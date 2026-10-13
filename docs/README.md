@@ -24,8 +24,10 @@ summary and a "backed by" box.
 | `08-silicon-plan.md` | OpenTitan as the base; Leg A on sky130 through LibreLane and a shuttle, with lithography explained; Leg B on 22FDX; Leg C the rack module; schedule and cost classes; the tape-out checklist | §13 |
 | `09-analogies.md` | Every feature as an everyday picture | all |
 | `10-plain-english-walkthrough.md` | The whole design in plain English, cross-referenced | itself |
+| `11-loop-timing.md` | The halt loop as a circuit: ngspice simulation of propagation and detection time across 72 governors | §6 |
 | `AUDIT-2026-10.md` | The audit: hallucinations and fake conditions found and fixed, sources checked, what is still unverified | §15 |
 | `../tools/console/` | The live program console published on claude.ai: agents, work items, event log | n/a |
+| `17-use-cases.md` | How the governor catches a safety issue before the action initiates: the five paths, a weapons release, a hazardous-knowledge request, an agent with a plan, and oversight that survives the model | all |
 | `research/board-lever-register.md` | Evidence register: which boards expose which lever signals, with sources and evidence levels | §15 |
 | `research/nvswitch-management.md` | Evidence register: NVLink authority out of band and in band; the seven firmware asks | §7, §15 |
 
