@@ -1,6 +1,6 @@
 # hw · from Verilog to GDS, and into the rack
 
-This directory holds what the physical design and the integration need: the OpenLane
+This directory holds what the physical design and the integration need: the LibreLane
 configuration that hardens `governor_core` on the SkyWater sky130 open process, the pinout
 of the governor module, and the rack integration reference (what wires go where on the
 system board and the GPU baseboard). The plan this executes is `docs/08-silicon-plan.md`.
@@ -9,18 +9,20 @@ system board and the GPU baseboard). The plan this executes is `docs/08-silicon-
 
 ```
 make rtl        # Amaranth -> rtl/gen/*.v   (runs here, no tools needed)
-make gds        # OpenLane 2 in Docker: synthesis, floorplan, place, CTS, route, DRC, LVS, GDS
+make gds        # LibreLane (Dockerized): synthesis, floorplan, place, CTS, route, DRC, LVS, GDS
 ```
 
-`make gds` needs Docker and the OpenLane 2 image, which pull the sky130 PDK on first run
-(several GB). It runs:
+The flow is [LibreLane](https://librelane.readthedocs.io/), the successor to OpenLane 2 (same
+authors, same configuration format, maintained under the FOSSi Foundation since Efabless
+closed in 2025). `make gds` needs Python and Docker; LibreLane pulls its own tool image and
+the sky130 PDK (through its `ciel` PDK manager, several GB) on first run. It runs:
 
 ```
-docker run --rm -v "$PWD":/work -w /work/hw/openlane/governor_core \
-  ghcr.io/efabless/openlane2:latest openlane config.json
+python3 -m pip install --upgrade librelane
+librelane --dockerized --pdk-root ~/.ciel hw/librelane/governor_core/config.json
 ```
 
-Outputs land in `hw/openlane/governor_core/runs/<timestamp>/final/`: `gds/governor_core.gds`
+Outputs land in `hw/librelane/governor_core/runs/<timestamp>/final/`: `gds/governor_core.gds`
 (the layout the shuttle takes), `lef/`, `def/`, `nl/` (the LVS netlist), `spef/`, and the
 signoff reports under `reports/` (synthesis area, STA at the three corners, Magic and KLayout
 DRC, Netgen LVS, antenna, IR drop). The tape-out checklist in `docs/08-silicon-plan.md` §5

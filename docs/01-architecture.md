@@ -1,5 +1,13 @@
 # 01 · Architecture
 
+> **In plain words:** the GPU is the star employee with no alarm bell wired in; the governor
+> is the security office next door. This document says where that office is, what is in it,
+> how it opens in the morning, what a working day looks like, and how it shuts everything down.
+> **Plain-English version:** `10-plain-english-walkthrough.md` §2 to §5.
+> **Backed by:** model `govsim/governor.py`, `govsim/cluster.py` (`build_rack`); hardware
+> `rtl/governor_rtl/top.py` (`GovernorCore`) and the blocks named in the table below; wiring
+> `hw/pcb/rack-integration.md`; tests `tests/test_h01`, `h11`, `h14`, `h16`.
+
 ## Where the governor lives
 
 A modern AI rack is a stack of boards the GPU vendor does not own outright: the system
@@ -33,8 +41,10 @@ root of trust, hot-swap controllers, switch management. The governor is added at
               ▼ to every other tray, the NVLink switch trays, the power shelf   ▼
 ```
 
+![Where the governor goes in the rack](figures/fig-rack.png)
+
 One governor instance per GPU slot. Physically, a governor chip serves the slots on one
-baseboard (eight channels on an HGX board, two or four on an NVL compute tray), with a
+baseboard (eight channels on an HGX board, four on an NVL72 compute tray), with a
 dedicated lever channel and management-bus channel per slot, so that each GPU still has its
 own identity record, its own budgets and its own halt rung. NVLink switch trays and the DPU
 get governors of their own. The governor is a PCIe endpoint behind the PCIe switch (or an
@@ -49,11 +59,13 @@ room next door; it does not ask the landlord to rebuild the building.
 
 ## Blocks
 
+![The governor die: five regions](figures/fig-die.png)
+
 | Block | Function | Reference |
 |---|---|---|
 | **Fuses (OTP)** | Unique device secret, anti-rollback counter, lifecycle state (test, production, decommissioned), governance key hashes, configuration | `govsim/fuses.py`; `rtl/governor_rtl/monotonic.py`, `lifecycle.py` |
 | **Silicon root** | Measured boot, extend-only measurement registers, DICE key derivation, quote engine, TRNG, monotonic counter | `govsim/root.py`; `rtl/governor_rtl/measure_reg.py` |
-| **Crypto engines** | SHA-256, HMAC, AES-GCM, ECDSA P-256 and Ed25519 (OTBN-class), TRNG. Integrated IP, not designed here | spec in `04-specification.md` §7 |
+| **Crypto engines** | SHA-256/384, HMAC, AES-GCM, ECDSA P-256 and P-384 on an OTBN-class coprocessor, TRNG. Integrated IP, not designed here | spec in `04-specification.md` §7 |
 | **Verifier** | Checks the paired GPU's confidential-computing attestation report and the host enclave's report against reference values signed by the governance root; issues the workload token with the fingerprint `H(firmware, model manifest, policy)` | `govsim/governor.py` (`Verifier`) |
 | **Policy store + epoch register** | Holds the accepted policy image; epoch is its digest in a register with no host write path | `govsim/policy.py`; `rtl/governor_rtl/epoch_reg.py` |
 | **Gate core** | Default-deny rulebook: fingerprint × action → rule; typed limits; lane (`auto`, `observer`, `human`); witnesses; budget; endpoint binding; mints tickets or parks holds | `govsim/governor.py` (`GateCore`) |
@@ -89,6 +101,8 @@ power on ──► ROM measures loader ──► extend M0 ──► loader meas
         ──► halt loop: assert "open" until the policy authority's first heartbeat arrives
         ──► fabric: announce identity (quote over nonce) ──► wait for roster
 ```
+
+![Boot and the DICE key chain](figures/fig-boot.png)
 
 The governor comes up *halted*. Nothing it governs may run until the policy authority has
 said hello and the roster has formed. In plain words: the building opens when the fire
@@ -136,6 +150,8 @@ marshal has checked the alarm, not before.
    PWRBRK# asserted)
    t ≥ T_throttle without recovery      t ≥ T_halt without CLEAR
 ```
+
+![The safe-mode ladder](figures/fig-safe-mode.png)
 
 The order is deliberate. Closing the ports and braking the power is reversible and loses
 nothing. A reset loses the job. A power cut is the floor. Which rung a given cause starts on

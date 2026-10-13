@@ -61,7 +61,7 @@ class Governor:
         self.state = BOOT
         self.root = SiliconRoot(self.fuses, counter_start=int(self.store.get("counter", 0)))
         self.key = self.root.boot(*self.firmware)
-        self.device_key = SigningKey.from_seed(self.fuses.derive(b"deviceid"))
+        self.device_key = self.root.device_key
         self.alias_cert = self.device_key.sign({"type": "alias-cert", "chip_id": self.chip_id, "pub": self.key.public.hex,
                                                 "meas1": self.root.meas1.value})
         self.log = Log(self.store, self.clock)

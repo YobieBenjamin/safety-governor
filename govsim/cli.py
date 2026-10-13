@@ -39,7 +39,7 @@ def demo() -> None:
     print("== the authority halts governor 2; the loop carries it to all four within one sense period")
     rack.halt(rack.nodes[2].governor)
     t = rack.loop.propagate()
-    print("   running:", rack.running(), f" propagated in {t*1e6:.0f} us")
+    print("   running:", rack.running(), f" propagated in one sense period ({t*1e6:.0f} us, a model parameter; the bench measures the real figure)")
     print("== clearing needs the authority, the log, and a neighbor that has the log")
     g = rack.nodes[0].governor
     print("   clear before checkpoints:", rack.clear(g)["why"])

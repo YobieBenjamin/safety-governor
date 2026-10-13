@@ -10,8 +10,16 @@ from __future__ import annotations
 import copy
 import json
 import os
+import pickle
 import tempfile
 from typing import Any
+
+
+def _snapshot(data: dict[str, Any]) -> bytes:
+    """A serialized image of the working copy. pickle is an order of magnitude faster than
+    copy.deepcopy for the nested dicts and lists the governor keeps, and the model saves
+    after every durable step, so this is the hot path of the whole simulation."""
+    return pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 class Store:
@@ -19,30 +27,29 @@ class Store:
 
     def __init__(self, path: str | None = None):
         self.path = path
-        self._nvm: dict[str, Any] = {}
         self.data: dict[str, Any] = {}
         self.writes = 0
         if path and os.path.exists(path):
             with open(path, encoding="utf-8") as fh:
-                self._nvm = json.load(fh)
-        self.data = copy.deepcopy(self._nvm)
+                self.data = json.load(fh)
+        self._nvm: bytes = _snapshot(self.data)
 
     def save(self) -> None:
         """Commit the working copy to NVM atomically."""
-        self._nvm = copy.deepcopy(self.data)
+        self._nvm = _snapshot(self.data)
         self.writes += 1
         if self.path:
             d = os.path.dirname(self.path) or "."
             fd, tmp = tempfile.mkstemp(dir=d, prefix=".store-", suffix=".json")
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(self._nvm, fh)
+                json.dump(self.data, fh)
                 fh.flush()
                 os.fsync(fh.fileno())
             os.replace(tmp, self.path)
 
     def power_loss(self) -> None:
         """Drop everything not yet saved."""
-        self.data = copy.deepcopy(self._nvm)
+        self.data = pickle.loads(self._nvm)
 
     def get(self, key: str, default: Any = None) -> Any:
         if key not in self.data:

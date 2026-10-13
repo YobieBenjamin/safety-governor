@@ -10,7 +10,7 @@ from .cluster import build_rack
 COST_S = {
     "mailbox": 20e-6,          # firmware path, auto rule
     "ticket": 20e-6,
-    "sign": 60e-6,             # one P-256 signature per response
+    "sign": 1e-3,              # one ECDSA signature per response, budgeted at 1 ms on an OTBN-class coprocessor (the spec batches records; this charges the worst case)
     "switch_program": 1e-3,    # one management-bus write per port change
     "fabric_msg": 5e-6,
     "attest": 2e-3,
@@ -21,7 +21,15 @@ COST_S = {
 GPU_SECONDS_PER_TOKEN = 1 / 2000.0      # a modest 2,000 tokens per second per GPU
 
 
-def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_request: int = 500, actions: int = 50) -> dict:
+def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_request: int = 500, actions: int = 50,
+        concurrent_sequences: int = 1) -> dict:
+    """Count the governor's operations for a workload and price them.
+
+    ``concurrent_sequences`` models the batching in ``docs/04-specification.md`` §9: an
+    inference server that serves N sequences at once completes up to N responses inside one
+    batch window, and the governor signs one Merkle root for all of them. The default of 1 is
+    the worst case, one signature per response, which is what the functional model counts.
+    """
     rack = build_rack(gpus, tier, policy_kw={"output_queries": 10 ** 9, "output_bytes": 10 ** 12})
     rack.bring_up()
     for n in rack.nodes:
@@ -38,10 +46,13 @@ def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_requ
             rack.heartbeat()
     for _ in range(actions):
         rack.request(node, "payments.transfer", {"amount": 1, "currency": "USD", "destination": "a"})
-    ops = node.governor.ops
-    governor_s = sum(COST_S.get(k, 0.0) * v for k, v in ops.items())
+    ops = dict(node.governor.ops)
+    priced = dict(ops)
+    priced["sign"] = -(-ops.get("sign", 0) // max(1, concurrent_sequences))   # ceil: one signature per batch of responses
+    governor_s = sum(COST_S.get(k, 0.0) * v for k, v in priced.items())
     gpu_s = total_tokens * GPU_SECONDS_PER_TOKEN
-    return {"tier": tier, "tokens": total_tokens, "ops": dict(ops), "governor_seconds": governor_s, "gpu_seconds": gpu_s,
+    return {"tier": tier, "tokens": total_tokens, "ops": ops, "signatures": priced["sign"],
+            "governor_seconds": governor_s, "gpu_seconds": gpu_s,
             "overhead_pct": 100.0 * governor_s / gpu_s if gpu_s else 0.0,
             "per_token_ops": (ops.get("mailbox", 0) + ops.get("ticket", 0) + ops.get("sign", 0)) / max(1, total_tokens)}
 
@@ -50,6 +61,10 @@ def main() -> None:
     for tier in ("rack", "integrated"):
         r = run(tier)
         print(f"{tier:11s} tokens={r['tokens']:>9,}  governor={r['governor_seconds']*1e3:8.1f} ms  gpu={r['gpu_seconds']:8.1f} s  overhead={r['overhead_pct']:.3f}%  ops={r['ops']}")
+    short = run("rack", requests=1000, tokens_per_request=100)
+    batched = run("rack", requests=1000, tokens_per_request=100, concurrent_sequences=16)
+    print(f"short responses (100 tokens), one signature each: overhead={short['overhead_pct']:.3f}%; "
+          f"16 sequences batched per window: overhead={batched['overhead_pct']:.3f}%  (why the spec batches, docs/04 §9)")
 
 
 if __name__ == "__main__":

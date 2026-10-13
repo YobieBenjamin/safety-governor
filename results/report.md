@@ -1,6 +1,6 @@
 # Sweep report
 
-Generated 2026-10-13 15:47 UTC by `govsim sweep`.
+Generated 2026-10-13 16:38 UTC by `govsim sweep`.
 
 `pass`: the hypothesis held. `gap`: it failed exactly as the design predicts for that tier (the recorded residual). `FAIL`: it failed in a way the design does not predict.
 
@@ -31,8 +31,8 @@ A model, not a measurement: operation counts from the functional model priced wi
 
 | Tier | Tokens | Governor time | GPU time | Overhead |
 |---|---|---|---|---|
-| rack | 100,000 | 17.1 ms | 50.0 s | 0.034 % |
-| integrated | 100,000 | 17.1 ms | 50.0 s | 0.034 % |
+| rack | 100,000 | 205.1 ms | 50.0 s | 0.410 % |
+| integrated | 100,000 | 205.1 ms | 50.0 s | 0.410 % |
 
 ## What the gaps mean
 

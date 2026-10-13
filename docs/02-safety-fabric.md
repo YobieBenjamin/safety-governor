@@ -8,12 +8,22 @@ In plain words: a fire-alarm loop and an intercom. The loop rings every bell the
 station is pulled, and rings them if the wire is cut. The intercom carries the details:
 who pulled it, which edition of the rulebook is in force, who is still on duty.
 
+> **Plain-English version:** `10-plain-english-walkthrough.md` §6.
+> **Backed by:** model `govsim/fabric.py` (`HaltLoop`, `MessageFabric`), `govsim/governor.py`
+> (`_heartbeat`, `sense_loop`, `on_fabric`, `publish_checkpoint`), `govsim/cluster.py`
+> (`change_epoch`, `exchange_checkpoints`); tests `tests/test_h11_halt_loop.py`,
+> `test_h12_fabric_auth.py`, `test_h13_shared_budget.py`, `test_h14_partition.py`; hardware
+> `rtl/governor_rtl/halt_loop.py`, `heartbeat.py`, `epoch_reg.py`; wiring
+> `hw/pcb/rack-integration.md` §4.
+
 ## 1. The halt loop
 
 **What it is.** A series current loop (4 to 20 mA class, like an industrial safety circuit)
 threaded through every governor in a safety domain. Each governor has a loop-in and a
 loop-out pin and a normally-closed switch between them. Each governor also senses loop
 current.
+
+![The halt loop as a circuit](figures/fig-halt-loop.png)
 
 **Rules.**
 
@@ -33,8 +43,10 @@ by anything between sender and receiver. A current loop has no software between 
 a bell. Fire codes learned this a century ago.
 
 **Timing.** Sense period 100 µs. Propagation is electrical, so the end-to-end bound is set by
-the slowest sense period plus debounce: 1 ms. The GPU's power brake asserts within 1 ms of
-the governor's halt output; reset and power cut follow the policy's rungs.
+the slowest sense period plus debounce: 1 ms. These are design targets, to be measured on
+the bench in Phase 2; the functional model's "100 µs" is a parameter, not a result. The GPU's
+power brake asserts within 1 ms of the governor's halt output; reset and power cut follow the
+policy's rungs.
 
 **Tested by.** `tests/test_h11_halt_loop.py`: any governor halting halts all; a cut wire
 halts all; no governor clears on its own; propagation stays within the bound.

@@ -83,3 +83,18 @@ def test_checkpoints_cross_link_neighbors(rack):
                 assert g.log.neighbor_heads[m.governor.chip_id] == m.governor.log.head or True   # heads advance as logs grow
         cp = g.log.checkpoint(g.key, g.chip_id)["payload"]
         assert set(cp["neighbor_heads"]) == set(neigh)
+
+
+def test_genuine_chip_with_unapproved_firmware_cannot_join(rack):
+    """A real governor chip with a valid vendor certificate, running firmware whose measurement
+    is not in the governance root's reference values. Its device identity is genuine; its quote
+    is refused all the same."""
+    bad = rack.rogue_governor_with_bad_firmware()
+    bad.fingerprint = rack.nodes[0].governor.fingerprint
+    bad.announce("job-4")
+    for n in rack.nodes:
+        n.governor.announce("job-4")
+    leader = min(rack.nodes, key=lambda n: n.governor.chip_id).governor
+    roster = leader.build_roster("job-4", [n.governor.chip_id for n in rack.nodes] + ["gov-badfw"])
+    assert roster and "gov-badfw" not in {m["chip_id"] for m in roster["payload"]["members"]}
+    assert all(n.governor.log.has("fabric.dropped", why=reasons.ROSTER_QUOTE_INVALID, **{"from": "gov-badfw"}) for n in rack.nodes)

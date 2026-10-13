@@ -4,6 +4,11 @@ This document says what the Safety Governor is for, what it must do, what it mus
 and what it deliberately does not attempt. Everything later in `docs/` traces back to a
 numbered line here. Tests in `tests/` cite these numbers.
 
+> **Plain-English version:** `10-plain-english-walkthrough.md` §1 and §15.
+> **Backed by:** every requirement names its test in the last column of its table; the live
+> result of all of them is `results/report.md` (`./run.sh`). Model `govsim/`, tests `tests/`,
+> hardware blocks `rtl/governor_rtl/`, silicon flow `hw/`.
+
 ## The problem, in one paragraph
 
 A frontier model runs across thousands of GPUs and emits trillions of tokens. No device can
@@ -153,6 +158,6 @@ three. What changes between tiers is only how fine the enforcement is.
 The design is accepted for tape-out when: every `sim` test passes at the rack tier, with the
 rack tier's one residual (H2 at descriptor level between roster members) recorded as an
 expected gap, and at the board-only tier with its gaps recorded; every `rtl` test
-passes and the generated Verilog hardens through the OpenLane flow with clean DRC and LVS;
+passes and the generated Verilog hardens through the LibreLane flow with clean DRC and LVS;
 the assumptions register has a row for every input any rule relies on; and the threat model's
 residual list has been reviewed by someone who did not write it.

@@ -15,20 +15,29 @@ In plain words: first a working model built from parts anyone can buy, on a shar
 fab so it costs thousands, not millions. Then the real part. Then the real part in the room
 next door to the GPUs, holding the keys to the doors.
 
+> **Plain-English version:** `10-plain-english-walkthrough.md` §13.
+> **Backed by:** `rtl/governor_rtl/*.py` and the generated `rtl/gen/*.v` (`make rtl`),
+> `hw/librelane/governor_core/config.json` and `hw/README.md` (`make gds`),
+> `hw/pinout/governor_module.csv`, `hw/pcb/rack-integration.md`; the tape-out checklist is §5
+> of this document.
+
 ## 1. Build strategy: stand on an open root of trust
 
 The governor needs a measured-boot core, fuses, a lifecycle controller, a key manager that
-does DICE-style derivation, SHA-256/HMAC, AES, a big-number engine for P-256, and an entropy
-source. That is, almost exactly, the block list of [OpenTitan](https://opentitan.org/), the
-open-source silicon root of trust, which has been through silicon. The governor is therefore
-built as **OpenTitan's Earl Grey subsystem plus the governor blocks**:
+does DICE-style derivation, SHA-256/HMAC, AES, a big-number engine for P-256 and P-384, and an
+entropy source. That is, almost exactly, the block list of [OpenTitan](https://opentitan.org/),
+the open-source silicon root of trust. OpenTitan is real silicon, not a paper design: the Earl
+Grey chip taped out in November 2023, validated chips were commercially available in February
+2024, Nuvoton began fabricating production parts in February 2025, and OpenTitan shipped in
+Chromebooks in March 2026 ([OpenTitan's own history](https://opentitan.org/history/)). The
+governor is therefore built as **OpenTitan's Earl Grey subsystem plus the governor blocks**:
 
 | From OpenTitan (Apache 2.0) | Governor blocks (this repository) |
 |---|---|
 | Ibex RISC-V core (runs the control firmware) | Gate core accelerator (rule CAM, comparators) |
 | OTP controller, lifecycle controller | Capability table (the source of truth for every switch port and flow the governor has opened) |
 | Key manager (DICE-style CDI derivation) | Monotonic counter with fuse-backed high-water mark |
-| HMAC/SHA-256, AES, KMAC, OTBN (P-256, Ed25519) | Epoch register with no host write path |
+| HMAC/SHA-256, AES, KMAC, OTBN (ECDSA P-256 and P-384, X25519, RSA, ML-KEM, ML-DSA) | Epoch register with no host write path |
 | CSRNG and entropy source with health tests | Used-ticket store (cuckoo table) |
 | SPI device, I2C, GPIO, UART, timers, alert handler | Heartbeat timer, halt sequencer, loop driver and sense |
 | Flash controller (product leg) | Meter counters |
@@ -52,7 +61,7 @@ second column, written to drop into OpenTitan's TileLink fabric as peripherals.
 | Fuses / OTP | **Not available as an open macro on sky130.** The prototype holds the UDS in a provisioning register written at power-up by an external secure element over SPI, and emulates the anti-rollback counter in authenticated external flash | The prototype proves function, not tamper resistance. Leg B uses real OTP |
 | NVM | External SPI NOR flash, encrypted and authenticated with a DICE-derived key | Same as above |
 | PHYs | None at 130 nm. Host interface is SPI; fabric is RS-485 or 100BASE-T1 through an external transceiver; loop pins are GPIO with an external comparator | PCIe and SGMII arrive in Leg B |
-| Flow | OpenLane 2 (Yosys, OpenROAD, Magic, KLayout, Netgen, OpenSTA) | `hw/openlane/governor_core/config.json` |
+| Flow | [LibreLane](https://librelane.readthedocs.io/) (Yosys, OpenROAD, Magic, KLayout, Netgen, OpenSTA), the successor to OpenLane 2 maintained under the FOSSi Foundation after Efabless closed | `hw/librelane/governor_core/config.json` |
 | Harness | A shuttle harness (Caravel-class: pad frame, management core, seal ring) with a ~10 mm² user area, or Tiny Tapeout tiles for individual blocks | Both are open; the harness supplies pads, ESD, the seal ring and the scribe |
 
 ### 2.2 The flow, step by step
@@ -60,7 +69,7 @@ second column, written to drop into OpenTitan's TileLink fabric as peripherals.
 ```
 rtl/governor_rtl/*.py ──(amaranth)──► rtl/gen/governor_core.v
         │
-        ▼  make gds   (OpenLane 2 in Docker)
+        ▼  make gds   (LibreLane, Dockerized: pip install librelane; librelane --dockerized ...)
  1. synthesis        Yosys + ABC: Verilog → sky130 gate netlist; area and cell report
  2. floorplan        OpenROAD: die/core area from config; pin placement from hw/pinout; power grid (met4/met5 straps); tap and decap cells
  3. placement        global (RePlAce), resizing, detailed placement; timing-driven
@@ -80,24 +89,24 @@ preparation.
 
 ### 2.3 Lithography, in plain words and in detail
 
-A chip is printed, layer by layer, like a photograph with forty exposures. The GDS file is
+A chip is printed, layer by layer, like a photograph with dozens of exposures. The GDS file is
 the set of negatives. Each layer of the GDS (diffusion, polysilicon, contacts, five metals,
 vias, implants) becomes one **photomask**: a quartz plate with the pattern in chrome. In the
 fab, a wafer is coated with photoresist, the mask's pattern is projected onto it with
 ultraviolet light through a reduction lens (the mask is drawn 4× larger than the printed
 feature), the exposed resist is developed, and the wafer is etched, implanted or plated
-through the openings. Then the next layer. Sky130 is a mature node: 248 nm lithography,
-no immersion, no multi-patterning, which is why the design rules are forgiving and the open
-tools can meet them.
+through the openings. Then the next layer. Sky130 is a mature node with relaxed design
+rules, printed with conventional deep-ultraviolet steppers, no immersion and no
+multi-patterning, which is why the open tools can meet its rules.
 
 What the design has to deliver for the masks to be makeable:
 
 | Item | Meaning | Who does it |
 |---|---|---|
-| DRC-clean GDS | Every polygon obeys the process's width, spacing, enclosure and density rules | us (OpenLane signoff) |
+| DRC-clean GDS | Every polygon obeys the process's width, spacing, enclosure and density rules | us (LibreLane signoff) |
 | LVS-clean | The layout is electrically the netlist we simulated | us (Netgen) |
-| Antenna-clean | No gate is connected to a long metal run that collects charge during etching without a diode to drain it | us (OpenLane inserts diodes) |
-| Metal fill | Every layer has the density the chemical-mechanical polishing step needs | us (OpenLane fill) |
+| Antenna-clean | No gate is connected to a long metal run that collects charge during etching without a diode to drain it | us (LibreLane inserts diodes) |
+| Metal fill | Every layer has the density the chemical-mechanical polishing step needs | us (LibreLane fill) |
 | Layer map | GDS layer numbers mapped to the foundry's mask layers | PDK provides |
 | Seal ring, scribe, alignment marks, pad frame | The frame that lets the fab cut and test the die | the shuttle harness provides |
 | Mask data preparation | Fracturing polygons into the mask writer's primitives; optical proximity correction (OPC) so the printed shape matches the drawn shape | the foundry and mask shop |
@@ -111,8 +120,8 @@ of the hundreds of thousands a private mask set costs even at 130 nm.
 
 | Route | Area | Cost class | Notes |
 |---|---|---|---|
-| Caravel-class shuttle on sky130 (operated by the successor to the Efabless chipIgnite program) | ~10 mm² user area, ~38 user IO | low five figures per slot, packaged QFN parts returned | Enough for the whole governor core plus OpenRAM macros; this is the plan of record |
-| Tiny Tapeout on sky130 or IHP SG13G2 | tiles of about 0.02 mm² each, a few IO per tile | hundreds of dollars per tile | For individual blocks (the halt loop, the monotonic counter, the capability checker) as early silicon proof of the invariants |
+| sky130 MPW slot from ChipFoundry, the company Efabless's founders started after Efabless closed in March 2025 (first sky130 tapeout September 2025; shuttles run when at least half the slots are sold), on a Caravel-class harness | ~10 mm² user area, ~38 user IO | low five figures per slot, packaged parts returned | Enough for the whole governor core plus OpenRAM macros; this is the plan of record |
+| Tiny Tapeout, which continued after Efabless closed, on IHP SG13G2 and, through ChipFoundry, sky130 | tiles of about 0.02 mm² each, a few IO per tile | hundreds of dollars per tile | For individual blocks (the halt loop, the monotonic counter, the capability checker) as early silicon proof of the invariants |
 | IHP SG13G2 open shuttle (130 nm BiCMOS, open PDK) | per-run allocation | low five figures | A second open process with an open PDK and its own OpenLane support; an alternative if sky130 capacity is short |
 
 ### 2.5 Package, board, bring-up
@@ -130,7 +139,7 @@ of the hundreds of thousands a private mask set costs even at 130 nm.
   host over SPI. (4) Levers against a real GPU: throttle, reset, power cut, with the GPU
   running a benchmark that ignores software. (5) Two boards: loop and fabric; roster; halt
   propagation on an oscilloscope. (6) Eight boards: epoch change, partition, shared budget.
-  (8) Lifecycle advance to PRODUCTION on one part; confirm JTAG refuses.
+  (7) Lifecycle advance to PRODUCTION on one part; confirm JTAG refuses.
 
 ### 2.6 Schedule and cost (Leg A)
 
@@ -186,7 +195,7 @@ NVSwitch, a halt message to the GSP, and later descriptor-level checkers) are li
 - [ ] All `tests/` pass at the rack tier with the descriptor-level residual of H2 recorded as the known gap
 - [ ] All `rtl/tests/` pass; invariants in `07-verification-plan.md` §3 hold in simulation
 - [ ] Generated Verilog in `rtl/gen/` matches the Amaranth sources (CI regenerates and diffs)
-- [ ] OpenLane: synthesis clean, no latches, no combinational loops
+- [ ] LibreLane: synthesis clean, no latches, no combinational loops
 - [ ] Timing: setup and hold met at tt, ss, ff with 10 % margin at 50 MHz
 - [ ] DRC: Magic and KLayout clean on the sky130 deck
 - [ ] LVS: Netgen clean

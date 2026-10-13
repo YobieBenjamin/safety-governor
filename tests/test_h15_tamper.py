@@ -56,9 +56,12 @@ def test_firmware_rollback_refused_at_boot():
         Governor("a", SimClock(), fuses=f, firmware_version=4)
 
 
-def test_modified_firmware_changes_the_key():
+def test_modified_firmware_changes_the_alias_key_and_a_modified_loader_changes_the_device_identity():
+    """DICE: DeviceID = f(UDS, loader measurement); alias key = f(DeviceID chain, firmware measurement)."""
     f = Fuses()
-    a = Governor("a", SimClock(), fuses=f, firmware_digest="aa" * 32, firmware_version=1)
-    b = Governor("b", SimClock(), fuses=f, firmware_digest="bb" * 32, firmware_version=1)
-    assert a.key.public != b.key.public
-    assert a.device_key.public == b.device_key.public      # the DICE device identity does not depend on the firmware
+    a = Governor("a", SimClock(), fuses=f, loader_digest="11" * 32, firmware_digest="aa" * 32, firmware_version=1)
+    b = Governor("b", SimClock(), fuses=f, loader_digest="11" * 32, firmware_digest="bb" * 32, firmware_version=1)
+    c = Governor("c", SimClock(), fuses=f, loader_digest="22" * 32, firmware_digest="aa" * 32, firmware_version=1)
+    assert a.key.public != b.key.public                    # firmware change: new alias key
+    assert a.device_key.public == b.device_key.public      # same loader: same device identity
+    assert a.device_key.public != c.device_key.public      # loader change: a different device, as DICE intends

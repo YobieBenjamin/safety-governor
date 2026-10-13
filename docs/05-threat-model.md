@@ -4,6 +4,14 @@ Who the adversary is, what they hold, what the governor stops, what it only rais
 of, and what it does not address. The residual list at the end is the part that matters most;
 it is the list the assumptions register and the human layers exist for.
 
+> **In plain words:** who is trying to beat the governor, what each of them holds, which
+> attacks the governor stops (each with the test that checks it), which it only makes
+> expensive, and which it does not address at all and who does.
+> **Plain-English version:** `10-plain-english-walkthrough.md` §10 and §15.
+> **Backed by:** the "Hypothesis / test" column below maps every stopped threat to a file in
+> `tests/`; the residual rows map to `06-assumptions-register.md` and to the human layers in
+> the companion repository.
+
 ## Adversaries
 
 | Adversary | Holds | Goal |
@@ -32,7 +40,7 @@ it is the list the assumptions register and the human layers exist for.
 | Fast, silent override | Quorum, latency floor, mandatory log entry | H8 |
 | Weight exfiltration to a non-roster peer, or over any path while the heartbeat is dead | Roster-bound NVSwitch ports, PCIe switch ports and ACS, DPU flows; unchecked paths bricked | H2 |
 | Slow leakage over the permitted output channel beyond budget | Query and byte budgets per workload; entropy and rate limits | H10 |
-| GPU keeps running when told to stop | Power brake, reset, 12 V cut, needing nothing from the GPU | H16 |
+| GPU keeps running when told to stop | Power brake, reset, slot power cut (where the board provides per-slot power control), needing nothing from the GPU | H16 |
 | A halt that reaches some GPUs and not others | The halt loop; fail-safe open | H11 |
 | A rogue device on the fabric; replayed fabric messages | Roster from mutual attestation; signed, sequenced, epoch-bound messages | H12 |
 | Two governors overspending a shared budget | One ledger owner per key; reserve at the owner | H13 |

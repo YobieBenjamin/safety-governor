@@ -26,15 +26,27 @@ spinning shaft. When the engine ran too fast the balls flew out and closed the s
 operator could talk it out of its job, it understood nothing about the factory, and it never
 slept. That is the whole idea. A model can think anything. The governor decides what leaves.
 
+## Two ways to read this
+
+Every part of the design exists at two depths, and they point at each other.
+
+| If you are | Start here | Then |
+|---|---|---|
+| Anyone | [`docs/10-plain-english-walkthrough.md`](docs/10-plain-english-walkthrough.md): the whole design as one story, with the six figures, and under every section a box naming the technical document, the model code, the test and the hardware block behind it | [`docs/09-analogies.md`](docs/09-analogies.md), one everyday picture per feature |
+| An engineer | [`docs/00-objectives.md`](docs/00-objectives.md) and on through `08`; each document opens with a plain-words summary and a "backed by" box listing the code that models it, the tests that would knock it down and the RTL that implements it | `govsim/`, `tests/`, `rtl/`, `hw/`, in that order |
+| In a hurry | The figure below, the one-paragraph design under it, and [`results/report.md`](results/report.md) | `./run.sh` |
+
+![Where the governor goes in the rack](docs/figures/fig-rack.png)
+
 ## What is in here
 
 | Directory | What it is | Run it |
 |---|---|---|
-| [`docs/`](docs/) | The design: objectives, architecture, the safety fabric, interfaces to the GPU and the rack, the specification, the threat model, the assumptions register, the verification plan, and the plan to put it on silicon through lithography | read |
+| [`docs/`](docs/) | The design: objectives, architecture, the safety fabric, interfaces to the GPU and the rack, the specification, the threat model, the assumptions register, the verification plan, the plan to put it on silicon through lithography, the analogies, and the plain-English walkthrough; figures in `docs/figures/` are drawn by `docs/figures/make_figures.py` from the same facts the text states | read |
 | [`govsim/`](govsim/) | A functional model of the governor, the rack's switches as enforcement points, the halt loop and the message fabric, across a simulated rack of GPUs | `./run.sh` |
-| [`tests/`](tests/) | One test file per hypothesis, H0 to H16. A hypothesis is a claim the blog makes; a test is what would knock it down | `./run.sh` |
-| [`rtl/`](rtl/) | The hard-core digital blocks in [Amaranth HDL](https://amaranth-lang.org/), simulated, with generated Verilog in `rtl/gen/` | `make rtl` |
-| [`hw/`](hw/) | The OpenLane flow for a SkyWater sky130 shuttle run, the pinout, and the rack integration reference (module, baseboard signals, switch management) | `make gds` on a machine with OpenLane |
+| [`tests/`](tests/) | One test file per hypothesis, H0 to H16 (122 tests). A hypothesis is a claim the blog makes; a test is what would knock it down | `./run.sh` |
+| [`rtl/`](rtl/) | The hard-core digital blocks in [Amaranth HDL](https://amaranth-lang.org/), simulated (15 block tests), with generated Verilog in `rtl/gen/` | `make rtl` |
+| [`hw/`](hw/) | The LibreLane flow for a SkyWater sky130 shuttle run, the pinout, and the rack integration reference (module, baseboard signals, switch management) | `make gds` on a machine with Docker |
 | [`results/`](results/) | The last sweep: which hypotheses hold at which tier of the design | `./run.sh` writes it |
 
 One command, under a minute, no hardware:
@@ -56,7 +68,7 @@ confidential-computing attestation locally against pinned reference values, rele
 model's decryption key only to a verified enclave, mints the one-time tickets that endpoints
 demand before they act, keeps the budgets, counts the tokens, and signs what the verified
 runtime presents. It has three physical levers over its GPU that need nothing from the GPU
-vendor: the power-brake pin, the reset pin, and the slot's power enable. It has authority
+vendor: the power-brake input, the reset pin, and the slot's power enable. It has authority
 over the three places on the board where the GPU's traffic already passes a switch: the
 NVSwitch ports (NVLink to other GPUs), the PCIe switch ports and ACS (the host, peers,
 storage), and the DPU's filter tables (RDMA across nodes). All governors in a rack share two
@@ -65,29 +77,32 @@ GPU when it opens or breaks, and a **message fabric**, an authenticated out-of-b
 for rosters, epochs, heartbeats, budgets and log checkpoints. Nothing in the GPU changes.
 Nothing in CUDA changes.
 
-## Plain-language guide to every feature
+## Every feature, at both depths
 
-| Feature | What it is for | In plain words |
-|---|---|---|
-| One governor per GPU slot, on the board | Authority has to be local and physical | A lifeguard per pool, not one for the whole water park |
-| Added through the rack's boards | It has to fit the hardware that exists | The security office rents the room next door; it does not ask the landlord to rebuild the building |
-| Fused identity and DICE key | The chip's key is derived from what it booted | A house key cut from the shape of the house. Change the house and the key stops fitting |
-| Local attestation verifier | The governor checks the GPU's signed report itself, against values it was given | The bouncer carries the photo book; he does not phone head office for every face |
-| Policy image and epoch | The rules are signed by several people; every edition has a number | A rulebook with an edition number. Tickets printed under an old edition are void |
-| Ticket minting and budgets | Every action gets a one-time permission bound to its exact fields; shared allowances are reserved before use | One seat, one show, torn at the door; one cashier per cash drawer |
-| Heartbeat | The policy authority has to keep saying "still here" | The dead man's switch on a train. Let go and the brakes come on |
-| Halt loop | A physical circuit through every governor in the rack | The fire-alarm loop. Pull any station and every bell rings. Cut the wire and every bell rings too |
-| Message fabric | Governors talk to each other over a private network with signed messages | The building's intercom, separate from the Wi-Fi the tenants use |
-| Roster | GPUs and governors verify each other before a job starts | Roll call with ID badges before the bus leaves |
-| Power brake, reset, slot power | Three ways to stop a GPU that need nothing from the GPU vendor | The circuit breaker in your house. The appliance does not get a vote |
-| Switch-port authority | The governor decides which NVSwitch, PCIe switch and NIC ports are open, and to whom | The doors between buildings only unlock for people on the roll; the switch is the door, and the governor holds the key |
-| Output signing | What the verified runtime presents is hashed and signed with the chip's key | The courier signs for the package. It proves who handled it, not what is inside |
-| Metering | Tokens, cycles and bytes per model | The taxi meter |
-| Signed log | Every decision is appended to a hash chain with signed checkpoints, cross-linked between governors | The flight recorder, and each governor keeps a copy of its neighbors' last page |
-| Fused-off debug | JTAG and scan are permanently disabled before the chip ships | The service hatch is welded shut after the factory |
+| Feature | In plain words | Technical | Model | Test | RTL / hardware |
+|---|---|---|---|---|---|
+| One governor per GPU slot, on the board | A lifeguard per pool, not one for the whole water park | `docs/01` "Where the governor lives" | `govsim/cluster.py` | `tests/test_h16_levers.py` | `hw/pcb/rack-integration.md` §1 |
+| Added through the rack's boards | The security office rents the room next door; it does not ask the landlord to rebuild the building | `docs/03` §1, `docs/08` §4 | `govsim/gpu.py` (nothing in the GPU changes) | the whole suite at the rack tier | `hw/pinout/governor_module.csv` |
+| Fused identity and DICE key | A house key cut from the shape of the house. Change the house and the key stops fitting | `docs/04` §7 | `govsim/root.py`, `govsim/fuses.py` | `tests/test_h15_tamper.py`, `test_h12_fabric_auth.py` | `rtl/governor_rtl/measure_reg.py`, `monotonic.py` |
+| Local attestation verifier | The bouncer carries the photo book; he does not phone head office for every face | `docs/01` "Job lifecycle" step 1, `docs/03` §2 | `govsim/governor.py` (`_cmd_verify_gpu`, `_cmd_verify_host`) | `tests/test_h01_attestation.py` | integrated crypto IP (`docs/08` §1) |
+| Policy image and epoch | A rulebook with an edition number. Tickets printed under an old edition are void | `docs/04` §4 | `govsim/policy.py` | `tests/test_h03_quorum.py` | `rtl/governor_rtl/epoch_reg.py` |
+| Ticket minting and budgets | One seat, one show, torn at the door; one cashier per cash drawer | `docs/04` §5, `docs/03` §7 | `govsim/governor.py` (`_cmd_request`), `govsim/ledger.py` | `tests/test_h00_contract.py`, `test_h04_lane.py`, `test_h13_shared_budget.py` | `rtl/governor_rtl/ticket_store.py` |
+| Heartbeat | The dead man's switch on a train. Let go and the brakes come on | `docs/02` §2 "Heartbeat fan-out", `docs/04` §9 | `govsim/governor.py` (`_heartbeat`) | `tests/test_h14_partition.py` | `rtl/governor_rtl/heartbeat.py` |
+| Halt loop | The fire-alarm loop. Pull any station and every bell rings. Cut the wire and every bell rings too | `docs/02` §1 | `govsim/fabric.py` (`HaltLoop`) | `tests/test_h11_halt_loop.py` | `rtl/governor_rtl/halt_loop.py`; `hw/pcb/rack-integration.md` §4 |
+| Message fabric | The building's intercom, separate from the Wi-Fi the tenants use | `docs/02` §2 | `govsim/fabric.py` (`MessageFabric`) | `tests/test_h12_fabric_auth.py` | fabric MAC as integrated IP (`docs/08` §1) |
+| Roster | Roll call with ID badges before the bus leaves | `docs/02` §2 "Roster formation" | `govsim/cluster.py` (`form_roster`) | `tests/test_h12_fabric_auth.py` | `rtl/governor_rtl/cap_table.py` (ports open only to roster peers) |
+| Power brake, reset, slot power | The circuit breaker in your house. The appliance does not get a vote | `docs/03` §2, `docs/01` "Safe-mode state machine" | `govsim/governor.py` (`_apply_rung`), `govsim/gpu.py` | `tests/test_h16_levers.py` | `rtl/governor_rtl/halt.py` |
+| Switch-port authority | The doors between buildings only unlock for people on the roll; the switch is the door, the governor holds the key | `docs/03` §3 | `govsim/endpoints.py` (`Switch`) | `tests/test_h02_enforcement_points.py` | `rtl/governor_rtl/cap_table.py` |
+| Output signing | The courier signs for the package. It proves who handled it, not what is inside | `docs/04` §6 | `govsim/governor.py` (`_cmd_sign_output`) | `tests/test_h10_leakage.py`, `test_h09_overhead.py` | crypto IP; `govsim/bench.py` prices it |
+| Metering | The taxi meter | `docs/04` §2 (`METER_SLOT`) | `govsim/gpu.py` (`run_tokens`) | `tests/test_h09_overhead.py` | `rtl/governor_rtl/meter.py` |
+| Signed log | The flight recorder, and each governor keeps a copy of its neighbors' last page | `docs/02` §2 "Cross-linked logs" | `govsim/log.py` | `tests/test_h00_contract.py` (every decision logged), `test_h12_fabric_auth.py` | NVM (`docs/04` §10) |
+| Alarms | A pulled fire alarm stays pulled until the marshal resets it | `docs/04` §2 (`ALARMS`) | `govsim/governor.py` (alarms) | `tests/test_h05_alarms.py` | `rtl/governor_rtl/alarms.py` |
+| Fused-off debug | The service hatch is welded shut after the factory | `docs/00` R4, `docs/08` §3 | `govsim/fuses.py` (lifecycle) | `tests/test_h15_tamper.py` | `rtl/governor_rtl/lifecycle.py` |
+| The assumptions register | The list taped to the wall of the security office | `docs/06` | `govsim/policy.py` (`check_register`) | `tests/test_h07_register.py` | n/a (policy data) |
 
-The full table, with the reason behind each feature and what it does not do, is in
-[`docs/09-analogies.md`](docs/09-analogies.md).
+The reason behind each feature and what it does not do are in
+[`docs/09-analogies.md`](docs/09-analogies.md); the same features told as one story are in
+[`docs/10-plain-english-walkthrough.md`](docs/10-plain-english-walkthrough.md).
 
 ## What it does not do
 
@@ -104,8 +119,8 @@ holds. Read [`docs/00-objectives.md`](docs/00-objectives.md) for the full list o
 Design and functional model: complete for the rack tier (plan of record) and the board-only
 fallback; the integrated tier (governor hooks inside the GPU) is specified as a future ask and
 not required. RTL: the hard-core control blocks, simulated and emitted as Verilog; the crypto
-engines are specified as integrated IP (OpenTitan-class SHA-256, HMAC, AES, ECDSA P-256 on
-OTBN, TRNG) and not re-implemented here. Silicon: flow configured for a sky130
+engines are specified as integrated IP (OpenTitan-class SHA-256, HMAC, AES, ECDSA P-256 and
+P-384 on OTBN, TRNG) and not re-implemented here. Silicon: flow configured for a sky130
 multi-project-wafer shuttle; not yet taped out. The honest state of every claim is in
 [`results/report.md`](results/report.md).
 

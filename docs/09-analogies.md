@@ -5,6 +5,10 @@ Safety Governor, the everyday thing it works like, the reason it is there, and t
 limit. The blog series uses the same pictures, so a reader can move between the posts and the
 design without learning a new vocabulary.
 
+> **The other direction:** `10-plain-english-walkthrough.md` tells the whole design as one
+> story in this vocabulary, and every section there points back to the technical document,
+> the model code, the test and the hardware block behind it.
+
 ## The big picture
 
 | Idea | In plain words |

@@ -5,6 +5,15 @@ formal properties prove the hardware blocks keep their invariants. Silicon valid
 the physical claims. The same hypothesis list runs at every level; a level is finished when
 its artefact passes the hypotheses that level can test.
 
+> **In plain words:** every claim is written down together with the observation that would
+> prove it wrong, and each one has a test. The model is checked first, then the hardware
+> blocks, then the chip itself after it comes back from the fab. The last section says what
+> the proofs take on faith.
+> **Plain-English version:** `10-plain-english-walkthrough.md` §12.
+> **Backed by:** `govsim/harness.py` (the sweep across tiers), `tests/test_h00_*.py` to
+> `test_h16_*.py`, `rtl/tests/test_blocks.py`, `.github/workflows/ci.yml`; the current matrix
+> is `results/report.md`.
+
 ## 1. Hypotheses and what would knock each one down
 
 | Id | Claim | Falsified if | Level | Test |
@@ -77,7 +86,7 @@ property is small enough, a formal statement for a bounded model checker:
 
 | Failure | Effect | Detection | Mitigation |
 |---|---|---|---|
-| Governor loses power | Loop opens | Immediate | Domain halts; the dead governor's GPU is powered down by the board's default-safe 12V_EN |
+| Governor loses power | Loop opens | Immediate | Domain halts; the dead governor's GPU is powered down by the slot's default-safe PWR_EN where the board has per-slot power control, and held in reset otherwise |
 | Governor firmware hang | Heartbeat not consumed; no tickets | Watchdog | Watchdog resets the governor into HALTED_INITIAL; loop opens |
 | Fuse read failure | Keys cannot derive | Boot | Chip stays in BOOT; never asserts RUN |
 | NVM corruption | Policy or ledger unreadable | Authentication tag | Refuse to RUN; request a fresh policy image; reservations are rebuilt from the roster |

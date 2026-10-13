@@ -1,12 +1,19 @@
 {
   "DESIGN_NAME": "governor_core",
-  "VERILOG_FILES": ["dir::../../../rtl/gen/governor_core.v"],
+  "VERILOG_FILES": [
+    "dir::../../../rtl/gen/governor_core.v"
+  ],
   "CLOCK_PORT": "clk",
   "CLOCK_PERIOD": 20.0,
   "PDK": "sky130A",
   "STD_CELL_LIBRARY": "sky130_fd_sc_hd",
   "FP_SIZING": "absolute",
-  "DIE_AREA": [0, 0, 1400, 1400],
+  "DIE_AREA": [
+    0,
+    0,
+    1400,
+    1400
+  ],
   "FP_CORE_UTIL": 35,
   "PL_TARGET_DENSITY_PCT": 45,
   "FP_PDN_MULTILAYER": true,
@@ -20,10 +27,8 @@
   "FILL_INSERTION": true,
   "SYNTH_STRATEGY": "AREA 0",
   "MAX_FANOUT_CONSTRAINT": 10,
-  "RESET_PORT": "rst",
   "pdk::sky130*": {
     "FP_IO_VLENGTH": 2,
     "FP_IO_HLENGTH": 2
-  },
-  "//": "OpenLane 2 configuration for the governor control core on a sky130 shuttle. See hw/README.md."
+  }
 }

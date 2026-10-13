@@ -9,6 +9,10 @@ relies on. The policy loader refuses an image whose rules name an input with no 
 In plain words: the list taped to the wall of the security office. Who is allowed to tell us
 this, how old can it be, what do we do when two people disagree, and what can we not check.
 
+> **Plain-English version:** `10-plain-english-walkthrough.md` §11.
+> **Backed by:** model `govsim/policy.py` (`check_register`: an image whose rules name an input
+> with no row does not load); tests `tests/test_h07_register.py`.
+
 ## Columns
 
 | Column | Meaning |

@@ -1,7 +1,8 @@
 """Hashing, signing and key derivation for the model.
 
-Ed25519 everywhere, the same choice as the reference stack. Production silicon ships ECDSA
-P-256 (TPM, SEV-SNP, NVIDIA attestation); the curve changes nothing about the architecture.
+Ed25519 everywhere, the same choice as the reference stack. Production silicon uses ECDSA
+P-384 (the curve the NVIDIA GPU attestation chain and AMD SEV-SNP use) and P-256 for
+TPM-class endpoints; the curve changes nothing about the architecture.
 
 A *signed object* is one envelope format used by every party::
 

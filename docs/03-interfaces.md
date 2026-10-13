@@ -5,13 +5,24 @@ exist. For each interface, this document says what it physically is, what the go
 command through it, what it can only observe, and what it cannot reach. The "cannot reach"
 column is the honest part. Nothing here changes the GPU's silicon or CUDA.
 
+> **In plain words:** this is the list of every plug the governor is connected to, what it can
+> do through each one, and, in the honest column, what it cannot reach through it.
+> **Plain-English version:** `10-plain-english-walkthrough.md` §2 and §7.
+> **Backed by:** model `govsim/endpoints.py` (switches as enforcement points, the endpoint
+> comparator), `govsim/gpu.py` (`EXITS`, `transfer`, the levers, the attestation report);
+> tests `tests/test_h02_enforcement_points.py`, `test_h06_comparator.py`, `test_h16_levers.py`;
+> hardware `rtl/governor_rtl/cap_table.py`, `halt.py`; pins `hw/pinout/governor_module.csv`;
+> wiring `hw/pcb/rack-integration.md`.
+
 ## 1. Where it plugs in
 
 | Form | What it is | Why |
 |---|---|---|
-| **Management module on the system board** | A card in the motherboard's DC-SCM-class management module slot (the OCP standard slot that carries the BMC and the platform root of trust, with PCIe, SPI, I2C/I3C, GPIO and a low-pin-count sideband on one connector), either as the second module or as a mezzanine on the existing one | Every modern server motherboard has this slot; it is how control hardware is added without redesigning the board |
+| **Management module on the system board** | A card in the motherboard's management-module slot, where the board follows OCP's Datacenter Secure Control Module standard (DC-SCM): the module that carries the baseboard management controller and the platform root of trust, on a connector (DC-SCI) that carries PCIe, eSPI, SPI, I2C/I3C, USB and an LVDS tunnel (LTPI) for the platform's sideband signals. The governor rides as a second module or as a mezzanine on the existing one | Many current server boards have this slot; it is how control hardware is added without redesigning the board. Boards without it take the soldered option below |
 | **Soldered on the GPU baseboard** | The governor die beside the baseboard's own management controller, with the per-slot signals routed directly | For OEM baseboards; the shortest wires to the levers and the NVSwitch management bus |
 | **Switch-tray and DPU governors** | The same chip on each NVLink switch tray and on the DPU's board | So every switch the GPU's traffic passes has a governor holding its management authority |
+
+![Where the governor goes in the rack](figures/fig-rack.png)
 
 In plain words: the security office rents the room next door that every building already has,
 instead of asking the landlord to knock a hole in the wall.
@@ -20,8 +31,8 @@ instead of asking the landlord to knock a hole in the wall.
 
 | Channel | Direction | What it carries |
 |---|---|---|
-| Out-of-band management bus (SMBus or I2C; the GPU's post-box interface that baseboard controllers already use) | governor ↔ GPU | Power, temperature, utilization, ECC and firmware version readouts; power-limit and clock-limit commands; GPU identity |
-| Power brake (PWRBRK# on PCIe form-factor cards by specification; the baseboard's per-module power-brake signal on SXM boards) | governor → GPU | Immediate drop to a low-power clock state, reversible, no data loss |
+| Out-of-band management bus (SMBus; the GPU's SMBus Post-Box Interface, SMBPBI, that baseboard controllers already use) | governor ↔ GPU | Power, temperature, utilization, ECC and firmware version readouts; the power cap (documented in NVIDIA's product briefs as settable over SMBPBI and persistent across driver loads and system boots); GPU identity |
+| Power brake | governor → GPU | NVIDIA GPUs have a hardware power-brake input that forces a clock slowdown (nvidia-smi reports it as "HW Power Brake Slowdown"); on PCIe cards it is the optional PWRBRK# edge-connector signal, which many boards do not wire and the carrier must route to the governor; on SXM baseboards it is a baseboard signal where the board provides one. Where no hardware brake is wired, the governor's software-honoured fallback is the power cap over the post-box interface (which NVIDIA documents as persisting across driver loads and reboots), and the hard fallback is reset. Reversible, no data loss |
 | Reset (PERST# per slot) | governor → GPU | Fundamental reset of the GPU; the job is lost |
 | Slot power enable (the EN pin of the slot's hot-swap controller or e-fuse, where the baseboard has one per module; shared rails on some boards, which the policy records) | governor → board | Power cut. The floor, where the board provides it |
 | Confidential-computing attestation report (obtained in-band through the driver as today, delivered to the governor's mailbox) | host → governor | The GPU's signed measurement report; the governor verifies it locally against pinned reference values |
@@ -38,9 +49,9 @@ those interfaces.
 
 | Traffic | Switch | Management path | What the governor sets | Granularity |
 |---|---|---|---|---|
-| GPU to GPU over NVLink inside a baseboard | NVSwitch chips on the HGX baseboard | The NVSwitch out-of-band management bus (same family as the GPU's) for reset, power and telemetry; Fabric Manager for routing and partitions | Which ports are up; which GPUs are in the same partition; reset and power of the switch itself | Port and partition (link level) |
+| GPU to GPU over NVLink inside a baseboard | NVSwitch chips on the HGX baseboard, beside the baseboard's own hardware management controller (HMC) | Out-of-band: NVIDIA's SMBPBI-based monitoring of NVSwitch status and errors, and the baseboard's reset lines; in-band: Fabric Manager, which programs routing and NVLink partitions (partition keys) and exposes partition activate/deactivate APIs in its shared-NVSwitch and vGPU modes | Today: switch reset and partition membership through Fabric Manager; with the firmware ask in §9, an out-of-band port disable | Partition and port (link level) |
 | GPU to GPU over NVLink across trays | NVLink switch trays in an NVL rack | The tray's management controller, with the governor beside it | As above, per tray | Port and partition |
-| GPU to host, to storage, GPU to GPU over PCIe | The PCIe switch on the system board (the data-center switch families all expose a management port, I2C/SMBus or MDIO, with per-port enable, ACS and isolation) | The switch's management interface | Downstream port enable per slot; ACS to force peer-to-peer through the upstream port or block it; port isolation | Port |
+| GPU to host, to storage, GPU to GPU over PCIe | The PCIe switch on the system board. The data-center families expose management both in-band and over a sideband (Microchip's Switchtec: UART, two-wire/SMBus and EJTAG, with per-port hot-plug controllers and downstream port containment; Broadcom's PEX family: a management port and I2C/SPI); ACS is a standard PCIe switch feature. The exact capability set is per family and is confirmed on the chosen board | The switch's management sideband, with the governor as the only master | Downstream port power and link state per slot; ACS to force peer-to-peer through the upstream port or block it; containment on error | Port |
 | RDMA across nodes; GPUDirect Storage over the network | The DPU or NIC | The DPU's own out-of-band management port and its programmable filter tables (DOCA) | Flow rules: which roster peers and which storage targets may exchange bytes | Flow |
 
 Enforcement at this tier is at the link level: a port is open to a roster member under a

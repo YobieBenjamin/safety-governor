@@ -19,7 +19,7 @@ documentation.
 | Signal | From | To | Notes |
 |---|---|---|---|
 | GPU post-box management bus (SMBus/I2C) | governor I2C master | GPU module | The governor is the only master. The BMC's access to the GPU is routed through the governor as a pass-through that the governor can refuse |
-| PWRBRK# (PCIe form factor) or the baseboard's power-brake signal (SXM) | governor open-drain | GPU | Asserted at power-on; released in RUN |
+| Power brake: PWRBRK# on PCIe cards (an optional edge-connector signal that NVIDIA GPUs honour as a hardware slowdown; many boards leave it unwired, so the carrier routes it), or the baseboard's power-brake signal on SXM boards where one is provided | governor open-drain | GPU | Asserted at power-on; released in RUN. Where no hardware brake exists, the fallback is the SMBPBI power cap (software-honoured) and then reset |
 | PERST# | governor open-drain | GPU | Asserted at power-on; released in RUN after bring-up |
 | PWR_EN | governor push-pull | slot hot-swap controller / e-fuse enable | Where the baseboard has per-module power control. Boards with shared rails: PWR_EN is not connected and the policy records "no slot power cut" for that board, so the floor is reset |
 | Slot present, slot fault | slot | governor GPIO | Presence and fault inputs for the roster and the log |
@@ -28,7 +28,7 @@ documentation.
 
 | Switch | Bus | Governor's role |
 |---|---|---|
-| NVSwitch chips on the baseboard | The NVSwitch out-of-band management bus (same family as the GPU's), plus the reset lines | Only master; reset, power and telemetry today; port disable and partition when the firmware ask in `docs/03-interfaces.md` §9 is met; Fabric Manager's in-band path is unchanged |
+| NVSwitch chips on the baseboard | The baseboard's management buses beside its hardware management controller (HMC): NVIDIA's SMBPBI-based out-of-band monitoring for NVSwitch, plus the baseboard's reset lines; Fabric Manager in-band for partitions | Only master on the out-of-band side; status and reset today, partition membership through a Fabric Manager that honours a governor-signed policy, and an out-of-band port disable when the firmware ask in `docs/03-interfaces.md` §9 is met |
 | PCIe switch on the system board | The switch's management port (I2C/SMBus or MDIO) and its reset | Only master; downstream port enable per slot, ACS, port isolation |
 | DPU | The DPU's out-of-band management port | Signed filter-table commands via the DPU governor |
 

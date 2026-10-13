@@ -78,3 +78,20 @@ def test_fabric_heals_and_the_segment_recovers_after_clear(rack):
     rack.heartbeat()
     rack.reload_jobs()
     assert all(rack.running())
+
+
+def test_reachable_straggler_is_expelled_by_the_epoch_bound_heartbeat(rack):
+    """The fabric is intact, but gov03's host never delivers the proposal. The authority commits
+    to the three that acknowledged. Heartbeats now carry the new epoch; gov03, still on the old
+    one, refuses them and halts at expiry. Nobody keeps running on the old rules."""
+    res = rack.change_epoch(rack.new_policy(), silent=["gov03"])
+    assert set(res["committed"]) == {"gov00", "gov01", "gov02"} and res["stragglers"] == ["gov03"]
+    g3 = rack.nodes[3].governor
+    assert g3.epoch != rack.epoch
+    r = rack.heartbeat()
+    assert g3.log.has("deny.heartbeat", why=reasons.POLICY_STALE_EPOCH)
+    for _ in range(3):
+        rack.tick(seconds=2.0)
+        rack.heartbeat()
+    assert not rack.nodes[3].gpu.running and g3.cause == reasons.HEARTBEAT_LOST
+    assert all(rack.nodes[i].gpu.running for i in range(3))

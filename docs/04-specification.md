@@ -4,11 +4,26 @@ This is the implementable description: registers, formats, timing, crypto, firmw
 memory budgets and physical targets. The functional model in `govsim/` and the RTL in
 `rtl/governor_rtl/` follow it; where they simplify, the simplification is named.
 
+> **In plain words:** this is the part an engineer builds from: the exact registers, message
+> formats, rulebook format, key hierarchy, timers, memory sizes and physical targets. Nothing
+> here is new; it pins down what the architecture says so that the model, the hardware and
+> the tests cannot drift apart.
+> **Plain-English version:** `10-plain-english-walkthrough.md` §8, §9 and §14.
+> **Backed by:** model `govsim/governor.py` (`command` and one `_cmd_*` handler per mailbox
+> code), `govsim/policy.py` (the policy image, k-of-n), `govsim/ledger.py`, `govsim/crypto.py`,
+> `govsim/bench.py` (the timing budgets priced); tests `tests/test_h00_contract.py`,
+> `test_h03_quorum.py`, `test_h04_lane.py`, `test_h08_override.py`, `test_h09_overhead.py`;
+> hardware `rtl/governor_rtl/mailbox.py`, `ticket_store.py`, `meter.py`, `top.py` (the CSR
+> window).
+
 ## 1. Conventions
 
-- All multi-byte fields are little-endian. All hashes are SHA-256 unless stated. All
-  signatures are ECDSA P-256 over SHA-256 (production) or Ed25519 (the functional model, which
-  reuses the reference stack's envelope). The architecture does not depend on the curve.
+- All multi-byte fields are little-endian. All hashes are SHA-256 unless stated. Production
+  signatures are ECDSA P-384 over SHA-384: that is the curve the NVIDIA GPU attestation chain
+  uses (the local verifier in NVIDIA's nvtrust checks 96-byte signatures with SHA-384) and the
+  curve AMD's SEV-SNP VCEK uses, so the governor's verifier needs it anyway, and using it for
+  the governor's own signatures keeps one engine. The functional model uses Ed25519 for speed
+  of implementation. The architecture does not depend on the curve.
 - "Durable" means written to the governor's authenticated NVM before the operation returns.
 - Reason codes are strings in the model and 16-bit codes in silicon; the mapping is in
   `govsim/reasons.py`.
@@ -34,7 +49,7 @@ verification plan agree.
 | 0x070 | `MONO_LO`, `MONO_HI` | RO | 64 | Monotonic counter |
 | 0x078 | `HB_REMAIN` | RO | 32 | Heartbeat ticks remaining |
 | 0x07C | `LOOP` | RO | 2 | bit 0 loop current sensed, bit 1 own switch open |
-| 0x080 | `LEVERS` | RO | 3 | bit 0 PWRBRK# asserted, bit 1 PERST# asserted, bit 2 12V_EN low |
+| 0x080 | `LEVERS` | RO | 3 | bit 0 power brake asserted, bit 1 PERST# asserted, bit 2 PWR_EN low |
 | 0x084 | `ALARMS` | RO | 32 | Sticky alarm bits (monotone; cleared only through the clear path) |
 | 0x100 | `MBOX_DOORBELL` | WO (host) | 32 | Length of the command frame placed in the inbound ring |
 | 0x104 | `MBOX_STATUS` | RO | 8 | 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused |
@@ -116,6 +131,8 @@ satisfy that (R-H7).
 
 ## 5. Typed request, ticket, capability
 
+![One request through the gate](figures/fig-request.png)
+
 ```
 Request {request_id, measurement_token, action, params{...}, witnesses: [Assertion]}
    request_hash = SHA-256(canonical(request_id, fingerprint, action, params))
@@ -160,7 +177,7 @@ record; execution integrity is research. The blog's three-claim table applies.
 |---|---|---|
 | Hashing, measurement, log chain | SHA-256 | Hardware engine; also hashes what the verified runtime presents for signing |
 | MAC for capabilities, NVM authentication | HMAC-SHA-256 | Same engine |
-| Signatures | ECDSA P-256 (matches TPM, SEV-SNP, GPU attestation); Ed25519 optional | OTBN-class big-number coprocessor; constant time |
+| Signatures | ECDSA P-384 over SHA-384 (what the NVIDIA GPU attestation chain and SEV-SNP use); P-256 for TPM-class endpoints | OTBN-class big-number coprocessor (OpenTitan's OTBN ships P-256 and P-384 ECDSA, X25519, RSA, SHA-2/3 and post-quantum ML-KEM and ML-DSA programs; Ed25519 would need its own program); constant time |
 | NVM encryption | AES-256-GCM | Hardware engine |
 | Randomness | TRNG (ring-oscillator entropy source with health tests) feeding a DRBG | Health tests per SP 800-90B |
 | Key derivation | HKDF-SHA-256 | Hardware or firmware |
@@ -198,7 +215,7 @@ firmware fail to verify, which is the intended behaviour: an upgrade is an epoch
 | Mailbox command, `auto` rule, ticket minted | 20 µs (firmware) / 2 µs (hard gate core) | 100 µs |
 | Capability lookup | 1 cycle at the checker clock | hidden in the switch's own port logic; the governor programs ports, it does not sit on them |
 | Switch port open or close after a roster, epoch or heartbeat event | 1 ms (management-bus write) | 10 ms |
-| Output signature per response | 60 µs (P-256 on OTBN-class engine) | 200 µs |
+| Device-provenance signature | under 2 ms per ECDSA signature on an OTBN-class coprocessor at 100 MHz, a budget rather than a measurement; a dedicated ECC engine is faster. Per-response signing therefore caps at a few hundred responses per second per engine, so records are batched: one signature per batch window (default 10 ms) over a Merkle root of the records in the window, each record carrying its path | 2 ms per signature; 10 ms batch window |
 | Heartbeat period / expiry | 1 s / 5 s | policy |
 | Loop sense period / end-to-end halt bound | 100 µs / 1 ms | fixed in silicon |
 | Epoch commit deadline | 10 s | policy |

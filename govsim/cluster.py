@@ -283,24 +283,32 @@ class Rack:
         image = self.make_policy_image(self.policy_version, **{**self.policy_kw, **kw})
         return sign_policy(image, self.governance[: self.threshold])
 
-    def change_epoch(self, image: dict, deadline_s: float | None = None) -> dict:
-        """Two-phase, rack-atomic among the governors the authority can reach from its entry point."""
+    def change_epoch(self, image: dict, silent: list[str] | None = None) -> dict:
+        """Two-phase epoch change. The authority proposes to every governor it can reach from its
+        entry point; a governor whose host never delivers the proposal (``silent``) or that is cut
+        off never acknowledges. When the acknowledging set is the whole roster the authority commits
+        everywhere it can; otherwise it commits to the acknowledging set and the stragglers are
+        expelled: the new heartbeats carry the new epoch, a governor still on the old epoch refuses
+        them, and it halts at its heartbeat expiry (the mechanism tested in H14)."""
+        silent = set(silent or [])
         reachable = [n.governor for n in self.nodes if self.fabric.reachable(self.entry.chip_id, n.governor.chip_id) or n.governor is self.entry]
         acks = {}
         for g in reachable:
+            if g.chip_id in silent:
+                continue
             r = g.command("POLICY_PROPOSE", {"image": image})
             if r["ok"]:
                 acks[g.chip_id] = r["ack"]
         stragglers = [n.governor.chip_id for n in self.nodes if n.governor.chip_id not in acks]
         new_epoch = policy_epoch(image)
         committed = []
-        if len(acks) == len(reachable):
-            for g in reachable:
+        for g in reachable:
+            if g.chip_id in acks:
                 r = g.command("POLICY_COMMIT", {"epoch": new_epoch})
                 if r["ok"]:
                     committed.append(g.chip_id)
-            if committed:
-                self.policy, self.epoch = image, new_epoch
+        if committed:
+            self.policy, self.epoch = image, new_epoch
         return {"acks": sorted(acks), "committed": sorted(committed), "stragglers": sorted(stragglers), "epoch": new_epoch}
 
     # ------------------------------------------------------------------ red team helpers
@@ -312,6 +320,17 @@ class Rack:
         g.load_policy(self.policy)
         g.fabric = self.fabric
         self.fabric.join(g)          # on the wire, never on the loop (a rogue cannot open the loop from outside)
+        return g
+
+    def rogue_governor_with_bad_firmware(self) -> Governor:
+        """A genuine chip (valid vendor certificate) running firmware that is not in the reference values."""
+        fuses = Fuses(chip_id="gov-badfw", governance_key_hashes=[digest(k.public.hex) for k in self.governance])
+        g = Governor("badfw", self.clock, tier=self.tier, fuses=fuses, loader_digest=GOV_LOADER,
+                     firmware_digest=digest("governor-fw-patched"), firmware_version=GOV_FW_VERSION)
+        g.provision(self.gov_vendor, PRODUCTION)
+        g.load_policy(self.policy)
+        g.fabric = self.fabric
+        self.fabric.join(g)
         return g
 
     def running(self) -> list[bool]:

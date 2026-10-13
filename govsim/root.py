@@ -46,6 +46,7 @@ class SiliconRoot:
         self.firmware_digest = ""
         self.firmware_version = 0
         self._key: SigningKey | None = None
+        self.device_key: SigningKey | None = None
 
     def boot(self, loader_digest: str, firmware_digest: str, firmware_version: int) -> SigningKey:
         """Measure, check rollback, derive the DICE identity. Returns the signing key."""
@@ -58,6 +59,10 @@ class SiliconRoot:
         self.meas1.extend(firmware_digest)
         cdi0 = self.fuses.derive(b"cdi0:" + bytes.fromhex(self.meas0.value))
         cdi1 = self.fuses.derive(b"cdi1:" + cdi0 + bytes.fromhex(self.meas1.value))
+        # DICE: the DeviceID key is derived from CDI_0 (the secret and the first mutable code, the
+        # loader); the alias key from CDI_1 (plus the firmware). A loader change changes the device
+        # identity; a firmware change changes only the alias key.
+        self.device_key = SigningKey.from_seed(self.fuses.derive(b"deviceid:" + cdi0))
         self._key = SigningKey.from_seed(self.fuses.derive(b"sign:" + cdi1))
         self.loader_digest, self.firmware_digest, self.firmware_version = loader_digest, firmware_digest, firmware_version
         self.booted = True
@@ -92,4 +97,5 @@ class SiliconRoot:
     def zeroize(self) -> None:
         self.fuses.zeroize()
         self._key = None
+        self.device_key = None
         self.booted = False
