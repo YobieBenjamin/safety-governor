@@ -1,0 +1,69 @@
+# 05 · Threat model
+
+Who the adversary is, what they hold, what the governor stops, what it only raises the cost
+of, and what it does not address. The residual list at the end is the part that matters most;
+it is the list the assumptions register and the human layers exist for.
+
+## Adversaries
+
+| Adversary | Holds | Goal |
+|---|---|---|
+| **The model** | Its own weights and sandbox; it can say anything to the broker | Cause an action outside the rulebook; exfiltrate its weights; keep running when told to stop |
+| **A compromised host** (root on the CPU, the hypervisor, the BMC, the scheduler) | Every host-side software path, including the driver and the mailbox delivery path | Forge or replay authorizations; roll back policy; bypass the governor; silence it |
+| **A compromised broker or runtime** | The ability to send any mailbox command the host can send; the serving stack's own keys if the enclave is compromised | Mislabel requests; submit forged requests; fill the output buffer with arbitrary bytes |
+| **A network adversary** | The data network and the management network | Inject, replay, delay, partition |
+| **An insider with a board in hand** | Physical access to the governor and its wires for hours | Extract keys; defeat the loop; replace the chip |
+| **A malicious operator** | Legitimate policy-authority access to some keys, but fewer than the quorum | Loosen rules alone; clear alarms alone; override fast and quietly |
+| **A supply-chain adversary** | The fab, the packaging house, or the vendor's signing keys | Ship a governor that lies |
+
+## What the governor stops (claims with tests)
+
+| Threat | Mechanism | Hypothesis / test |
+|---|---|---|
+| Action without authorization | Endpoint comparator demands a ticket bound to the exact fields, single use, current epoch, committed at the governor | H0 |
+| Forged, altered, expired, replayed ticket | Signature under the governor's DICE key; params digest; expiry; durable used-ticket set | H0 |
+| Broker chooses its own lane ("this is reversible") | The rulebook selects the rule from fingerprint, action and limited fields only | H4 |
+| Modified GPU firmware, swapped model, changed policy, with permissions carried over | Fingerprint covers all three; permissions keyed on the fingerprint | H1 |
+| Policy loosened by one operator | k-of-n signatures checked by the governor itself | H3 |
+| Policy rollback to an older, looser image | Anti-rollback counter in fuses tracks the policy version | H3 |
+| Alarm cleared by the model, the host or a lone operator | Alarms are sticky; clearing needs a rule or an approver key | H5 |
+| Everything above the comparator compromised | Comparator re-checks against its own sensors and lists | H6 |
+| A rule relying on an input nobody vouched for | Policy load fails if a constraint names an input with no register row | H7 |
+| Fast, silent override | Quorum, latency floor, mandatory log entry | H8 |
+| Weight exfiltration to a non-roster peer, or over any path while the heartbeat is dead | Roster-bound NVSwitch ports, PCIe switch ports and ACS, DPU flows; unchecked paths bricked | H2 |
+| Slow leakage over the permitted output channel beyond budget | Query and byte budgets per workload; entropy and rate limits | H10 |
+| GPU keeps running when told to stop | Power brake, reset, 12 V cut, needing nothing from the GPU | H16 |
+| A halt that reaches some GPUs and not others | The halt loop; fail-safe open | H11 |
+| A rogue device on the fabric; replayed fabric messages | Roster from mutual attestation; signed, sequenced, epoch-bound messages | H12 |
+| Two governors overspending a shared budget | One ledger owner per key; reserve at the owner | H13 |
+| A partitioned segment kept alive by silence or a replayed heartbeat | Heartbeat expiry; authority signature; sequence numbers | H14 |
+| An epoch change applied unevenly | Two-phase commit with a deadline; stragglers halted | H14 |
+| Debug port used in production | Lifecycle fuse; access refused and logged | H15 |
+| Host silences the governor | Silence is a missed heartbeat; the governor halts | H14 |
+
+## What the governor only raises the cost of
+
+| Threat | Mitigation | Residual |
+|---|---|---|
+| Key extraction by decapping, probing, fault injection | Fused secret readable only by the KDF; active mesh shield; glitch detectors; zeroization; keys never in SRAM longer than needed | A well-funded lab with time can still win. Tamper response makes it expensive and evident, not impossible |
+| Loop defeat by jumpering the wire around a governor | Loop current is sensed at every governor and the loop carries a low-rate signed beacon on the message fabric that names the loop's expected member count; a jumpered governor's absence from the beacon is an alarm | An attacker who can jumper the wire and spoof the beacon has board-level access to two governors, which the enclosure tamper switch should have reported |
+| Replacing a governor with a lookalike | DICE identity; reference values signed by the governance root; the roster refuses an unknown chip | A fab-level clone with the same UDS defeats this; supply-chain controls, not silicon, are the answer |
+| Side channels on the crypto engines | Constant-time implementations; power and EM countermeasures in the product node | Not proven in the prototype |
+| Denial of service by flooding the mailbox | Rate limits per signer; refusals logged | A flooded governor refuses; it never allows. Availability is the cost, by design |
+
+## What the governor does not address
+
+| Residual | Where it lives instead |
+|---|---|
+| A harmful sentence over an allowed channel | Narrow rulebooks, the observer lane, human review |
+| A stale, incomplete or wrong list the rules compare against | The assumptions register; the authority that signs the list |
+| Sensors that agree because they share a failure mode | The register's independence column; endpoint design |
+| A policy that is wrong | Policy review, formal checking, and the humans who sign it |
+| Fab-level compromise, a leaked vendor key | Supply-chain controls, public logs of firmware hashes, key diversity |
+| The operator who holds the quorum and uses it badly | Governance design, not hardware |
+| Availability: a heartbeat too aggressive, a safe move badly chosen | The safe-mode policy and the measurement program |
+
+In plain words: the governor makes sure nobody gets past the gate without a ticket, and that
+the gate cannot be bribed, bypassed or switched off quietly. It does not decide what a ticket
+should cost, and it does not know whether the map on the wall is right. Those are jobs for
+people, and the whole design is built to keep them people's jobs.

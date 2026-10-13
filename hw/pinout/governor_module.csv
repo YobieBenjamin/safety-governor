@@ -1,0 +1,32 @@
+group,pin,direction,type,default_at_power_on,notes
+power,VDD_CORE,in,power,,core supply per process (1.8 V on sky130; 0.8 V on 22FDX)
+power,VDD_IO,in,power,,1.8 V I/O
+power,VDD_FUSE,in,power,tied off,fuse programming supply; connected only at provisioning
+power,GND,in,power,,
+clock,REFCLK,in,LVCMOS,,25 MHz reference; internal PLL
+clock,RESET_N,in,LVCMOS open-drain,low,brown-out detector holds reset until supplies are stable
+host,PCIE_TX_P/N,out,PCIe Gen3 x1,idle,mailbox endpoint behind the PCIe switch
+host,PCIE_RX_P/N,in,PCIe Gen3 x1,,
+host,PCIE_REFCLK_P/N,in,HCSL,,
+host,SMB_HOST_SCL/SDA,bidir,SMBus,,alternative mailbox for the smallest boards
+slot0..7,GPU_SMB_SCL/SDA,bidir,I2C/SMBus master,idle,the GPU's out-of-band post-box interface; governor is the only master
+slot0..7,PWRBRK_N,out,open-drain,asserted (low),power brake; released only in RUN
+slot0..7,PERST_N,out,open-drain,asserted (low),fundamental reset; released only in RUN after bring-up
+slot0..7,PWR_EN,out,push-pull,low,slot hot-swap controller enable; high only when the governor is booted and not in SAFE
+switch,NVSW_SMB_SCL/SDA,bidir,I2C/SMBus master,idle,NVSwitch management bus; reset and port state
+switch,NVSW_RESET_N,out,open-drain,asserted,per NVSwitch reset
+switch,PEX_MGMT_SCL/SDA,bidir,I2C/SMBus master,idle,PCIe switch management port
+switch,PEX_MDIO/MDC,bidir,MDIO master,idle,PCIe switch management (families that use MDIO)
+switch,PEX_RESET_N,out,open-drain,asserted,PCIe switch reset
+dpu,DPU_OOB_TX/RX,bidir,1000BASE-T or I2C,idle,DPU out-of-band management port for filter-table commands
+loop,LOOP_IN,in,current loop,,halt loop input from the previous governor
+loop,LOOP_OUT,out,current loop switch,open,normally-closed in RUN; open at power-on and in HALT/SAFE
+loop,LOOP_SENSE,in,comparator,,loop current present
+fabric,FAB_A_TX/RX,bidir,SGMII or 100BASE-T1,idle,ring A
+fabric,FAB_B_TX/RX,bidir,SGMII or 100BASE-T1,idle,ring B
+tamper,MESH_A,in,analog,,active shield drive
+tamper,MESH_B,in,analog,,active shield sense
+tamper,TAMPER_IN,in,LVCMOS,,enclosure switch; low = tripped
+provisioning,PROV_SPI_CLK/MOSI/MISO/CS_N,bidir,SPI,disabled,fuse programming and reference-value injection; dead after the lifecycle fuse advances
+debug,JTAG_TCK/TMS/TDI/TDO,bidir,JTAG,disabled in PRODUCTION,test only
+status,LED_STATE[2:0],out,LVCMOS,000,state for the technician: HALTED_INITIAL/RUN/THROTTLE/HALT/SAFE

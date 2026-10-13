@@ -1,0 +1,6 @@
+The documentation in this repository (README.md, docs/, hw/*.md, hw/pcb/, hw/pinout/) is
+licensed under the Creative Commons Attribution-NonCommercial 4.0 International License
+(CC BY-NC 4.0). https://creativecommons.org/licenses/by-nc/4.0/
+
+Attribution: Yobie Benjamin, Safety Governor, https://github.com/YobieBenjamin/safety-governor
+Commercial use requires a separate license: yobie AT ieee DOT org

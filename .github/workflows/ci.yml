@@ -1,0 +1,19 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -q tests
+      - run: python -m pytest -q rtl/tests
+      - run: python -m rtl.gen --check
+      - run: python -m govsim.cli sweep
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sweep-report
+          path: results/report.md

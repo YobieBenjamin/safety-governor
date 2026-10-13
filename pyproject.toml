@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safety-governor"
+version = "0.1.0"
+description = "Safety Governor: a functional model, hypothesis tests and RTL for a chip that says no, one per NVIDIA GPU, added through the rack's boards"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "PolyForm-Noncommercial-1.0.0"}
+dependencies = [
+  "cryptography>=41",
+  "amaranth>=0.5,<0.6",
+  "amaranth-yosys",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+govsim = "govsim.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["govsim*", "rtl*"]
+
+[tool.pytest.ini_options]
+addopts = "-q"

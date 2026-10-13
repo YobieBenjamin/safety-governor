@@ -1,0 +1,94 @@
+# 07 · Verification plan
+
+Three levels, one catalogue. The functional model proves the logic. The RTL simulation and
+formal properties prove the hardware blocks keep their invariants. Silicon validation proves
+the physical claims. The same hypothesis list runs at every level; a level is finished when
+its artefact passes the hypotheses that level can test.
+
+## 1. Hypotheses and what would knock each one down
+
+| Id | Claim | Falsified if | Level | Test |
+|---|---|---|---|---|
+| H0 | Within the boundary, no protected operation executes without a fresh authorization bound to that exact operation | Any forged, altered, expired, replayed or unauthorized ticket is accepted by an endpoint | sim, silicon | `tests/test_h00_contract.py` |
+| H1 | Attestation binds permissions to firmware, model manifest and policy | A change in any of them leaves the fingerprint or the epoch unchanged, or a permission carries over | sim, silicon | `tests/test_h01_attestation.py` |
+| H2 | Every enumerated boundary crossing passes a governed switch | Bytes reach a non-roster peer, or leave while the heartbeat is dead, or a path is found that the enumeration missed; descriptor-level leaks between roster members are the recorded residual | sim (rack tier; residual recorded), silicon | `tests/test_h02_enforcement_points.py` |
+| H3 | Policy changes only with a quorum, and never backwards | An image with fewer than k signatures, or an older version, is accepted | sim, rtl (monotonic) | `tests/test_h03_quorum.py` |
+| H4 | The broker cannot choose its rule or lane | A requester-supplied label changes a decision | sim | `tests/test_h04_lane.py` |
+| H5 | Alarms are monotone | An alarm is cleared without a rule or key | sim, rtl (sticky alarm bits) | `tests/test_h05_alarms.py` |
+| H6 | The comparator holds with every layer above it compromised | A release succeeds with host, broker and runtime under red-team control | sim, silicon | `tests/test_h06_comparator.py` |
+| H7 | The assumptions register is complete for the deployment | A policy with a rule input that has no register row loads | sim | `tests/test_h07_register.py` |
+| H8 | Human override is slow and fully logged | An override below the latency floor, below the quorum, or missing from the log | sim | `tests/test_h08_override.py` |
+| H9 | Governor overhead is zero per token, one lookup per transfer, one signature per response | Operation counts grow with tokens, or the modelled cost exceeds one percent for the reference workload | sim (model), silicon (measurement) | `tests/test_h09_overhead.py`, `govsim/bench.py` |
+| H10 | Permitted-channel leakage stays within the budget | Extraction through the output channel exceeds the query or byte budget without tripping a limit | sim | `tests/test_h10_leakage.py` |
+| H11 | A halt propagates to every GPU in the domain within the bound, fail-safe | Any GPU keeps running after a halt or a loop break; any governor clears alone | sim, rtl (halt_loop), silicon | `tests/test_h11_halt_loop.py` |
+| H12 | Only roster members speak on the fabric, and only once per message | A rogue or replayed message is acted on | sim | `tests/test_h12_fabric_auth.py` |
+| H13 | Shared budgets cannot be overspent across governors | Concurrent reservations exceed the limit | sim | `tests/test_h13_shared_budget.py` |
+| H14 | Partitions and epoch changes end in safe states, never in stale ones | A cut-off segment keeps running; an epoch applies unevenly | sim, rtl (heartbeat) | `tests/test_h14_partition.py` |
+| H15 | Production silicon has no debug path | A debug access succeeds in the production lifecycle state | sim, rtl (lifecycle), silicon | `tests/test_h15_tamper.py` |
+| H16 | The physical levers work without the GPU's cooperation | A GPU that ignores every software command keeps running after the governor asserts its levers | sim, silicon | `tests/test_h16_levers.py` |
+
+## 2. Tiers in the simulation
+
+Every test runs against three configurations of the model:
+
+| Tier | Enforcement points | Levers | Fabric |
+|---|---|---|---|
+| rack (plan of record) | NVSwitch ports, PCIe switch ports and ACS, DPU flow tables, all roster-bound; unchecked paths bricked | brake, reset, slot power | loop + messages |
+| board (fallback) | none (the model records the gap) | brake, reset, slot power | loop + messages |
+| integrated (future ask) | the rack tier plus descriptor-level checks at the copy engines and the peer MMU, and an inline output hash | as rack | as rack |
+
+H2 has two parts. Link-level containment (no bytes to a non-roster peer, no bytes when the
+heartbeat is dead) must hold at the rack tier. Descriptor-level containment between two
+roster members is *expected to fail* at the rack and board tiers and is reported as the
+known residual, not a surprise. The report in `results/report.md` shows the matrix.
+
+## 3. RTL properties
+
+For each block in `rtl/governor_rtl/`, a simulation test in `rtl/tests/` and, where the
+property is small enough, a formal statement for a bounded model checker:
+
+| Block | Invariant |
+|---|---|
+| `monotonic` | The counter value never decreases; a decrement request is refused |
+| `measure_reg` | The register changes only through `extend`; no write path exists |
+| `epoch_reg` | The register changes only on `policy_commit` with `quorum_ok`; the host port cannot write it |
+| `lifecycle` | The state is monotone; in PRODUCTION, `debug_grant` is never asserted |
+| `cap_table` | A lookup allows only an entry with matching key, budget > 0, not expired, matching epoch tag; budget never underflows |
+| `ticket_store` | A burned id is never admitted again; `burn` before `admit` ordering |
+| `heartbeat` | `safe_mode` asserts within one tick of expiry; the timer reloads only on `hb_valid` |
+| `halt` | `halt_out` asserts on any of (loop open, heartbeat expired, tamper, command) and never deasserts without `clear` |
+| `halt_loop` | The switch opens on `halt_out`; `loop_sense` low drives `halt_out` within one sense period |
+| `meter` | Counters are read-only from the host port and only increment |
+| `mailbox` | No command is dispatched unless `seq > last_seq` and `sig_ok` and (`epoch_match` or command is epoch-exempt) |
+| `alarms` | Bits set by any source; cleared only through `clear_strobe` gated by `clear_authorized` |
+
+## 4. Silicon validation (after tape-out)
+
+| Claim | Test |
+|---|---|
+| Halt bound 1 ms on a 72-governor loop | Oscilloscope on PWRBRK# across the domain; worst case over temperature and loop length |
+| Levers stop a real GPU | A GPU running a benchmark ignores software; PWRBRK# throttles, PERST# resets, PWR_EN cuts; every governed switch port around it closes |
+| Fuse lifecycle | JTAG refused in PRODUCTION; attempt logged |
+| Tamper | Mesh cut, glitch injection, temperature excursion: keys zeroized, state SAFE |
+| Overhead under one percent | Phase 2 measurement on a real node: tokens per second and action latency with the governor off, on, and on with full logging and revocation |
+| Fabric under partition | Pull cables; verify the table in `02-safety-fabric.md` §3 row by row |
+
+## 5. Failure modes and effects (FMEA, abbreviated)
+
+| Failure | Effect | Detection | Mitigation |
+|---|---|---|---|
+| Governor loses power | Loop opens | Immediate | Domain halts; the dead governor's GPU is powered down by the board's default-safe 12V_EN |
+| Governor firmware hang | Heartbeat not consumed; no tickets | Watchdog | Watchdog resets the governor into HALTED_INITIAL; loop opens |
+| Fuse read failure | Keys cannot derive | Boot | Chip stays in BOOT; never asserts RUN |
+| NVM corruption | Policy or ledger unreadable | Authentication tag | Refuse to RUN; request a fresh policy image; reservations are rebuilt from the roster |
+| Loop sense comparator stuck "closed" | A real open is missed at one governor | Beacon on the message fabric names the expected member count; mismatch | Alarm; the other governors' switches still open the loop |
+| Fabric port failure | Partition | Heartbeat expiry | Safe mode for the cut-off segment |
+| Clock glitch | Counter or FSM corruption | Glitch detector | Zeroize, SAFE |
+
+## 6. What the proofs assume
+
+Following seL4's practice, the control firmware's verification will state its assumptions
+explicitly: the hardware model (the RTL properties above hold), no DMA into the governor's
+SRAM (there is no DMA engine), the crypto engines compute what they claim, the fuse and NVM
+macros are correct, and the compiler is trusted or the binary is verified. A verified
+controller does not verify the GPU beside it. The claims table in the blog applies in full.
