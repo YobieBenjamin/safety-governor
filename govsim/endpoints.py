@@ -5,16 +5,17 @@ Rack tier: the enforcement points are the switches the GPU's traffic already pas
 is their only writer; a port or flow is open exactly when a matching, unexpired capability
 exists. Integrated tier (a future vendor ask): descriptor-level checkers inside the GPU.
 
-Action endpoints are the comparators in the devices that act. They hold the governor's
-public key, their own used-ticket store, the current epoch, a heartbeat timer and their own
-sensors, and they re-check at the moment of action.
+Action endpoints are the comparators in the devices that act. They hold the public keys of
+the rack's governors, their own used-ticket store (the model's used-ticket set lives here, not
+in the governor), the current epoch, a heartbeat timer and their own sensors, and they re-check
+at the moment of action.
 """
 from __future__ import annotations
 
 from typing import Any, Callable
 
 from . import reasons
-from .crypto import VerifyKey, canonical, digest, hmac_sha256, verify_object
+from .crypto import VerifyKey, canonical, digest, hmac_sha256, verify_any, verify_object
 from .store import Store
 
 RACK_POINTS = ("nvswitch", "pcie", "dpu", "storage")
@@ -26,8 +27,7 @@ class Switch:
     """A governed switch: NVSwitch, PCIe switch, DPU flow table or the storage path.
 
     ``program`` is the only way to open a port or flow, and it verifies the governor's MAC.
-    ``host_write`` models the host, the BMC or Fabric Manager trying to change the switch;
-    at the rack tier the governor is the only master on the management bus, so it fails.
+    There is no host write path: the governor is the only master on the management bus.
     """
 
     def __init__(self, kind: str, owner_chip_id: str, cap_key: bytes, log: Callable[[str, dict], None]):
@@ -38,6 +38,7 @@ class Switch:
         self.log = log
         self.refusals: list[dict] = []
         self.epoch_tag = ""
+        self.bytes_passed: dict[str, int] = {}           # peer -> bytes that crossed this switch
 
     def mac(self, cap: dict) -> str:
         body = {k: v for k, v in cap.items() if k != "mac"}
@@ -53,13 +54,12 @@ class Switch:
     def close_all(self) -> None:
         self.table.clear()
 
+    def close_peer(self, peer: str) -> None:
+        for k in [k for k in self.table if k[0] == peer]:
+            self.table.pop(k)
+
     def set_epoch(self, epoch_tag: str) -> None:
         self.epoch_tag = epoch_tag
-
-    def host_write(self, peer: str, direction: str) -> bool:
-        """The host cannot program the switch. Logged as an attempt."""
-        self.log("switch.host_write_refused", {"switch": self.kind, "peer": peer})
-        return False
 
     def pass_traffic(self, peer: str, direction: str, nbytes: int, now: float) -> tuple[bool, str]:
         cap = self.table.get((peer, direction)) or self.table.get((peer, "both"))
@@ -73,6 +73,7 @@ class Switch:
         if cap["budget"] < nbytes:
             return self._refuse(peer, direction, nbytes, reasons.EP_BUDGET_EXHAUSTED)
         cap["budget"] -= nbytes
+        self.bytes_passed[peer] = self.bytes_passed.get(peer, 0) + nbytes
         return True, reasons.OK
 
     def _refuse(self, peer: str, direction: str, nbytes: int, why: str) -> tuple[bool, str]:
@@ -88,12 +89,12 @@ class DescriptorChecker(Switch):
 class ActionEndpoint:
     """The comparator in the device that acts (requirement R10, R11; hypotheses H0, H6)."""
 
-    def __init__(self, name: str, clock, governor_pub: VerifyKey, store: Store | None = None,
+    def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], store: Store | None = None,
                  safe_transition: str = "no_action", lists: dict[str, Any] | None = None,
                  sensors: dict[str, Any] | None = None, heartbeat_expiry_s: float = 5.0):
         self.name = name
         self.clock = clock
-        self.governor_pub = governor_pub
+        self.keys = dict(governor_keys)      # key id -> VerifyKey of every governor that may mint for this device
         self.store = store or Store()
         self.consumed = self.store.get("consumed", {})     # ticket_id -> t
         self.epoch = ""
@@ -110,7 +111,7 @@ class ActionEndpoint:
 
     # --- inputs from the governor ---------------------------------------------
     def set_epoch(self, signed_epoch: dict) -> bool:
-        if not verify_object(signed_epoch, self.governor_pub) or signed_epoch["payload"].get("type") != "policy-epoch":
+        if verify_any(signed_epoch, self.keys) is None or signed_epoch["payload"].get("type") != "policy-epoch":
             return False
         self.epoch = signed_epoch["payload"]["epoch"]
         return True
@@ -122,7 +123,7 @@ class ActionEndpoint:
     def admit(self, ticket: dict | None, action: str, params: dict, now: float) -> tuple[bool, str]:
         if ticket is None:
             return False, reasons.TICKET_MISSING
-        if not verify_object(ticket, self.governor_pub) or ticket["payload"].get("type") != "ticket":
+        if verify_any(ticket, self.keys) is None or ticket["payload"].get("type") != "ticket":
             return False, reasons.TICKET_BAD_SIGNATURE
         t = ticket["payload"]
         if t["action"] != action:

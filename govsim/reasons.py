@@ -15,6 +15,7 @@ POLICY_REGISTER_INCOMPLETE = "policy.register_incomplete"
 POLICY_EXPIRED = "policy.expired"
 POLICY_STALE_EPOCH = "policy.stale_epoch"
 POLICY_NOT_STAGED = "policy.not_staged"
+POLICY_BUDGET_OWNER_MISSING = "policy.budget_owner_missing"
 
 # mailbox
 MBOX_BAD_SEQUENCE = "mailbox.bad_sequence"
@@ -36,6 +37,7 @@ GATE_BUDGET_OWNER_UNREACHABLE = "gate.budget_owner_unreachable"
 GATE_HELD = "gate.held_for_human"
 GATE_ALARM = "gate.alarm_active"
 GATE_OUTPUT_BUDGET = "gate.output_budget_exceeded"
+OUTPUT_UNPRESENTED = "gate.output_unpresented"
 
 # approvals and overrides
 APPROVE_UNKNOWN_HOLD = "approve.unknown_hold"
@@ -85,6 +87,7 @@ HEARTBEAT_REPLAY = "heartbeat.replay"
 HEARTBEAT_EXPIRED = "heartbeat.expired"
 ROSTER_QUOTE_INVALID = "roster.quote_invalid"
 ROSTER_NOT_MEMBER = "roster.not_member"
+ROSTER_BAD_SIGNATURE = "roster.bad_signature"
 CLEAR_UNAUTHORIZED = "clear.unauthorized"
 CLEAR_CAUSE_NOT_LOGGED = "clear.cause_not_logged"
 CLEAR_NO_NEIGHBOR_ACK = "clear.no_neighbor_ack"

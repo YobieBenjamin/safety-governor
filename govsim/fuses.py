@@ -16,10 +16,17 @@ TEST, PROVISIONED, PRODUCTION, DECOMMISSIONED = 0, 1, 2, 3
 LIFECYCLE_NAMES = {TEST: "TEST", PROVISIONED: "PROVISIONED", PRODUCTION: "PRODUCTION", DECOMMISSIONED: "DECOMMISSIONED"}
 
 
+def _kdf_engine(uds: bytes):
+    """The key-derivation engine: the only thing that ever sees the secret, held in its closure."""
+    def derive(info: bytes, length: int) -> bytes:
+        return hkdf(uds, info, length)
+    return derive
+
+
 class Fuses:
     def __init__(self, chip_id: str | None = None, governance_key_hashes: list[str] | None = None, uds: bytes | None = None):
         self.chip_id = chip_id or secrets.token_hex(8)
-        self._uds = uds or secrets.token_bytes(32)
+        self._kdf = _kdf_engine(uds or secrets.token_bytes(32))   # no attribute holds the secret
         self.rollback = 0                      # firmware version; thermometer-coded in silicon
         self.policy_version = 0                # policy image version; a second thermometer
         self.lifecycle = TEST
@@ -31,12 +38,12 @@ class Fuses:
         """The only way out of the fuse block: a derived key, never the secret itself."""
         if self.zeroized:
             raise RuntimeError(reasons.TAMPER_ZEROIZED)
-        return hkdf(self._uds, info, length)
+        return self._kdf(info, length)
 
     @property
     def uds_fingerprint(self) -> str:
         """A public, non-reversible identifier of the secret, for the chip certificate."""
-        return sha256(hkdf(self._uds, b"fingerprint"))
+        return sha256(self.derive(b"fingerprint"))
 
     # --- monotone state -----------------------------------------------------
     def bump_rollback(self, to: int) -> None:
@@ -62,5 +69,5 @@ class Fuses:
 
     def zeroize(self) -> None:
         """Tamper response: the secret is gone and so is every key derived from it."""
-        self._uds = b"\x00" * 32
+        self._kdf = _kdf_engine(b"\x00" * 32)
         self.zeroized = True

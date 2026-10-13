@@ -10,7 +10,7 @@ documentation.
 | Board | What goes there | Why |
 |---|---|---|
 | System board (motherboard) | The governor module in the management-module slot (DC-SCM-class), or as a mezzanine on the existing module | The slot already carries PCIe, I2C/I3C, GPIO and a sideband to the board; it is how control hardware is added without a board redesign |
-| GPU baseboard (HGX / NVL tray) | Either routed from the module through the baseboard connector, or the governor die soldered beside the baseboard's management controller | The per-slot signals and the NVSwitch management bus live here |
+| GPU baseboard (HGX / NVL tray) | Routed from the module through the baseboard connector: the management bus and whichever reset and power signals the baseboard exposes. The governor die soldered beside the baseboard's management controller is the shortest wiring and is an ask to NVIDIA, whose board it is | The per-slot signals and the NVSwitch management bus live here |
 | NVLink switch tray | A governor beside the tray's management controller | Owns the tray's switch ports |
 | DPU board | A governor on the DPU's board, or the DPU's own root of trust running the governor firmware | Owns the filter tables |
 
@@ -40,7 +40,7 @@ refuses writes that are not its own.
 
 | Wire | Physical | Routing | Notes |
 |---|---|---|---|
-| Halt loop | Series current loop, 4 to 20 mA class, one twisted pair | LOOP_OUT of governor N to LOOP_IN of governor N+1 through every tray in the domain, back to the domain's supervisor governor | A jumper plug terminates the last tray. Broken loop = halt. Loop continuity is part of the rack's power-on self-test |
+| Halt loop | Supervised series current loop with a live-zero current (the 4 to 20 mA idea), one twisted pair | LOOP_OUT of governor N to LOOP_IN of governor N+1 through every tray in the domain, back to the domain's supervisor governor | A jumper plug terminates the last tray. Broken loop = halt. Loop continuity is part of the rack's power-on self-test |
 | Message fabric | Dual ring, 100BASE-T1 (two-wire) or SGMII over the rack's existing management cabling but on separate pairs | Ring A clockwise, ring B counter-clockwise through the trays | No connection to the management network's switches; a governor-to-governor wire only |
 
 Both wires leave each tray on one small connector next to the management connector; the
@@ -48,14 +48,17 @@ rack harness carries them tray to tray.
 
 ## 5. Power-on sequence
 
-1. Rack power on. Governors boot halted: every slot's PWRBRK# and PERST# asserted, PWR_EN
-   low, every governed switch port closed, loop switches open.
+1. Rack power on. Governors boot halted: every slot's power brake and PERST# asserted, PWR_EN
+   low, every governed switch port closed, loop switches open. A governor that went down with
+   an uncleared safe-mode cause comes back on that rung, with its switch open, and waits for
+   CLEAR.
 2. Governors measure boot, derive keys, load their policy image from NVM, and verify it.
-3. The rack's loop continuity test passes (every governor's LOOP_OUT closed only after step
-   2 succeeds; a governor that failed to boot keeps the loop open and the rack does not start).
-4. The policy authority's first heartbeat enters at the supervisor governor and fans out.
-   Armed governors see loop current and go to RUN: PWR_EN high, PERST# released after the
-   slot's power-good, PWRBRK# released.
+3. The policy authority's first heartbeat enters at the supervisor governor and fans out.
+   A governor with no open cause and a valid heartbeat is armed and closes its loop switch.
+4. When every governor in the domain has closed its switch, loop current flows; the rack's
+   loop continuity test passes (a governor that failed to boot keeps the loop open and the
+   rack does not start). Armed governors see the current and go to RUN: PWR_EN high, PERST#
+   released after the slot's power-good, the power brake released.
 5. The host boots, the driver attests each GPU, the governors verify and form the roster, the
    switch ports open for roster members, the model key is released, the job starts.
 

@@ -22,6 +22,10 @@ def _snapshot(data: dict[str, Any]) -> bytes:
     return pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+class PowerLoss(Exception):
+    """Fault injection: the power failed before this save completed."""
+
+
 class Store:
     """Authenticated NVM. In memory by default; optionally backed by a JSON file."""
 
@@ -29,13 +33,23 @@ class Store:
         self.path = path
         self.data: dict[str, Any] = {}
         self.writes = 0
+        self._fail_in: int | None = None
         if path and os.path.exists(path):
             with open(path, encoding="utf-8") as fh:
                 self.data = json.load(fh)
         self._nvm: bytes = _snapshot(self.data)
 
+    def fail_after(self, n: int | None) -> None:
+        """Make the n-th save from now fail with ``PowerLoss`` (None disarms)."""
+        self._fail_in = n
+
     def save(self) -> None:
         """Commit the working copy to NVM atomically."""
+        if self._fail_in is not None:
+            self._fail_in -= 1
+            if self._fail_in <= 0:
+                self._fail_in = None
+                raise PowerLoss()
         self._nvm = _snapshot(self.data)
         self.writes += 1
         if self.path:

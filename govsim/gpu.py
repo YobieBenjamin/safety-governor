@@ -113,8 +113,12 @@ class GPU:
         return n
 
     def emit(self, stream: str, data: bytes) -> bytes | None:
-        """Token bytes leaving the GPU. Integrated tier: folded into the governor's hash inline."""
+        """Token bytes leaving the GPU for the host: they cross the governed pcie port where there is
+        one. Integrated tier: also folded into the governor's hash inline."""
         if not self.running or self.output_blocked:
+            return None
+        switch = self.switches.get("pcie")
+        if switch is not None and not switch.pass_traffic("host", "out", len(data), self.clock.now())[0]:
             return None
         self.bytes_out += len(data)
         if self.output_hook:
@@ -142,8 +146,9 @@ class GPU:
         switch = self.switches.get(exit_name)
         if switch is None:
             if exit_name in ("copy_engine", "peer_mmu"):
-                # internal path: at the rack tier it is governed only by the switch the bytes reach next
-                return True, reasons.EP_UNCHECKED
+                # internal path: checked by the descriptor checker where there is one (integrated tier);
+                # at the rack tier it is governed only by the switch the bytes reach next
+                return True, reasons.OK if checker is not None else reasons.EP_UNCHECKED
             self.gap_log.append({"exit": exit_name, "peer": peer, "bytes": nbytes, "why": "no governed switch"})
             return True, reasons.EP_UNCHECKED
         ok, why = switch.pass_traffic(peer, direction, nbytes, now)

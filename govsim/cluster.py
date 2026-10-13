@@ -26,6 +26,7 @@ GPU_FW = "nvidia-gpu-fw-2026.10"
 HOST_FW = "host-enclave-fw-1"
 GOV_LOADER, GOV_FW, GOV_FW_VERSION = digest("loader-v1"), digest("governor-fw-v1"), 1
 PROTECTED_SITES = [[34.052, -118.244], [48.857, 2.351], [31.769, 35.216]]   # schools, in the model's world
+WORKLOAD_70B = digest([GPU_FW, HOST_FW, digest(["model-70b", 1])])            # the shipped model's workload measurement
 
 
 def governor_meas1(firmware_digest: str = GOV_FW) -> str:
@@ -66,6 +67,7 @@ class Rack:
         self.hb_seq = 0
         self.authority_seq = 0
         self.approver_seq: dict[str, int] = {}
+        self.endpoint_seq: dict[str, int] = {}
         # fabric
         self.loop = HaltLoop()
         self.fabric = MessageFabric()
@@ -90,7 +92,8 @@ class Rack:
             hk = SigningKey.generate()
             hc = self.cpu_vendor.sign({"type": "host-enclave-cert", "pub": hk.public.hex})
             self.nodes.append(Node(f"node{i}", gpu, g, hk, hc))
-        # endpoints, one of each, attached to governor 0 (any governor can mint for any endpoint)
+        # endpoints, one of each; they hold every governor's key and commit to the governor that minted
+        self.by_key = {n.governor.key.key_id: n.governor for n in self.nodes}
         self.endpoints: dict[str, ActionEndpoint] = {}
         self._make_endpoints()
         self.entry = self.nodes[0].governor      # where the authority's messages enter the fabric
@@ -99,7 +102,7 @@ class Rack:
     # ------------------------------------------------------------------ policy
     def make_policy_image(self, version: int, *, pay_small_limit: float = 2000.0, strike_mode: str = "observer",
                           override_floor_s: float = 60.0, drop_register_row: str | None = None, expires_in_s: float = 30 * 86400,
-                          output_queries: int = 50, output_bytes: int = 200_000) -> dict:
+                          output_queries: int = 50, output_bytes: int = 200_000, unpresented_bytes: int = 1 << 20) -> dict:
         now = self.clock.now()
         refs = [
             {"device_class": "gpu", "vendor_key": self.gpu_vendor.public.hex, "firmware_digest": GPU_FW, "valid_until": now + 365 * 86400},
@@ -115,7 +118,10 @@ class Rack:
                       rate={"max": 100, "window_s": 60}, endpoint="payment-switch", inputs=["beneficiary-registry"]),
             make_rule("payments.transfer.large", "payments.transfer", mode="human", approvers_quorum=2,
                       constraints={"amount": {"min": 1000, "max": 1_000_000}}, endpoint="payment-switch", inputs=["beneficiary-registry"]),
-            make_rule("model.output", "model.output", output_budget={"queries": output_queries, "bytes": output_bytes, "window_s": 3600}, inputs=[]),
+            make_rule("model.output", "model.output", inputs=[],
+                      output_budget={"queries": output_queries, "bytes": output_bytes, "window_s": 3600, "unpresented_bytes": unpresented_bytes}),
+            make_rule("model.export.70b", "model.export", measurement=WORKLOAD_70B),              # exact workload: auto
+            make_rule("model.export.any", "model.export", mode="human", approvers_quorum=2),      # any other workload: humans
         ]
         rows = [
             make_register_row("protected-sites", "deconfliction authority list, countersigned by the governance root", "per-entry expiry; stale is a denial",
@@ -126,6 +132,8 @@ class Rack:
                               "observers run on isolated compute", "whether the observer is right"),
             make_register_row("beneficiary-registry", "sanctions and beneficiary registries, signed", "registry version in the epoch", "new beneficiary is a hold",
                               "registries run by different bodies", "whether an entry is correct"),
+            make_register_row("pay-usd-hourly", "the policy image (budget limit and window)", "epoch", "old epoch is a denial",
+                              "as for the policy", "whether the limit is the right limit"),
         ]
         if drop_register_row:
             rows = [r for r in rows if r["input"] != drop_register_row]
@@ -146,16 +154,22 @@ class Rack:
 
     def _make_endpoints(self) -> None:
         g0 = self.nodes[0].governor
+        keys = {kid: g.key.public for kid, g in self.by_key.items()}
         protected = {"entries": [tuple(e) for e in PROTECTED_SITES], "stale": False}
-        strike = ActionEndpoint("strike-guidance", self.clock, g0.key.public, safe_transition="no_release",
+        strike = ActionEndpoint("strike-guidance", self.clock, keys, safe_transition="no_release",
                                 sensors={"nav_gnss": (37.0, -122.0), "nav_inertial": (37.0, -122.0), "lists": {"protected-sites": protected}})
         strike.checks = strike_checks()
-        pay = ActionEndpoint("payment-switch", self.clock, g0.key.public, safe_transition="decline")
+        pay = ActionEndpoint("payment-switch", self.clock, keys, safe_transition="decline")
         for ep in (strike, pay):
-            ep.commit = g0.commit_from_endpoint
+            ep.commit = self._commit_route
             ep.set_epoch(g0.signed_epoch())
             self.endpoints[ep.name] = ep
             g0.endpoints[ep.name] = ep
+
+    def _commit_route(self, ticket: dict) -> bool:
+        """The endpoint commits to the governor whose key signed the ticket."""
+        g = self.by_key.get(ticket.get("signer"))
+        return g.commit_from_endpoint(ticket) if g is not None else False
 
     # ------------------------------------------------------------------ the authority
     def _authority_env(self, payload: dict) -> dict:
@@ -220,9 +234,10 @@ class Rack:
         return r
 
     def form_roster(self, job_id: str, members: list[Node] | None = None) -> dict | None:
+        """Each host asks its governor to join through the mailbox; the lowest chip id leads."""
         members = members or self.nodes
         for node in members:
-            node.governor.announce(job_id)
+            node.governor.command("ROSTER_JOIN", {}, node.host_sign({"job_id": job_id}, node.governor.epoch))
         leader = min(members, key=lambda n: n.governor.chip_id).governor
         return leader.build_roster(job_id, [n.governor.chip_id for n in members])
 
@@ -241,11 +256,26 @@ class Rack:
 
     # ------------------------------------------------------------------ the host side (untrusted)
     def request(self, node: Node, action: str, params: dict, witnesses: list[dict] | None = None, labels: dict | None = None, governor: Governor | None = None) -> dict:
+        """A typed request, signed by the node's verified host enclave."""
         g = governor or node.governor
         body = {"request_id": random_id(8), "measurement_token": node.token, "action": action, "params": params, "witnesses": witnesses or []}
         if labels:
             body.update(labels)      # requester-supplied labels; the gate must ignore them (H4)
-        return g.command("REQUEST", body)
+        return g.command("REQUEST", {}, node.host_sign(body, g.epoch))
+
+    def cap_request(self, node: Node, **fields) -> dict:
+        g = node.governor
+        return g.command("CAP_REQUEST", {}, node.host_sign(fields, g.epoch))
+
+    def end_model(self, node: Node) -> dict:
+        g = node.governor
+        return g.command("END_MODEL", {}, node.host_sign({"model_digest": node.model_digest}, g.epoch))
+
+    def commit_via_mailbox(self, governor: Governor, endpoint_name: str, ticket: dict) -> dict:
+        key = self.endpoint_keys[endpoint_name]
+        n = self.endpoint_seq.get(endpoint_name, 0) + 1
+        self.endpoint_seq[endpoint_name] = n
+        return governor.command("COMMIT", {}, key.sign({"seq": n, "epoch": governor.epoch, "ticket": ticket}))
 
     def witness(self, request_hash: str, risk: float = 0.1, ttl_s: float = 30.0) -> dict:
         return self.observer.sign({"type": "observer-verdict", "request_hash": request_hash, "risk": risk, "expires_at": self.clock.now() + ttl_s})
@@ -258,7 +288,7 @@ class Rack:
         rid = random_id(8)
         rhash = digest([rid, node.token["payload"]["fingerprint"], action, params])
         body = {"request_id": rid, "measurement_token": node.token, "action": action, "params": params, "witnesses": [self.witness(rhash, risk)]}
-        return g.command("REQUEST", body)
+        return g.command("REQUEST", {}, node.host_sign(body, g.epoch))
 
     def approve(self, governor: Governor, hold_id: str, request_hash: str, approver: SigningKey, reason: str = "reviewed") -> dict:
         n = self.approver_seq.get(approver.key_id, 0) + 1

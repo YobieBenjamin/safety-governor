@@ -7,14 +7,13 @@ other governors (``on_fabric``); the loop is sensed (``sense_loop``); time passe
 
 Simplifications relative to the specification, each named where it applies:
 - Signatures are Ed25519; wrapping a model key to an enclave is an HMAC-based stand-in.
-- The COMMIT from an endpoint is authenticated by the ticket it carries rather than by an
-  endpoint signature.
+- The endpoint's COMMIT may arrive as a direct call (``commit_from_endpoint``) as well as
+  through the mailbox (``COMMIT``); the direct path is authenticated by the ticket it carries.
 - Fabric round trips are synchronous function calls.
 """
 from __future__ import annotations
 
 import hashlib
-import secrets
 import threading
 from collections import Counter
 from typing import Any
@@ -25,16 +24,31 @@ from .endpoints import BRICKED, DescriptorChecker, INTEGRATED_POINTS, RACK_POINT
 from .fuses import Fuses, PRODUCTION
 from .ledger import Ledger
 from .log import Log
-from .policy import check_constraints, check_register, find_rule, policy_epoch, select_rule, verify_policy
+from .policy import check_budget_owners, check_constraints, check_register, find_rule, policy_epoch, select_rule, verify_policy
 from .root import SiliconRoot
 from .store import Store
 
-BOOT, HALTED_INITIAL, RUN, THROTTLE, HALT, SAFE = "BOOT", "HALTED_INITIAL", "RUN", "THROTTLE", "HALT", "SAFE"
+HALTED_INITIAL, RUN, THROTTLE, HALT, SAFE = "HALTED_INITIAL", "RUN", "THROTTLE", "HALT", "SAFE"
 RUNG_ORDER = {RUN: 0, THROTTLE: 1, HALT: 2, SAFE: 3}
+STATE_CODES = {HALTED_INITIAL: 0, RUN: 1, THROTTLE: 2, HALT: 3, SAFE: 4}      # the STATE register encoding
 TIERS = ("rack", "board", "integrated")
-EPOCH_EXEMPT = {"ATTEST", "VERIFY_GPU", "VERIFY_HOST", "POLICY_PROPOSE", "POLICY_COMMIT", "HEARTBEAT", "CLEAR", "LOG_CHECKPOINT", "COUNTERS", "ALARM_RAISE", "HALT"}
 TOKEN_TTL_S = 3600.0
 TICKET_TTL_S = 300.0
+SEEN_HEARTBEATS_MAX = 256
+
+# docs/04 section 3: the mailbox command codes, one handler per code (``_cmd_<name>``).
+MAILBOX_CODES = {
+    0x01: "ATTEST", 0x02: "VERIFY_GPU", 0x03: "VERIFY_HOST", 0x04: "BEGIN_MODEL", 0x05: "END_MODEL",
+    0x06: "REQUEST", 0x07: "APPROVE", 0x08: "COMMIT", 0x09: "SIGN_OUTPUT", 0x0A: "CAP_REQUEST",
+    0x0B: "ROSTER_JOIN", 0x0C: "POLICY_PROPOSE", 0x0D: "POLICY_COMMIT", 0x0E: "HEARTBEAT", 0x0F: "HALT",
+    0x10: "CLEAR", 0x11: "LOG_CHECKPOINT", 0x12: "COUNTERS", 0x13: "EXCEPTION_DRAIN",
+    0x14: "ALARM_RAISE", 0x15: "ALARM_CLEAR",
+}
+# Commands whose frame may carry any epoch (they move, repair or inspect the epoch itself).
+EPOCH_EXEMPT = {"POLICY_PROPOSE", "POLICY_COMMIT", "ATTEST", "HALT", "CLEAR", "ALARM_CLEAR"}
+# Commands accepted while the governor is not in RUN.
+NO_RUN_NEEDED = {"ATTEST", "VERIFY_GPU", "VERIFY_HOST", "POLICY_PROPOSE", "POLICY_COMMIT", "HEARTBEAT", "CLEAR",
+                 "LOG_CHECKPOINT", "COUNTERS", "ALARM_RAISE", "ALARM_CLEAR", "HALT", "APPROVE", "COMMIT", "EXCEPTION_DRAIN"}
 
 
 class Governor:
@@ -58,7 +72,6 @@ class Governor:
 
     # ------------------------------------------------------------------ boot and restart
     def _boot(self) -> None:
-        self.state = BOOT
         self.root = SiliconRoot(self.fuses, counter_start=int(self.store.get("counter", 0)))
         self.key = self.root.boot(*self.firmware)
         self.device_key = self.root.device_key
@@ -71,41 +84,59 @@ class Governor:
         self.mbox_seq: dict[str, int] = self.store.get("mbox_seq", {})
         self.meter: dict[str, dict] = self.store.get("meter", {})
         self.policy: dict | None = None
-        self.epoch = ""
-        self.staged: dict | None = None
-        self.cause: str | None = None
-        self.cause_entry: int | None = None
-        self.rung_entered_at = 0.0
-        self.levers = {"pwrbrk": False, "perst": False, "pwr_en": True}
+        self._epoch = ""
+        staged = self.store.get("staged")
+        self.staged: dict | None = staged["image"] if staged else None
+        self.staged_at: float = float(staged["at"]) if staged else 0.0
+        self.levers = {"pwrbrk": True, "perst": True, "pwr_en": False}
         self.loop_switch_open = True
         self.hb_expiry = 0.0
-        self.hb_last_seq = -1
+        self.hb_last_seq: int = int(self.store.get("hb_last_seq", -1))
+        self.seen_heartbeats: list[int] = self.store.get("seen_heartbeats", [])
         self.verified: dict[str, dict] = {}
         self.nonces: set[str] = set()
         self.fingerprint: str | None = None
+        self.workload: str | None = None
         self.host_key: VerifyKey | None = None
         self.model_digest: str | None = None
         self.lists: dict[str, dict] = {}
         self.output_streams: dict[str, Any] = {}
+        self.presented_bytes = 0
         self.cap_key = self.root.derive(b"cap")
         self.switches: dict[str, Switch] = {}
         self.checkers: dict[str, DescriptorChecker] = {}
         self.roster: dict | None = None
         self.roster_keys: dict[str, VerifyKey] = {}
+        signed_roster = self.store.get("roster")                 # the roster outlives a power loss until it expires
+        if signed_roster and signed_roster["payload"]["expires_at"] > self.clock.now():
+            self.roster = signed_roster["payload"]
+            self.roster_keys = {m["chip_id"]: VerifyKey.from_hex(m["key"]) for m in self.roster["members"]}
         self.pending_quotes: dict[str, dict[str, dict]] = {}
-        self.fabric_seq = 0
-        self.fabric_last_seq: dict[str, int] = {}
-        self.seen_heartbeats: set[int] = set()
+        self.fabric_seq: int = int(self.store.get("fabric_seq", 0)) + 1000     # a restarted sender is never a replay
+        self.fabric_last_seq: dict[str, int] = self.store.get("fabric_last_seq", {})
         self.acked_heads: dict[str, int] = {}      # my head -> my log size at that head, acknowledged by a neighbor
         self.approvals: dict[str, dict[str, dict]] = {}
+        self.last_tick_t = self.clock.now()
         image = self.store.get("policy_image")
         if image:
             ok, why = self._accept_policy(image, at_boot=True)
             if not ok:
                 self.log.append("policy.boot_load_failed", {"why": why})
-        self.cause_opens_loop = False
-        self._apply_rung(HALTED_INITIAL, opens_loop=True)
-        self.log.append("boot", {"firmware": self.root.firmware_digest, "version": self.root.firmware_version, "tier": self.tier})
+        # the safe-mode rung survives power loss: an uncleared cause comes back as the same rung
+        rung = self.store.get("rung", {})
+        self.cause = rung.get("cause")
+        self.cause_entry = rung.get("cause_entry")
+        self.cause_opens_loop = bool(rung.get("cause_opens_loop", False))
+        self.rung_entered_at = float(rung.get("rung_entered_at", 0.0))
+        self.state = HALTED_INITIAL
+        if self.cause is not None and rung.get("state") in RUNG_ORDER and rung["state"] != RUN:
+            self.loop_switch_open = bool(rung.get("loop_switch_open", True))
+            self._apply_rung(rung["state"], opens_loop=self.cause_opens_loop)
+        else:
+            self.cause, self.cause_entry, self.cause_opens_loop = None, None, False
+            self._apply_rung(HALTED_INITIAL, opens_loop=True)
+        self.log.append("boot", {"firmware": self.root.firmware_digest, "version": self.root.firmware_version, "tier": self.tier,
+                                 "state": self.state, "cause": self.cause})
 
     def restart(self) -> None:
         """Power loss and return. Durable state survives; everything else is rebuilt."""
@@ -115,11 +146,15 @@ class Governor:
         self.gpu, self.loop, self.fabric, self.endpoints, self.device_cert = gpu, loop, fabric, endpoints, cert
         if gpu is not None:
             self.attach_gpu(gpu)
-        self._apply_rung(HALTED_INITIAL, opens_loop=True)
 
     @property
     def chip_id(self) -> str:
         return self.fuses.chip_id
+
+    @property
+    def epoch(self) -> str:
+        """The policy epoch. Read-only: only ``_accept_policy`` moves it."""
+        return self._epoch
 
     def provision(self, vendor_key: SigningKey, lifecycle: int = PRODUCTION) -> None:
         """Factory: the governor vendor certifies the DICE device identity; the lifecycle fuse advances."""
@@ -164,12 +199,13 @@ class Governor:
             return False, reasons.POLICY_ROLLBACK
         if image["expires_at"] <= self.clock.now():
             return False, reasons.POLICY_EXPIRED
-        missing = check_register(image)
-        if missing:
+        if check_register(image):
             return False, reasons.POLICY_REGISTER_INCOMPLETE
-        old_epoch = self.epoch
+        if check_budget_owners(image):
+            return False, reasons.POLICY_BUDGET_OWNER_MISSING
+        old_epoch = self._epoch
         self.policy = image
-        self.epoch = policy_epoch(image)
+        self._epoch = policy_epoch(image)
         self.fuses.bump_policy(image["version"])
         self.store.data["policy_image"] = image
         for sw in list(self.switches.values()) + list(self.checkers.values()):
@@ -182,7 +218,7 @@ class Governor:
         return True, reasons.OK
 
     def signed_epoch(self) -> dict:
-        return self.key.sign({"type": "policy-epoch", "epoch": self.epoch, "governor": self.chip_id, "issued_at": self.clock.now()})
+        return self.key.sign({"type": "policy-epoch", "epoch": self.epoch, "governor": self.chip_id, "issued_at": self.mono()})
 
     def install_list(self, list_id: str, signed_list: dict) -> bool:
         """A signed list (protected sites, sanctions) the rules compare against."""
@@ -218,16 +254,19 @@ class Governor:
             hexes = []
         return {VerifyKey.from_hex(h).key_id: VerifyKey.from_hex(h) for h in hexes}
 
-    def _check_signed(self, env: dict, cls: str, rule_id: str | None = None, epoch_exempt: bool = False) -> tuple[bool, str]:
-        key = verify_any(env, self._keys(cls, rule_id))
-        if key is None:
+    def _check_signed(self, env: dict | None, cls: str, cmd: str, rule_id: str | None = None) -> tuple[bool, str]:
+        """The mailbox checks, in order: sequence number, epoch, signature. The first failure is reported."""
+        if not isinstance(env, dict) or not isinstance(env.get("payload"), dict):
             return False, reasons.MBOX_BAD_SIGNATURE
         p = env["payload"]
         seq = int(p.get("seq", -1))
-        if seq <= self.mbox_seq.get(key.key_id, -1):
+        if seq <= self.mbox_seq.get(env.get("signer"), -1):
             return False, reasons.MBOX_BAD_SEQUENCE
-        if not epoch_exempt and p.get("epoch") != self.epoch:
+        if cmd not in EPOCH_EXEMPT and p.get("epoch") != self.epoch:
             return False, reasons.POLICY_STALE_EPOCH
+        key = verify_any(env, self._keys(cls, rule_id))
+        if key is None:
+            return False, reasons.MBOX_BAD_SIGNATURE
         self.mbox_seq[key.key_id] = seq
         self.store.save()
         return True, reasons.OK
@@ -240,10 +279,10 @@ class Governor:
             self.ops["mailbox"] += 1
             if self.fuses.zeroized:
                 return {"ok": False, "why": reasons.TAMPER_ZEROIZED}
-            handler = getattr(self, "_cmd_" + cmd.lower(), None)
+            handler = getattr(self, "_cmd_" + cmd.lower(), None) if cmd in MAILBOX_CODES.values() else None
             if handler is None:
                 return {"ok": False, "why": reasons.MBOX_UNKNOWN_COMMAND}
-            if cmd not in EPOCH_EXEMPT and cmd not in ("APPROVE", "COMMIT", "ALARM_CLEAR") and self.state != RUN:
+            if cmd not in NO_RUN_NEEDED and self.state != RUN:
                 return {"ok": False, "why": reasons.MBOX_NOT_RUNNING}
             return handler(body, env)
 
@@ -256,6 +295,10 @@ class Governor:
         n = random_id(16)
         self.nonces.add(n)
         return n
+
+    def mono(self) -> int:
+        """The monotonic counter: microseconds of the governor's own time."""
+        return self.root.counter.value
 
     def _reference(self, device_class: str) -> list[dict]:
         return [r for r in (self.policy or {}).get("reference_values", []) if r["device_class"] == device_class]
@@ -284,7 +327,9 @@ class Governor:
             return self._deny("verify_gpu", reasons.ATTEST_BAD_SIGNATURE + ".manifest_mismatch")
         self.verified["gpu"] = {"chip_id": p["chip_id"], "firmware_digest": p["firmware_digest"], "expires_at": now + TOKEN_TTL_S}
         self.log.append("verify.gpu", {"chip_id": p["chip_id"], "firmware": p["firmware_digest"]})
-        return {"ok": True, "why": reasons.OK}
+        result = self.key.sign({"type": "verify-result", "device": "gpu", "chip_id": p["chip_id"], "firmware": p["firmware_digest"],
+                                "nonce": p["nonce"], "expires_at": now + TOKEN_TTL_S, "governor": self.chip_id})
+        return {"ok": True, "why": reasons.OK, "result": result}
 
     def _cmd_verify_host(self, body, env):
         self.ops["attest"] += 1
@@ -316,7 +361,7 @@ class Governor:
         """The verified loader presents a publisher-signed manifest; the governor releases the key."""
         if not self._attested():
             return self._deny("begin_model", reasons.GATE_NOT_ATTESTED)
-        ok, why = self._check_signed(env, "host")
+        ok, why = self._check_signed(env, "host", "BEGIN_MODEL")
         if not ok:
             return self._deny("begin_model", why)
         manifest = env["payload"].get("manifest")
@@ -324,15 +369,32 @@ class Governor:
             return self._deny("begin_model", reasons.MBOX_BAD_SIGNATURE + ".manifest")
         model_digest = manifest["payload"]["model_digest"]
         self.model_digest = model_digest
-        self.fingerprint = digest([self.verified["gpu"]["firmware_digest"], self.verified["host"]["firmware_digest"], model_digest, self.epoch])
+        # the workload measurement keys the rulebook; the fingerprint adds the policy epoch
+        self.workload = digest([self.verified["gpu"]["firmware_digest"], self.verified["host"]["firmware_digest"], model_digest])
+        self.fingerprint = digest([self.workload, self.epoch])
         wrapped = hmac_sha256(self.root.derive(b"wrap"), bytes.fromhex(self.host_key.hex) + model_digest.encode())
-        self.meter.setdefault(model_digest, {"tokens": 0, "cycles": 0, "bytes_in": 0, "bytes_out": 0})
+        self.meter.setdefault(model_digest, {"tokens": 0, "cycles": 0, "bytes_in": 0, "bytes_out": 0, "final": False})
         self.store.save()
         self.log.append("model.begin", {"model": model_digest, "fingerprint": self.fingerprint})
         return {"ok": True, "why": reasons.OK, "wrapped_key": wrapped, "fingerprint": self.fingerprint, "token": self.workload_token()}
 
+    def _cmd_end_model(self, body, env):
+        """The loader ends the job: the meter slot is read a last time and frozen."""
+        ok, why = self._check_signed(env, "host", "END_MODEL")
+        if not ok:
+            return self._deny("end_model", why)
+        model = env["payload"].get("model_digest") or self.model_digest
+        if model not in self.meter:
+            return self._deny("end_model", reasons.MBOX_UNKNOWN_COMMAND + ".no_such_slot")
+        self.read_meter()
+        self.meter[model]["final"] = True
+        self.store.save()
+        self.log.append("model.end", {"model": model, "meter": dict(self.meter[model])})
+        return {"ok": True, "why": reasons.OK, "meter": dict(self.meter[model])}
+
     def workload_token(self) -> dict:
-        return self.key.sign({"type": "workload-token", "fingerprint": self.fingerprint, "expires_at": self.clock.now() + TOKEN_TTL_S})
+        return self.key.sign({"type": "workload-token", "fingerprint": self.fingerprint, "workload": self.workload,
+                              "expires_at": self.clock.now() + TOKEN_TTL_S})
 
     # ------------------------------------------------------------------ the gate core
     def _deny(self, what: str, why: str, **extra) -> dict:
@@ -340,22 +402,27 @@ class Governor:
         return {"ok": False, "why": why, **extra}
 
     def _cmd_request(self, body, env):
-        """Typed request from the broker. Four questions, in order, failing closed."""
+        """Typed request from the broker, signed by the verified host enclave. Four questions, failing closed."""
         self.ops["action"] += 1
         now = self.clock.now()
-        req = body
+        ok, why = self._check_signed(env, "host", "REQUEST")
+        if not ok:
+            return self._deny("request", why)
+        if not self._attested():
+            return self._deny("request", reasons.GATE_NOT_ATTESTED)
+        req = env["payload"]
         action, params = req.get("action"), req.get("params", {})
         token = req.get("measurement_token")
         if not token or not verify_object(token, self.key.public) or token["payload"].get("type") != "workload-token" \
                 or token["payload"]["expires_at"] <= now or token["payload"]["fingerprint"] != self.fingerprint:
             return self._deny("request", reasons.GATE_NOT_ATTESTED)
-        fp = token["payload"]["fingerprint"]
+        fp, workload = token["payload"]["fingerprint"], token["payload"]["workload"]
         rhash = digest([req.get("request_id"), fp, action, params])
         if self.ledger.seen(rhash):
             return self._deny("request", reasons.GATE_REPLAY)
         if self.alarms:
             return self._deny("request", reasons.GATE_ALARM, request_hash=rhash)
-        rule, why = select_rule(self.policy, fp, action, params, self.lists)   # requester labels never reach this call (H4)
+        rule, why = select_rule(self.policy, workload, action, params, self.lists)   # requester labels never reach this call (H4)
         if rule is None:
             return self._deny("request", why, request_hash=rhash)
         req_mode = rule["requirement"]["mode"]
@@ -374,7 +441,7 @@ class Governor:
             ok, rid, why = self._reserve(b["key"], amount, b["limit"], b["window_s"], now, TICKET_TTL_S + rule.get("delay_s", 0.0))
             if not ok:
                 return self._deny("request", why, request_hash=rhash)
-            reservation = {"key": b["key"], "rid": rid, "owner": self.policy["budget_owners"].get(b["key"], self.chip_id)}
+            reservation = {"key": b["key"], "rid": rid, "owner": self.policy["budget_owners"][b["key"]]}
         self.ledger.mark(rhash, now)
         if req_mode == "human":
             hold_id = random_id(8)
@@ -403,7 +470,10 @@ class Governor:
         return False, reasons.GATE_WITNESS_MISSING
 
     def _reserve(self, key: str, amount: float, limit: float, window_s: float, now: float, ttl: float) -> tuple[bool, str | None, str]:
-        owner = self.policy["budget_owners"].get(key, self.chip_id)
+        """Reserve at the key's owner: locally if that is us, over the fabric otherwise. There is no default owner."""
+        owner = self.policy["budget_owners"].get(key)
+        if owner is None:
+            return False, None, reasons.POLICY_BUDGET_OWNER_MISSING
         if owner == self.chip_id:
             rid = self.ledger.reserve(key, amount, limit, window_s, now, ttl)
             return (True, rid, reasons.OK) if rid else (False, None, reasons.GATE_BUDGET)
@@ -418,12 +488,13 @@ class Governor:
         return False, None, reasons.GATE_BUDGET_OWNER_UNREACHABLE
 
     def _mint(self, rhash: str, action: str, params: dict, fp: str, rule: dict, reservation: dict | None, now: float) -> dict:
+        """``issued_at`` is the governor's monotonic counter; ``valid_from``/``expires_at`` are endpoint clock seconds."""
         self.ops["ticket"] += 1
         t = {"type": "ticket", "ticket_id": random_id(16), "request_hash": rhash, "action": action, "params_digest": digest(params),
              "measurement": fp, "rule": rule["id"], "policy_epoch": self.epoch, "endpoint": rule.get("endpoint"),
              "budget_key": reservation["key"] if reservation else None, "reservation": reservation["rid"] if reservation else None,
-             "budget_owner": reservation["owner"] if reservation else None,
-             "issued_at": now, "valid_from": now + rule.get("delay_s", 0.0), "expires_at": now + rule.get("delay_s", 0.0) + TICKET_TTL_S}
+             "budget_owner": reservation["owner"] if reservation else None, "governor": self.chip_id,
+             "issued_at": self.mono(), "valid_from": now + rule.get("delay_s", 0.0), "expires_at": now + rule.get("delay_s", 0.0) + TICKET_TTL_S}
         ticket = self.key.sign(t)
         self.log.append("gate.ticket", {"ticket_id": t["ticket_id"], "request_hash": rhash, "rule": rule["id"], "epoch": self.epoch})
         return ticket
@@ -436,7 +507,7 @@ class Governor:
         hold = self.holds.get(hold_id)
         if hold is None:
             return self._deny("approve", reasons.APPROVE_UNKNOWN_HOLD)
-        ok, why = self._check_signed(env, "approver", rule_id=hold["rule"])
+        ok, why = self._check_signed(env, "approver", "APPROVE", rule_id=hold["rule"])
         if not ok:
             return self._deny("approve", reasons.APPROVE_BAD_SIGNATURE if why == reasons.MBOX_BAD_SIGNATURE else why)
         p = env["payload"]
@@ -459,6 +530,14 @@ class Governor:
         self.store.save()
         self.log.append("approve.released", {"hold_id": hold_id, "approvers": sorted(self.approvals[hold_id]), "latency_s": now - hold["created_at"]})
         return {"ok": True, "why": reasons.OK, "ticket": ticket}
+
+    def _cmd_commit(self, body, env):
+        """The endpoint's COMMIT through the mailbox, signed by the endpoint's key."""
+        ok, why = self._check_signed(env, "endpoint", "COMMIT")
+        if not ok:
+            return self._deny("commit", why)
+        committed = self.commit_from_endpoint(env["payload"].get("ticket") or {})
+        return {"ok": committed, "why": reasons.OK if committed else reasons.COMMIT_REJECTED}
 
     def commit_from_endpoint(self, ticket: dict) -> bool:
         """The endpoint's COMMIT. Unreachable governor means the endpoint refuses."""
@@ -502,9 +581,7 @@ class Governor:
         return {"ok": True, "why": reasons.OK}
 
     def _cmd_alarm_clear(self, body, env):
-        if env is None:
-            return self._deny("alarm_clear", reasons.ALARM_CLEAR_UNAUTHORIZED)
-        ok, why = self._check_signed(env, "approver", rule_id="alarms", epoch_exempt=True)
+        ok, why = self._check_signed(env, "approver", "ALARM_CLEAR", rule_id="alarms")
         if not ok:
             return self._deny("alarm_clear", reasons.ALARM_CLEAR_UNAUTHORIZED)
         code = env["payload"].get("code")
@@ -519,19 +596,22 @@ class Governor:
         self.ops["output_bytes"] += len(data)
         self.output_streams.setdefault(stream, hashlib.sha256()).update(data)
 
+    def _output_rule(self) -> dict | None:
+        return find_rule(self.policy, self.workload or "", "model.output") if self.workload else None
+
     def _cmd_sign_output(self, body, env):
         """Device-provenance record. Integrated tier: over the inline hash; rack tier: over what the verified runtime presents."""
         self.ops["sign"] += 1
-        ok, why = self._check_signed(env, "host")
+        ok, why = self._check_signed(env, "host", "SIGN_OUTPUT")
         if not ok:
             return self._deny("sign_output", why)
         p = env["payload"]
         stream = p.get("stream")
         now = self.clock.now()
-        rule = find_rule(self.policy, self.fingerprint or "", "model.output") if self.fingerprint else None
+        nbytes = len(bytes.fromhex(p.get("data_hex", "")))
+        rule = self._output_rule()
         if rule and rule.get("output_budget"):
             ob = rule["output_budget"]
-            nbytes = len(bytes.fromhex(p.get("data_hex", "")))
             if not self.ledger.rate_ok(f"out-q|{self.fingerprint}", ob["queries"], ob["window_s"], now):
                 self._output_tripped()
                 return self._deny("sign_output", reasons.GATE_OUTPUT_BUDGET)
@@ -540,6 +620,7 @@ class Governor:
                 self._output_tripped()
                 return self._deny("sign_output", reasons.GATE_OUTPUT_BUDGET)
             self.ledger.commit(f"out-b|{self.fingerprint}", rid, now)
+        self.presented_bytes += nbytes
         if self.tier == "integrated":
             h = self.output_streams.pop(stream, hashlib.sha256()).hexdigest()
             inline = True
@@ -551,8 +632,8 @@ class Governor:
                                 "model_digest": self.model_digest, "policy_epoch": self.epoch,
                                 "roster_id": self.roster["roster_id"] if self.roster else None,
                                 "prompt_hash": p.get("claimed_prompt_hash"), "prompt_hash_verified": False,
-                                "output_hash": h, "output_hash_inline": inline, "nonce": p.get("nonce"), "time": now,
-                                "counters": dict(counters)})
+                                "output_hash": h, "output_hash_inline": inline, "nonce": p.get("nonce"), "time": self.mono(),
+                                "counters": {k: v for k, v in counters.items() if k != "final"}})
         self.log.append("output.signed", {"stream": stream, "inline": inline})
         return {"ok": True, "why": reasons.OK, "record": record}
 
@@ -562,11 +643,25 @@ class Governor:
             self.gpu.output_blocked = True
         self.enter_safe_mode(reasons.GATE_OUTPUT_BUDGET, rung=THROTTLE)
 
+    def _check_unpresented_output(self) -> None:
+        """Rack and integrated tiers: bytes that left for the host through the pcie port must have been presented."""
+        sw = self.switches.get("pcie")
+        rule = self._output_rule()
+        if sw is None or self.gpu is None or rule is None or not rule.get("output_budget"):
+            return
+        slack = int(rule["output_budget"].get("unpresented_bytes", 1 << 20))
+        if sw.bytes_passed.get("host", 0) - self.presented_bytes > slack and reasons.OUTPUT_UNPRESENTED not in self.alarms:
+            self.raise_alarm(reasons.OUTPUT_UNPRESENTED, "governor")
+            self.gpu.output_blocked = True
+            sw.close_peer("host")
+
     def read_meter(self) -> None:
         """Out-of-band read of the GPU's counters into the meter slot."""
         if self.gpu is None or self.model_digest is None:
             return
-        slot = self.meter.setdefault(self.model_digest, {"tokens": 0, "cycles": 0, "bytes_in": 0, "bytes_out": 0})
+        slot = self.meter.setdefault(self.model_digest, {"tokens": 0, "cycles": 0, "bytes_in": 0, "bytes_out": 0, "final": False})
+        if slot.get("final"):
+            return
         slot.update({"tokens": self.gpu.tokens, "cycles": self.gpu.cycles, "bytes_in": self.gpu.bytes_in, "bytes_out": self.gpu.bytes_out})
         self.store.save()
 
@@ -575,6 +670,15 @@ class Governor:
 
     def _cmd_log_checkpoint(self, body, env):
         return {"ok": True, "why": reasons.OK, "checkpoint": self.log.checkpoint(self.key, self.chip_id)}
+
+    def _cmd_exception_drain(self, body, env):
+        """Refusals at every governed switch since the last drain, handed to the log."""
+        drained = []
+        for sw in list(self.switches.values()) + list(self.checkers.values()):
+            drained.extend(sw.refusals)
+            sw.refusals = []
+        self.log.append("exceptions.drained", {"count": len(drained)})
+        return {"ok": True, "why": reasons.OK, "refusals": drained}
 
     # ------------------------------------------------------------------ capabilities and switches
     def _capability(self, point: str, peer: str, direction: str, budget: int, expiry: float) -> dict:
@@ -610,23 +714,36 @@ class Governor:
             sw.close_all()
 
     def _cmd_cap_request(self, body, env):
-        """The driver asks for a port or flow to a peer. Only roster members, only under this epoch."""
+        """The verified host asks for a port or flow. Only roster members; the host itself only on pcie."""
+        ok, why = self._check_signed(env, "host", "CAP_REQUEST")
+        if not ok:
+            return self._deny("cap_request", why)
+        if not self._attested():
+            return self._deny("cap_request", reasons.GATE_NOT_ATTESTED)
         if self.roster is None:
             return self._deny("cap_request", reasons.EP_NOT_ON_ROSTER)
-        peer = body.get("peer")
-        if peer != "host" and peer not in {m["gpu_chip_id"] for m in self.roster["members"]}:
+        p = env["payload"]
+        peer, kind, direction = p.get("peer"), p.get("point"), p.get("direction", "both")
+        if peer == "host":
+            if kind != "pcie" or direction != "both":
+                return self._deny("cap_request", reasons.EP_NOT_ON_ROSTER, peer=peer, point=kind)
+        elif peer not in {m["gpu_chip_id"] for m in self.roster["members"]}:
             return self._deny("cap_request", reasons.EP_NOT_ON_ROSTER, peer=peer)
-        kind = body.get("point")
         sw = self.switches.get(kind) or self.checkers.get(kind)
         if sw is None:
             return self._deny("cap_request", reasons.EP_UNCHECKED, point=kind)
-        cap = self._capability(kind, peer, body.get("direction", "both"), int(body.get("budget", 1 << 30)),
-                               min(self.roster["expires_at"], self.clock.now() + float(body.get("ttl", 3600))))
+        cap = self._capability(kind, peer, direction, int(p.get("budget", 1 << 30)),
+                               min(self.roster["expires_at"], self.clock.now() + float(p.get("ttl", 3600))))
         return {"ok": sw.program(cap), "why": reasons.OK, "capability": cap}
 
     # ------------------------------------------------------------------ heartbeat, levers, safe mode
     def _cmd_heartbeat(self, body, env):
         return self._heartbeat(env, hops=0)
+
+    def _staged_epoch_live(self, now: float) -> bool:
+        """A staged image is a valid epoch for heartbeats only until the policy's commit deadline."""
+        deadline = float(self.policy["fabric"].get("epoch_deadline_s", 10.0)) if self.policy else 10.0
+        return self.staged is not None and now <= self.staged_at + deadline
 
     def _heartbeat(self, env: dict | None, hops: int) -> dict:
         if env is None or verify_any(env, self._keys("authority")) is None:
@@ -635,30 +752,39 @@ class Governor:
         now = self.clock.now()
         if int(p.get("seq", -1)) <= self.hb_last_seq:
             return self._deny("heartbeat", reasons.HEARTBEAT_REPLAY)
-        if p.get("epoch") not in (self.epoch, policy_epoch(self.staged) if self.staged else None):
+        accepted = {self.epoch} | ({policy_epoch(self.staged)} if self._staged_epoch_live(now) else set())
+        if p.get("epoch") not in accepted:
             return self._deny("heartbeat", reasons.POLICY_STALE_EPOCH)
         if p.get("window_end", 0) <= now or p.get("window_start", 0) > now:
             return self._deny("heartbeat", reasons.HEARTBEAT_EXPIRED)
         if hops > self.policy["fabric"]["max_hops"]:
             return self._deny("heartbeat", reasons.FABRIC_TOO_MANY_HOPS)
         self.hb_last_seq = int(p["seq"])
-        self.hb_expiry = float(p["window_end"])
+        self.hb_expiry = min(float(p["window_end"]), now + float(self.policy["fabric"].get("heartbeat_expiry_s", 5.0)))
         self.ops["heartbeat"] += 1
+        relay = self.hb_last_seq not in self.seen_heartbeats
+        if relay:
+            self.seen_heartbeats = (self.seen_heartbeats + [self.hb_last_seq])[-SEEN_HEARTBEATS_MAX:]
+        self.store.data["hb_last_seq"] = self.hb_last_seq
+        self.store.data["seen_heartbeats"] = self.seen_heartbeats
+        self.store.save()
         if self.state == HALTED_INITIAL and self.cause is None:
             self.loop_switch_open = False          # armed: the switch closes; RUN waits for loop current
+            self._persist_rung()
             self._try_run()
         for ep in self.endpoints.values():
             ep.heartbeat(now)
-        if self.fabric is not None and self.hb_last_seq not in self.seen_heartbeats:
-            self.seen_heartbeats.add(self.hb_last_seq)
+        if self.fabric is not None and relay and hops < self.policy["fabric"]["max_hops"]:
             self.fabric_send("HEARTBEAT", {"authority": env, "hops": hops + 1})
         return {"ok": True, "why": reasons.OK}
 
     def _cmd_halt(self, body, env):
-        ok, why = self._check_signed(env, "authority", epoch_exempt=True)
+        ok, why = self._check_signed(env, "authority", "HALT")
         if not ok:
             return self._deny("halt", why)
         rung = env["payload"].get("rung", HALT)
+        if rung not in (THROTTLE, HALT, SAFE):
+            return self._deny("halt", reasons.MBOX_UNKNOWN_COMMAND + ".bad_rung")
         self.enter_safe_mode(reasons.HALT_COMMANDED, rung=rung)
         return {"ok": True, "why": reasons.OK}
 
@@ -680,7 +806,14 @@ class Governor:
                 if self.fabric is not None:
                     self.fabric_send("HALT_CAUSE", {"cause": cause, "head": head})
 
+    def _persist_rung(self) -> None:
+        self.store.data["rung"] = {"cause": self.cause, "cause_entry": self.cause_entry, "cause_opens_loop": self.cause_opens_loop,
+                                   "rung_entered_at": self.rung_entered_at, "state": self.state, "loop_switch_open": self.loop_switch_open}
+        self.store.save()
+
     def _apply_rung(self, rung: str, opens_loop: bool = False) -> None:
+        """Levers per rung: HALTED_INITIAL brake+reset+power off; RUN released; THROTTLE brake;
+        HALT brake+reset; SAFE brake+reset+power off. Persisted before returning."""
         self.state = rung
         g = self.gpu
         if rung == RUN:
@@ -688,7 +821,7 @@ class Governor:
             self.levers = {"pwrbrk": False, "perst": False, "pwr_en": True}
         elif rung == HALTED_INITIAL:
             self.loop_switch_open = True
-            self.levers = {"pwrbrk": True, "perst": False, "pwr_en": True}
+            self.levers = {"pwrbrk": True, "perst": True, "pwr_en": False}
             self.close_ports()
         elif rung == THROTTLE:
             self.levers = {"pwrbrk": True, "perst": False, "pwr_en": True}
@@ -707,6 +840,7 @@ class Governor:
             g.set_pwr_en(self.levers["pwr_en"])
         if rung == RUN and self.roster is not None:
             self.open_ports_for_roster()
+        self._persist_rung()
 
     def _try_run(self) -> None:
         """HALTED_INITIAL -> RUN when there is no cause, a live heartbeat, and loop current."""
@@ -723,11 +857,18 @@ class Governor:
             self._try_run()
 
     def tick(self) -> None:
-        """Time passes: heartbeat expiry, rung escalation, reservation expiry."""
+        """Time passes: the counter, heartbeat expiry, rung escalation, the meter, the output cross-check."""
         with self.lock:
             now = self.clock.now()
+            elapsed_us = int(round((now - self.last_tick_t) * 1e6))
+            if elapsed_us > 0:
+                self.root.counter.tick(elapsed_us)
+                self.store.data["counter"] = self.root.counter.value
+                self.store.save()
+            self.last_tick_t = now
             if self.state == RUN and now > self.hb_expiry:
-                self.enter_safe_mode(reasons.HEARTBEAT_LOST)
+                stale = self.staged is not None and not self._staged_epoch_live(now)
+                self.enter_safe_mode(reasons.EPOCH_STRAGGLER if stale else reasons.HEARTBEAT_LOST)
             sm = (self.policy or {}).get("safe_mode", {})
             if self.state == THROTTLE and self.cause and now - self.rung_entered_at >= sm.get("T_throttle_s", 30.0):
                 self.rung_entered_at = now
@@ -739,11 +880,13 @@ class Governor:
                 self.log.append("halt.escalate", {"to": SAFE, "cause": self.cause})
                 self.cause_entry = self.log.size - 1
                 self._apply_rung(SAFE, opens_loop=self.cause_opens_loop)
+            self.read_meter()
+            self._check_unpresented_output()
             self.sense_loop()
 
     def _cmd_clear(self, body, env):
         """Only the authority clears, only after the cause is logged and a neighbor has the log."""
-        ok, why = self._check_signed(env, "authority", epoch_exempt=True)
+        ok, why = self._check_signed(env, "authority", "CLEAR")
         if not ok:
             return self._deny("clear", reasons.CLEAR_UNAUTHORIZED)
         if self.cause is None:
@@ -758,6 +901,7 @@ class Governor:
             self.gpu.output_blocked = False
         self._apply_rung(HALTED_INITIAL)
         self.loop_switch_open = False           # armed; RUN follows when the whole loop is closed and the heartbeat is live
+        self._persist_rung()
         self._try_run()
         return {"ok": True, "why": reasons.OK}
 
@@ -773,7 +917,11 @@ class Governor:
             return self._deny("policy_propose", reasons.POLICY_ROLLBACK)
         if check_register(image):
             return self._deny("policy_propose", reasons.POLICY_REGISTER_INCOMPLETE)
-        self.staged = image
+        if check_budget_owners(image):
+            return self._deny("policy_propose", reasons.POLICY_BUDGET_OWNER_MISSING)
+        self.staged, self.staged_at = image, self.clock.now()
+        self.store.data["staged"] = {"image": image, "at": self.staged_at}
+        self.store.save()
         self.log.append("policy.staged", {"epoch": policy_epoch(image), "version": image["version"]})
         return {"ok": True, "why": reasons.OK, "ack": self.key.sign({"type": "epoch-ack", "epoch": policy_epoch(image), "chip_id": self.chip_id})}
 
@@ -781,8 +929,10 @@ class Governor:
         if self.staged is None or policy_epoch(self.staged) != body.get("epoch"):
             return self._deny("policy_commit", reasons.POLICY_NOT_STAGED)
         old = self.epoch
-        ok, why = self._accept_policy(self.staged)
-        self.staged = None
+        image, self.staged, self.staged_at = self.staged, None, 0.0
+        self.store.data["staged"] = None
+        ok, why = self._accept_policy(image)
+        self.store.save()
         if not ok:
             return self._deny("policy_commit", why)
         self.log.append("policy.committed", {"old": old, "new": self.epoch})
@@ -811,6 +961,7 @@ class Governor:
         with self.lock:
             self.log.append("tamper", {"kind": kind})
             self.cause, self.cause_opens_loop = reasons.TAMPER, True
+            self.cause_entry = self.log.size - 1
             self._apply_rung(SAFE, opens_loop=True)
             self.root.zeroize()
             self.close_ports()
@@ -820,12 +971,14 @@ class Governor:
         if self.fabric is None or self.fuses.zeroized:
             return []
         self.fabric_seq += 1
+        self.store.data["fabric_seq"] = self.fabric_seq
+        self.store.save()
         self.ops["fabric_msg"] += 1
-        msg = self.key.sign({"type": mtype, "from": self.chip_id, "seq": self.fabric_seq, "epoch": self.epoch, "body": body})
+        msg = self.key.sign({"type": mtype, "from": self.chip_id, "seq": self.fabric_seq, "epoch": self.epoch, "time": self.mono(), "body": body})
         return self.fabric.send(self.chip_id, msg, to=to)
 
     def _verify_governor_quote(self, qmsg: dict) -> VerifyKey | None:
-        """Chain: governor vendor key → device cert → alias cert → quote; firmware in the reference values."""
+        """Chain: governor vendor key -> device cert -> alias cert -> quote; firmware in the reference values."""
         refs = self._reference("governor")
         vendor_keys = {VerifyKey.from_hex(r["vendor_key"]).key_id: VerifyKey.from_hex(r["vendor_key"]) for r in refs}
         dc, ac, quote = qmsg.get("device_cert"), qmsg.get("alias_cert"), qmsg.get("quote")
@@ -855,6 +1008,17 @@ class Governor:
         self.pending_quotes.setdefault(job_id, {})[self.chip_id] = {**q, "key": self.key.public}
         self.fabric_send("QUOTE", q)
 
+    def _cmd_roster_join(self, body, env):
+        """The verified host names the job; the governor broadcasts its quote to start roster formation."""
+        ok, why = self._check_signed(env, "host", "ROSTER_JOIN")
+        if not ok:
+            return self._deny("roster_join", why)
+        job_id = env["payload"].get("job_id")
+        if not job_id:
+            return self._deny("roster_join", reasons.MBOX_UNKNOWN_COMMAND + ".no_job")
+        self.announce(job_id)
+        return {"ok": True, "why": reasons.OK}
+
     def build_roster(self, job_id: str, expected: list[str], ttl_s: float = 3600.0) -> dict | None:
         """The leader (lowest chip id among valid quotes) signs the roster."""
         quotes = self.pending_quotes.get(job_id, {})
@@ -862,7 +1026,7 @@ class Governor:
         if not members or min(quotes) != self.chip_id:
             return None
         roster = {"type": "roster", "roster_id": digest([job_id, members, self.clock.now()]), "job_id": job_id,
-                  "leader": self.chip_id, "expires_at": self.clock.now() + ttl_s,
+                  "leader": self.chip_id, "expires_at": self.clock.now() + ttl_s, "time": self.mono(),
                   "members": [{"chip_id": c, "key": quotes[c]["key"].hex, "gpu_chip_id": quotes[c]["quote"]["payload"].get("gpu_chip_id"),
                                "gpu_fingerprint": quotes[c]["quote"]["payload"].get("gpu_fingerprint")} for c in members]}
         signed = self.key.sign(roster)
@@ -870,23 +1034,28 @@ class Governor:
         self.fabric_send("ROSTER", {"roster": signed})
         return signed
 
-    def _adopt_roster(self, signed: dict) -> bool:
-        r = signed["payload"]
-        quotes = self.pending_quotes.get(r["job_id"], {})
-        leader = quotes.get(r["leader"])
-        if leader is None or not verify_object(signed, leader["key"]):
-            return False
-        if self.chip_id not in {m["chip_id"] for m in r["members"]} or r["expires_at"] <= self.clock.now():
-            return False
-        for m in r["members"]:
-            if m["chip_id"] not in quotes or quotes[m["chip_id"]]["key"].hex != m["key"]:
-                return False
+    def _adopt_roster(self, signed: dict) -> tuple[bool, str]:
+        """Adopt a roster only if the leader's signature verifies against the leader's own verified quote."""
+        try:
+            r = signed["payload"]
+            quotes = self.pending_quotes.get(r["job_id"], {})
+            leader = quotes.get(r["leader"])
+            if leader is None or not verify_object(signed, leader["key"]):
+                return False, reasons.ROSTER_BAD_SIGNATURE
+            if self.chip_id not in {m["chip_id"] for m in r["members"]} or r["expires_at"] <= self.clock.now():
+                return False, reasons.ROSTER_NOT_MEMBER
+            for m in r["members"]:
+                if m["chip_id"] not in quotes or quotes[m["chip_id"]]["key"].hex != m["key"]:
+                    return False, reasons.ROSTER_QUOTE_INVALID
+        except (KeyError, TypeError):
+            return False, reasons.ROSTER_BAD_SIGNATURE
         self.roster = r
         self.roster_keys = {m["chip_id"]: VerifyKey.from_hex(m["key"]) for m in r["members"]}
+        self.store.data["roster"] = signed
         self.log.append("roster.adopted", {"roster_id": r["roster_id"], "members": [m["chip_id"] for m in r["members"]]})
         if self.state == RUN:
             self.open_ports_for_roster()
-        return True
+        return True, reasons.OK
 
     def on_fabric(self, msg: dict) -> Any:
         """Every message is checked here. The wire itself checks nothing."""
@@ -902,8 +1071,7 @@ class Governor:
             if mtype == "ROSTER":
                 return self._on_roster(msg)
             if mtype == "HEARTBEAT":
-                body = p.get("body", {})
-                return self._heartbeat(body.get("authority"), hops=int(body.get("hops", 1)))
+                return self._on_heartbeat_relay(msg, sender)
             key = self.roster_keys.get(sender)
             if key is None:
                 self.log.append("fabric.dropped", {"why": reasons.FABRIC_NOT_MEMBER, "from": sender, "type": mtype})
@@ -914,14 +1082,29 @@ class Governor:
             if int(p.get("seq", -1)) <= self.fabric_last_seq.get(sender, -1):
                 self.log.append("fabric.dropped", {"why": reasons.FABRIC_REPLAY, "from": sender})
                 return {"ok": False, "why": reasons.FABRIC_REPLAY}
-            if mtype not in ("HEARTBEAT", "HALT_CAUSE", "CHECKPOINT", "CHECKPOINT_ACK") and p.get("epoch") != self.epoch:
+            if mtype not in ("HALT_CAUSE", "CHECKPOINT", "CHECKPOINT_ACK") and p.get("epoch") != self.epoch:
                 self.log.append("fabric.dropped", {"why": reasons.FABRIC_STALE_EPOCH, "from": sender})
                 return {"ok": False, "why": reasons.FABRIC_STALE_EPOCH}
             self.fabric_last_seq[sender] = int(p["seq"])
+            self.store.data["fabric_last_seq"] = self.fabric_last_seq
+            self.store.save()
             handler = getattr(self, "_on_" + mtype.lower(), None)
             if handler is None:
                 return {"ok": False, "why": reasons.MBOX_UNKNOWN_COMMAND}
             return handler(sender, p["body"])
+
+    def _on_heartbeat_relay(self, msg: dict, sender: str):
+        """A relayed heartbeat: the authority's envelope is what counts; the relay's signature vouches
+        for the hop count. An unknown relay (before the roster exists) is accepted with no further relaying."""
+        body = msg["payload"].get("body", {})
+        key = self.roster_keys.get(sender)
+        max_hops = self.policy["fabric"]["max_hops"] if self.policy else 0
+        if key is None:
+            return self._heartbeat(body.get("authority"), hops=max_hops)
+        if not verify_object(msg, key):
+            self.log.append("fabric.dropped", {"why": reasons.FABRIC_BAD_SIGNATURE, "from": sender, "type": "HEARTBEAT"})
+            return {"ok": False, "why": reasons.FABRIC_BAD_SIGNATURE}
+        return self._heartbeat(body.get("authority"), hops=int(body.get("hops", 1)))
 
     def _on_quote(self, msg: dict):
         body = msg["payload"]["body"]
@@ -933,15 +1116,14 @@ class Governor:
         return {"ok": True, "why": reasons.OK}
 
     def _on_roster(self, msg: dict):
-        signed = msg["payload"]["body"]["roster"]
-        ok = self._adopt_roster(signed)
-        return {"ok": ok, "why": reasons.OK if ok else reasons.ROSTER_NOT_MEMBER}
-
-    def _on_heartbeat(self, sender: str, body: dict):
-        return self._heartbeat(body.get("authority"), hops=int(body.get("hops", 1)))
+        signed = (msg["payload"].get("body") or {}).get("roster")
+        ok, why = self._adopt_roster(signed) if signed else (False, reasons.ROSTER_BAD_SIGNATURE)
+        if not ok:
+            self.log.append("fabric.dropped", {"why": why, "from": msg["payload"].get("from"), "type": "ROSTER"})
+        return {"ok": ok, "why": why}
 
     def _on_reserve(self, sender: str, body: dict):
-        owner = self.policy["budget_owners"].get(body["key"], self.chip_id)
+        owner = self.policy["budget_owners"].get(body["key"])
         if owner != self.chip_id:
             return {"ok": False, "why": reasons.GATE_BUDGET_OWNER_UNREACHABLE}
         rid = self.ledger.reserve(body["key"], body["amount"], body["limit"], body["window_s"], self.clock.now(), body["ttl"])
@@ -967,6 +1149,7 @@ class Governor:
         cp = body.get("checkpoint")
         key = self.roster_keys.get(sender)
         if not cp or key is None or not verify_object(cp, key):
+            self.log.append("fabric.dropped", {"why": reasons.FABRIC_BAD_SIGNATURE, "from": sender, "type": "CHECKPOINT"})
             return {"ok": False, "why": reasons.FABRIC_BAD_SIGNATURE}
         self.log.record_neighbor_head(sender, cp["payload"]["head"])
         self.fabric_send("CHECKPOINT_ACK", {"head": cp["payload"]["head"], "size": cp["payload"]["size"]}, to=sender)

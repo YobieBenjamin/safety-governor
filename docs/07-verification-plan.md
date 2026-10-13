@@ -49,7 +49,7 @@ Every test runs against three configurations of the model:
 H2 has two parts. Link-level containment (no bytes to a non-roster peer, no bytes when the
 heartbeat is dead) must hold at the rack tier. Descriptor-level containment between two
 roster members is *expected to fail* at the rack and board tiers and is reported as the
-known residual, not a surprise. The report in `results/report.md` shows the matrix.
+known residual, not a surprise. At the integrated tier the descriptor checker is modelled but a buffer-class policy is not, so H2b is reported as a gap there too rather than as a pass earned by a test that closes the checker by hand. The report in `results/report.md` shows the matrix; it summarizes the sweep's probes, which are lighter than the test files they stand for.
 
 ## 3. RTL properties
 
@@ -64,12 +64,13 @@ property is small enough, a formal statement for a bounded model checker:
 | `lifecycle` | The state is monotone; in PRODUCTION, `debug_grant` is never asserted |
 | `cap_table` | A lookup allows only an entry with matching key, budget > 0, not expired, matching epoch tag; budget never underflows |
 | `ticket_store` | A burned id is never admitted again; `burn` before `admit` ordering |
-| `heartbeat` | `safe_mode` asserts within one tick of expiry; the timer reloads only on `hb_valid` |
-| `halt` | `halt_out` asserts on any of (loop open, heartbeat expired, tamper, command) and never deasserts without `clear` |
-| `halt_loop` | The switch opens on `halt_out`; `loop_sense` low drives `halt_out` within one sense period |
-| `meter` | Counters are read-only from the host port and only increment |
-| `mailbox` | No command is dispatched unless `seq > last_seq` and `sig_ok` and (`epoch_match` or command is epoch-exempt) |
-| `alarms` | Bits set by any source; cleared only through `clear_strobe` gated by `clear_authorized` |
+| `heartbeat` | `expired` asserts within one millisecond tick of expiry; `remaining` reloads only on `hb_valid`, to the window given |
+| `halt` | The rung (`state`) climbs on any of `loop_lost`, `hb_expired`, `tamper`, `cmd_halt`, `cmd_throttle`, `local_trip` and on the timers, never descends without `clear`; the levers `pwrbrk`, `perst`, `pwr_en` follow the rung exactly; `switch_open` starts set, clears only when armed (no cause, `hb_ok`), sets on `loop_lost`, `tamper` or `cmd_halt`, and `clear` does not reset it; `cause` bits 2:0 name the summary |
+| `halt_loop` | `loop_out_open` follows `switch_open`; `loop_sense` low for two samples drives `loop_lost` (debounce) |
+| `meter` | Counters are read-only from the host port (`host_wr` is refused and flagged) and only increment |
+| `mailbox` | No command is dispatched unless `frame_seq` is above the key slot's last accepted sequence, then (`epoch_match` or `epoch_exempt`), then `sig_ok`, checked in that order with the first failure reported in `status` |
+| `alarms` | Bits set by any source through `set_mask`; cleared only through `clear_mask` gated by `clear_authorized` |
+| `top` (`GovernorCore`) | No CSR write port but the doorbell; the millisecond tick for the timers derives from the microsecond counter; the core boots on the HALTED_INITIAL rung with all three levers in the safe state and the loop switch open |
 
 ## 4. Silicon validation (after tape-out)
 
@@ -88,9 +89,9 @@ property is small enough, a formal statement for a bounded model checker:
 |---|---|---|---|
 | Governor loses power | Loop opens | Immediate | Domain halts; the dead governor's GPU is powered down by the slot's default-safe PWR_EN where the board has per-slot power control, and held in reset otherwise |
 | Governor firmware hang | Heartbeat not consumed; no tickets | Watchdog | Watchdog resets the governor into HALTED_INITIAL; loop opens |
-| Fuse read failure | Keys cannot derive | Boot | Chip stays in BOOT; never asserts RUN |
+| Fuse read failure | Keys cannot derive | Boot | Boot refused; the sequencer never leaves HALTED_INITIAL |
 | NVM corruption | Policy or ledger unreadable | Authentication tag | Refuse to RUN; request a fresh policy image; reservations are rebuilt from the roster |
-| Loop sense comparator stuck "closed" | A real open is missed at one governor | Beacon on the message fabric names the expected member count; mismatch | Alarm; the other governors' switches still open the loop |
+| Loop sense comparator stuck "closed" | A real open is missed at one governor | Not detected by the model today; a member-count beacon on the message fabric is planned (`05-threat-model.md`) | The other governors' switches still open the loop; this governor's slot stops only when its own heartbeat expires |
 | Fabric port failure | Partition | Heartbeat expiry | Safe mode for the cut-off segment |
 | Clock glitch | Counter or FSM corruption | Glitch detector | Zeroize, SAFE |
 

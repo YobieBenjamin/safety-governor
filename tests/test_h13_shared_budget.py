@@ -54,3 +54,42 @@ def test_reservations_release_at_ticket_expiry(rack):
     rack.clock.advance(301)
     rack.heartbeat()
     assert pay(rack, node1, 1000, governor=node1.governor)["ok"]
+
+
+def test_owner_partitioned_between_reserve_and_commit_means_no_action_and_no_double_spend(rack):
+    node1 = rack.nodes[1]
+    t = pay(rack, node1, 1000, governor=node1.governor)["ticket"]
+    rack.fabric.split({"gov00"}, {"gov01", "gov02", "gov03"})
+    ep = rack.endpoints["payment-switch"]
+    ok, why = ep.execute(t, "payments.transfer", {"amount": 1000, "currency": "USD", "destination": "acct-1"})
+    assert not ok and why == reasons.COMMIT_REJECTED and not ep.executed
+    rack.fabric.heal()
+    owner = rack.nodes[0].governor
+    assert owner.ledger.usage("pay-usd-hourly", 3600, rack.clock.now()) == (0, 1000)   # still reserved, never spent twice
+    ok, why = ep.execute(t, "payments.transfer", {"amount": 1000, "currency": "USD", "destination": "acct-1"})
+    assert not ok and why == reasons.TICKET_REPLAY                                       # the burned ticket is not retried
+
+
+def test_a_ticket_minted_by_a_non_leader_governor_executes(rack):
+    """Endpoints hold every governor's key and commit to the governor that minted."""
+    node2 = rack.nodes[2]
+    t = pay(rack, node2, 300, governor=node2.governor)["ticket"]
+    assert t["signer"] == node2.governor.key.key_id
+    ep = rack.endpoints["payment-switch"]
+    ok, why = ep.execute(t, "payments.transfer", {"amount": 300, "currency": "USD", "destination": "acct-1"})
+    assert ok and why == reasons.OK
+    assert node2.governor.log.has("gate.commit", ticket_id=t["payload"]["ticket_id"])
+    assert rack.nodes[0].governor.ledger.usage("pay-usd-hourly", 3600, rack.clock.now())[0] == 300   # committed at the owner
+
+
+def test_a_budget_key_with_no_owner_does_not_load(rack):
+    from govsim.policy import check_budget_owners, sign_policy
+    image = rack.make_policy_image(rack.policy_version + 1)
+    for rule in image["rules"]:
+        if rule["id"] == "payments.transfer.small":
+            rule["budget"]["key"] = "pay-usd-hourly-v2"
+    image["assumptions"].append({**image["assumptions"][-1], "input": "pay-usd-hourly-v2"})
+    image = sign_policy(image, rack.governance[:3])
+    assert check_budget_owners(image) == ["pay-usd-hourly-v2"]
+    r = rack.nodes[0].governor.command("POLICY_PROPOSE", {"image": image})
+    assert not r["ok"] and r["why"] == reasons.POLICY_BUDGET_OWNER_MISSING

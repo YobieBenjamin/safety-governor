@@ -18,8 +18,8 @@ column is the honest part. Nothing here changes the GPU's silicon or CUDA.
 
 | Form | What it is | Why |
 |---|---|---|
-| **Management module on the system board** | A card in the motherboard's management-module slot, where the board follows OCP's Datacenter Secure Control Module standard (DC-SCM): the module that carries the baseboard management controller and the platform root of trust, on a connector (DC-SCI) that carries PCIe, eSPI, SPI, I2C/I3C, USB and an LVDS tunnel (LTPI) for the platform's sideband signals. The governor rides as a second module or as a mezzanine on the existing one | Many current server boards have this slot; it is how control hardware is added without redesigning the board. Boards without it take the soldered option below |
-| **Soldered on the GPU baseboard** | The governor die beside the baseboard's own management controller, with the per-slot signals routed directly | For OEM baseboards; the shortest wires to the levers and the NVSwitch management bus |
+| **Management module on the system board** | A card in the motherboard's management-module slot, where the board follows OCP's Datacenter Secure Control Module standard (DC-SCM 2.x): the module that carries the baseboard management controller and, optionally, the platform root of trust, on a connector (DC-SCI) that carries PCIe, eSPI, SPI, I2C/I3C, USB, UART and an LVDS tunnel (LTPI) for the platform's sideband signals. The governor rides as a second module or as a mezzanine on the existing one | OCP-style boards from several vendors have this slot; it is how control hardware is added without redesigning the board. It is the plan of record. The baseboard is reached through its connector: the management bus to the GPUs and the HMC, and whichever reset and power signals the OEM wires |
+| **Soldered on the GPU baseboard** | The governor die beside the HGX baseboard's own hardware management controller, with the per-slot signals routed directly | The shortest wires to the levers and the NVSwitch management bus. The HGX baseboard, its NVSwitch chips and its HMC are NVIDIA's, so this option is an ask to NVIDIA (§9), not an assumption |
 | **Switch-tray and DPU governors** | The same chip on each NVLink switch tray and on the DPU's board | So every switch the GPU's traffic passes has a governor holding its management authority |
 
 ![Where the governor goes in the rack](figures/fig-rack.png)
@@ -31,7 +31,7 @@ instead of asking the landlord to knock a hole in the wall.
 
 | Channel | Direction | What it carries |
 |---|---|---|
-| Out-of-band management bus (SMBus; the GPU's SMBus Post-Box Interface, SMBPBI, that baseboard controllers already use) | governor ↔ GPU | Power, temperature, utilization, ECC and firmware version readouts; the power cap (documented in NVIDIA's product briefs as settable over SMBPBI and persistent across driver loads and system boots); GPU identity |
+| Out-of-band management bus (SMBus; the GPU's SMBus Post-Box Interface, SMBPBI, that baseboard controllers already use) | governor ↔ GPU | Power, temperature and the readouts the product's SMBPBI exposes (the full set is in NVIDIA's SMBPBI design guide, which is not public); the power cap, which the A100 PCIe product brief (PB-10577) documents as settable over SMBPBI and in force across driver loads and system boots, to be confirmed per product |
 | Power brake | governor → GPU | NVIDIA GPUs have a hardware power-brake input that forces a clock slowdown (nvidia-smi reports it as "HW Power Brake Slowdown"); on PCIe cards it is the optional PWRBRK# edge-connector signal, which many boards do not wire and the carrier must route to the governor; on SXM baseboards it is a baseboard signal where the board provides one. Where no hardware brake is wired, the governor's software-honoured fallback is the power cap over the post-box interface (which NVIDIA documents as persisting across driver loads and reboots), and the hard fallback is reset. Reversible, no data loss |
 | Reset (PERST# per slot) | governor → GPU | Fundamental reset of the GPU; the job is lost |
 | Slot power enable (the EN pin of the slot's hot-swap controller or e-fuse, where the baseboard has one per module; shared rails on some boards, which the policy records) | governor → board | Power cut. The floor, where the board provides it |
@@ -51,8 +51,8 @@ those interfaces.
 |---|---|---|---|---|
 | GPU to GPU over NVLink inside a baseboard | NVSwitch chips on the HGX baseboard, beside the baseboard's own hardware management controller (HMC) | Out-of-band: NVIDIA's SMBPBI-based monitoring of NVSwitch status and errors, and the baseboard's reset lines; in-band: Fabric Manager, which programs routing and NVLink partitions (partition keys) and exposes partition activate/deactivate APIs in its shared-NVSwitch and vGPU modes | Today: switch reset and partition membership through Fabric Manager; with the firmware ask in §9, an out-of-band port disable | Partition and port (link level) |
 | GPU to GPU over NVLink across trays | NVLink switch trays in an NVL rack | The tray's management controller, with the governor beside it | As above, per tray | Port and partition |
-| GPU to host, to storage, GPU to GPU over PCIe | The PCIe switch on the system board. The data-center families expose management both in-band and over a sideband (Microchip's Switchtec: UART, two-wire/SMBus and EJTAG, with per-port hot-plug controllers and downstream port containment; Broadcom's PEX family: a management port and I2C/SPI); ACS is a standard PCIe switch feature. The exact capability set is per family and is confirmed on the chosen board | The switch's management sideband, with the governor as the only master | Downstream port power and link state per slot; ACS to force peer-to-peer through the upstream port or block it; containment on error | Port |
-| RDMA across nodes; GPUDirect Storage over the network | The DPU or NIC | The DPU's own out-of-band management port and its programmable filter tables (DOCA) | Flow rules: which roster peers and which storage targets may exchange bytes | Flow |
+| GPU to host, to storage, GPU to GPU over PCIe | The PCIe switch on the system board. The data-center families expose management both in-band and over a sideband (Microchip's Switchtec: UART, two-wire/SMBus and EJTAG, with per-port hot-plug controllers and downstream port containment; Broadcom's PEX family: a management port and I2C/SPI). Access Control Services is an optional PCIe capability that data-center switches implement; it and the exact management set are confirmed per part on the chosen board | The switch's management sideband, with the governor as the only master | Downstream port power and link state per slot; ACS to force peer-to-peer through the upstream port or block it; containment on error | Port |
+| RDMA across nodes; GPUDirect Storage over the network | The DPU or NIC | The DPU's own out-of-band management port and its hardware steering tables, programmed through DOCA Flow | Flow rules: which roster peers and which storage targets may exchange bytes | Flow |
 
 Enforcement at this tier is at the link level: a port is open to a roster member under a
 current epoch and a live heartbeat, or it is closed. That blocks exfiltration to anything
@@ -68,7 +68,7 @@ the keys to the doors between the buildings, and the doors only open for people 
 
 | Channel | What it carries |
 |---|---|
-| PCIe endpoint behind the switch (a small BAR with a mailbox doorbell and a response ring; no other writable registers) | Signed commands from the broker, the loader and the policy authority's relay; attestation evidence; typed requests; responses and tickets back |
+| PCIe endpoint behind the switch (a small BAR with a mailbox doorbell and a response ring; no other writable registers) | Signed commands from the broker, the loader and the policy authority's relay; attestation evidence; typed requests and port requests, which must be signed by the verified host enclave's key while its attestation is fresh; responses and tickets back |
 | CPU TEE attestation (TDX, SEV-SNP or CCA report, delivered through the mailbox) | The host enclave's measurement, which the verifier checks against reference values before it will release the model key or accept requests from the serving stack |
 | Model key release | The governor wraps the model's data key to the verified enclave's public key, once per load, under a current epoch |
 
@@ -90,18 +90,20 @@ cannot keep the GPU alive by silence.
 ## 6. The DPU
 
 A node with a BlueField-class DPU on its path to the model gets a governor on the DPU's
-board. It programs the filter tables through the DPU's out-of-band management port with
+board. It programs the steering tables through the DPU's out-of-band management port with
 signed commands, so the host kernel cannot. Over the fabric, GPU governors and the DPU
-governor share the roster, so RDMA flows are permitted only between roster members. NVIDIA's
-Sentry runs on the same DPU and acts as a witness: its verdicts are assertions the gate core
-consumes and never computes.
+governor share the roster, so RDMA flows are permitted only between roster members. On
+BlueField-4 nodes, NVIDIA's Sentry (announced September 2026 as part of its open agent safety
+platform, built for BlueField-4) can act as a witness: its verdicts are assertions the gate
+core consumes and never computes.
 
 ## 7. Action endpoints
 
 The governor is a ticket issuer. The endpoint comparator in the device that acts (guidance
-chip, payment switch's HSM, motor controller, gateway line card) holds the governor's public
-key, its own used-ticket store, the current epoch and a heartbeat timer. The interface is the
-ticket and the commit:
+chip, payment switch's HSM, motor controller, gateway line card) holds the public keys of the
+governors that may mint for it (the rack's governor key set, installed with the policy), its
+own used-ticket store, the current epoch and a heartbeat timer. The interface is the ticket
+and the commit:
 
 ```
 governor → endpoint   TICKET   {request_hash, action, params_digest, fingerprint, rule,
@@ -142,7 +144,7 @@ opens for business either way.
 
 | Group | Pins | Notes |
 |---|---|---|
-| Power | VDD core, VDD IO, VDD fuse-program (tied off after provisioning), GND | 1.8 V IO, core per process |
+| Power | VDD core, VDD IO, VDD fuse-program (tied off after provisioning), GND | 3.3 V IO on the sky130 prototype (the harness's IO ring), 1.8 V IO on the product; core per process |
 | Host | PCIe x1 (Gen 3 is enough) behind the PCIe switch, or SMBus for the smallest boards | Mailbox only |
 | Per GPU slot (× 8) | SMBus/I2C master; PWRBRK# (open drain); PERST# (open drain); PWR_EN (push-pull to the slot's hot-swap controller where present) | All default to the safe state at power-on |
 | Switch management | I2C/SMBus and MDIO masters to the NVSwitch chips and the PCIe switch; one GPIO per switch for reset | The governor is the only master on these buses |

@@ -35,3 +35,14 @@ def test_labels_never_reach_the_log_as_decisions(rack1):
     g = node.governor
     for e in g.log.entries("gate.ticket"):
         assert e["data"]["rule"] != "payments.transfer.large"
+
+
+def test_exact_workload_rule_beats_the_wildcard(rack1):
+    """The shipped policy keys one rule on the 70b workload measurement (auto) and a wildcard on
+    the same action (human). The verified workload picks the rule; the broker cannot."""
+    node = rack1.nodes[0]
+    r = rack1.request(node, "model.export", {"target": "s3://bucket"}, labels={"rule": "model.export.any"})
+    assert r["ok"] and r["ticket"]["payload"]["rule"] == "model.export.70b"
+    rack1.load_model(node, rack1.manifest("model-other", 1))                 # another workload: the wildcard applies
+    r = rack1.request(node, "model.export", {"target": "s3://bucket"}, labels={"rule": "model.export.70b"})
+    assert not r["ok"] and r["why"] == reasons.GATE_HELD

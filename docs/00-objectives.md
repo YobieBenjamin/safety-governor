@@ -34,7 +34,7 @@ in the factory, so when one closes its valve the rest know within a millisecond.
 |---|---|---|
 | G1 | Enforce the security contract from the reference stack in hardware the host cannot bypass: within a declared boundary, every protected operation requires a fresh authorization bound to that exact operation | The contract is the whole point; software alone cannot be tamperproof |
 | G2 | Give every GPU its own governor with physical, vendor-independent authority over it and over the switches its traffic passes | Authority has to be local. A chip that can only ask the GPU nicely is a classifier with a heatsink |
-| G2a | Work with NVIDIA's GPUs, baseboards and CUDA exactly as they ship: added through the rack's boards, governing through management interfaces that already exist | NVIDIA has most of the market; a design that needs new GPU silicon or a CUDA change does not ship |
+| G2a | Work with NVIDIA's GPUs, baseboards and CUDA exactly as they ship: added through the rack's boards, governing through management interfaces that already exist. The system board and its management-module slot are the OEM's; the HGX baseboard, its NVSwitch chips and its hardware management controller are NVIDIA's, so what the governor reaches on the baseboard is what the baseboard exposes at its connector, and anything soldered onto the baseboard is an ask | NVIDIA has most of the market; a design that needs new GPU silicon or a CUDA change does not ship |
 | G3 | Link all governors in a cluster over a channel that no model, host or network switch can reach | Frontier jobs span nodes; a halt or an epoch change that reaches some GPUs and not others is a hazard |
 | G4 | Fail safe: loss of power, loss of heartbeat, a broken loop wire, a bad policy load or a detected tamper all end in the specified safe transition, never in "carry on" | A safety system that fails open is a decoration |
 | G5 | Be small enough to verify: control firmware in the class of a verified kernel, hardware blocks with written-down invariants, and a proof-assumption list | The third test of a reference monitor |
@@ -54,7 +54,7 @@ functional model in `govsim/` (tests in `tests/`), `rtl` is the Amaranth simulat
 |---|---|---|
 | R1 | The chip holds a unique device secret in one-time-programmable fuses readable only by the key-derivation engine | sim (`fuses.py`), silicon |
 | R2 | Boot is measured: each stage extends a register that can only be extended, never written, and the signing key is derived from the measurement (DICE) | sim, rtl (`measure_reg`) |
-| R3 | An anti-rollback counter in fuses rejects firmware older than the last accepted version | sim, rtl (`monotonic`) |
+| R3 | An anti-rollback counter in fuses rejects firmware older than the last accepted version; the policy version is fused the same way | sim (boot refused; rollback refused with the stored image gone) |
 | R4 | Debug and scan access is disabled by a lifecycle fuse before shipment; an access attempt in the production state is refused and logged | sim, rtl (`lifecycle`) |
 | R5 | Voltage, clock and temperature glitch detectors, and an active shield over the key store, trigger zeroization of volatile keys | silicon (modelled as a flag in sim) |
 
@@ -65,7 +65,7 @@ functional model in `govsim/` (tests in `tests/`), `rtl` is the Amaranth simulat
 | R6 | A policy image is accepted only with k-of-n signatures from governance keys whose hashes are in ROM or fuses | sim |
 | R7 | The policy epoch is the digest of the accepted image, held in a register no host path can write | sim, rtl (`epoch_reg`) |
 | R8 | A ticket, a capability or a fabric message from a superseded epoch is refused | sim |
-| R9 | An epoch change is cluster-atomic: it is live only when every roster member has acknowledged it, and a member that cannot acknowledge within the bound is halted, not left on the old rules | sim (H14) |
+| R9 | An epoch change leaves no governor on the old rules: the authority commits to the members that acknowledged, the heartbeat carries the new epoch, a member that never staged cannot accept it and halts at expiry, and a member that staged but saw no commit halts at the staged-policy deadline | sim (H14) |
 
 ### Authorization
 
@@ -73,7 +73,7 @@ functional model in `govsim/` (tests in `tests/`), `rtl` is the Amaranth simulat
 |---|---|---|
 | R10 | Every protected operation is authorized; the rulebook selects the rule and the lane from the verified workload, the action and the typed fields, and from nothing the requester supplies | sim (H0, H4) |
 | R11 | Authorization is a transaction: check, reserve, commit; replay state, reservations, holds and the used-ticket set survive power loss | sim (H0) |
-| R12 | One ledger owns a budget key; a shared allowance is reserved at the owner over the fabric, never estimated locally | sim (H13) |
+| R12 | One ledger owns a budget key, named in the policy image and checked at load (an image with an ownerless budget key does not load); a shared allowance is reserved at the owner over the fabric, never estimated locally | sim (H13) |
 | R13 | Any party may raise an alarm; an alarm is cleared only by a rule the chip can check or by an approver key | sim (H5) |
 | R14 | Human override requires the policy's quorum of approvers, a written reason, and a latency floor; every override is in the log | sim (H8) |
 
@@ -99,30 +99,30 @@ functional model in `govsim/` (tests in `tests/`), `rtl` is the Amaranth simulat
 |---|---|---|
 | R21 | The governor can throttle (power brake), reset (PERST#) and power-cut (slot enable, where the board provides it) its GPU without the GPU's cooperation, and can close every governed switch port around it | sim (H16), rtl (`halt`) |
 | R22 | The halt loop is a physical current loop; any governor opening it, or a break in the wire, drives every governor's halt output within the bound | sim (H11), rtl (`halt_loop`) |
-| R23 | A governor cannot clear a halt on its own; clearing requires the policy authority's signed command after the cause is logged | sim (H11) |
+| R23 | A governor cannot clear a halt on its own, and a power cycle does not clear it either: the open cause is durable and comes back as the same rung; clearing requires the policy authority's signed command after the cause is logged and a neighbor has acknowledged the checkpoint | sim (H11) |
 
 ### Fabric
 
 | Id | Requirement | Tested |
 |---|---|---|
-| R24 | Fabric messages are signed with DICE-derived keys, carry sequence numbers and the epoch, and are accepted only from roster members | sim (H12) |
+| R24 | Fabric messages are signed with DICE-derived keys, carry sequence numbers, a monotonic-counter timestamp and the epoch, and are accepted only from roster members; last-seen sequence numbers survive a power loss so a restart does not reopen the replay window | sim (H12) |
 | R25 | The roster is built from mutual attestation at job start and expires with the job | sim (H12) |
-| R26 | The heartbeat fans out over the fabric with per-hop freshness; a governor past its heartbeat expiry enters safe mode | sim (H14), rtl (`heartbeat`) |
+| R26 | The heartbeat fans out over the fabric; each relay signs it and the hop count is bounded; the governor clamps any signed window to the policy's expiry; a governor past its expiry enters safe mode | sim (H14), rtl (`heartbeat`) |
 | R27 | Each log checkpoint includes the last checkpoint heads of the governor's fabric neighbors | sim (H12) |
 
 ### Provenance and metering
 
 | Id | Requirement | Tested |
 |---|---|---|
-| R28 | Every byte crossing the output path is folded into a running hash; a response gets a signed device-provenance record naming chip, firmware, model digest, policy epoch, roster, output hash, counters and time | sim |
+| R28 | A response gets a signed device-provenance record naming chip, firmware, model digest, policy epoch, roster, output hash, counters and time. At the integrated tier the hash is over the bytes themselves; at the rack tier it is over what the verified runtime presents, and the governor cross-checks the bytes that left for the host through its PCIe switch port against the bytes presented, raising an alarm and closing the port when the difference exceeds the policy's slack | sim (H10) |
 | R29 | Tokens, kernel cycles and bytes are counted per model digest in registers the host can read and not write | sim, rtl (`meter`) |
-| R30 | The permitted output channel carries query and byte budgets per workload; exceeding them trips a limit | sim (H10) |
+| R30 | The permitted output channel carries query and byte budgets per workload, and an unpresented-bytes slack; exceeding any of them trips a limit | sim (H10) |
 
 ### Cost
 
 | Id | Requirement | Tested |
 |---|---|---|
-| R31 | Per-token work in the governor is zero; per-transfer work is one table lookup; per-response work is one hash finalization and one signature | sim (`bench.py`) |
+| R31 | Per-token work in the governor is zero; per-transfer work is one table lookup; per-response work is one hash finalization and a share of one batched signature. Firmware time on action paths is under one percent of GPU time; the signing engine, priced at OpenTitan's published OTBN cycle count, keeps up at under 50 percent utilization with batching | sim (`bench.py`) |
 | R32 | Whole-deployment overhead under one percent, including tail latency, small requests, collectives, logging and revocation | silicon (Phase 2 measurement) |
 
 ## N · Non-goals
@@ -146,7 +146,7 @@ The integrated tier is a future ask, kept for completeness and not required.
 
 | Tier | Placement | Enforcement | What it cannot do | Needs |
 |---|---|---|---|---|
-| **Rack (plan of record)** | A governor module on the system board (DC-SCM-class slot) or soldered on the GPU baseboard; one governor instance per GPU slot; governors on the NVLink switch trays and the DPU | Per-slot levers (power brake, reset, slot power); NVSwitch ports and partitions; PCIe switch ports and ACS; DPU flow tables; attestation via the GPU's confidential-computing report; tickets, budgets, epochs, log, meter | Inspect individual transfers between two roster members | A slot on the board; the switches' management buses; three signals per GPU slot. Nothing from NVIDIA |
+| **Rack (plan of record)** | A governor module on the system board (DC-SCM-class slot), reaching the GPU baseboard through the baseboard's connector; one governor instance per GPU slot; governors on the NVLink switch trays and the DPU. Soldering the governor onto the HGX baseboard beside NVIDIA's management controller is the shortest wiring and is an ask to NVIDIA, because the baseboard is theirs | Per-slot levers (power brake, reset, slot power) where the board exposes them; NVSwitch partitions through Fabric Manager and switch reset; PCIe switch ports and ACS; DPU flow tables; attestation via the GPU's confidential-computing report; tickets, budgets, epochs, log, meter | Inspect individual transfers between two roster members | A slot on the system board; the switch management buses the OEM controls; the per-slot signals the baseboard exposes at its connector. On PCIe-card servers, where the slots are on the OEM's board, nothing from NVIDIA; on HGX, the lever signals the baseboard does not expose are an ask |
 | Board-only (fallback) | The same module, where switch management is unreachable or the baseboard has direct NVLink with no NVSwitch | Levers, attestation, tickets, budgets, epochs, log, meter | Any port authority | As above, minus the switch buses |
 | Integrated (future ask) | Hooks inside the GPU: descriptor-level checkers at the copy engines and the peer MMU, an inline output hash | Byte-level containment between roster members; device provenance of the bytes themselves | Nothing on the enumerated list | NVIDIA firmware and, for the checkers, silicon |
 

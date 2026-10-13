@@ -14,6 +14,15 @@ def test_modified_gpu_firmware_fails_reference_check(rack1):
     assert not r["gpu"]["ok"] and r["gpu"]["why"] == reasons.ATTEST_FIRMWARE_NOT_IN_REFERENCE
 
 
+def test_verify_gpu_result_is_signed_by_the_governor(rack1):
+    from govsim.crypto import verify_object
+    node = rack1.nodes[0]
+    r = rack1.attest(node)["gpu"]
+    assert r["ok"] and verify_object(r["result"], node.governor.key.public)
+    p = r["result"]["payload"]
+    assert p["type"] == "verify-result" and p["chip_id"] == node.gpu.chip_id and p["firmware"] == GPU_FW
+
+
 def test_unknown_device_certificate_refused(rack1):
     node = rack1.nodes[0]
     node.gpu.device_cert = SigningKey.generate().sign({"type": "gpu-device-cert", "chip_id": node.gpu.chip_id, "pub": node.gpu.device_key.public.hex})
@@ -44,7 +53,7 @@ def test_swapped_model_changes_fingerprint_and_old_token_dies(rack1):
     assert r["ok"] and r["fingerprint"] != old_fp
     body = {"request_id": "r1", "measurement_token": old_token, "action": "payments.transfer",
             "params": {"amount": 5, "currency": "USD", "destination": "a"}, "witnesses": []}
-    assert g.command("REQUEST", body)["why"] == reasons.GATE_NOT_ATTESTED
+    assert g.command("REQUEST", {}, node.host_sign(body, g.epoch))["why"] == reasons.GATE_NOT_ATTESTED
 
 
 def test_unsigned_manifest_refused_and_no_key_released(rack1):

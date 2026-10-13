@@ -28,8 +28,8 @@ does DICE-style derivation, SHA-256/HMAC, AES, a big-number engine for P-256 and
 entropy source. That is, almost exactly, the block list of [OpenTitan](https://opentitan.org/),
 the open-source silicon root of trust. OpenTitan is real silicon, not a paper design: the Earl
 Grey chip taped out in November 2023, validated chips were commercially available in February
-2024, Nuvoton began fabricating production parts in February 2025, and OpenTitan shipped in
-Chromebooks in March 2026 ([OpenTitan's own history](https://opentitan.org/history/)). The
+2024, production fabrication began in February 2025 at Nuvoton ([Google's announcement](https://opensource.googleblog.com/2025/02/fabrication-begins-for-production-opentitan-silicon.html)),
+and OpenTitan shipped in Chromebooks in March 2026 ([OpenTitan's own history](https://opentitan.org/history/)). The
 governor is therefore built as **OpenTitan's Earl Grey subsystem plus the governor blocks**:
 
 | From OpenTitan (Apache 2.0) | Governor blocks (this repository) |
@@ -37,7 +37,7 @@ governor is therefore built as **OpenTitan's Earl Grey subsystem plus the govern
 | Ibex RISC-V core (runs the control firmware) | Gate core accelerator (rule CAM, comparators) |
 | OTP controller, lifecycle controller | Capability table (the source of truth for every switch port and flow the governor has opened) |
 | Key manager (DICE-style CDI derivation) | Monotonic counter with fuse-backed high-water mark |
-| HMAC/SHA-256, AES, KMAC, OTBN (ECDSA P-256 and P-384, X25519, RSA, ML-KEM, ML-DSA) | Epoch register with no host write path |
+| HMAC/SHA-256, AES (ECB, CBC, CFB, OFB, CTR), KMAC, OTBN with its crypto library (ECDSA P-256 and P-384, Ed25519 and X25519, RSA, SHA-256/512, SHA-3/SHAKE; ML-DSA and ML-KEM are being built for the next OTBN generation, not in Earl Grey silicon) | Epoch register with no host write path |
 | CSRNG and entropy source with health tests | Used-ticket store (cuckoo table) |
 | SPI device, I2C, GPIO, UART, timers, alert handler | Heartbeat timer, halt sequencer, loop driver and sense |
 | Flash controller (product leg) | Meter counters |
@@ -55,12 +55,12 @@ second column, written to drop into OpenTitan's TileLink fabric as peripherals.
 
 | Item | Choice | Note |
 |---|---|---|
-| Process | SkyWater SKY130 (sky130A open PDK), 130 nm, 5 metal layers, 1.8 V core, 3.3 V IO | The only fully open process with a public DRC/LVS deck and repeated shuttle history |
+| Process | SkyWater SKY130 (sky130A open PDK), 130 nm, 5 metal layers, 1.8 V core, IO up to 5 V (the harness runs it at 3.3 V) | The open process with the longest shuttle history and the deepest open-tool support; IHP's SG13G2 and GF180MCU are the other open PDKs |
 | Standard cells | `sky130_fd_sc_hd` (high density) | 50 MHz target is easy |
 | SRAM | OpenRAM-generated macros (e.g., 32 × 1 KB) | Open, tested on sky130 shuttles |
-| Fuses / OTP | **Not available as an open macro on sky130.** The prototype holds the UDS in a provisioning register written at power-up by an external secure element over SPI, and emulates the anti-rollback counter in authenticated external flash | The prototype proves function, not tamper resistance. Leg B uses real OTP |
+| Fuses / OTP | **No open OTP macro on sky130.** The PDK has ReRAM primitives and a SONOS cell, but neither is a qualified key store. The prototype holds the UDS in a provisioning register written at power-up by an external secure element over SPI, and emulates the anti-rollback counter in authenticated external flash | The prototype proves function, not tamper resistance. Leg B uses real OTP |
 | NVM | External SPI NOR flash, encrypted and authenticated with a DICE-derived key | Same as above |
-| PHYs | None at 130 nm. Host interface is SPI; fabric is RS-485 or 100BASE-T1 through an external transceiver; loop pins are GPIO with an external comparator | PCIe and SGMII arrive in Leg B |
+| PHYs | None in the open sky130 PDK. Host interface is SPI; fabric is RS-485 or 100BASE-T1 through an external transceiver; loop pins are GPIO with an external comparator | PCIe and SGMII arrive in Leg B |
 | Flow | [LibreLane](https://librelane.readthedocs.io/) (Yosys, OpenROAD, Magic, KLayout, Netgen, OpenSTA), the successor to OpenLane 2 maintained under the FOSSi Foundation after Efabless closed | `hw/librelane/governor_core/config.json` |
 | Harness | A shuttle harness (Caravel-class: pad frame, management core, seal ring) with a ~10 mm² user area, or Tiny Tapeout tiles for individual blocks | Both are open; the harness supplies pads, ESD, the seal ring and the scribe |
 
@@ -120,8 +120,8 @@ of the hundreds of thousands a private mask set costs even at 130 nm.
 
 | Route | Area | Cost class | Notes |
 |---|---|---|---|
-| sky130 MPW slot from ChipFoundry, the company Efabless's founders started after Efabless closed in March 2025 (first sky130 tapeout September 2025; shuttles run when at least half the slots are sold), on a Caravel-class harness | ~10 mm² user area, ~38 user IO | low five figures per slot, packaged parts returned | Enough for the whole governor core plus OpenRAM macros; this is the plan of record |
-| Tiny Tapeout, which continued after Efabless closed, on IHP SG13G2 and, through ChipFoundry, sky130 | tiles of about 0.02 mm² each, a few IO per tile | hundreds of dollars per tile | For individual blocks (the halt loop, the monotonic counter, the capability checker) as early silicon proof of the invariants |
+| sky130 MPW slot from ChipFoundry, the company Efabless's founders started after Efabless closed in March 2025 (first sky130 tapeout September 2025; shuttles run when at least half the slots are sold), on a Caravel-class harness | up to about 15 mm² of die per slot (a Caravel-class user area is about 10 mm²), 38 user IO | low five figures per slot (ChipFoundry lists $14,950), packaged parts returned | Enough for the whole governor core plus OpenRAM macros; this is the plan of record |
+| Tiny Tapeout, which continued after Efabless closed, on IHP SG13G2 and, through ChipFoundry, sky130 | tiles of about 0.016 mm² (160 × 100 µm), 24 GPIO per tile (8 in, 8 out, 8 bidirectional) | hundreds of dollars per tile | For individual blocks (the halt loop, the monotonic counter, the capability checker) as early silicon proof of the invariants |
 | IHP SG13G2 open shuttle (130 nm BiCMOS, open PDK) | per-run allocation | low five figures | A second open process with an open PDK and its own OpenLane support; an alternative if sky130 capacity is short |
 
 ### 2.5 Package, board, bring-up
@@ -164,7 +164,7 @@ About a year to a measured prototype, for a cost dominated by people, not masks.
 | Crypto | OpenTitan engines synthesized for the node; side-channel countermeasures enabled | Same RTL as Leg A |
 | Security physical design | Active mesh shield on the top metal; voltage, clock and temperature sensors; light sensor; glitch detectors; key SRAM with scrambling; zeroization on alert | R5 in the objectives |
 | Package | BGA-169, 10 × 10 mm | Fits a GPU baseboard footprint |
-| Qualification | AEC-Q100-style temperature cycling and HTOL as a data-center analogue; IEC 61508 SIL 2 hardware metrics (FIT, SFF) | The nuclear-plant analogy demands the nuclear-plant paperwork |
+| Qualification | AEC-Q100-style temperature cycling and HTOL as a data-center analogue; IEC 61508 SIL 2 hardware metrics (probability of dangerous failure per hour, safe failure fraction, hardware fault tolerance), with the dangerous-failure budget expressed in FIT | The nuclear-plant analogy demands the nuclear-plant paperwork |
 | Flow | Commercial (Synopsys or Cadence) with the foundry PDK under NDA; the same RTL, the same tests | Open tools do not yet carry commercial PDKs |
 
 Mask set and NRE at 22 nm are in the low millions; engineering is the larger cost. Timeline:
@@ -178,7 +178,7 @@ changes; the work is board and integration work.
 | Work item | Who | What it is |
 |---|---|---|
 | Governor module | this project with a board partner | A DC-SCM-class card: the governor die, an SPI flash, the fabric transceivers, the loop comparator, the per-slot lever drivers, I2C/SMBus and MDIO masters for the switch management buses; the standard management-module connector carries PCIe x1 (mailbox), I2C/I3C, GPIO and power |
-| Baseboard integration | the OEM or the system integrator | Routing of each GPU slot's PWRBRK#, PERST#, PWR_EN and management bus to the module connector (or to the soldered governor); the NVSwitch management bus with the governor as the only master; the PCIe switch management port assigned to the governor |
+| Baseboard integration | the OEM or the system integrator, and NVIDIA for what is on the HGX baseboard | On PCIe-card servers: each slot's PWRBRK#, PERST#, PWR_EN and management bus routed to the module connector. On HGX: the management bus to the GPUs and the HMC and the reset and power signals the baseboard exposes at its connector, routed to the module; anything on the baseboard itself (a soldered governor, the per-slot signals the connector does not carry, the NVSwitch management bus with the governor as the only master) is NVIDIA's board and needs NVIDIA. The PCIe switch management port assigned to the governor |
 | Switch-tray and DPU governors | this project with the tray and DPU board owners | The same die on each NVLink switch tray's management board and on the DPU board; fabric and loop routed through the rack alongside the management network, on their own wires |
 | Rack cabling | the integrator | The halt loop and the dual-ring fabric through the rack: two connectors per tray, a jumper plug on the last tray; loop continuity is part of the rack's power-on test |
 | Firmware for the management interfaces | this project | Drivers for the GPU post-box interface, the NVSwitch management bus, the PCIe switch management port and the DPU out-of-band port, each as a small, verified, write-only-by-governor driver |

@@ -1,10 +1,10 @@
 """The policy image: rules, keys, reference values, the assumptions register, k-of-n
-signatures and the epoch. ``docs/04-specification.md`` §4.
+signatures and the epoch. ``docs/04-specification.md`` section 4.
 
-A rule's constraints may reference *inputs* (a list id, a registry, a sensor source). The
-image carries an assumptions register with one row per input; ``check_register`` returns the
-inputs that have no row, and a governor refuses to load an image where that set is not empty
-(requirement H7).
+A rule relies on *inputs*: the lists its constraints name, the observer verdict its lane needs,
+the budget key it spends from, and anything it declares. ``check_register`` derives that set and
+returns the inputs with no assumptions-register row; ``check_budget_owners`` returns budget keys
+with no owner. A governor refuses an image where either set is not empty (H7, R12).
 """
 from __future__ import annotations
 
@@ -59,8 +59,7 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
                                    "causes": {reasons.LOOP_OPEN: "HALT", reasons.LOOP_BROKEN: "HALT",
                                               reasons.TAMPER: "SAFE", reasons.HEARTBEAT_LOST: "THROTTLE",
                                               reasons.EPOCH_STRAGGLER: "HALT", reasons.HALT_COMMANDED: "HALT"}},
-        "fabric": fabric or {"heartbeat_period_s": 1.0, "heartbeat_expiry_s": 5.0, "max_hops": 16,
-                             "epoch_deadline_s": 10.0, "loop_bound_s": 0.001},
+        "fabric": fabric or {"heartbeat_expiry_s": 5.0, "max_hops": 16, "epoch_deadline_s": 10.0, "loop_bound_s": 0.001},
     }
 
 
@@ -99,20 +98,41 @@ def verify_policy(image: dict, governance_hashes: list[str] | None = None) -> tu
         return False, reasons.POLICY_QUORUM
 
 
+LIST_CONSTRAINTS = ("not_in_list", "in_list", "digest_of")
+OBSERVER_INPUT = "observer-verdict"
+
+
+def rule_inputs(rule: dict) -> list[str]:
+    """Every input a rule relies on, derived from what it does, plus anything it declares."""
+    inputs = list(rule.get("inputs", []))
+    for c in rule.get("constraints", {}).values():
+        for k in LIST_CONSTRAINTS:
+            if k in c:
+                inputs.append(c[k])
+    req = rule.get("requirement", {})
+    if req.get("observers") or req.get("mode") == "observer":
+        inputs.append(OBSERVER_INPUT)
+    if rule.get("budget"):
+        inputs.append(rule["budget"]["key"])
+    return list(dict.fromkeys(inputs))
+
+
 def check_register(image: dict) -> list[str]:
-    """Inputs named by rules that have no assumptions-register row."""
+    """Inputs the rules or endpoints rely on that have no assumptions-register row."""
     rows = {r["input"] for r in image.get("assumptions", [])}
-    missing: list[str] = []
+    needed: list[str] = []
     for rule in image.get("rules", []):
-        for inp in rule.get("inputs", []):
-            if inp not in rows and inp not in missing:
-                missing.append(inp)
-    # endpoints rely on inputs too
+        needed += rule_inputs(rule)
     for ep in image.get("endpoints", []):
-        for inp in ep.get("inputs", []):
-            if inp not in rows and inp not in missing:
-                missing.append(inp)
-    return missing
+        needed += ep.get("inputs", [])
+    return [inp for inp in dict.fromkeys(needed) if inp not in rows]
+
+
+def check_budget_owners(image: dict) -> list[str]:
+    """Budget keys the rules use that no governor owns. There is no default owner."""
+    owners = image.get("budget_owners", {})
+    keys = [r["budget"]["key"] for r in image.get("rules", []) if r.get("budget")]
+    return [k for k in dict.fromkeys(keys) if k not in owners]
 
 
 def find_rule(image: dict, measurement: str, action: str) -> dict | None:

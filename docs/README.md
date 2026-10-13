@@ -26,6 +26,12 @@ summary and a "backed by" box.
 | `10-plain-english-walkthrough.md` | The whole design in plain English, cross-referenced | itself |
 | `AUDIT-2026-10.md` | The audit: hallucinations and fake conditions found and fixed, sources checked, what is still unverified | §15 |
 
+## One document
+
+`safety-governor-design.docx` is all of the above plus the hardware references, the audit and
+the sweep report in one file with the figures, built by `tools/build_master_docx.py` (`make
+docx`; pandoc and python-docx). The Markdown files are the originals.
+
 ## Figures
 
 Drawn by `figures/make_figures.py` (matplotlib only) from the same facts the text states;
@@ -45,7 +51,7 @@ regenerate them with `python3 docs/figures/make_figures.py` after a design chang
 | Layer | Where | Run |
 |---|---|---|
 | Functional model of the governor and a simulated rack | `../govsim/` | `python -m govsim.cli demo`, `bench`, `sweep` |
-| Hypothesis tests H0 to H16 (122 tests) | `../tests/` | `python -m pytest tests` |
+| Hypothesis tests H0 to H16 (159 tests) | `../tests/` | `python -m pytest tests` |
 | Hard-core RTL blocks (Amaranth) and their simulations | `../rtl/governor_rtl/`, `../rtl/tests/` | `make rtl`, `python -m pytest rtl/tests` |
 | Generated Verilog | `../rtl/gen/` | checked in; CI regenerates and diffs |
 | Silicon flow, pinout, rack wiring | `../hw/` | `make gds` (Docker) |

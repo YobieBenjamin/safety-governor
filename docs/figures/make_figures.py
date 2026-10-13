@@ -101,7 +101,7 @@ def fig_rack():
     arrow(ax, 5.3, 5.85, 5.3, 6.08, color=QUIET, style="-|>")
     label(ax, 5.4, 5.99, "network, storage", size=6.6, color=QUIET)
     # governor module
-    box(ax, 0.7, 4.0, 7.1, 0.75, "SAFETY GOVERNOR module  (management-module slot, DC-SCM-class, or soldered on the baseboard)",
+    box(ax, 0.7, 4.0, 7.1, 0.75, "SAFETY GOVERNOR module  (the OEM's management-module slot, DC-SCM-class; soldering on the baseboard is an ask to NVIDIA)",
         ["one governor instance per GPU slot · fuses, root, verifier, policy + epoch, gate core, ledger, log, meter, heartbeat, levers, loop, fabric"],
         kind="gov", title_size=8.6, line_size=7.2)
     arrow(ax, 3.35, 4.9, 3.35, 4.75, color=BLUE, style="-|>", lw=1.3)
@@ -111,10 +111,10 @@ def fig_rack():
     arrow(ax, 1.45, 4.9, 1.45, 4.75, color=QUIET, style="-|>", lw=1.0)
     label(ax, 1.55, 4.82, "mailbox (PCIe / SMBus)", size=6.6, color=QUIET)
     # rack supervisor
-    box(ax, 8.2, 4.0, 1.5, 1.85, "Rack supervisor", ["policy authority", "heartbeat source", "loop current source", "fabric ring head"], kind="plain", align="center", title_size=8.4, line_size=7.0)
+    box(ax, 8.2, 4.0, 1.5, 1.85, "Rack supervisor", ["heartbeat entry point", "(the authority is a key", "held outside the rack)", "loop current source", "fabric ring head"], kind="plain", align="center", title_size=8.4, line_size=6.6)
     # baseboard (narrower, so the loop and fabric drops have a free strip on the right)
     ax.add_patch(FancyBboxPatch((0.5, 1.6), 7.3, 2.0, boxstyle="round,pad=0.02,rounding_size=0.08", fc=GRAY_FILL, ec=EDGE, lw=0.9))
-    label(ax, 0.65, 3.42, "GPU baseboard (HGX: 8 slots · NVL72 compute tray: 4 slots)", size=8.4, color=INK, weight="bold")
+    label(ax, 0.65, 3.42, "GPU baseboard, NVIDIA's (HGX: 8 slots · NVL72 compute tray: 4 slots); reached through its connector", size=8.0, color=INK, weight="bold")
     for i in range(8):
         x = 0.65 + i * 0.86
         box(ax, x, 2.5, 0.72, 0.75, f"GPU{i}", ["SXM"], kind="nv", align="center", title_size=7.6, line_size=6.4)
@@ -155,20 +155,20 @@ def fig_die():
     ax.text(0.3, 7.35, "The governor die: one chip, five regions, and only one way in from the host (the mailbox).",
             fontsize=10.5, color=INK, fontweight="bold", va="center")
     ax.add_patch(FancyBboxPatch((0.3, 0.9), 9.8, 6.2, boxstyle="round,pad=0.02,rounding_size=0.1", fc="white", ec=BLUE, lw=1.6))
-    label(ax, 0.45, 6.95, "governor die (sky130 prototype: ~10 mm² core, QFN-64 · product: < 4 mm² at 22 nm, BGA-169)", size=8, color=BLUE)
+    label(ax, 0.45, 6.95, "governor die (sky130 prototype: ~2 mm² core in a ~10 mm² harness, QFN-64 · product: < 4 mm² at 22 nm, BGA-169)", size=8, color=BLUE)
     # region 1: root of trust
     ax.add_patch(FancyBboxPatch((0.5, 4.5), 3.0, 2.3, boxstyle="round,pad=0.02,rounding_size=0.08", fc=GRAY_FILL, ec=EDGE, lw=0.8))
     label(ax, 0.62, 6.62, "ROOT OF TRUST (OpenTitan-class)", size=7.8, color=INK, weight="bold")
     box(ax, 0.6, 5.55, 1.35, 0.9, "Fuses (OTP)", ["UDS · anti-rollback", "lifecycle · key hashes"], kind="gov", title_size=7.8, line_size=6.4)
     box(ax, 2.05, 5.55, 1.35, 0.9, "Silicon root", ["ROM · MEAS0/1", "DICE keys · TRNG"], kind="gov", title_size=7.8, line_size=6.4)
-    box(ax, 0.6, 4.6, 2.8, 0.85, "Crypto engines (integrated IP)", ["SHA-256/384 · HMAC · AES-GCM · TRNG", "ECDSA P-256 / P-384 on an OTBN-class coprocessor"], kind="plain", title_size=7.8, line_size=6.4)
+    box(ax, 0.6, 4.6, 2.8, 0.85, "Crypto engines (integrated IP)", ["SHA-256/384 · HMAC · AES-CTR · TRNG", "ECDSA P-256 / P-384 on an OTBN-class coprocessor (17 ms)"], kind="plain", title_size=7.8, line_size=6.4)
     # region 2: policy and gate
     ax.add_patch(FancyBboxPatch((3.7, 4.5), 3.2, 2.3, boxstyle="round,pad=0.02,rounding_size=0.08", fc=GRAY_FILL, ec=EDGE, lw=0.8))
     label(ax, 3.82, 6.62, "RULES AND PERMISSIONS", size=7.8, color=INK, weight="bold")
     box(ax, 3.8, 5.55, 1.45, 0.9, "Policy store", ["signed image, k-of-n", "EPOCH reg: no host write"], kind="gov", title_size=7.8, line_size=6.4)
-    box(ax, 5.35, 5.55, 1.45, 0.9, "Gate core", ["fingerprint × action", "→ rule, lane, budget"], kind="gov", title_size=7.8, line_size=6.4)
+    box(ax, 5.35, 5.55, 1.45, 0.9, "Gate core", ["workload × action", "→ rule, lane, budget"], kind="gov", title_size=7.8, line_size=6.4)
     box(ax, 3.8, 4.6, 1.45, 0.85, "Ledger", ["budgets · reservations", "rate windows · replay"], kind="gov", title_size=7.8, line_size=6.4)
-    box(ax, 5.35, 4.6, 1.45, 0.85, "Ticket store", ["used-ticket set", "capability tables"], kind="gov", title_size=7.8, line_size=6.4)
+    box(ax, 5.35, 4.6, 1.45, 0.85, "Ticket store", ["used-ticket set", "(endpoint role)"], kind="gov", title_size=7.8, line_size=6.4)
     # region 3: provenance
     ax.add_patch(FancyBboxPatch((7.1, 4.5), 2.8, 2.3, boxstyle="round,pad=0.02,rounding_size=0.08", fc=GRAY_FILL, ec=EDGE, lw=0.8))
     label(ax, 7.22, 6.62, "RECORD", size=7.8, color=INK, weight="bold")
@@ -179,14 +179,14 @@ def fig_die():
     ax.add_patch(FancyBboxPatch((0.5, 2.3), 9.4, 2.0, boxstyle="round,pad=0.02,rounding_size=0.08", fc=GREEN_FILL, ec=GREEN, lw=0.9))
     label(ax, 0.62, 4.12, "STOPPING (hard logic, no firmware in the path)", size=7.8, color=GREEN, weight="bold")
     box(ax, 0.6, 2.45, 1.7, 1.45, "Heartbeat", ["countdown from last", "valid authority token", "expiry → safe mode"], kind="safe", title_size=7.8, line_size=6.4)
-    box(ax, 2.4, 2.45, 2.2, 1.45, "Safe-mode sequencer", ["RUN → THROTTLE → HALT → SAFE", "per-slot levers:", "brake · PERST# · PWR_EN"], kind="safe", title_size=7.8, line_size=6.4)
+    box(ax, 2.4, 2.45, 2.2, 1.45, "Safe-mode sequencer", ["RUN → THROTTLE → HALT → SAFE", "levers: brake · PERST# · PWR_EN", "rung and cause survive power loss"], kind="safe", title_size=7.8, line_size=6.4)
     box(ax, 4.7, 2.45, 1.9, 1.45, "Halt loop I/O", ["series switch, fail-open", "current sense, 100 µs", "open → HALT, everyone"], kind="safe", title_size=7.8, line_size=6.4)
-    box(ax, 6.7, 2.45, 1.5, 1.45, "Alarms", ["sticky, monotone", "tamper → zeroize", "clear path only"], kind="safe", title_size=7.8, line_size=6.4)
+    box(ax, 6.7, 2.45, 1.5, 1.45, "Alarms", ["sticky, monotone", "set by anyone", "clear path only"], kind="safe", title_size=7.8, line_size=6.4)
     box(ax, 8.3, 2.45, 1.5, 1.45, "Lifecycle", ["test → production", "→ decommissioned", "debug fused off"], kind="safe", title_size=7.8, line_size=6.4)
     # region 5: interfaces and control
     box(ax, 0.6, 1.05, 2.1, 1.05, "Mailbox", ["the ONLY host input", "signed, sequenced, epoch-checked", "no writable registers but the doorbell"], kind="warn", title_size=7.8, line_size=6.2)
     box(ax, 2.8, 1.05, 2.0, 1.05, "Fabric ports × 2", ["dual ring, SGMII-class", "signed messages", "governor-to-governor only"], kind="gov", title_size=7.8, line_size=6.2)
-    box(ax, 4.9, 1.05, 2.2, 1.05, "Switch management", ["NVSwitch / PCIe switch / DPU", "I2C, SMBus, MDIO, UART", "the governor is the only writer"], kind="gov", title_size=7.8, line_size=6.2)
+    box(ax, 4.9, 1.05, 2.2, 1.05, "Switch management", ["capability tables: which port is", "open to whom, until when", "PCIe switch / DPU / NVSwitch buses"], kind="gov", title_size=7.8, line_size=6.2)
     box(ax, 7.2, 1.05, 1.3, 1.05, "Lever ch. × 8", ["per GPU slot", "SMBus + 3 pins", "+ present/fault"], kind="gov", title_size=7.8, line_size=6.2)
     box(ax, 8.6, 1.05, 1.25, 1.05, "Control CPU", ["Ibex-class", "firmware < 10k", "lines, no DMA"], kind="plain", title_size=7.8, line_size=6.2)
     label(ax, 0.45, 0.55, "Memory: ROM 64 KB · OTP 8 Kbit · SRAM 512 KB · authenticated NVM 16 MB (policy ≤ 1 MB, log, ledger, used tickets).  "
@@ -208,6 +208,7 @@ def fig_safe_mode():
               ("SAFE", 8.2, "PWR_EN low;", "slot power cut;", "the floor", "nv")]
     for name, x, a, b, c, kind in states:
         box(ax, x, 2.3, W, 1.35, name, [a, b, c], kind=kind, align="center", title_size=7.6 if len(name) > 8 else 8.6, line_size=6.3)
+    label(ax, 0.4, 0.14, "The rung and its cause are written to the chip's own memory: a power cycle brings the governor back on the same rung, with its loop switch open.", size=6.4)
     ym = 2.97
     arrow(ax, 0.4 + W, ym, 2.35, ym, color=GREEN, lw=1.4)
     ax.text(2.025, ym + 0.12, "heartbeat\n+ loop current", ha="center", va="bottom", fontsize=5.8, color=GREEN)
@@ -219,7 +220,7 @@ def fig_safe_mode():
     ax.text(7.875, ym + 0.12, "T_halt\n300 s", ha="center", va="bottom", fontsize=5.8, color=CORAL)
     # causes
     box(ax, 2.5, 0.35, 3.6, 1.45, "Local causes → THROTTLE first", ["heartbeat expired (5 s)", "epoch stale (missed a rack-wide policy change)", "output budget exceeded", "policy may start any cause on a higher rung"], kind="warn", title_size=8, line_size=6.6)
-    box(ax, 6.4, 0.35, 3.6, 1.45, "Loop-opening causes → HALT, and the whole rack", ["loop open or broken (any governor, any cut)", "tamper detected (also zeroizes keys)", "signed HALT from the policy authority", "the governor's own loop switch opens"], kind="nv", title_size=8, line_size=6.6)
+    box(ax, 6.4, 0.35, 3.6, 1.45, "Loop-opening causes → HALT, whole rack (tamper → SAFE)", ["loop open or broken (any governor, any cut)", "tamper detected: straight to SAFE, keys zeroized", "signed HALT from the policy authority", "the governor's own loop switch opens"], kind="nv", title_size=7.6, line_size=6.6)
     arrow(ax, 4.3, 1.8, 4.95, 2.3, color=AMBER, lw=1.2)
     arrow(ax, 7.6, 1.8, 6.9, 2.3, color=CORAL, lw=1.2)
     # clear path
@@ -247,7 +248,7 @@ def fig_boot():
         if i < 4:
             arrow(ax, x + 1.75, 3.15, x + 2.0, 3.15, color=INK, lw=1.1)
     box(ax, 0.4, 0.5, 4.3, 1.7, "Key derivation (DICE)", ["CDI_0 = KDF(UDS, MEAS0)         DeviceID key = KDF(CDI_0)", "CDI_1 = KDF(CDI_0, MEAS1)        Alias (signing) key = KDF(CDI_1)",
-                                                           "UDS never leaves the fuse block: it is only ever an input to the KDF.", "govsim/root.py · tests/test_h15_tamper.py (unapproved firmware cannot join)"],
+                                                           "UDS never leaves the fuse block: it is only ever an input to the KDF.", "govsim/root.py · tests/test_h15_tamper.py (keys follow the firmware) · test_h12 (unapproved firmware cannot join)"],
         kind="gov", title_size=8.4, line_size=6.6)
     box(ax, 5.0, 0.5, 5.0, 1.7, "What comes up halted", ["every slot: power brake and PERST# asserted, PWR_EN low", "every governed switch port closed; loop switch open until the first heartbeat",
                                                           "nothing the governor governs runs before the policy authority has said hello", "and the roster has formed  (docs/01 Boot · hw/pcb/rack-integration.md §5)"],
@@ -287,7 +288,7 @@ def fig_loop():
         ax.plot(cx - 0.25, yw, "o", color=GREEN, ms=3.2)
         ax.plot(cx + 0.25, yw, "o", color=GREEN, ms=3.2)
     label(ax, 1.15, yw + 0.17, "LOOP_OUT → LOOP_IN, tray to tray", size=6.4, color=GREEN)
-    box(ax, 0.3, 0.25, 4.6, 1.3, "Opens the loop (everyone halts within the 1 ms bound)", ["this governor: tamper, commanded HALT, boot not finished", "any cut, unplugged tray, dead governor, lost power", "sense period 100 µs is a design target; the Phase 2 measurement replaces it"],
+    box(ax, 0.3, 0.25, 4.6, 1.3, "Opens the loop (everyone halts within the 1 ms bound)", ["this governor: tamper, commanded HALT, boot not finished", "any cut, unplugged tray, dead governor, lost power", "loss is declared after two 100 µs sense periods (debounce); a Phase 2 target"],
         kind="safe", title_size=8, line_size=6.6)
     box(ax, 5.2, 0.25, 4.9, 1.3, "Does not open the loop (local rungs only)", ["heartbeat lost on one governor, its own output budget, an epoch straggler", "those throttle their own slot; the loop is for the rack-wide stop",
                                                                               "govsim/fabric.py HaltLoop · rtl/governor_rtl/halt_loop.py · tests/test_h11_halt_loop.py"],
@@ -298,9 +299,9 @@ def fig_loop():
 def fig_request():
     fig, ax = new_fig(10.4, 5.6)
     ax.text(0.3, 5.35, "One request: the broker asks, the governor answers four questions, the endpoint re-checks before it acts.", fontsize=10.5, color=INK, fontweight="bold", va="center")
-    box(ax, 0.3, 3.5, 1.6, 1.3, "Broker", ["verified runtime", "typed request:", "action + fields"], kind="nv", align="center", title_size=8.4, line_size=6.6)
+    box(ax, 0.3, 3.5, 1.6, 1.3, "Broker", ["verified host enclave", "typed request, signed:", "action + fields"], kind="nv", align="center", title_size=8.4, line_size=6.6)
     box(ax, 2.3, 3.5, 1.5, 1.3, "Mailbox", ["seq > last?", "epoch current?", "signature ok?"], kind="warn", align="center", title_size=8.4, line_size=6.6)
-    box(ax, 4.2, 2.8, 3.3, 2.0, "Gate core: four questions", ["1  Who is asking?  fingerprint = H(firmware, model, policy)", "2  Is it in the rulebook?  default deny; no rule, no action",
+    box(ax, 4.2, 2.8, 3.3, 2.0, "Gate core: four questions", ["1  Who is asking?  workload = H(gpu fw, host fw, model); exact rule beats wildcard", "2  Is it in the rulebook?  default deny; no rule, no action",
                                                              "3  Does it fit?  typed limits, lane (auto / observer / human)", "4  Is there budget?  the ledger reserves it first;", "    a shared budget is reserved at its owner, over the fabric"],
         kind="gov", title_size=8.4, line_size=6.5)
     box(ax, 7.85, 3.5, 1.2, 1.3, "Ticket", ["one-time", "exact fields", "epoch, expiry"], kind="gov", align="center", title_size=8.4, line_size=6.6)
@@ -316,7 +317,7 @@ def fig_request():
     ax.text(8.55, 3.3, "approved", ha="left", va="center", fontsize=6.4, color=AMBER)
     arrow(ax, 5.85, 2.8, 5.85, 2.1, color=CORAL, lw=1.3, text="no", tsize=6.8, toff=(0.2, 0))
     box(ax, 4.2, 1.1, 3.3, 1.0, "Refusal", ["reason code to the broker, entry in the hash-chained log,", "sticky alarm if the policy says so. Nothing else happens."], kind="nv", title_size=8.2, line_size=6.5)
-    box(ax, 0.3, 1.1, 3.5, 1.9, "The endpoint's comparator", ["the device that acts holds a copy of the rule and its own sensors;", "it compares the ticket's fields against what it can measure", "(position, amount, port) and refuses on mismatch even if every", "layer above it is compromised.  tests/test_h06_comparator.py"],
+    box(ax, 0.3, 1.1, 3.5, 1.9, "The endpoint's comparator", ["the device that acts holds the governors' keys, its own lists and", "its own sensors; it re-checks the ticket and its sensors against", "them (position, amount, port) and refuses on mismatch even if every", "layer above it is compromised.  tests/test_h06_comparator.py"],
         kind="safe", title_size=8.2, line_size=6.4)
     label(ax, 0.3, 0.6, "Model: govsim/governor.py (_cmd_request, approvals, commit_from_endpoint) · govsim/ledger.py · govsim/endpoints.py · RTL: rtl/governor_rtl/mailbox.py, ticket_store.py", size=6.6)
     label(ax, 0.3, 0.38, "Tests: tests/test_h00_contract.py · test_h04_lane.py · test_h06_comparator.py · test_h08_override.py · test_h13_shared_budget.py", size=6.6)

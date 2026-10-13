@@ -2,7 +2,9 @@
 ``burn`` is refused and ``full`` is asserted so the endpoint refuses rather than admits.
 
 In silicon this is a cuckoo table in NVM sized for a year of tickets and checkpointed; the
-block here is a small CAM with the same interface and the same invariant.
+block here is a small CAM with the same interface and the same invariant. It is the endpoint
+comparator's block: in the functional model the used-ticket set lives in
+``govsim/endpoints.py`` (``ActionEndpoint.consumed``), not in the governor.
 """
 from amaranth import Array, Elaboratable, Module, Signal
 

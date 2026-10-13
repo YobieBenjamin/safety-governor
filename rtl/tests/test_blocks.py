@@ -10,7 +10,7 @@ from amaranth.sim import Simulator  # noqa: E402
 from rtl.governor_rtl import (Alarms, CapTable, EpochReg, GovernorCore, HaltSeq, Heartbeat, Lifecycle, LoopIO,  # noqa: E402
                               Mailbox, MeasureReg, Meter, MonotonicCounter, TicketStore)
 from rtl.governor_rtl.cap_table import R_BUDGET, R_EXPIRED, R_NO_CAP, R_OK, R_STALE_EPOCH  # noqa: E402
-from rtl.governor_rtl.halt import HALT, HALTED_INITIAL, RUN, SAFE, THROTTLE  # noqa: E402
+from rtl.governor_rtl.halt import C_COMMAND, C_LOCAL, C_LOOP, C_TAMPER, HALT, HALTED_INITIAL, RUN, SAFE, THROTTLE  # noqa: E402
 from rtl.governor_rtl.lifecycle import PRODUCTION, TEST  # noqa: E402
 from rtl.governor_rtl.mailbox import S_BAD_EPOCH, S_BAD_SEQ, S_BAD_SIG, S_OK, S_REFUSED  # noqa: E402
 
@@ -254,33 +254,40 @@ def test_heartbeat_expires_and_reloads_only_on_valid():
     run(dut, tb)
 
 
+def levers(ctx, dut):
+    return (ctx.get(dut.pwrbrk), ctx.get(dut.perst), ctx.get(dut.pwr_en))
+
+
 def test_halt_sequencer_rungs_and_clear():
     dut = HaltSeq(t_throttle=3, t_halt=4)
 
     async def tb(ctx):
-        assert ctx.get(dut.state) == HALTED_INITIAL and ctx.get(dut.pwrbrk) == 1
-        ctx.set(dut.armed_ok, 1)
+        # boot: brake and reset asserted, power off, loop switch open
+        assert ctx.get(dut.state) == HALTED_INITIAL and levers(ctx, dut) == (1, 1, 0) and ctx.get(dut.switch_open) == 1
+        ctx.set(dut.hb_ok, 1)
+        ctx.set(dut.loop_sense, 1)
         await ctx.tick()
-        assert ctx.get(dut.state) == RUN and ctx.get(dut.pwrbrk) == 0 and ctx.get(dut.ports_closed) == 0
+        assert ctx.get(dut.state) == RUN and levers(ctx, dut) == (0, 0, 1) and ctx.get(dut.ports_closed) == 0
+        assert ctx.get(dut.switch_open) == 0
         ctx.set(dut.hb_expired, 1)
         await ctx.tick()
         ctx.set(dut.hb_expired, 0)
-        assert ctx.get(dut.state) == THROTTLE and ctx.get(dut.pwrbrk) == 1 and ctx.get(dut.switch_open) == 0
+        assert ctx.get(dut.state) == THROTTLE and levers(ctx, dut) == (1, 0, 1) and ctx.get(dut.switch_open) == 0
+        assert ctx.get(dut.cause) == C_LOCAL
         ctx.set(dut.tick, 1)
         for _ in range(3):
             await ctx.tick()
-        assert ctx.get(dut.state) == HALT and ctx.get(dut.perst) == 1
+        assert ctx.get(dut.state) == HALT and levers(ctx, dut) == (1, 1, 1) and ctx.get(dut.switch_open) == 0   # local: loop stays closed
         for _ in range(4):
             await ctx.tick()
-        assert ctx.get(dut.state) == SAFE and ctx.get(dut.pwr_en) == 0
+        assert ctx.get(dut.state) == SAFE and levers(ctx, dut) == (1, 1, 0)
         ctx.set(dut.tick, 0)
-        ctx.set(dut.armed_ok, 1)
         await ctx.tick()
         assert ctx.get(dut.state) == SAFE                     # no way up without clear
         ctx.set(dut.clear, 1)
         await ctx.tick()
         ctx.set(dut.clear, 0)
-        assert ctx.get(dut.state) == HALTED_INITIAL and ctx.get(dut.cause) == 0
+        assert ctx.get(dut.state) == HALTED_INITIAL and ctx.get(dut.cause) == 0 and levers(ctx, dut) == (1, 1, 0)
         await ctx.tick()
         assert ctx.get(dut.state) == RUN
 
@@ -291,15 +298,58 @@ def test_halt_loop_lost_opens_switch_and_tamper_is_safe():
     dut = HaltSeq()
 
     async def tb(ctx):
-        ctx.set(dut.armed_ok, 1)
+        ctx.set(dut.hb_ok, 1)
+        ctx.set(dut.loop_sense, 1)
         await ctx.tick()
+        assert ctx.get(dut.state) == RUN and ctx.get(dut.switch_open) == 0
         ctx.set(dut.loop_lost, 1)
         await ctx.tick()
         ctx.set(dut.loop_lost, 0)
-        assert ctx.get(dut.state) == HALT and ctx.get(dut.switch_open) == 1
+        assert ctx.get(dut.state) == HALT and ctx.get(dut.switch_open) == 1 and ctx.get(dut.cause) == C_LOOP
+        ctx.set(dut.hb_ok, 1)                                  # a live heartbeat alone never closes it again
+        await ctx.tick()
+        assert ctx.get(dut.switch_open) == 1 and ctx.get(dut.state) == HALT
         ctx.set(dut.tamper, 1)
         await ctx.tick()
-        assert ctx.get(dut.state) == SAFE and ctx.get(dut.pwr_en) == 0
+        assert ctx.get(dut.state) == SAFE and ctx.get(dut.pwr_en) == 0 and ctx.get(dut.cause) == C_TAMPER
+
+    run(dut, tb)
+
+
+def test_halt_commanded_opens_the_switch_and_local_causes_write_local():
+    dut = HaltSeq()
+
+    async def tb(ctx):
+        ctx.set(dut.hb_ok, 1)
+        ctx.set(dut.loop_sense, 1)
+        await ctx.tick()
+        ctx.set(dut.local_trip, 1)
+        await ctx.tick()
+        ctx.set(dut.local_trip, 0)
+        assert ctx.get(dut.state) == THROTTLE and ctx.get(dut.cause) == C_LOCAL and ctx.get(dut.switch_open) == 0
+        ctx.set(dut.cmd_halt, 1)
+        await ctx.tick()
+        ctx.set(dut.cmd_halt, 0)
+        assert ctx.get(dut.state) == HALT and ctx.get(dut.cause) == C_COMMAND and ctx.get(dut.switch_open) == 1
+
+    run(dut, tb)
+
+
+def test_halt_loop_loss_while_throttled_halts():
+    dut = HaltSeq()
+
+    async def tb(ctx):
+        ctx.set(dut.hb_ok, 1)
+        ctx.set(dut.loop_sense, 1)
+        await ctx.tick()
+        ctx.set(dut.cmd_throttle, 1)
+        await ctx.tick()
+        ctx.set(dut.cmd_throttle, 0)
+        assert ctx.get(dut.state) == THROTTLE and ctx.get(dut.cause) == C_LOCAL
+        ctx.set(dut.loop_lost, 1)
+        await ctx.tick()
+        ctx.set(dut.loop_lost, 0)
+        assert ctx.get(dut.state) == HALT and ctx.get(dut.switch_open) == 1 and ctx.get(dut.cause) == C_LOOP
 
     run(dut, tb)
 
@@ -364,7 +414,7 @@ def test_mailbox_sequence_epoch_signature():
         return 0, ctx.get(dut.status)
 
     async def tb(ctx):
-        ctx.set(dut.signer_class, 2)
+        ctx.set(dut.key_slot, 2)
         d, s = await deliver(ctx, seq=1)
         assert d == 1 and s == S_OK
         d, s = await deliver(ctx, seq=1)                     # replay
@@ -377,6 +427,43 @@ def test_mailbox_sequence_epoch_signature():
         assert d == 1 and s == S_OK
         d, s = await deliver(ctx, seq=4, needs_run=1, running=0)
         assert d == 0 and s == S_REFUSED
+        ctx.set(dut.key_slot, 5)                              # another key has its own sequence
+        d, s = await deliver(ctx, seq=1)
+        assert d == 1 and s == S_OK
+
+    run(dut, tb)
+
+
+def test_mailbox_reports_the_first_failing_check():
+    """A frame with two defects reports the first check in the order sequence, epoch, signature."""
+    dut = Mailbox()
+
+    async def deliver(ctx, seq, epoch_match=1, sig_ok=1):
+        ctx.set(dut.frame_seq, seq)
+        ctx.set(dut.epoch_match, epoch_match)
+        ctx.set(dut.running, 1)
+        ctx.set(dut.doorbell, 1)
+        await ctx.tick()
+        ctx.set(dut.doorbell, 0)
+        verifying = ctx.get(dut.verify_req)
+        if verifying:
+            ctx.set(dut.sig_done, 1)
+            ctx.set(dut.sig_ok, sig_ok)
+            dispatched = ctx.get(dut.dispatch)
+            await ctx.tick()
+            ctx.set(dut.sig_done, 0)
+            return dispatched, ctx.get(dut.status), verifying
+        return 0, ctx.get(dut.status), verifying
+
+    async def tb(ctx):
+        d, s, v = await deliver(ctx, seq=1)
+        assert d == 1 and s == S_OK
+        d, s, v = await deliver(ctx, seq=1, sig_ok=0)                    # replayed and forged: sequence first
+        assert d == 0 and s == S_BAD_SEQ and v == 0                      # the crypto core was never asked
+        d, s, v = await deliver(ctx, seq=2, epoch_match=0, sig_ok=0)     # stale and forged: epoch before signature
+        assert d == 0 and s == S_BAD_EPOCH and v == 0
+        d, s, v = await deliver(ctx, seq=2, sig_ok=0)                    # only the signature is bad
+        assert d == 0 and s == S_BAD_SIG and v == 1
 
     run(dut, tb)
 
@@ -406,21 +493,98 @@ def test_governor_core_boots_halted_and_runs_on_heartbeat_with_loop_current():
     async def tb(ctx):
         ctx.set(dut.csr_addr, 0x008)
         assert ctx.get(dut.csr_rdata) == HALTED_INITIAL
-        assert ctx.get(dut.pwrbrk_n) == 0                 # brake asserted (active low pad)
+        # boot: brake and reset asserted (active low pads), slot power off, loop switch open
+        assert (ctx.get(dut.pwrbrk_n), ctx.get(dut.perst_n), ctx.get(dut.pwr_en), ctx.get(dut.loop_out_open)) == (0, 0, 0, 1)
+        ctx.set(dut.csr_addr, 0x080)
+        assert ctx.get(dut.csr_rdata) == 0b111                   # LEVERS: brake, PERST#, PWR_EN low
+        ctx.set(dut.csr_addr, 0x008)
         ctx.set(dut.loop_sense, 1)
         ctx.set(dut.hb.window, 10)
         ctx.set(dut.hb.hb_valid, 1)
         await ctx.tick()
         ctx.set(dut.hb.hb_valid, 0)
         await ctx.tick()
-        assert ctx.get(dut.csr_rdata) == RUN and ctx.get(dut.pwrbrk_n) == 1
+        assert ctx.get(dut.csr_rdata) == RUN
+        assert (ctx.get(dut.pwrbrk_n), ctx.get(dut.perst_n), ctx.get(dut.pwr_en), ctx.get(dut.loop_out_open)) == (1, 1, 1, 0)
         # the loop drops: two samples later the core halts and opens its switch
         ctx.set(dut.loop_sense, 0)
         ctx.set(dut.sample, 1)
         for _ in range(4):
             await ctx.tick()
         assert ctx.get(dut.csr_rdata) == HALT and ctx.get(dut.loop_out_open) == 1 and ctx.get(dut.perst_n) == 0
+        ctx.set(dut.csr_addr, 0x00C)                              # CAUSE: [2:0] from the sequencer, [15:8] from firmware
+        ctx.set(dut.cause_fw, 0x2A)
+        assert ctx.get(dut.csr_rdata) == (0x2A << 8) | C_LOOP
         # the CSR window has no write port at all
         assert not hasattr(dut, "csr_wdata")
+
+    run(dut, tb)
+
+
+def test_governor_core_timers_run_on_the_millisecond_tick():
+    """Heartbeat and sequencer timers count ms strobes derived from the 1 us monotonic tick."""
+    dut = GovernorCore(cap_entries=2, ticket_entries=2, t_throttle_ms=2, t_halt_ms=3)
+
+    async def tb(ctx):
+        ctx.set(dut.loop_sense, 1)
+        ctx.set(dut.hb.window, 2)                                 # two milliseconds of validity
+        ctx.set(dut.hb.hb_valid, 1)
+        await ctx.tick()
+        ctx.set(dut.hb.hb_valid, 0)
+        await ctx.tick()
+        assert ctx.get(dut.halt.state) == RUN
+        ctx.set(dut.tick, 1)
+        for _ in range(1024):                                     # one millisecond of microsecond ticks
+            await ctx.tick()
+        assert ctx.get(dut.hb.remaining) == 1 and ctx.get(dut.halt.state) == RUN
+        for _ in range(1024):
+            await ctx.tick()
+        await ctx.tick()
+        assert ctx.get(dut.hb.expired) == 1 and ctx.get(dut.halt.state) == THROTTLE
+        for _ in range(2 * 1024):                                 # T_throttle = 2 ms
+            await ctx.tick()
+        await ctx.tick()
+        assert ctx.get(dut.halt.state) == HALT
+        for _ in range(3 * 1024):                                 # T_halt = 3 ms
+            await ctx.tick()
+        await ctx.tick()
+        assert ctx.get(dut.halt.state) == SAFE
+        ctx.set(dut.tick, 0)
+        ctx.set(dut.csr_addr, 0x070)
+        assert ctx.get(dut.csr_rdata) == 7 * 1024 + 3             # MONO_LO counts every microsecond tick
+
+    run(dut, tb)
+
+
+def test_governor_core_csr_decodes_mbox_seq_and_meter():
+    dut = GovernorCore(cap_entries=2, ticket_entries=2)
+
+    async def tb(ctx):
+        ctx.set(dut.mbox.key_slot, 0)
+        ctx.set(dut.mbox.frame_seq, 7)
+        ctx.set(dut.mbox.epoch_match, 1)
+        ctx.set(dut.doorbell, 1)
+        await ctx.tick()
+        ctx.set(dut.doorbell, 0)
+        ctx.set(dut.mbox.sig_done, 1)
+        ctx.set(dut.mbox.sig_ok, 1)
+        await ctx.tick()
+        ctx.set(dut.mbox.sig_done, 0)
+        ctx.set(dut.csr_addr, 0x108)
+        assert ctx.get(dut.csr_rdata) == 7                        # MBOX_SEQ
+        ctx.set(dut.meter.slot, 1)
+        ctx.set(dut.meter.add_tokens, 5)
+        ctx.set(dut.meter.add_out, 0x1_0000_0003)
+        ctx.set(dut.meter.strobe, 1)
+        await ctx.tick()
+        ctx.set(dut.meter.strobe, 0)
+        ctx.set(dut.csr_addr, 0x200 + 32 * 1)                     # slot 1, tokens, low word
+        assert ctx.get(dut.csr_rdata) == 5
+        ctx.set(dut.csr_addr, 0x200 + 32 * 1 + 24)                # slot 1, bytes out, low word
+        assert ctx.get(dut.csr_rdata) == 3
+        ctx.set(dut.csr_addr, 0x200 + 32 * 1 + 28)                # slot 1, bytes out, high word
+        assert ctx.get(dut.csr_rdata) == 1
+        ctx.set(dut.csr_addr, 0x200)                              # slot 0 untouched
+        assert ctx.get(dut.csr_rdata) == 0
 
     run(dut, tb)

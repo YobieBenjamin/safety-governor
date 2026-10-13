@@ -61,9 +61,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("bench", help="the H9 overhead model")
     args = ap.parse_args(argv)
     if args.cmd == "sweep":
-        text = report(sweep())
-        print(text)
-        return 1 if "FAIL" in text else 0
+        matrix = sweep()
+        print(report(matrix))
+        return 1 if any(v.startswith("FAIL") for row in matrix.values() for v in row.values()) else 0
     if args.cmd == "demo":
         demo()
         return 0

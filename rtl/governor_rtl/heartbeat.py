@@ -1,6 +1,6 @@
 """Heartbeat timer. Invariant: ``expired`` asserts within one tick of the window running out
 and the timer reloads only on ``hb_valid`` (the crypto core's verdict on the authority's
-token), never on anything the host writes.
+token), never on anything the host writes. ``tick`` is one millisecond; ``window`` is in ms.
 """
 from amaranth import Elaboratable, Module, Signal
 

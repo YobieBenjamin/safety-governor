@@ -1,6 +1,6 @@
 group,pin,direction,type,default_at_power_on,notes
 power,VDD_CORE,in,power,,core supply per process (1.8 V on sky130; 0.8 V on 22FDX)
-power,VDD_IO,in,power,,1.8 V I/O
+power,VDD_IO,in,power,,3.3 V I/O on the sky130 prototype (harness IO ring); 1.8 V on the 22FDX product
 power,VDD_FUSE,in,power,tied off,fuse programming supply; connected only at provisioning
 power,GND,in,power,,
 clock,REFCLK,in,LVCMOS,,25 MHz reference; internal PLL

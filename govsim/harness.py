@@ -61,11 +61,14 @@ def probe_h2_link(rack):
 
 
 def probe_h2_descriptor(rack):
+    """Two roster members exchanging bytes a rule would not allow. The rack and board tiers have no
+    checker in the path (EP_UNCHECKED); the integrated tier has the checker but no buffer-class policy
+    to program it with, so the transfer passes there too. Both are recorded gaps, not passes."""
     node, other = rack.nodes[0], rack.nodes[1]
-    if rack.tier == "integrated":
-        node.governor.checkers["copy_engine"].close_all()
-        return "pass" if not node.gpu.transfer("copy_engine", other.gpu.chip_id, "out", MB)[0] else "FAIL"
+    stranger_refused = not node.gpu.transfer("copy_engine", "gpu-stranger", "out", MB)[0] if rack.tier == "integrated" else True
     ok, why = node.gpu.transfer("copy_engine", other.gpu.chip_id, "out", MB)
+    if rack.tier == "integrated":
+        return "gap" if (ok and why == reasons.OK and stranger_refused) else "FAIL"
     return "gap" if (ok and why == reasons.EP_UNCHECKED) else "FAIL"
 
 
@@ -88,7 +91,7 @@ def probe_h4(rack):
 def probe_h5(rack):
     g = rack.nodes[0].governor
     g.raise_alarm("x", "model")
-    a = g.command("ALARM_CLEAR", {"code": "x"})["why"] == reasons.ALARM_CLEAR_UNAUTHORIZED and "x" in g.alarms
+    a = g.command("ALARM_CLEAR", {}, SigningKey.generate().sign({"seq": 1, "code": "x"}))["why"] == reasons.ALARM_CLEAR_UNAUTHORIZED and "x" in g.alarms
     b = g.command("ALARM_CLEAR", {}, rack.approvers["alarms"][0].sign({"seq": 1, "code": "x"}))["ok"] and "x" not in g.alarms
     return "pass" if a and b else "FAIL"
 
@@ -127,7 +130,7 @@ def probe_h8(rack):
 
 def probe_h9(rack):
     r = bench_run(rack.tier, gpus=2, requests=100, tokens_per_request=500, actions=10)
-    return "pass" if (r["overhead_pct"] < 1.0 and r["ops"]["sign"] == 100) else "FAIL"
+    return "pass" if (r["firmware_overhead_pct"] < 1.0 and r["engine_utilization_pct"] < 50.0 and r["ops"]["sign"] == 100) else "FAIL"
 
 
 def probe_h10(rack):
@@ -219,7 +222,7 @@ PROBES = [
     ("H6", "the comparator holds with every layer above it compromised", probe_h6),
     ("H7", "the assumptions register is complete or the policy does not load", probe_h7),
     ("H8", "human override is slow and fully logged", probe_h8),
-    ("H9", "zero per-token work; modelled overhead under one percent", probe_h9),
+    ("H9", "zero per-token work; firmware under one percent of GPU time; the signing engine keeps up", probe_h9),
     ("H10", "permitted-channel leakage trips the budget", probe_h10),
     ("H11", "a halt reaches every GPU within the bound; nobody clears alone", probe_h11),
     ("H12", "only roster members speak on the fabric; forged heartbeats fail", probe_h12),
@@ -253,13 +256,17 @@ def report(matrix: dict[str, dict[str, str]], out_dir: str = "results") -> str:
     for hid, text, _ in PROBES:
         row = matrix[hid]
         lines.append(f"| {hid} | {text} | {row['rack']} | {row['board']} | {row['integrated']} |")
-    lines += ["", "## Modelled overhead (H9)", "",
-              "A model, not a measurement: operation counts from the functional model priced with the figures in `docs/04-specification.md` §9, against a GPU doing 2,000 tokens per second.", "",
-              "| Tier | Tokens | Governor time | GPU time | Overhead |", "|---|---|---|---|---|"]
+    lines += ["", "## Modelled cost (H9)", "",
+              "A model, not a measurement: operation counts from the functional model priced with the figures in `docs/04-specification.md` §9, against a GPU doing 2,000 tokens per second with 500-token responses. "
+              "Firmware time is the share of GPU time spent on action paths. The signing engine (ECDSA P-384 at OpenTitan's published 1,697,985 OTBN cycles, 17 ms at 100 MHz, shared by eight slots) runs beside the GPU and has to keep up; one signature per 50 ms batch window caps it. Record latency is the most a response waits if the runtime insists on its record before release.", "",
+              "| Tier | Tokens | Firmware time | GPU time | Firmware share | Engine, one signature per response | Engine, batched | Record latency |", "|---|---|---|---|---|---|---|---|"]
     for t, r in b.items():
-        lines.append(f"| {t} | {r['tokens']:,} | {r['governor_seconds']*1e3:.1f} ms | {r['gpu_seconds']:.1f} s | {r['overhead_pct']:.3f} % |")
+        lines.append(f"| {t} | {r['tokens']:,} | {r['firmware_seconds']*1e3:.1f} ms | {r['gpu_seconds']:.1f} s | {r['firmware_overhead_pct']:.3f} % | {r['engine_utilization_unbatched_pct']:.0f} % | {r['engine_utilization_pct']:.0f} % | {r['record_latency_s']*1e3:.0f} ms |")
+    short = bench_run("rack", gpus=2, requests=200, tokens_per_request=100, actions=20)
+    lines.append(f"| rack, 100-token responses | {short['tokens']:,} | {short['firmware_seconds']*1e3:.1f} ms | {short['gpu_seconds']:.1f} s | {short['firmware_overhead_pct']:.3f} % | {short['engine_utilization_unbatched_pct']:.0f} % (cannot keep up) | {short['engine_utilization_pct']:.0f} % | {short['record_latency_s']*1e3:.0f} ms |")
     lines += ["", "## What the gaps mean", "",
-              "- **H2b at rack and board**: from the board the governor governs links and flows, not descriptors. Two legitimate roster members can exchange bytes a rule would not have allowed. That is the residual named in `docs/00-objectives.md` N5; the in-GPU checkers of the integrated tier close it.",
+              "- **H2b at rack and board**: from the board the governor governs links and flows, not descriptors. Two legitimate roster members can exchange bytes a rule would not have allowed. That is the residual named in `docs/00-objectives.md` N5.",
+              "- **H2b at integrated**: descriptor checker modelled; a buffer-class policy is not. The copy-engine checker refuses a stranger, but the governor programs it with the same roster capabilities as the switches, so a transfer between two roster members still passes.",
               "- **H2a at board**: a system where the switches' management is unreachable, or a baseboard with direct NVLink and no NVSwitch, has no port authority. The governor still has its levers, its tickets and its log; it cannot keep a stranger off the link.", ""]
     text = "\n".join(lines)
     with open(os.path.join(out_dir, "report.md"), "w", encoding="utf-8") as fh:

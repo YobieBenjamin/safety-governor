@@ -73,16 +73,81 @@ def test_replayed_heartbeat_does_not_extend_life(rack):
 
 
 def test_checkpoints_cross_link_neighbors(rack):
+    heads_at_publish = {n.governor.chip_id: n.governor.log.head for n in rack.nodes}
     rack.exchange_checkpoints()
     for n in rack.nodes:
         g = n.governor
         neigh = rack.fabric.neighbors(g.chip_id)
         assert set(g.log.neighbor_heads) == set(neigh)
-        for m in rack.nodes:
-            if m.governor.chip_id in neigh:
-                assert g.log.neighbor_heads[m.governor.chip_id] == m.governor.log.head or True   # heads advance as logs grow
+        for chip in neigh:
+            assert g.log.neighbor_heads[chip] == heads_at_publish[chip]      # the neighbor's head as it published it
         cp = g.log.checkpoint(g.key, g.chip_id)["payload"]
-        assert set(cp["neighbor_heads"]) == set(neigh)
+        assert cp["neighbor_heads"] == {chip: heads_at_publish[chip] for chip in neigh}
+
+
+def test_forged_checkpoint_is_dropped_and_logged(rack):
+    a, b = rack.nodes[1].governor, rack.nodes[2].governor
+    before = dict(b.log.neighbor_heads)
+    fake = SigningKey.generate().sign({"type": "checkpoint", "chip_id": a.chip_id, "head": "ab" * 32, "size": 999, "neighbor_heads": {}, "time": 0})
+    res = a.fabric_send("CHECKPOINT", {"checkpoint": fake}, to=b.chip_id)
+    assert res[0][1]["why"] == reasons.FABRIC_BAD_SIGNATURE
+    assert b.log.neighbor_heads == before
+    assert b.log.has("fabric.dropped", why=reasons.FABRIC_BAD_SIGNATURE, type="CHECKPOINT")
+
+
+def test_forged_roster_is_dropped_and_logged(rack):
+    leader = rack.nodes[0].governor
+    others = [n.governor for n in rack.nodes[1:]]
+    before = [g.roster["roster_id"] for g in others]
+    fake_roster = SigningKey.generate().sign({**leader.roster, "roster_id": "ff" * 32, "expires_at": rack.clock.now() + 3600})
+    msg = SigningKey.generate().sign({"type": "ROSTER", "from": leader.chip_id, "seq": 10_000, "epoch": leader.epoch, "time": 0,
+                                       "body": {"roster": fake_roster}})
+    results = rack.fabric.send(leader.chip_id, msg)
+    assert all(r["why"] == reasons.ROSTER_BAD_SIGNATURE for _, r in results)
+    assert [g.roster["roster_id"] for g in others] == before
+    assert all(g.log.has("fabric.dropped", why=reasons.ROSTER_BAD_SIGNATURE, type="ROSTER") for g in others)
+
+
+def test_heartbeat_relay_signature_and_hop_limit(rack):
+    """A relayed heartbeat carries the authority's envelope inside a member's envelope. A forged
+    relay is dropped; a genuine relay past the hop limit is refused."""
+    a, b = rack.nodes[1].governor, rack.nodes[2].governor
+    now = rack.clock.now()
+    rack.hb_seq += 1
+    env = rack.heartbeat_key.sign({"type": "heartbeat", "seq": rack.hb_seq, "epoch": rack.epoch, "window_start": now - 1, "window_end": now + 5})
+    forged = SigningKey.generate().sign({"type": "HEARTBEAT", "from": a.chip_id, "seq": a.fabric_seq + 1, "epoch": a.epoch, "time": 0,
+                                         "body": {"authority": env, "hops": 1}})
+    res = rack.fabric.send(a.chip_id, forged, to=b.chip_id)
+    assert res[0][1]["why"] == reasons.FABRIC_BAD_SIGNATURE and b.hb_last_seq < rack.hb_seq
+    too_far = rack.policy["fabric"]["max_hops"] + 1
+    res = a.fabric_send("HEARTBEAT", {"authority": env, "hops": too_far}, to=b.chip_id)
+    assert res[0][1]["why"] == reasons.FABRIC_TOO_MANY_HOPS and b.hb_last_seq < rack.hb_seq
+    res = a.fabric_send("HEARTBEAT", {"authority": env, "hops": 1}, to=b.chip_id)
+    assert res[0][1]["ok"] and b.hb_last_seq == rack.hb_seq
+
+
+def test_replayed_fabric_message_after_a_restart_is_dropped(rack):
+    """The receiver's last-seen sequence numbers survive its own power loss."""
+    a, b = rack.nodes[1].governor, rack.nodes[2].governor
+    a.fabric_send("ALARM", {"code": "real.alarm"})
+    msg = a.key.sign({"type": "ALARM", "from": a.chip_id, "seq": a.fabric_seq, "epoch": a.epoch, "time": 0, "body": {"code": "real.alarm"}})
+    b.restart()
+    rack.recover(rack.nodes[2])
+    rack.form_roster("job-again")                                             # b is a member again, with a's key
+    assert a.chip_id in b.roster_keys
+    b.alarms.clear()
+    r = b.on_fabric(msg)
+    assert r["why"] == reasons.FABRIC_REPLAY and "real.alarm" not in b.alarms
+
+
+def test_a_restarted_sender_is_not_a_replay(rack):
+    a, b = rack.nodes[1].governor, rack.nodes[2].governor
+    a.fabric_send("ALARM", {"code": "before"})
+    a.restart()
+    rack.recover(rack.nodes[1])
+    rack.form_roster("job-again")
+    res = a.fabric_send("ALARM", {"code": "after"}, to=b.chip_id)
+    assert res[0][1]["ok"] and "after" in b.alarms
 
 
 def test_genuine_chip_with_unapproved_firmware_cannot_join(rack):

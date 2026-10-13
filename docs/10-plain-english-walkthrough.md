@@ -38,7 +38,7 @@ NVIDIA is asked for nothing. There is a short list of software changes that woul
 tighter, and the design works without any of them.
 
 The name is James Watt's. His governor was two brass balls on a spinning shaft. When the
-engine ran too fast the balls flew out and closed the steam valve. No operator could talk
+engine ran too fast the balls flew out and throttled the steam valve. No operator could talk
 it out of its job. It understood nothing about the factory. It never slept.
 
 > **Technical version:** `00-objectives.md` (goals G1 to G8, requirements R1 to R32,
@@ -54,9 +54,15 @@ it out of its job. It understood nothing about the factory. It never slept.
 A modern AI rack is a stack of boards. The motherboard carries the CPU, a PCIe switch, the
 network card (a DPU) and a slot for a management module. The GPU baseboard carries eight
 GPUs (four on the newest NVL trays), the NVSwitch chips that connect them, and a small
-management controller of its own. All of those boards already contain control hardware that
-is not NVIDIA's. The governor is added at that level: a card in the management-module slot,
-or a chip soldered on the baseboard next to the controller that is already there.
+management controller of its own. The motherboard, the PCIe switch and the DPU are the
+server maker's, and they already contain control hardware that is not NVIDIA's. The GPU
+baseboard is NVIDIA's. The governor is added on the server maker's side: a card in the
+motherboard's management-module slot, which reaches the baseboard through the baseboard's
+connector and gets whatever that connector carries (the management bus to the GPUs, and the
+reset and power signals the server maker wires). Soldering the governor onto the baseboard
+next to NVIDIA's own controller would be the shortest wiring; that is something to ask
+NVIDIA for, not something the design assumes. On servers built from ordinary PCIe GPU
+cards, every slot is on the server maker's board and nothing is NVIDIA's to grant.
 
 One governor instance looks after one GPU slot. Physically, one governor chip serves all the
 slots on one baseboard, with a separate set of wires to each slot, so each GPU still has its
@@ -75,9 +81,9 @@ Inside the chip there are five regions:
 
 - **Root of trust.** Fuses that hold a secret burned in at the factory, a tiny boot ROM,
   registers that record what firmware was loaded and can only ever be added to, the key
-  machinery, a random-number source, and the arithmetic engines for hashing and signing. This
-  region is taken from OpenTitan, an open-source silicon root of trust that is real, shipping
-  silicon, not a paper design.
+  machinery, a random-number source, and the arithmetic engines for hashing, encrypting and
+  signing. This region is taken from OpenTitan, an open-source silicon root of trust that is
+  real, shipping silicon, not a paper design.
 - **Rules and permissions.** The policy store with its edition number (the *epoch*), the gate
   core that answers "may this happen?", the ledger that keeps budgets, and the store of
   permission slips already used.
@@ -123,10 +129,14 @@ cannot join a roster, mint a permission slip, or sign a receipt. A house key cut
 shape of the house. Change the house and the key stops fitting.
 
 The chip comes up *stopped*. Every GPU slot's brake and reset are asserted and its power is
-off. Every switch port the governor controls is closed. The halt loop switch is open. Nothing
-the governor looks after may run until the policy authority has sent its first signed
-heartbeat and the governors have formed a roster. The building opens when the fire marshal
-has checked the alarm, not before.
+off. Every switch port the governor controls is closed. The halt loop switch is open; it
+closes once the governor has a valid heartbeat and no open cause, and the governor runs only
+when it then sees current in the loop, which means every governor in the rack has closed its
+switch. Nothing the governor looks after may run until the policy authority has sent its
+first signed heartbeat and the governors have formed a roster. If the chip lost power while
+it was holding a GPU stopped, it comes back still holding it: the stop and its cause are
+written to the chip's own memory, and a power cycle does not clear them. The building opens
+when the fire marshal has checked the alarm, not before.
 
 > **Technical version:** `01-architecture.md` "Boot", `04-specification.md` §7 (key
 > hierarchy), `08-silicon-plan.md` §1 (OpenTitan).
@@ -237,10 +247,11 @@ reach.
 
 **The halt loop** is a single electrical current loop threaded through every governor, the
 same idea as a fire-alarm loop or the safety circuit around an industrial press. Each
-governor has a switch in the loop and a sensor on it. Any governor that enters HALT opens its
-switch. Any governor that sees the current stop asserts its own halt within one sense period
-(the design target is a tenth of a millisecond, with one millisecond end to end for a
-72-GPU rack; both are targets to be measured on the bench, not results). A cut wire, a pulled
+governor has a switch in the loop and a sensor on it. Any governor with a rack-wide cause
+(a signed halt, a tamper, the loop itself opening) opens its switch. Any governor that sees
+the current stop asserts its own halt within two sense periods (the design target is a tenth
+of a millisecond per period, with one millisecond end to end for a 72-GPU rack; both are
+targets to be measured on the bench, not results). A cut wire, a pulled
 tray, a dead governor or a lost connector all read as "open", so the rack halts. Pull any
 station and every bell rings. Cut the wire and every bell rings too. Why a wire and not a
 message: a message can be dropped, delayed, replayed or filtered by anything in between. A
@@ -260,14 +271,17 @@ Four things the fabric does with those messages:
   seconds without a valid one enters safe mode. A segment of the rack cut off from the
   authority halts itself; nothing in it can forge the authority's signature to stay alive.
   The dead man's switch on a train.
-- **Rules edition change, all at once.** A new rulebook is proposed, every governor checks
-  the signatures itself and initials receipt, and only when everyone has initialled does the
-  authority say "from now". A governor that did not initial by the deadline is not left
-  working from the old book; the heartbeat it receives carries the new edition, it cannot
-  accept that heartbeat, and it halts at expiry.
-- **Shared budgets.** A budget that several GPUs draw on has exactly one owner. Everyone else
-  asks the owner to reserve before spending. One cashier per cash drawer; a second cashier
-  does not guess what is in it.
+- **Rules edition change, nobody left behind.** A new rulebook is proposed, every governor
+  checks the signatures itself and initials receipt, and the authority says "from now" to
+  those who did. From then on the heartbeat carries the new edition. A governor that never
+  initialled cannot accept that heartbeat and halts at expiry. A governor that initialled
+  but never heard "from now" gets ten seconds of grace and then halts too. Nobody keeps
+  working from the old book.
+- **Shared budgets.** A budget that several GPUs draw on has exactly one owner, named in the
+  rulebook; a rulebook that names a shared budget without an owner does not load. Everyone
+  else asks the owner to reserve before spending. If the owner goes quiet between the
+  reservation and the spend, the spend fails and nothing is spent twice. One cashier per cash
+  drawer; a second cashier does not guess what is in it.
 - **Cross-linked logs.** Each governor writes the last line of its neighbours' log books into
   its own, so rewriting one history means rewriting the neighbours', and theirs, outward
   through the rack.
@@ -309,9 +323,9 @@ The honest part of an interface list is the column that says "cannot reach".
 - **Memory.** The governor never reads GPU memory or host memory. Weights at rest are useless
   without the key it holds.
 - **The devices that act.** The governor issues permission slips. The device that acts (a
-  guidance chip, a payment switch's security module, a motor controller) holds the
-  governor's public key and checks the slip itself before acting. A governor that cannot be
-  reached means no action.
+  guidance chip, a payment switch's security module, a motor controller) holds the public
+  keys of the rack's governors and checks the slip itself before acting. A governor that
+  cannot be reached means no action.
 - **The people.** The governance root, the approvers and the heartbeat authority are keys held
   outside the rack and outside the GPU vendor. The party that decides what may run is not the
   party selling the chip or renting it.
@@ -337,23 +351,27 @@ office opens for business either way.
 ![One request](figures/fig-request.png)
 
 When the model wants to act, the software around it (the *broker*) sends the governor a
-typed request: the action, and its fields. The mailbox checks the message's number, its
-rules edition and its signature before anything else looks at it. Then the gate core asks
-four questions:
+typed request: the action, and its fields, signed with the key the verified host enclave
+established at attestation. The mailbox checks the message's number, its rules edition and
+its signature, in that order, before anything else looks at it. Then the gate core asks four
+questions:
 
-1. **Who is asking?** The fingerprint of the job: a hash of the GPU firmware, the model and
-   the rules edition, established at attestation. Not a name the broker typed.
+1. **Who is asking?** The workload: a hash of the GPU firmware, the host firmware and the
+   model, established at attestation and at model load. Not a name the broker typed. The
+   ticket is also bound to the rules edition, so a ticket from an old edition is void.
 2. **Is it in the rulebook?** The rulebook is default-deny. No rule, no action. The rule is
-   chosen from the fingerprint, the action and the typed fields, and from nothing the
-   requester supplies. The broker cannot say "this one is low risk" and be believed.
+   chosen from the workload, the action and the typed fields, and from nothing the requester
+   supplies; a rule written for one exact workload beats a rule written for any. The broker
+   cannot say "this one is low risk" and be believed.
 3. **Does it fit?** Typed limits (an amount, a target, a size) and a lane: *auto* (the slip
    is minted now), *observer* (minted, and a witness is told), or *human* (parked as a hold
    until the required number of approvers sign, after a delay the policy sets and never
    below ten seconds, so nobody can be rushed).
 4. **Is there budget?** The ledger reserves the amount before the slip is minted. Shared
    budgets are reserved at their owner over the fabric. Reserve, then commit, then act,
-   with every step written to the chip's own memory before it returns; the tests restart
-   the governor and the endpoint between steps and check that nothing is lost or doubled.
+   with every step written to the chip's own memory before it returns; the tests make the
+   chip's memory fail at every single save point in turn, restart it, and check that nothing
+   is lost or spent twice.
 
 The answer is a one-time **ticket** bound to the exact fields, the rules edition and an
 expiry, signed with the chip's key. The endpoint burns the ticket's number so it can never be
@@ -389,9 +407,10 @@ state, the alarm bits, the meter counters and the log head. All read-only. The o
 host can write is the mailbox doorbell, which says "there is a signed command frame in the
 ring". The mailbox checks, in order: is the sequence number higher than the last one from
 this signer; does the rules edition match; does the signature verify for this class of
-command. Only then is the command handled. There are nineteen commands, from `ATTEST`
-(0x01) to `EXCEPTION_DRAIN` (0x13), and the specification lists what each one takes, who may
-sign it, and what it does.
+command. Only then is the command handled. There are twenty-one commands, from `ATTEST`
+(0x01) to `ALARM_CLEAR` (0x15), and the specification lists what each one takes, who may
+sign it, and what it does; a test checks that every code has a handler and that nothing else
+is reachable.
 
 > **Technical version:** `04-specification.md` §2 (register map, with offsets) and §3
 > (every mailbox command).
@@ -469,10 +488,12 @@ future version with hooks inside the GPU, kept to show what NVIDIA's cooperation
 The result is a matrix, regenerated by `./run.sh` into `results/report.md`. Three outcomes
 are possible: *pass*; *gap*, meaning the hypothesis failed exactly as the design predicts for
 that tier and the residual is written down; and *FAIL*, meaning it failed in a way the design
-did not predict. Today the matrix has two honest gaps and no FAILs: at the rack and board
+did not predict. Today the matrix has three honest gaps and no FAILs: at the rack and board
 tiers the governor cannot inspect an individual transfer between two legitimate roster
-members (it governs doors, not parcels), and at the board tier it cannot keep a stranger off
-the link at all.
+members (it governs doors, not parcels); at the integrated tier the checker inside the GPU is
+modelled but the rule that would tell it which buffers may move is not, so that row is a gap
+too rather than a pass earned by a test that closes the checker by hand; and at the board tier
+the governor cannot keep a stranger off the link at all.
 
 Below the model, each hardware block has a written invariant (the epoch register has no
 write path from the host; a burned ticket is never admitted again; the loop switch opens on
@@ -489,8 +510,11 @@ compiler is trusted or the binary verified. A verified controller does not verif
 beside it.
 
 > **Technical version:** `07-verification-plan.md`; the live matrix in `results/report.md`.
-> **Code:** `govsim/harness.py` (the sweep), `tests/test_h00_*.py` to `test_h16_*.py` (122
-> tests), `rtl/tests/test_blocks.py` (15 block simulations), `.github/workflows/ci.yml`.
+> **Code:** `govsim/harness.py` (the sweep), `tests/test_h00_*.py` to `test_h16_*.py` (159
+> tests), `rtl/tests/test_blocks.py` (20 block simulations), `.github/workflows/ci.yml`. In the
+> October 2026 audit, forty-eight single-point mutations of the model and the RTL were run
+> against the suite; the twenty that survived each got a test that now catches them
+> (`AUDIT-2026-10.md`).
 
 ---
 
@@ -547,19 +571,31 @@ silicon changes. The work is board work.
 ## 14. What it costs
 
 The governor does no work per token. Per transfer it is one table lookup, inside the switch's
-own port logic. Per response it is one hash finalisation and one signature. Per action it is
-one mailbox command. The model counts those operations for a reference workload and prices
-them with the budgets in the specification (a signature charged at its full 1 ms budget on a
-modest crypto coprocessor, which nobody has measured yet). Against a GPU producing two
-thousand tokens a second with 500-token responses, the governor's time is about 0.4 percent.
+own port logic. Per response it is one hash finalisation and a share of one signature. Per
+action it is one mailbox command. Three numbers describe the cost, because they answer
+three different questions.
 
-The honest shape of that number: because the signature is per response, short responses
-cost proportionally more. At 100-token responses, one signature each is about 2 percent, over
-the budget. That is why the specification batches: an inference server completing many
-responses inside one 10 ms window gets one signature for all of them, and at sixteen
-concurrent sequences the same workload is under 0.2 percent. The test suite asserts the
-shortfall as well as the fix, so the model cannot hide it. The real figure comes from the
-Phase 2 measurement on a real node and replaces all of this.
+First, the firmware's time, which is the only governor work that sits on the path of an
+action: for a reference workload (half a million tokens, a thousand responses, fifty
+actions) it is about 24 milliseconds against 250 seconds of GPU time, a hundredth of a
+percent.
+
+Second, the signing engine. It runs beside the GPU, not in front of it, so it does not slow
+the GPU down; it only has to keep up. The honest price of a signature is the one OpenTitan
+publishes for its OTBN coprocessor: 1,697,985 cycles for a P-384 signature, 17 milliseconds
+at 100 MHz. That is far too slow to sign every response one by one (a chip serving eight
+GPUs with short responses would need the engine 272 percent of the time), which is why the
+specification signs one Merkle root per 50 millisecond window instead: however many responses
+finish in a window, the engine signs once, and it is busy at most 34 percent of the time
+whatever the load. The first version of this document priced the signature at a wish (one
+millisecond) and claimed 0.4 percent; the audit replaced the wish with the published figure
+and the test suite now asserts the shortfall as well as the fix.
+
+Third, latency. The receipt trails the response; a runtime that insists on the receipt before
+releasing a response waits at most one window plus one signature, 67 milliseconds.
+
+All of this is a model. The real figures come from the Phase 2 measurement on a real node and
+replace it.
 
 > **Technical version:** `04-specification.md` §9 (timing budgets), `00-objectives.md` R31
 > and R32.
@@ -572,13 +608,22 @@ Phase 2 measurement on a real node and replaces all of this.
 
 - From the board, the governor governs **links and flows, not individual transfers**
   between two legitimate roster members. Closing that needs checkers inside the GPU, which is
-  NVIDIA's call.
+  NVIDIA's call, and a rule that says which buffers may move, which is not modelled yet.
+- The **HGX baseboard is NVIDIA's**. The plan of record reaches it through its connector and
+  gets what the connector carries; a governor soldered onto the baseboard, the per-slot
+  signals the connector does not carry, and the NVSwitch management bus with the governor as
+  the only writer are asks. On PCIe-card servers none of this applies.
 - The **power brake on SXM baseboards** and **per-slot power control** vary by board. The
   design records, per board, which levers exist; the floor is reset, and reset always exists.
 - An **out-of-band port disable on NVSwitch** is an ask, not a fact; today's authority is
   partition membership through Fabric Manager plus switch reset.
-- The **halt-loop timing** (100 µs sense, 1 ms end to end) and the **signature latency** are
-  design targets until the bench measures them.
+- The **halt-loop timing** (100 µs sense, 1 ms end to end) is a design target until the bench
+  measures it. The **signature cost** is OpenTitan's published figure for its OTBN, not a
+  measurement of this chip; a dedicated ECC engine would be faster and none is assumed.
+- A governor **jumpered out of the loop** is not detected today; a member-count beacon on the
+  message fabric that would make its absence an alarm is specified and not yet modelled.
+- An **automatic release and re-request of shared budgets when their owner leaves** is not
+  modelled; the behaviour today is fail-safe (the spend fails) rather than self-healing.
 - The **sky130 prototype is not tamper-resistant**; it proves function. Real fuses, the mesh
   and the glitch detectors arrive with the product node.
 - **Cost and schedule** figures are class estimates (low five figures for a shuttle slot,
@@ -588,4 +633,4 @@ Phase 2 measurement on a real node and replaces all of this.
   the semantic residual belongs to narrow rulebooks, witnesses and humans.
 
 > **Technical version:** `00-objectives.md` N1 to N7, `05-threat-model.md` (the last two
-> tables), `06-assumptions-register.md`, `results/report.md` (the two gaps).
+> tables), `06-assumptions-register.md`, `results/report.md` (the three gaps), `AUDIT-2026-10.md`.

@@ -15,7 +15,7 @@ design without learning a new vocabulary.
 |---|---|
 | The model is not the guard | A brilliant employee with no alarm bell wired in. You do not fix that with a smarter employee. You wire in the bell |
 | Guard the wire, not the thoughts | A stadium with eighty thousand people shouting. You cannot police the shouting. There is one gate onto the field. Guard the gate |
-| The governor | James Watt's brass balls on the spinning shaft: when the engine runs too fast they fly out and close the steam valve. No operator can talk them out of it |
+| The governor | James Watt's brass balls on the spinning shaft: when the engine runs too fast they fly out and throttle the steam valve. No operator can talk them out of it |
 | One governor per GPU | A lifeguard per pool, not one lifeguard for the whole water park |
 | Governors wired together | All the lifeguards on the same whistle |
 | Added through the rack's boards | The security office rents the room next door that every building already has, instead of asking the landlord to knock a hole in the wall |
@@ -89,6 +89,6 @@ design without learning a new vocabulary.
 | The functional model (`govsim`) | A tabletop model of the building with little badge readers you can push with a pencil |
 | The RTL | The architect's drawings, exact to the brick |
 | The shuttle run | Sharing a bus to the fab with other riders so the trip costs thousands, not millions |
-| GDS, masks, lithography | The drawings become a set of negatives; the fab makes stencils from them and prints the chip layer by layer like a forty-exposure photograph |
+| GDS, masks, lithography | The drawings become a set of negatives; the fab makes stencils from them and prints the chip layer by layer like a photograph with dozens of exposures |
 | Known-good-die test, then fuses | The part is tested with the service hatch open, then the hatch is welded shut |
 | The module in the rack | The security office moves into the room next door, with the keys to the doors between the buildings |

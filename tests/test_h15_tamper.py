@@ -32,9 +32,28 @@ def test_lifecycle_is_monotone():
     f.advance_lifecycle(DECOMMISSIONED)
 
 
-def test_the_secret_has_no_accessor():
-    f = Fuses()
-    assert not any(name in ("uds", "secret", "get_uds") for name in dir(f))
+def test_the_secret_is_held_by_no_attribute():
+    """The UDS lives only inside the key-derivation engine's closure: no attribute of the fuse
+    block, at any depth, holds its bytes. Derivation still works and is deterministic."""
+    seed = bytes(range(32))
+    f = Fuses(chip_id="t", uds=seed)
+
+    def walk(obj, seen):
+        if id(obj) in seen:
+            return []
+        seen.add(id(obj))
+        if isinstance(obj, (bytes, bytearray)):
+            return [bytes(obj)]
+        if isinstance(obj, dict):
+            return [b for v in obj.values() for b in walk(v, seen)]
+        if isinstance(obj, (list, tuple, set)):
+            return [b for v in obj for b in walk(v, seen)]
+        if hasattr(obj, "__dict__") and not callable(obj):
+            return walk(vars(obj), seen)
+        return []
+
+    assert seed not in walk(f, set())
+    assert f.derive(b"a") == Fuses(chip_id="t", uds=seed).derive(b"a")
     assert f.derive(b"a") != f.derive(b"b")
 
 
