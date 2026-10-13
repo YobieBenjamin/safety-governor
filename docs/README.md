@@ -24,6 +24,7 @@ summary and a "backed by" box.
 | `08-silicon-plan.md` | OpenTitan as the base; Leg A on sky130 through LibreLane and a shuttle, with lithography explained; Leg B on 22FDX; Leg C the rack module; schedule and cost classes; the tape-out checklist | §13 |
 | `09-analogies.md` | Every feature as an everyday picture | all |
 | `10-plain-english-walkthrough.md` | The whole design in plain English, cross-referenced | itself |
+| `AUDIT-2026-10.md` | The audit: hallucinations and fake conditions found and fixed, sources checked, what is still unverified | §15 |
 
 ## Figures
 

@@ -122,7 +122,9 @@ not required. RTL: the hard-core control blocks, simulated and emitted as Verilo
 engines are specified as integrated IP (OpenTitan-class SHA-256, HMAC, AES, ECDSA P-256 and
 P-384 on OTBN, TRNG) and not re-implemented here. Silicon: flow configured for a sky130
 multi-project-wafer shuttle; not yet taped out. The honest state of every claim is in
-[`results/report.md`](results/report.md).
+[`results/report.md`](results/report.md), and the October 2026 audit of the design (what was wrong,
+what was verified against which source, what is still a target rather than a fact) is
+[`docs/AUDIT-2026-10.md`](docs/AUDIT-2026-10.md).
 
 ## License
 
