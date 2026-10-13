@@ -6,6 +6,8 @@ firmware image is ``boot(loader_digest, firmware_digest)``.
 """
 from __future__ import annotations
 
+import random
+
 from . import reasons
 from .crypto import SigningKey, sha256, canonical
 from .fuses import Fuses
@@ -36,11 +38,15 @@ class MonotonicCounter:
 
 
 class SiliconRoot:
-    def __init__(self, fuses: Fuses, counter_start: int = 0):
+    def __init__(self, fuses: Fuses, counter_start: int = 0, rng_seed: int | None = None):
         self.fuses = fuses
         self.meas0 = MeasurementRegister()
         self.meas1 = MeasurementRegister()
         self.counter = MonotonicCounter(counter_start)
+        # The TRNG. Silicon draws from a physical noise source; the model draws from the OS unless a
+        # seed is given, which makes a test's sample set reproducible without making it predictable to
+        # the runtime (the seed never leaves the chip).
+        self._rng = random.Random(rng_seed) if rng_seed is not None else random.SystemRandom()
         self.booted = False
         self.loader_digest = ""
         self.firmware_digest = ""
@@ -77,6 +83,10 @@ class SiliconRoot:
     def derive(self, label: bytes) -> bytes:
         """A key under CDI_1 for NVM, capability MACs, wrapping."""
         return self.fuses.derive(b"cdi1-derived:" + bytes.fromhex(self.meas1.value) + b":" + label)
+
+    def random_fraction(self) -> float:
+        """One draw from the chip's TRNG in [0, 1): what audit sampling uses."""
+        return self._rng.random()
 
     def quote(self, nonce: str, extra: dict | None = None) -> dict:
         """Signed evidence of what booted, over a nonce."""

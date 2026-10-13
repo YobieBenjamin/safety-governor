@@ -125,8 +125,9 @@ class GPU:
             self.output_hook(stream, data)
         return data
 
-    def transfer(self, exit_name: str, peer: str, direction: str, nbytes: int) -> tuple[bool, str]:
-        """Bytes crossing an exit. Governed by the switch at that exit, if the tier has one."""
+    def transfer(self, exit_name: str, peer: str, direction: str, nbytes: int, buffer_class: str = "activations") -> tuple[bool, str]:
+        """Bytes crossing an exit. Governed by the switch at that exit, if the tier has one. The buffer
+        class is what a descriptor names; only a checker (integrated tier) can see it, a switch cannot."""
         from . import reasons
         now = self.clock.now()
         if not self.running and direction == "out":
@@ -140,7 +141,7 @@ class GPU:
             return True, reasons.EP_UNCHECKED
         checker = self.checkers.get(exit_name)
         if checker is not None:
-            ok, why = checker.pass_traffic(peer, direction, nbytes, now)
+            ok, why = checker.pass_traffic(peer, direction, nbytes, now, buffer_class=buffer_class)
             if not ok:
                 return False, why
         switch = self.switches.get(exit_name)

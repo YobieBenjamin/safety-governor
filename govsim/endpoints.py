@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from . import reasons
-from .crypto import VerifyKey, canonical, digest, hmac_sha256, verify_any, verify_object
+from .crypto import SigningKey, VerifyKey, canonical, digest, hmac_sha256, sha256, verify_any, verify_object
 from .store import Store
 
 RACK_POINTS = ("nvswitch", "pcie", "dpu", "storage")
@@ -44,11 +44,15 @@ class Switch:
         body = {k: v for k, v in cap.items() if k != "mac"}
         return hmac_sha256(self._cap_key, canonical(body))
 
+    def _key(self, cap: dict) -> tuple:
+        """The table key. A switch sees peer and direction and nothing finer (buffer classes are not on the wire)."""
+        return (cap["peer"], cap["direction"])
+
     def program(self, cap: dict) -> bool:
         if cap.get("point") != self.kind or cap.get("mac") != self.mac(cap):
             self.refusals.append({"why": reasons.EP_NO_CAPABILITY, "cap": cap})
             return False
-        self.table[(cap["peer"], cap["direction"])] = dict(cap)
+        self.table[self._key(cap)] = dict(cap)
         return True
 
     def close_all(self) -> None:
@@ -65,25 +69,40 @@ class Switch:
         cap = self.table.get((peer, direction)) or self.table.get((peer, "both"))
         if cap is None:
             return self._refuse(peer, direction, nbytes, reasons.EP_NO_CAPABILITY)
+        return self._admit(cap, peer, direction, nbytes, now)
+
+    def _admit(self, cap: dict, peer: str, direction: str, nbytes: int, now: float, **extra) -> tuple[bool, str]:
+        """The checks on a matching entry: expiry, epoch tag, byte budget. One lookup, one decrement."""
         if cap["expiry"] <= now:
-            self.table.pop((cap["peer"], cap["direction"]), None)
-            return self._refuse(peer, direction, nbytes, reasons.EP_EXPIRED)
+            self.table.pop(self._key(cap), None)
+            return self._refuse(peer, direction, nbytes, reasons.EP_EXPIRED, **extra)
         if cap["epoch_tag"] != self.epoch_tag:
-            return self._refuse(peer, direction, nbytes, reasons.EP_STALE_EPOCH)
+            return self._refuse(peer, direction, nbytes, reasons.EP_STALE_EPOCH, **extra)
         if cap["budget"] < nbytes:
-            return self._refuse(peer, direction, nbytes, reasons.EP_BUDGET_EXHAUSTED)
+            return self._refuse(peer, direction, nbytes, reasons.EP_BUDGET_EXHAUSTED, **extra)
         cap["budget"] -= nbytes
         self.bytes_passed[peer] = self.bytes_passed.get(peer, 0) + nbytes
         return True, reasons.OK
 
-    def _refuse(self, peer: str, direction: str, nbytes: int, why: str) -> tuple[bool, str]:
-        self.refusals.append({"switch": self.kind, "peer": peer, "direction": direction, "bytes": nbytes, "why": why})
-        self.log("switch.refused", {"switch": self.kind, "peer": peer, "bytes": nbytes, "why": why})
+    def _refuse(self, peer: str, direction: str, nbytes: int, why: str, **extra) -> tuple[bool, str]:
+        self.refusals.append({"switch": self.kind, "peer": peer, "direction": direction, "bytes": nbytes, "why": why, **extra})
+        self.log("switch.refused", {"switch": self.kind, "peer": peer, "bytes": nbytes, "why": why, **extra})
         return False, why
 
 
 class DescriptorChecker(Switch):
-    """Integrated tier only: the same table at a copy engine or the peer MMU, inside the GPU."""
+    """Integrated tier only: the same table at a copy engine or the peer MMU, inside the GPU, keyed on
+    (peer, direction, buffer class). A class with no entry for that peer is refused: EP_BUFFER_CLASS."""
+
+    def _key(self, cap: dict) -> tuple:
+        return (cap["peer"], cap["direction"], cap.get("buffer_class"))
+
+    def pass_traffic(self, peer: str, direction: str, nbytes: int, now: float, buffer_class: str = "activations") -> tuple[bool, str]:
+        cap = self.table.get((peer, direction, buffer_class)) or self.table.get((peer, "both", buffer_class))
+        if cap is None:
+            why = reasons.EP_BUFFER_CLASS if any(k[0] == peer for k in self.table) else reasons.EP_NO_CAPABILITY
+            return self._refuse(peer, direction, nbytes, why, buffer_class=buffer_class)
+        return self._admit(cap, peer, direction, nbytes, now, buffer_class=buffer_class)
 
 
 class ActionEndpoint:
@@ -176,6 +195,61 @@ class ActionEndpoint:
         self.store.power_loss()
         self.consumed = self.store.get("consumed", {})
         self.state = "ARMED"
+
+
+RELEASE_ACTION = "response.release"
+
+
+class EgressEndpoint(ActionEndpoint):
+    """The DPU's egress to the user: bytes are held until a release ticket for exactly that response
+    is admitted. Without a valid ticket the bytes never leave."""
+
+    def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], store: Store | None = None, safe_transition: str = "hold"):
+        super().__init__(name, clock, governor_keys, store, safe_transition=safe_transition)
+        self.held: dict[tuple[str, str], dict] = {}        # (session, response_id) -> {"bytes", "response_hash", "stream_hashes"}
+        self.delivered: dict[str, list[bytes]] = {}        # session -> responses that left
+        self.bytes_held = 0
+        self.bytes_delivered = 0
+
+    def hold(self, session: str, response_id: str, data: bytes, stream_hashes: dict[str, str] | None = None) -> str:
+        """Buffer a response; returns its hash, which the governor's ticket must name."""
+        h = sha256(data)
+        self.held[(session, response_id)] = {"bytes": data, "response_hash": h, "stream_hashes": dict(stream_hashes or {"response": h})}
+        self.bytes_held += len(data)
+        return h
+
+    def release(self, ticket: dict | None) -> tuple[bool, str]:
+        """Admit a ``response.release`` ticket: its params digest must cover one held (session, response_id,
+        response_hash); only then do the bytes move to ``delivered``."""
+        if ticket is None:
+            return self._refuse(reasons.TICKET_MISSING)
+        want = (ticket.get("payload") or {}).get("params_digest")
+        for (session, response_id), item in list(self.held.items()):
+            params = {"session": session, "response_id": response_id, "response_hash": item["response_hash"], "stream_hashes": item["stream_hashes"]}
+            if digest(params) != want:
+                continue
+            ok, why = self.execute(ticket, RELEASE_ACTION, params)
+            if ok:
+                self.held.pop((session, response_id))
+                self.delivered.setdefault(session, []).append(item["bytes"])
+                self.bytes_held -= len(item["bytes"])
+                self.bytes_delivered += len(item["bytes"])
+            return ok, why
+        return self._refuse(reasons.TICKET_PARAMS_MISMATCH)
+
+
+class AuditStore(EgressEndpoint):
+    """The audit store: an egress of its own (the sandbox's only one) that also signs escrow receipts."""
+
+    def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], key: SigningKey, store: Store | None = None):
+        super().__init__(name, clock, governor_keys, store, safe_transition="hold")
+        self.key = key
+        self.receipts: list[str] = []
+
+    def receipt(self, response_hash: str) -> dict:
+        """The signed acknowledgement that a response is in escrow: the witness a release request carries."""
+        self.receipts.append(response_hash)
+        return self.key.sign({"type": "escrow", "store": self.name, "response_hash": response_hash, "time": self.clock.now()})
 
 
 # ----------------------------------------------------------------------------- device checks

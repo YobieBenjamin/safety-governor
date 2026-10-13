@@ -1,6 +1,6 @@
 # Sweep report
 
-Generated 2026-10-13 20:23 UTC by `govsim sweep`.
+Generated 2026-10-13 22:50 UTC by `govsim sweep`.
 
 `pass`: the hypothesis held. `gap`: it failed exactly as the design predicts for that tier (the recorded residual). `FAIL`: it failed in a way the design does not predict.
 
@@ -9,7 +9,7 @@ Generated 2026-10-13 20:23 UTC by `govsim sweep`.
 | H0 | every protected operation needs a fresh, exact, single-use authorization | pass | pass | pass |
 | H1 | attestation binds permissions to firmware, model and policy | pass | pass | pass |
 | H2a | link-level: no bytes to a non-roster peer; unchecked paths bricked | pass | gap | pass |
-| H2b | descriptor-level: a transfer between two roster members a rule would not allow | gap | gap | gap |
+| H2b | descriptor-level: a transfer between two roster members the buffer policy would not allow | gap | gap | pass |
 | H3 | policy changes only with a quorum, never backwards | pass | pass | pass |
 | H4 | the broker cannot choose its rule or lane | pass | pass | pass |
 | H5 | alarms are monotone | pass | pass | pass |
@@ -18,12 +18,14 @@ Generated 2026-10-13 20:23 UTC by `govsim sweep`.
 | H8 | human override is slow and fully logged | pass | pass | pass |
 | H9 | zero per-token work; firmware under one percent of GPU time; the signing engine keeps up | pass | pass | pass |
 | H10 | permitted-channel leakage trips the budget | pass | pass | pass |
-| H11 | a halt reaches every GPU within the bound; nobody clears alone | pass | pass | pass |
+| H11 | a halt reaches every GPU within the bound; nobody clears alone; a governor jumpered out of the loop is named and the loop opened | pass | pass | pass |
 | H12 | only roster members speak on the fabric; forged heartbeats fail | pass | pass | pass |
 | H13 | shared budgets cannot be overspent across governors | pass | pass | pass |
 | H14 | partitions and epoch changes end in safe states | pass | pass | pass |
 | H15 | no debug path in production; tamper zeroizes | pass | pass | pass |
 | H16 | the levers work without the GPU's cooperation | pass | pass | pass |
+| H17 | no governed action initiates without a ticket and no governed response leaves the rack without a release ticket | pass | pass | pass |
+| H18 | oversight survives the model: the observer is always invoked and cannot be impersonated, audit sampling is unpredictable, the evaluated model is the deployed model, compute and hazard budgets bind | pass | pass | pass |
 
 ## Modelled cost (H9)
 
@@ -31,12 +33,11 @@ A model, not a measurement: operation counts from the functional model priced wi
 
 | Tier | Tokens | Firmware time | GPU time | Firmware share | Engine, one signature per response | Engine, batched | Record latency |
 |---|---|---|---|---|---|---|---|
-| rack | 100,000 | 5.1 ms | 50.0 s | 0.010 % | 54 % | 34 % | 67 ms |
-| integrated | 100,000 | 5.1 ms | 50.0 s | 0.010 % | 54 % | 34 % | 67 ms |
-| rack, 100-token responses | 20,000 | 5.1 ms | 10.0 s | 0.051 % | 272 % (cannot keep up) | 34 % | 67 ms |
+| rack | 100,000 | 5.2 ms | 50.0 s | 0.010 % | 54 % | 34 % | 67 ms |
+| integrated | 100,000 | 5.2 ms | 50.0 s | 0.010 % | 54 % | 34 % | 67 ms |
+| rack, 100-token responses | 20,000 | 5.2 ms | 10.0 s | 0.052 % | 272 % (cannot keep up) | 34 % | 67 ms |
 
 ## What the gaps mean
 
-- **H2b at rack and board**: from the board the governor governs links and flows, not descriptors. Two legitimate roster members can exchange bytes a rule would not have allowed. That is the residual named in `docs/00-objectives.md` N5.
-- **H2b at integrated**: descriptor checker modelled; a buffer-class policy is not. The copy-engine checker refuses a stranger, but the governor programs it with the same roster capabilities as the switches, so a transfer between two roster members still passes.
+- **H2b at rack and board**: from the board the governor governs links and flows, not descriptors. Two legitimate roster members can exchange bytes the buffer policy would not have allowed (the weights, over the copy engine). That is the residual named in `docs/00-objectives.md` N5. At the integrated tier the descriptor checkers are keyed per buffer class and programmed from the policy image's buffer policy, which closes it there.
 - **H2a at board**: a system where the switches' management is unreachable, or a baseboard with direct NVLink and no NVSwitch, has no port authority. The governor still has its levers, its tickets and its log; it cannot keep a stranger off the link.

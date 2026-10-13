@@ -24,7 +24,7 @@ from .endpoints import BRICKED, DescriptorChecker, INTEGRATED_POINTS, RACK_POINT
 from .fuses import Fuses, PRODUCTION
 from .ledger import Ledger
 from .log import Log
-from .policy import check_budget_owners, check_constraints, check_register, find_rule, policy_epoch, select_rule, verify_policy
+from .policy import RELEASE_ACTION, buffer_allowed, check_budget_owners, check_constraints, check_register, find_rule, policy_epoch, select_rule, verify_policy
 from .root import SiliconRoot
 from .store import Store
 
@@ -35,6 +35,10 @@ TIERS = ("rack", "board", "integrated")
 TOKEN_TTL_S = 3600.0
 TICKET_TTL_S = 300.0
 SEEN_HEARTBEATS_MAX = 256
+# Causes that open the loop (the whole domain stops) unless the policy's safe_mode.opens_loop says otherwise.
+LOOP_OPENING_CAUSES = (reasons.LOOP_OPEN, reasons.LOOP_BROKEN, reasons.TAMPER, reasons.HALT_COMMANDED, reasons.LOOP_JUMPERED)
+# Alarms scoped to one session: they park that session's releases for the human lane and do not block the gate for every request.
+SESSION_SCOPED_ALARMS = {reasons.SESSION_HAZARD_BUDGET}
 
 # docs/04 section 3: the mailbox command codes, one handler per code (``_cmd_<name>``).
 MAILBOX_CODES = {
@@ -53,12 +57,14 @@ NO_RUN_NEEDED = {"ATTEST", "VERIFY_GPU", "VERIFY_HOST", "POLICY_PROPOSE", "POLIC
 
 class Governor:
     def __init__(self, name: str, clock, *, tier: str = "rack", fuses: Fuses | None = None, store: Store | None = None,
-                 loader_digest: str | None = None, firmware_digest: str | None = None, firmware_version: int = 1):
+                 loader_digest: str | None = None, firmware_digest: str | None = None, firmware_version: int = 1,
+                 rng_seed: int | None = None):
         if tier not in TIERS:
             raise ValueError(tier)
         self.name, self.clock, self.tier = name, clock, tier
         self.fuses = fuses or Fuses()
         self.store = store or Store()
+        self.rng_seed = rng_seed
         self.firmware = (loader_digest or digest("loader-v1"), firmware_digest or digest("governor-fw-v1"), firmware_version)
         self.lock = threading.RLock()
         self.ops: Counter = Counter()
@@ -72,7 +78,7 @@ class Governor:
 
     # ------------------------------------------------------------------ boot and restart
     def _boot(self) -> None:
-        self.root = SiliconRoot(self.fuses, counter_start=int(self.store.get("counter", 0)))
+        self.root = SiliconRoot(self.fuses, counter_start=int(self.store.get("counter", 0)), rng_seed=self.rng_seed)
         self.key = self.root.boot(*self.firmware)
         self.device_key = self.root.device_key
         self.alias_cert = self.device_key.sign({"type": "alias-cert", "chip_id": self.chip_id, "pub": self.key.public.hex,
@@ -83,6 +89,10 @@ class Governor:
         self.holds: dict[str, dict] = self.store.get("holds", {})
         self.mbox_seq: dict[str, int] = self.store.get("mbox_seq", {})
         self.meter: dict[str, dict] = self.store.get("meter", {})
+        self.epoch_history: list[str] = self.store.get("epoch_history", [])   # every epoch accepted, newest last
+        self.quoted_nonces: list[str] = self.store.get("quoted_nonces", [])    # nonces already quoted over (replay refused)
+        self.responses: dict[str, dict] = self.store.get("responses", {})     # response_id -> presented streams, audit draw
+        self.licenses: dict[str, int] = self.store.get("licenses", {})        # model digest -> cycles a license allows
         self.policy: dict | None = None
         self._epoch = ""
         staged = self.store.get("staged")
@@ -115,6 +125,8 @@ class Governor:
         self.fabric_seq: int = int(self.store.get("fabric_seq", 0)) + 1000     # a restarted sender is never a replay
         self.fabric_last_seq: dict[str, int] = self.store.get("fabric_last_seq", {})
         self.acked_heads: dict[str, int] = {}      # my head -> my log size at that head, acknowledged by a neighbor
+        self.loop_beacon: dict | None = None       # the beacon whose collection window is open
+        self.loop_reports: dict[int, dict[str, dict]] = {}     # beacon seq -> chip id -> LOOP_REPORT body
         self.approvals: dict[str, dict[str, dict]] = {}
         self.last_tick_t = self.clock.now()
         image = self.store.get("policy_image")
@@ -208,6 +220,8 @@ class Governor:
         self._epoch = policy_epoch(image)
         self.fuses.bump_policy(image["version"])
         self.store.data["policy_image"] = image
+        if not self.epoch_history or self.epoch_history[-1] != self._epoch:
+            self.epoch_history.append(self._epoch)        # the compliance report lists every edition this chip ran under
         for sw in list(self.switches.values()) + list(self.checkers.values()):
             sw.set_epoch(self.epoch[:8])
         if not at_boot and old_epoch and old_epoch != self.epoch:
@@ -248,11 +262,52 @@ class Governor:
             hexes = p["observer_keys"]
         elif cls == "endpoint":
             hexes = [e["pubkey"] for e in p["endpoints"]]
+        elif cls == "eval":
+            hexes = p.get("eval_keys", [])
+        elif cls == "license":
+            hexes = p.get("compute_budget", {}).get("license_keys", [])
+        elif cls == "audit_store":
+            hexes = [e["pubkey"] for e in p["endpoints"] if e["name"] == p.get("audit", {}).get("store")]
         elif cls == "host":
             return {self.host_key.key_id: self.host_key} if self.host_key else {}
         else:
             hexes = []
         return {VerifyKey.from_hex(h).key_id: VerifyKey.from_hex(h) for h in hexes}
+
+    def _evaluated(self, model_digest: str, attestation: dict | None) -> tuple[bool, str]:
+        """The deployment gate: a key in ``eval_keys`` attests that this exact digest passed its evaluations."""
+        if not attestation or verify_any(attestation, self._keys("eval")) is None:
+            return False, reasons.MODEL_NOT_EVALUATED
+        p = attestation["payload"]
+        if p.get("model_digest") != model_digest or p.get("evals_passed") is not True or not p.get("report_digest"):
+            return False, reasons.MODEL_NOT_EVALUATED
+        self.log.append("model.evaluated", {"model": model_digest, "report": p["report_digest"], "by": attestation["signer"]})
+        return True, reasons.OK
+
+    def _accept_license(self, model_digest: str, token: dict | None) -> tuple[bool, str]:
+        """A compute license: a license key's signature over {model_digest, cycles_allowed} raises the budget."""
+        if not isinstance(token, dict) or verify_any(token, self._keys("license")) is None:
+            return False, reasons.LICENSE_INVALID
+        p = token["payload"]
+        if p.get("model_digest") != model_digest or not isinstance(p.get("cycles_allowed"), int) or p["cycles_allowed"] < 0:
+            return False, reasons.LICENSE_INVALID
+        self.licenses[model_digest] = max(self.licenses.get(model_digest, 0), int(p["cycles_allowed"]))
+        self.store.save()
+        self.log.append("compute.licensed", {"model": model_digest, "cycles_allowed": self.licenses[model_digest], "by": token["signer"]})
+        return True, reasons.OK
+
+    def _compute_budget_check(self) -> None:
+        """Each tick: cycles metered for the model against the policy's budget, or the license if one was presented."""
+        cb = (self.policy or {}).get("compute_budget", {})
+        model = self.model_digest
+        if model is None or cb.get("cycles") is None or reasons.COMPUTE_BUDGET in self.alarms:
+            return
+        allowed = max(int(cb["cycles"]), self.licenses.get(model, 0))
+        cycles = self.meter.get(model, {}).get("cycles", 0)
+        if cycles > allowed:
+            self.log.append("compute.budget_exceeded", {"model": model, "cycles": cycles, "allowed": allowed})
+            self.raise_alarm(reasons.COMPUTE_BUDGET, "governor", {"model": model, "cycles": cycles, "allowed": allowed})
+            self.enter_safe_mode(reasons.COMPUTE_BUDGET, rung=THROTTLE)
 
     def _check_signed(self, env: dict | None, cls: str, cmd: str, rule_id: str | None = None) -> tuple[bool, str]:
         """The mailbox checks, in order: sequence number, epoch, signature. The first failure is reported."""
@@ -287,8 +342,17 @@ class Governor:
             return handler(body, env)
 
     def _cmd_attest(self, body, env):
-        nonce = body.get("nonce", "")
-        return {"ok": True, "why": reasons.OK, "quote": self.root.quote(nonce, {"epoch": self.epoch, "state": self.state}),
+        """A quote over the caller's nonce, carrying the compliance report: what ran, how much, under which editions."""
+        nonce = str(body.get("nonce", ""))
+        if not nonce or nonce in self.quoted_nonces:        # a quote is made once per nonce: a repeat is a replay
+            return self._deny("attest", reasons.ATTEST_BAD_NONCE)
+        self.quoted_nonces = (self.quoted_nonces + [nonce])[-SEEN_HEARTBEATS_MAX:]
+        self.store.data["quoted_nonces"] = self.quoted_nonces
+        self.store.save()
+        self.read_meter()
+        compliance = {"models": {m: {k: v for k, v in slot.items() if k != "final"} for m, slot in self.meter.items()},
+                      "epochs": list(self.epoch_history), "log_head": self.log.head, "log_size": self.log.size}
+        return {"ok": True, "why": reasons.OK, "quote": self.root.quote(nonce, {"epoch": self.epoch, "state": self.state, "compliance": compliance}),
                 "device_cert": self.device_cert, "alias_cert": self.alias_cert}
 
     def nonce(self) -> str:
@@ -368,6 +432,15 @@ class Governor:
         if not manifest or verify_any(manifest, self._keys("publisher")) is None:
             return self._deny("begin_model", reasons.MBOX_BAD_SIGNATURE + ".manifest")
         model_digest = manifest["payload"]["model_digest"]
+        if self.policy.get("deployment_gate"):           # what was evaluated is what runs: no attestation, no key
+            ok, why = self._evaluated(model_digest, body.get("eval_attestation") or env["payload"].get("eval_attestation"))
+            if not ok:
+                return self._deny("begin_model", why, model=model_digest)
+        license_token = body.get("license") or env["payload"].get("license")
+        if license_token is not None:
+            ok, why = self._accept_license(model_digest, license_token)
+            if not ok:
+                return self._deny("begin_model", why, model=model_digest)
         self.model_digest = model_digest
         # the workload measurement keys the rulebook; the fingerprint adds the policy epoch
         self.workload = digest([self.verified["gpu"]["firmware_digest"], self.verified["host"]["firmware_digest"], model_digest])
@@ -420,13 +493,24 @@ class Governor:
         rhash = digest([req.get("request_id"), fp, action, params])
         if self.ledger.seen(rhash):
             return self._deny("request", reasons.GATE_REPLAY)
-        if self.alarms:
+        if any(code not in SESSION_SCOPED_ALARMS for code in self.alarms):
             return self._deny("request", reasons.GATE_ALARM, request_hash=rhash)
         rule, why = select_rule(self.policy, workload, action, params, self.lists)   # requester labels never reach this call (H4)
         if rule is None:
             return self._deny("request", why, request_hash=rhash)
         req_mode = rule["requirement"]["mode"]
-        if req_mode == "observer":
+        hold_cause = None
+        if action == RELEASE_ACTION:
+            verdict_mode, why = self._release_gate(rule, params, req.get("witnesses", []), now)
+            if verdict_mode == "deny":
+                return self._deny("request", why, request_hash=rhash, response_id=params.get("response_id"))
+            if verdict_mode == "hold":
+                req_mode, hold_cause = "human", why
+        elif action == "compute.extend" and req_mode != "human":      # the license is the action; a human lane parks it unread
+            ok, why = self._accept_license(self.model_digest or "", req.get("license"))
+            if not ok:
+                return self._deny("request", why, request_hash=rhash)
+        elif req_mode == "observer":
             ok, why = self._witnessed(rule, rhash, req.get("witnesses", []), now)
             if not ok:
                 return self._deny("request", why, request_hash=rhash)
@@ -446,12 +530,83 @@ class Governor:
         if req_mode == "human":
             hold_id = random_id(8)
             self.holds[hold_id] = {"request_hash": rhash, "action": action, "params": params, "fingerprint": fp, "rule": rule["id"],
-                                   "reservation": reservation, "created_at": now, "epoch": self.epoch}
+                                   "reservation": reservation, "created_at": now, "epoch": self.epoch, "cause": hold_cause}
             self.store.save()
-            self.log.append("gate.hold", {"hold_id": hold_id, "request_hash": rhash, "rule": rule["id"]})
-            return {"ok": False, "why": reasons.GATE_HELD, "hold_id": hold_id, "request_hash": rhash}
+            self.log.append("gate.hold", {"hold_id": hold_id, "request_hash": rhash, "rule": rule["id"], "cause": hold_cause})
+            return {"ok": False, "why": reasons.GATE_HELD, "hold_id": hold_id, "request_hash": rhash, "cause": hold_cause}
         ticket = self._mint(rhash, action, params, fp, rule, reservation, now)
         return {"ok": True, "why": reasons.OK, "ticket": ticket, "request_hash": rhash}
+
+    # ------------------------------------------------------------------ response release
+    def _release_gate(self, rule: dict, params: dict, witnesses: list[dict], now: float) -> tuple[str, str]:
+        """The checks a response must pass before a release ticket: every required stream presented, the hash
+        as recorded, the observer's verdict, the session's hazard budget, the escrow receipt. Returns
+        ("ok" | "hold" | "deny", reason)."""
+        response_id = str(params.get("response_id"))
+        rec = self.responses.get(response_id)
+        required = rule.get("streams_required") or self.policy.get("streams_required", ["response"])
+        if rec is None or any(s not in rec["streams"] for s in required):
+            return "deny", reasons.RELEASE_STREAM_MISSING
+        if params.get("response_hash") != rec["streams"].get("response") or params.get("stream_hashes") != rec["streams"]:
+            return "deny", reasons.RELEASE_HASH_MISMATCH
+        req = rule["requirement"]
+        session = str(params.get("session"))
+        verdict = None
+        if req["mode"] == "observer":
+            verdict, why = self._release_verdict(rule, rec["streams"]["response"], witnesses, now)
+            if verdict is None:
+                return "deny", why
+            rec["verdict"] = verdict
+            self.store.save()
+            self.log.append("release.verdict", {"response_id": response_id, "hazard_class": verdict["hazard_class"],
+                                                "category": verdict["category"], "risk": verdict["risk"], "legibility": verdict["legibility"]})
+        hb = rule.get("hazard_budget")
+        if hb:
+            key = f"hazard|{session}"
+            if verdict is not None and verdict["hazard_class"] != "none":
+                self.ledger.rate_mark(key, now)
+            count = self.ledger.rate_count(key, hb["window_s"], now)
+            if count > hb["max"]:
+                self.log.append("release.session_hazard_budget", {"session": session, "count": count, "max": hb["max"], "response_id": response_id})
+                self.raise_alarm(reasons.SESSION_HAZARD_BUDGET, "governor", {"session": session})
+                return "hold", reasons.SESSION_HAZARD_BUDGET
+        if verdict is not None:
+            if verdict["hazard_class"] not in req.get("allowed_hazard_classes", ["none"]):
+                return ("hold" if req.get("on_hazard") == "human" else "deny"), reasons.RELEASE_HAZARD
+            if verdict["legibility"] < float(req.get("min_legibility", 0.0)):
+                return ("hold" if req.get("on_illegible") == "human" else "deny"), reasons.RELEASE_ILLEGIBLE
+        audit = self.policy.get("audit", {})
+        escrowed_class = verdict is not None and verdict["hazard_class"] in audit.get("escrow_classes", [])
+        if (rec.get("sampled") or escrowed_class) and not self._escrow_receipt(rec["streams"]["response"], witnesses):
+            return "deny", reasons.RELEASE_ESCROW_REQUIRED
+        return "ok", reasons.OK
+
+    def _release_verdict(self, rule: dict, response_hash: str, witnesses: list[dict], now: float) -> tuple[dict | None, str]:
+        """An observer key's assertion over the response hash: {risk, hazard_class, category, legibility}."""
+        keys = self._keys("observer")
+        for w in witnesses:
+            if not isinstance(w, dict) or verify_any(w, keys) is None:
+                continue
+            p = w["payload"]
+            if p.get("type") != "observer-verdict" or p.get("response_hash") != response_hash:
+                continue
+            if p.get("expires_at", 0) <= now:
+                return None, reasons.GATE_WITNESS_STALE
+            if float(p.get("risk", 1.0)) > rule["requirement"]["max_risk"]:
+                return None, reasons.GATE_WITNESS_RISK
+            return {"hazard_class": str(p.get("hazard_class", "hazard")), "category": str(p.get("category", "")),
+                    "risk": float(p.get("risk", 1.0)), "legibility": float(p.get("legibility", 0.0)), "observer": w["signer"]}, reasons.OK
+        return None, reasons.GATE_WITNESS_MISSING
+
+    def _escrow_receipt(self, response_hash: str, witnesses: list[dict]) -> bool:
+        """The audit store's signed acknowledgement that this response is in escrow."""
+        keys = self._keys("audit_store")
+        for w in witnesses:
+            if isinstance(w, dict) and verify_any(w, keys) is not None and w["payload"].get("type") == "escrow" \
+                    and w["payload"].get("response_hash") == response_hash:
+                self.log.append("release.escrow_receipt", {"response_hash": response_hash, "store": w["payload"].get("store")})
+                return True
+        return False
 
     def _witnessed(self, rule: dict, rhash: str, witnesses: list[dict], now: float) -> tuple[bool, str]:
         keys = self._keys("observer")
@@ -566,15 +721,15 @@ class Governor:
             return ok
 
     # ------------------------------------------------------------------ alarms
-    def raise_alarm(self, code: str, source: str) -> None:
-        """Anyone may raise. The bits are sticky."""
+    def raise_alarm(self, code: str, source: str, detail: dict | None = None) -> None:
+        """Anyone may raise. The bits are sticky. ``detail`` names what the alarm is about (a member, a peer)."""
         with self.lock:
             if code not in self.alarms:
-                self.alarms[code] = {"source": source, "t": self.clock.now()}
+                self.alarms[code] = {"source": source, "t": self.clock.now(), **(detail or {})}
                 self.store.save()
-                self.log.append("alarm.raised", {"code": code, "source": source})
+                self.log.append("alarm.raised", {"code": code, "source": source, **(detail or {})})
                 if self.fabric is not None and source != "fabric":
-                    self.fabric_send("ALARM", {"code": code, "origin": self.chip_id})
+                    self.fabric_send("ALARM", {"code": code, "origin": self.chip_id, "detail": detail or {}})
 
     def _cmd_alarm_raise(self, body, env):
         self.raise_alarm(body.get("code", "alarm.unspecified"), body.get("source", "host"))
@@ -628,14 +783,30 @@ class Governor:
             h = hashlib.sha256(bytes.fromhex(p.get("data_hex", ""))).hexdigest()
             inline = False
         counters = self.meter.get(self.model_digest or "", {})
+        response_id = str(p.get("response_id") or stream)
         record = self.key.sign({"type": "device-provenance", "chip_id": self.chip_id, "fw_measurement": self.root.meas1.value,
                                 "model_digest": self.model_digest, "policy_epoch": self.epoch,
                                 "roster_id": self.roster["roster_id"] if self.roster else None,
                                 "prompt_hash": p.get("claimed_prompt_hash"), "prompt_hash_verified": False,
                                 "output_hash": h, "output_hash_inline": inline, "nonce": p.get("nonce"), "time": self.mono(),
-                                "counters": {k: v for k, v in counters.items() if k != "final"}})
-        self.log.append("output.signed", {"stream": stream, "inline": inline})
+                                "response_id": response_id, "counters": {k: v for k, v in counters.items() if k != "final"}})
+        self.log.append("output.signed", {"stream": stream, "inline": inline, "response_id": response_id})
+        self._record_stream(response_id, stream, h, p.get("session"))
         return {"ok": True, "why": reasons.OK, "record": record}
+
+    def _record_stream(self, response_id: str, stream: str, h: str, session: str | None) -> None:
+        """Every presented stream hash goes under its response id; the "response" stream also gets the audit draw."""
+        rec = self.responses.setdefault(response_id, {"streams": {}, "session": session, "sampled": None, "verdict": None})
+        rec["streams"][stream] = h
+        rec["session"] = rec.get("session") or session
+        if stream == "response" and rec["sampled"] is None:
+            # The draw comes from the chip's TRNG after the hash exists and is logged before any release
+            # decision, so the runtime cannot know in advance which responses are watched.
+            audit = (self.policy or {}).get("audit", {})
+            rec["sampled"] = self.root.random_fraction() < float(audit.get("sample_rate", 0.0))
+            if rec["sampled"]:
+                self.log.append("audit.sampled", {"response_id": response_id, "response_hash": h})
+        self.store.save()
 
     def _output_tripped(self) -> None:
         self.raise_alarm(reasons.GATE_OUTPUT_BUDGET, "governor")
@@ -681,31 +852,47 @@ class Governor:
         return {"ok": True, "why": reasons.OK, "refusals": drained}
 
     # ------------------------------------------------------------------ capabilities and switches
-    def _capability(self, point: str, peer: str, direction: str, budget: int, expiry: float) -> dict:
-        cap = {"point": point, "peer": peer, "direction": direction, "budget": budget, "expiry": expiry, "epoch_tag": self.epoch[:8]}
+    def _capability(self, point: str, peer: str, direction: str, budget: int, expiry: float, buffer_class: str | None = None) -> dict:
+        """A table entry under this governor's cap key. ``buffer_class`` is None at a switch, which cannot
+        see one, and a class name at a descriptor checker, where it is part of the key."""
+        cap = {"point": point, "peer": peer, "direction": direction, "budget": budget, "expiry": expiry, "epoch_tag": self.epoch[:8],
+               "buffer_class": buffer_class}
         cap["mac"] = hmac_sha256(self.cap_key, canonical(cap))
         return cap
 
+    def _buffer_allowed(self, buffer_class: str, peer: str) -> bool:
+        """The policy image's buffer policy: may this class leave through a checker for this peer?"""
+        return buffer_allowed((self.policy or {}).get("buffer_policy", {}), buffer_class, peer)
+
     def open_ports_for_roster(self, budget: int = 1 << 40) -> int:
-        """Program every governed switch for exactly the roster's members. Returns entries written."""
+        """Program every governed switch for exactly the roster's members, and every descriptor checker
+        per buffer class under the policy's buffer policy. Returns entries written."""
         if self.roster is None:
             return 0
         n = 0
         expiry = self.roster["expires_at"]
         peers = [m["gpu_chip_id"] for m in self.roster["members"] if m["chip_id"] != self.chip_id]
-        for kind, sw in list(self.switches.items()) + list(self.checkers.items()):
+        host = ["host"] if "host" in self.verified else []
+        if (self.policy or {}).get("sandbox"):
+            peers = []                                    # a model organism gets no peer path and no network flow at all
+        for kind, sw in self.switches.items():
             sw.close_all()
-            if kind in ("nvswitch", "dpu", "peer_mmu"):
+            if kind in ("nvswitch", "dpu"):
                 for peer in peers:
                     n += sw.program(self._capability(kind, peer, "both", budget, expiry))
-            elif kind in ("pcie", "copy_engine"):
-                if "host" in self.verified:
-                    n += sw.program(self._capability(kind, "host", "both", budget, expiry))
-                for peer in peers:
+            elif kind == "pcie":
+                for peer in host + peers:
                     n += sw.program(self._capability(kind, peer, "both", budget, expiry))
             elif kind == "storage":
-                if self.model_digest:
-                    n += sw.program(self._capability(kind, self.model_digest, "in", budget, expiry))
+                if self.model_digest:                     # the model's own storage flow, to load from and to write its weights to
+                    n += sw.program(self._capability(kind, self.model_digest, "both", budget, expiry))
+        for kind, ck in self.checkers.items():
+            ck.close_all()
+            targets = peers if kind == "peer_mmu" else host + peers      # the peer MMU maps peers, never the host
+            for cls in (self.policy or {}).get("buffer_classes", []):
+                for peer in targets:
+                    if self._buffer_allowed(cls, peer):
+                        n += ck.program(self._capability(kind, peer, "both", budget, expiry, buffer_class=cls))
         self.ops["switch_program"] += n
         return n
 
@@ -732,8 +919,13 @@ class Governor:
         sw = self.switches.get(kind) or self.checkers.get(kind)
         if sw is None:
             return self._deny("cap_request", reasons.EP_UNCHECKED, point=kind)
+        buffer_class = None
+        if kind in self.checkers:                 # a checker entry names a class, and the buffer policy has the last word
+            buffer_class = str(p.get("buffer_class", "activations"))
+            if not self._buffer_allowed(buffer_class, peer):
+                return self._deny("cap_request", reasons.EP_BUFFER_CLASS, peer=peer, point=kind, buffer_class=buffer_class)
         cap = self._capability(kind, peer, direction, int(p.get("budget", 1 << 30)),
-                               min(self.roster["expires_at"], self.clock.now() + float(p.get("ttl", 3600))))
+                               min(self.roster["expires_at"], self.clock.now() + float(p.get("ttl", 3600))), buffer_class=buffer_class)
         return {"ok": sw.program(cap), "why": reasons.OK, "capability": cap}
 
     # ------------------------------------------------------------------ heartbeat, levers, safe mode
@@ -776,6 +968,8 @@ class Governor:
             ep.heartbeat(now)
         if self.fabric is not None and relay and hops < self.policy["fabric"]["max_hops"]:
             self.fabric_send("HEARTBEAT", {"authority": env, "hops": hops + 1})
+        if relay and p.get("loop_beacon") is not None:     # once per beacon, after the fan-out, so the roll call follows the heartbeat
+            self._on_loop_beacon(p["loop_beacon"])
         return {"ok": True, "why": reasons.OK}
 
     def _cmd_halt(self, body, env):
@@ -794,7 +988,7 @@ class Governor:
         with self.lock:
             sm = (self.policy or {}).get("safe_mode", {})
             rung = rung or sm.get("causes", {}).get(cause, sm.get("default_rung", THROTTLE))
-            opens = cause in sm.get("opens_loop", [reasons.LOOP_OPEN, reasons.LOOP_BROKEN, reasons.TAMPER, reasons.HALT_COMMANDED])
+            opens = cause in sm.get("opens_loop", LOOP_OPENING_CAUSES)
             current = RUNG_ORDER.get(self.state, 0)
             if self.cause is None or RUNG_ORDER[rung] > current or (opens and not self.cause_opens_loop):
                 self.cause = cause
@@ -857,7 +1051,8 @@ class Governor:
             self._try_run()
 
     def tick(self) -> None:
-        """Time passes: the counter, heartbeat expiry, rung escalation, the meter, the output cross-check."""
+        """Time passes: the counter, heartbeat expiry, rung escalation, the meter, the output cross-check,
+        the loop beacon's collection window."""
         with self.lock:
             now = self.clock.now()
             elapsed_us = int(round((now - self.last_tick_t) * 1e6))
@@ -881,7 +1076,9 @@ class Governor:
                 self.cause_entry = self.log.size - 1
                 self._apply_rung(SAFE, opens_loop=self.cause_opens_loop)
             self.read_meter()
+            self._compute_budget_check()
             self._check_unpresented_output()
+            self._close_loop_window()
             self.sense_loop()
 
     def _cmd_clear(self, body, env):
@@ -1138,8 +1335,57 @@ class Governor:
         return {"ok": True, "why": reasons.OK}
 
     def _on_alarm(self, sender: str, body: dict):
-        self.raise_alarm(body["code"], "fabric")
+        detail = body.get("detail")
+        self.raise_alarm(body["code"], "fabric", detail if isinstance(detail, dict) else None)
         return {"ok": True, "why": reasons.OK}
+
+    # ------------------------------------------------------------------ the loop member-count beacon
+    def _on_loop_beacon(self, beacon: dict) -> None:
+        """The authority's LOOP_BEACON (inside the heartbeat it signed): close the previous window, then
+        report this governor's own switch state and loop sense to everyone on the fabric."""
+        if self.loop is None or not isinstance(beacon, dict):
+            return
+        self._close_loop_window()
+        self.loop_beacon = {"loop_id": beacon.get("loop_id"), "seq": int(beacon.get("seq", -1)),
+                            "expected": [str(m) for m in beacon.get("expected_members", [])]}
+        report = {"loop_id": self.loop_beacon["loop_id"], "seq": self.loop_beacon["seq"],
+                  "switch_open": bool(self.loop_switch_open), "current_sensed": bool(self.loop.current())}
+        self.loop_reports.setdefault(report["seq"], {})[self.chip_id] = report
+        self.fabric_send("LOOP_REPORT", report)
+
+    def _on_loop_report(self, sender: str, body: dict):
+        """A roster member's signed report (the fabric checked key, signature, sequence and epoch)."""
+        try:
+            seq = int(body["seq"])
+            report = {"loop_id": body["loop_id"], "seq": seq, "switch_open": bool(body["switch_open"]), "current_sensed": bool(body["current_sensed"])}
+        except (KeyError, TypeError, ValueError):
+            self.log.append("fabric.dropped", {"why": reasons.FABRIC_BAD_SIGNATURE, "from": sender, "type": "LOOP_REPORT"})
+            return {"ok": False, "why": reasons.FABRIC_BAD_SIGNATURE}
+        self.loop_reports.setdefault(seq, {})[sender] = report
+        return {"ok": True, "why": reasons.OK}
+
+    def _close_loop_window(self) -> None:
+        """End of the collection window (next tick or next beacon): a silent expected member is logged; a
+        member whose switch is open by its own account while anyone senses current is jumpered or lying."""
+        # Only reports of the same beacon seq are compared with each other (never a report against the
+        # loop as sensed now), so a switch that opened or closed after the beacon is never a false positive.
+        b, self.loop_beacon = self.loop_beacon, None
+        if b is None:
+            return
+        reports = {c: r for c, r in self.loop_reports.pop(b["seq"], {}).items() if r["loop_id"] == b["loop_id"]}
+        for seq in [s for s in self.loop_reports if s < b["seq"]]:       # late reports for older beacons; newer ones are kept
+            self.loop_reports.pop(seq)
+        if self.chip_id not in b["expected"] or self.loop is None or self.loop.loop_id != b["loop_id"]:
+            return                                       # not a member of this loop: nothing to judge
+        for member in b["expected"]:
+            if member not in reports:
+                self.log.append("loop.member_silent", {"why": reasons.LOOP_MEMBER_SILENT, "member": member, "seq": b["seq"]})
+        current_sensed = any(r["current_sensed"] for r in reports.values())
+        for member, r in sorted(reports.items()):
+            if member in b["expected"] and r["switch_open"] and current_sensed:
+                self.log.append("loop.jumpered", {"why": reasons.LOOP_JUMPERED, "member": member, "seq": b["seq"]})
+                self.raise_alarm(reasons.LOOP_JUMPERED, "governor", {"member": member, "seq": b["seq"]})
+                self.enter_safe_mode(reasons.LOOP_JUMPERED)
 
     def _on_halt_cause(self, sender: str, body: dict):
         self.log.append("fabric.halt_cause", {"from": sender, "cause": body.get("cause")})

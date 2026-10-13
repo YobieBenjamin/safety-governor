@@ -39,6 +39,19 @@ GATE_ALARM = "gate.alarm_active"
 GATE_OUTPUT_BUDGET = "gate.output_budget_exceeded"
 OUTPUT_UNPRESENTED = "gate.output_unpresented"
 
+# response release (a response leaving the rack is a governed action)
+RELEASE_HAZARD = "release.hazard_class_not_allowed"
+RELEASE_ILLEGIBLE = "release.below_legibility_floor"
+RELEASE_ESCROW_REQUIRED = "release.escrow_receipt_required"
+RELEASE_STREAM_MISSING = "release.required_stream_missing"
+RELEASE_HASH_MISMATCH = "release.response_hash_mismatch"
+SESSION_HAZARD_BUDGET = "release.session_hazard_budget_exceeded"
+
+# deployment and training governance
+MODEL_NOT_EVALUATED = "model.not_evaluated"
+COMPUTE_BUDGET = "compute.budget_exceeded"
+LICENSE_INVALID = "compute.license_invalid"
+
 # approvals and overrides
 APPROVE_UNKNOWN_HOLD = "approve.unknown_hold"
 APPROVE_BAD_SIGNATURE = "approve.bad_signature"
@@ -74,6 +87,7 @@ EP_STALE_EPOCH = "ep.stale_epoch"
 EP_BRICKED = "ep.path_bricked"
 EP_NOT_ON_ROSTER = "ep.peer_not_on_roster"
 EP_UNCHECKED = "ep.unchecked_path"   # the recorded gap at tiers without a checker
+EP_BUFFER_CLASS = "ep.buffer_class_not_permitted"   # integrated tier: the class may not leave for that peer
 
 # fabric
 FABRIC_NOT_MEMBER = "fabric.sender_not_on_roster"
@@ -100,6 +114,8 @@ LIFECYCLE_BACKWARDS = "lifecycle.backwards"
 # levers and loop
 LOOP_OPEN = "loop.open"
 LOOP_BROKEN = "loop.broken"
+LOOP_JUMPERED = "loop.member_jumpered"       # a member reports its switch open while the loop carries current
+LOOP_MEMBER_SILENT = "loop.member_silent"    # an expected member sent no report for the beacon (logged, not an alarm)
 HALT_COMMANDED = "halt.commanded"
 HEARTBEAT_LOST = "halt.heartbeat_lost"
 EPOCH_STRAGGLER = "halt.epoch_straggler"

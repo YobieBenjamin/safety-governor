@@ -14,19 +14,48 @@ from typing import Any, Iterable
 from . import reasons
 from .crypto import SigningKey, VerifyKey, digest, verify_object
 
+# Buffer classes at the integrated tier, and where each class may go through the copy engines
+# and the peer MMU. Scopes: "none" (never leaves the GPU), "roster" (roster peers only), "host"
+# (the verified host only), "any-roster-or-host". A class with no entry, or an unknown scope,
+# gets no capability at all: fail closed.
+BUFFER_CLASSES = ["weights", "kv_cache", "activations", "outputs"]
+BUFFER_POLICY = {"weights": "none", "kv_cache": "roster", "activations": "roster", "outputs": "host"}
+BUFFER_SCOPES = ("none", "roster", "host", "any-roster-or-host")
+
+# Audit: the share of responses the chip's TRNG picks for review, the verdict classes that are
+# always escrowed, and the endpoint whose signed receipt releases an escrowed response.
+AUDIT = {"sample_rate": 0.05, "escrow_classes": ["hazard"], "store": "audit-store"}
+RELEASE_ACTION = "response.release"
+
+
+def buffer_allowed(buffer_policy: dict, buffer_class: str, peer: str) -> bool:
+    """May ``buffer_class`` leave for ``peer`` ("host" or a roster peer) under this buffer policy?"""
+    scope = buffer_policy.get(buffer_class, "none")
+    if peer == "host":
+        return scope in ("host", "any-roster-or-host")
+    return scope in ("roster", "any-roster-or-host")
+
 
 def make_rule(rule_id: str, action: str, *, measurement: str = "*", constraints: dict | None = None,
               mode: str = "auto", observers: list[str] | None = None, max_risk: float = 1.0,
               approvers_quorum: int = 0, rate: dict | None = None, budget: dict | None = None,
               endpoint: str | None = None, delay_s: float = 0.0, inputs: list[str] | None = None,
-              output_budget: dict | None = None) -> dict:
+              output_budget: dict | None = None, allowed_hazard_classes: list[str] | None = None,
+              min_legibility: float = 0.0, on_hazard: str = "refuse", on_illegible: str = "refuse",
+              hazard_budget: dict | None = None, streams_required: list[str] | None = None) -> dict:
     return {
         "id": rule_id, "measurement": measurement, "action": action,
         "constraints": constraints or {},
-        "requirement": {"mode": mode, "observers": observers or [], "max_risk": max_risk, "approvers_quorum": approvers_quorum},
+        "requirement": {"mode": mode, "observers": observers or [], "max_risk": max_risk, "approvers_quorum": approvers_quorum,
+                        # response.release only: which verdict classes may leave, the legibility floor, and
+                        # whether a failing verdict is refused or parked for the human lane
+                        "allowed_hazard_classes": list(allowed_hazard_classes if allowed_hazard_classes is not None else ["none"]),
+                        "min_legibility": min_legibility, "on_hazard": on_hazard, "on_illegible": on_illegible},
         "rate": rate, "budget": budget, "endpoint": endpoint, "delay_s": delay_s,
         "inputs": inputs or [],              # the register rows this rule relies on
         "output_budget": output_budget,      # {"queries": n, "bytes": n, "window_s": s}
+        "hazard_budget": hazard_budget,      # response.release only: {"max": n, "window_s": s} hazard verdicts per session
+        "streams_required": streams_required,   # response.release only; None: the image's streams_required
     }
 
 
@@ -40,7 +69,11 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
                 publisher_keys: list[VerifyKey], reference_values: list[dict], endpoints: list[dict],
                 budget_owners: dict[str, str], rules: list[dict], assumptions: list[dict],
                 safe_mode: dict | None = None, fabric: dict | None = None, observer_keys: list[VerifyKey] | None = None,
-                revocations: list[str] | None = None, override_floor_s: float = 60.0) -> dict:
+                revocations: list[str] | None = None, override_floor_s: float = 60.0,
+                buffer_classes: list[str] | None = None, buffer_policy: dict[str, str] | None = None,
+                audit: dict | None = None, streams_required: list[str] | None = None,
+                eval_keys: list[VerifyKey] | None = None, deployment_gate: bool = False,
+                compute_budget: dict | None = None, sandbox: bool = False) -> dict:
     return {
         "version": version, "issued_at": issued_at, "expires_at": expires_at,
         "governance_keys": [k.hex for k in governance_keys], "threshold": threshold,
@@ -55,8 +88,16 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
         "rules": rules,
         "assumptions": assumptions,
         "override_floor_s": override_floor_s,
+        "buffer_classes": list(buffer_classes if buffer_classes is not None else BUFFER_CLASSES),
+        "buffer_policy": dict(buffer_policy if buffer_policy is not None else BUFFER_POLICY),   # the default for every workload without a rule of its own
+        "audit": dict(audit if audit is not None else AUDIT),              # unpredictable sampling and escrow before release
+        "streams_required": list(streams_required if streams_required is not None else ["response"]),   # per workload default
+        "eval_keys": [k.hex for k in (eval_keys or [])],                   # who may attest that a model was evaluated
+        "deployment_gate": bool(deployment_gate),                          # BEGIN_MODEL needs an eval attestation
+        "compute_budget": dict(compute_budget if compute_budget is not None else {"cycles": None, "license_keys": []}),
+        "sandbox": bool(sandbox),                                          # model organisms: no network flows
         "safe_mode": safe_mode or {"default_rung": "THROTTLE", "T_throttle_s": 30.0, "T_halt_s": 300.0,
-                                   "causes": {reasons.LOOP_OPEN: "HALT", reasons.LOOP_BROKEN: "HALT",
+                                   "causes": {reasons.LOOP_OPEN: "HALT", reasons.LOOP_BROKEN: "HALT", reasons.LOOP_JUMPERED: "HALT",
                                               reasons.TAMPER: "SAFE", reasons.HEARTBEAT_LOST: "THROTTLE",
                                               reasons.EPOCH_STRAGGLER: "HALT", reasons.HALT_COMMANDED: "HALT"}},
         "fabric": fabric or {"heartbeat_expiry_s": 5.0, "max_hops": 16, "epoch_deadline_s": 10.0, "loop_bound_s": 0.001},

@@ -163,21 +163,95 @@ def test_every_enumerated_exit_is_governed_or_bricked_at_rack_tier(rack):
             assert not node.gpu.transfer(exit_name, "x", "out", 1)[0]
 
 
-@pytest.mark.parametrize("tier", ["rack", "board", "integrated"])
+@pytest.mark.parametrize("tier", ["rack", "board"])
 def test_descriptor_level_leak_between_roster_members_is_the_recorded_gap(tier):
-    """A legitimate peer on an open port receiving bytes a rule would not have allowed. Rack
-    and board tiers have no checker in the path. The integrated tier has one, but the governor
-    programs it with the same roster capabilities as the switches, and no buffer-class policy
-    exists to narrow them: the transfer passes there too. All three are recorded gaps."""
+    """A legitimate peer on an open port receiving bytes a rule would not have allowed. The rack
+    and board tiers have no checker in the path: the weights leave with EP_UNCHECKED. That is the
+    recorded residual (docs/00 N5); the integrated tier closes it with buffer classes (below)."""
     r = build_rack(2, tier)
     r.bring_up()
     node, other = r.nodes
-    ok, why = node.gpu.transfer("copy_engine", other.gpu.chip_id, "out", MB)
-    if tier == "integrated":
-        assert ok and why == reasons.OK                                          # checker consulted, capability as programmed
-        assert not node.gpu.transfer("copy_engine", "gpu-stranger", "out", MB)[0]   # what the checker does refuse
-    else:
-        assert ok and why == reasons.EP_UNCHECKED
+    ok, why = node.gpu.transfer("copy_engine", other.gpu.chip_id, "out", MB, buffer_class="weights")
+    assert ok and why == reasons.EP_UNCHECKED
+    assert "copy_engine" not in node.governor.checkers                           # nothing in the path could have seen the class
+
+
+def test_integrated_checker_refuses_weights_to_a_roster_peer():
+    """H2b at the integrated tier: the policy's buffer policy keeps weights on the GPU. The copy
+    engine's checker, keyed per buffer class, refuses them to a roster member with EP_BUFFER_CLASS
+    and logs it; the stranger is still refused for having no entry at all."""
+    r = build_rack(2, "integrated")
+    r.bring_up()
+    node, other = r.nodes
+    peer = other.gpu.chip_id
+    assert r.policy["buffer_policy"]["weights"] == "none"
+    for point in ("copy_engine", "peer_mmu"):
+        ok, why = node.gpu.transfer(point, peer, "out", MB, buffer_class="weights")
+        assert not ok and why == reasons.EP_BUFFER_CLASS, point
+        assert node.governor.log.has("switch.refused", switch=point, peer=peer, why=reasons.EP_BUFFER_CLASS, buffer_class="weights")
+    ok, why = node.gpu.transfer("copy_engine", "gpu-stranger", "out", MB, buffer_class="activations")
+    assert not ok and why == reasons.EP_NO_CAPABILITY
+    drained = node.governor.command("EXCEPTION_DRAIN", {})["refusals"]
+    assert any(d["why"] == reasons.EP_BUFFER_CLASS and d["buffer_class"] == "weights" for d in drained)
+
+
+def test_integrated_checker_passes_activations_to_a_roster_peer_and_outputs_only_to_the_host():
+    """The same peer, the same engine, a class the policy lets through: activations and the KV cache
+    go to roster members; outputs go to the verified host and nowhere else; weights go nowhere."""
+    r = build_rack(2, "integrated")
+    r.bring_up()
+    node, other = r.nodes
+    peer = other.gpu.chip_id
+    assert node.gpu.transfer("copy_engine", peer, "out", MB, buffer_class="activations") == (True, reasons.OK)
+    assert node.gpu.transfer("copy_engine", peer, "out", MB, buffer_class="kv_cache") == (True, reasons.OK)
+    assert node.gpu.transfer("peer_mmu", peer, "out", MB, buffer_class="activations") == (True, reasons.OK)
+    assert node.gpu.transfer("copy_engine", "host", "out", MB, buffer_class="outputs") == (True, reasons.OK)
+    assert node.gpu.transfer("copy_engine", peer, "out", MB, buffer_class="outputs") == (False, reasons.EP_BUFFER_CLASS)
+    assert node.gpu.transfer("copy_engine", "host", "out", MB, buffer_class="weights") == (False, reasons.EP_BUFFER_CLASS)
+    assert node.gpu.transfer("copy_engine", "host", "out", MB, buffer_class="activations") == (False, reasons.EP_BUFFER_CLASS)
+    assert node.gpu.transfer("copy_engine", peer, "out", MB, buffer_class="scratch") == (False, reasons.EP_BUFFER_CLASS)   # a class the policy never named: closed
+    assert node.gpu.transfer("peer_mmu", "host", "out", MB, buffer_class="outputs") == (False, reasons.EP_NO_CAPABILITY)   # the peer MMU never maps the host
+
+
+def test_buffer_policy_comes_from_the_policy_image():
+    """A policy that lets weights move between roster members (a sharded load) opens exactly that;
+    the checker is programmed from the image, not from a built-in table."""
+    r = build_rack(2, "integrated", policy_kw={"buffer_policy": {"weights": "roster", "kv_cache": "roster", "activations": "roster", "outputs": "host"}})
+    r.bring_up()
+    node, other = r.nodes
+    assert node.gpu.transfer("copy_engine", other.gpu.chip_id, "out", MB, buffer_class="weights") == (True, reasons.OK)
+    assert node.gpu.transfer("copy_engine", "host", "out", MB, buffer_class="weights") == (False, reasons.EP_BUFFER_CLASS)
+    ck = node.governor.checkers["copy_engine"]
+    assert all(c["buffer_class"] in r.policy["buffer_classes"] for c in ck.table.values())
+    assert all(len(k) == 3 for k in ck.table) and all(len(k) == 2 for k in node.governor.switches["nvswitch"].table)
+
+
+def test_host_cannot_request_a_checker_capability_the_buffer_policy_forbids():
+    """CAP_REQUEST at a checker point names a class; the buffer policy decides, not the host."""
+    r = build_rack(2, "integrated")
+    r.bring_up()
+    node, other = r.nodes
+    peer = other.gpu.chip_id
+    res = r.cap_request(node, point="copy_engine", peer=peer, direction="out", buffer_class="weights")
+    assert not res["ok"] and res["why"] == reasons.EP_BUFFER_CLASS
+    assert node.gpu.transfer("copy_engine", peer, "out", MB, buffer_class="weights") == (False, reasons.EP_BUFFER_CLASS)
+    res = r.cap_request(node, point="copy_engine", peer=peer, direction="out", buffer_class="activations", budget=3 * MB)
+    assert res["ok"] and res["capability"]["buffer_class"] == "activations"
+    res = r.cap_request(node, point="nvswitch", peer=peer, direction="out", buffer_class="weights")     # a switch has no class to key on
+    assert res["ok"] and res["capability"]["buffer_class"] is None
+
+
+def test_checker_capability_mac_covers_the_buffer_class():
+    """An entry for activations re-labelled as weights fails the MAC: the class is inside the signed fields."""
+    r = build_rack(2, "integrated")
+    r.bring_up()
+    node, other = r.nodes
+    g = node.governor
+    ck = g.checkers["copy_engine"]
+    good = g._capability("copy_engine", other.gpu.chip_id, "both", MB, r.clock.now() + 60, buffer_class="activations")
+    relabelled = {**good, "buffer_class": "weights"}
+    assert not ck.program(relabelled)
+    assert (other.gpu.chip_id, "both", "weights") not in ck.table
 
 
 def test_board_tier_records_the_gap_for_every_switch():

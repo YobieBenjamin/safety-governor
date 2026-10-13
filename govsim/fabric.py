@@ -15,25 +15,46 @@ if TYPE_CHECKING:
 
 
 class HaltLoop:
-    def __init__(self, sense_period_s: float = 0.0001):
+    """The series current loop: current flows iff the wire is intact and every switch that is in the
+    series path is closed. ``jumper`` wires around a governor; the beacon sees that only once it opens."""
+
+    # Jumpering: the governor's switch leaves the series path and its state no longer affects the
+    # current, while the governor still senses the loop like everyone else. The member-count beacon
+    # (Governor._on_loop_beacon) detects a jumper only when the jumpered governor reports its switch
+    # as open while the loop carries current. A jumpered governor whose switch is closed is
+    # indistinguishable from a healthy one, and harmless, until it tries to open the loop.
+
+    def __init__(self, sense_period_s: float = 0.0001, loop_id: str = "loop-0"):
         self.members: list["Governor"] = []
         self.wire_intact = True
         self.sense_period_s = sense_period_s
+        self.loop_id = loop_id
         self.jumpered: set[str] = set()       # chip ids an attacker wired around
 
     def join(self, g: "Governor") -> None:
         self.members.append(g)
 
+    def members_in_loop(self) -> set[str]:
+        """The governors whose switch is really in the series path."""
+        return {m.chip_id for m in self.members if m.chip_id not in self.jumpered}
+
     def current(self) -> bool:
         if not self.wire_intact:
             return False
-        return all((m.chip_id in self.jumpered) or not m.loop_switch_open for m in self.members)
+        return all(not m.loop_switch_open for m in self.members if m.chip_id not in self.jumpered)
 
     def cut(self) -> None:
         self.wire_intact = False
 
     def repair(self) -> None:
         self.wire_intact = True
+
+    def jumper(self, name: str) -> None:
+        """Wire around governor ``name``: its switch no longer affects loop current."""
+        self.jumpered.add(name)
+
+    def unjumper(self, name: str) -> None:
+        self.jumpered.discard(name)
 
     def propagate(self) -> float:
         """One sense period: every member senses the loop. Returns the time it took."""

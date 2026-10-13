@@ -70,6 +70,16 @@ class Ledger:
             self.replay[request_hash] = now
             self.store.save()
 
+    def rate_mark(self, key: str, now: float) -> None:
+        """Count one event in the key's window without a limit (the limit is judged with ``rate_count``)."""
+        with self.lock:
+            self.windows.setdefault(key, []).append(now)
+            self.store.save()
+
+    def rate_count(self, key: str, window_s: float, now: float) -> int:
+        with self.lock:
+            return len([t for t in self.windows.get(key, []) if now - t < window_s])
+
     def rate_ok(self, key: str, max_count: int, window_s: float, now: float) -> bool:
         with self.lock:
             w = [t for t in self.windows.get(key, []) if now - t < window_s]
