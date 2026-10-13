@@ -26,6 +26,8 @@ summary and a "backed by" box.
 | `10-plain-english-walkthrough.md` | The whole design in plain English, cross-referenced | itself |
 | `AUDIT-2026-10.md` | The audit: hallucinations and fake conditions found and fixed, sources checked, what is still unverified | §15 |
 | `../tools/console/` | The live program console published on claude.ai: agents, work items, event log | n/a |
+| `research/board-lever-register.md` | Evidence register: which boards expose which lever signals, with sources and evidence levels | §15 |
+| `research/nvswitch-management.md` | Evidence register: NVLink authority out of band and in band; the seven firmware asks | §7, §15 |
 
 ## One document
 
