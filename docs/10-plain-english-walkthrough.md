@@ -510,7 +510,7 @@ compiler is trusted or the binary verified. A verified controller does not verif
 beside it.
 
 > **Technical version:** `07-verification-plan.md`; the live matrix in `results/report.md`.
-> **Code:** `govsim/harness.py` (the sweep), `tests/test_h00_*.py` to `test_h16_*.py` (159
+> **Code:** `govsim/harness.py` (the sweep), `tests/test_h00_*.py` to `test_h18_*.py` (200
 > tests), `rtl/tests/test_blocks.py` (20 block simulations), `.github/workflows/ci.yml`. In the
 > October 2026 audit, forty-eight single-point mutations of the model and the RTL were run
 > against the suite; the twenty that survived each got a test that now catches them

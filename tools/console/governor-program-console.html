@@ -1,0 +1,176 @@
+<title>Governor Program Console</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Layout: a single column that reads like an operations console: status strip, agents, work items, event log. */
+  :root {
+    --bg: #f5f6f4;
+    --panel: #ffffff;
+    --fg: #1d2420;
+    --muted: #5c655f;
+    --line: #d6dbd6;
+    --accent: #1f5f8b;
+    --run: #1f7a4d;
+    --run-bg: #e3f2e9;
+    --wait: #8a6d1f;
+    --wait-bg: #f7efd9;
+    --done: #4a5560;
+    --done-bg: #e8ebee;
+    --fail: #a33b2e;
+    --fail-bg: #f8e4e0;
+    --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121614; --panel: #1a201d; --fg: #e6ebe7; --muted: #9aa49d; --line: #2e3733; --accent: #7fb4dc;
+      --run: #7fd0a2; --run-bg: #1d3328; --wait: #e0bb5f; --wait-bg: #3a3117; --done: #b1bac3; --done-bg: #262d33; --fail: #f09a8b; --fail-bg: #3f1f1a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121614; --panel: #1a201d; --fg: #e6ebe7; --muted: #9aa49d; --line: #2e3733; --accent: #7fb4dc;
+    --run: #7fd0a2; --run-bg: #1d3328; --wait: #e0bb5f; --wait-bg: #3a3117; --done: #b1bac3; --done-bg: #262d33; --fail: #f09a8b; --fail-bg: #3f1f1a;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+  .wrap { max-width: 880px; margin: 0 auto; padding-block: 20px 40px; padding-inline: 16px; display: grid; gap: 22px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0; text-wrap: balance; }
+  h2 { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+  .strip { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+  .strip .phase { font-size: 15px; color: var(--fg); min-width: 0; }
+  .strip .meta { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .strip .meta b { color: var(--fg); font-weight: 500; }
+  .stale { color: var(--fail) !important; }
+  .counts { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .counts span b { color: var(--fg); font-weight: 500; }
+  .cards { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+  .card .top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .card .name { font-weight: 600; min-width: 0; }
+  .card .task { color: var(--fg); min-width: 0; }
+  .card .summary { color: var(--muted); font-size: 13.5px; min-width: 0; }
+  .card .when { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pill { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .pill.running { color: var(--run); background: var(--run-bg); }
+  .pill.waiting, .pill.pending, .pill.in_progress { color: var(--wait); background: var(--wait-bg); }
+  .pill.done, .pill.completed, .pill.idle { color: var(--done); background: var(--done-bg); }
+  .pill.failed, .pill.blocked { color: var(--fail); background: var(--fail-bg); }
+  .work { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); overflow: hidden; }
+  .work .row { display: grid; grid-template-columns: 110px 1fr; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); align-items: start; }
+  .work .row:first-child { border-top: 0; }
+  .work .row .t { min-width: 0; }
+  .work .row .d { color: var(--muted); font-size: 13.5px; }
+  .log { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; overflow-x: auto; }
+  .log .e { display: grid; grid-template-columns: 58px 1fr; gap: 10px; padding: 2px 0; }
+  .log .e .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .log .e.agent .m { color: var(--accent); }
+  .log .e.done .m { color: var(--run); }
+  .log .e.warn .m { color: var(--fail); }
+  .empty { color: var(--muted); font-size: 14px; padding: 14px; border: 1px dashed var(--line); border-radius: 6px; }
+  .foot { color: var(--muted); font-size: 12.5px; }
+  @media (max-width: 480px) { .work .row { grid-template-columns: 1fr; gap: 4px; } }
+  @media (prefers-reduced-motion: no-preference) { .pill.running { animation: pulse 2.4s ease-in-out infinite; } }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+</style>
+<div class="wrap">
+  <div>
+    <h1>Governor Program Console</h1>
+    <div class="strip">
+      <div class="phase" id="phase">Waiting for the first status update.</div>
+      <div class="meta">updated <b id="updated">never</b> <span id="stale"></span></div>
+    </div>
+    <div class="counts" id="counts"></div>
+  </div>
+
+  <section>
+    <h2>Agents</h2>
+    <div class="cards" id="agents"><div class="empty">Agents appear here as they are spawned: the name, the task they hold, elapsed time, and what they returned.</div></div>
+  </section>
+
+  <section>
+    <h2>Work items</h2>
+    <div class="work" id="work"><div class="empty" style="border:0;border-radius:0">The program's work items, with their status, appear here.</div></div>
+  </section>
+
+  <section>
+    <h2>Event log</h2>
+    <div class="log" id="log"><div class="empty" style="border:0;padding:4px 0">Timestamped events: agents spawned and finished, tests run, commits made, decisions taken.</div></div>
+  </section>
+
+  <div class="foot">Live from the session's store; the page refreshes itself as rows change. Times are shown in your local time zone.</div>
+</div>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const fmtTime = (iso) => { try { const d = new Date(iso); return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } };
+  const fmtWhen = (iso) => { try { const d = new Date(iso); return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } };
+  const ago = (iso) => { const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000); if (s < 90) return Math.round(s) + " s ago"; if (s < 5400) return Math.round(s / 60) + " min ago"; return (s / 3600).toFixed(1) + " h ago"; };
+  const elapsed = (a, b) => { const s = Math.max(0, (new Date(b || Date.now()).getTime() - new Date(a).getTime()) / 1000); return s < 60 ? Math.round(s) + " s" : s < 3600 ? Math.round(s / 60) + " min" : (s / 3600).toFixed(1) + " h"; };
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  let lastUpdated = null;
+
+  function renderStatus(doc) {
+    if (!doc || !doc.exists) return;
+    const d = doc.data();
+    $("phase").textContent = d.phase || "";
+    lastUpdated = d.updated || null;
+    tickClock();
+  }
+  function tickClock() {
+    if (!lastUpdated) return;
+    $("updated").textContent = fmtWhen(lastUpdated) + " (" + ago(lastUpdated) + ")";
+    const staleMin = (Date.now() - new Date(lastUpdated).getTime()) / 60000;
+    $("stale").textContent = staleMin > 20 ? "no update for a while" : "";
+    $("stale").className = staleMin > 20 ? "stale" : "";
+  }
+  setInterval(tickClock, 15000);
+
+  function renderAgents(snap) {
+    const host = $("agents");
+    if (snap.empty) return;
+    const rows = snap.docs.map((x) => Object.assign({ id: x.id }, x.data()));
+    const order = { running: 0, waiting: 1, idle: 2, failed: 3, done: 4 };
+    rows.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || String(b.started || "").localeCompare(String(a.started || "")));
+    host.innerHTML = rows.map((a) => `
+      <div class="card">
+        <div class="top"><div class="name">${esc(a.name)}</div><span class="pill ${esc(a.status || "idle")}">${esc(a.status || "idle")}</span></div>
+        <div class="task">${esc(a.task)}</div>
+        ${a.summary ? `<div class="summary">${esc(a.summary)}</div>` : ""}
+        <div class="when">${a.started ? "started " + fmtTime(a.started) : ""}${a.started ? " · " + (a.finished ? "ran " : "running ") + elapsed(a.started, a.finished) : ""}${a.tokens ? " · " + Number(a.tokens).toLocaleString() + " tokens" : ""}</div>
+      </div>`).join("");
+    const running = rows.filter((r) => r.status === "running").length;
+    const done = rows.filter((r) => r.status === "done").length;
+    $("counts").innerHTML = `<span><b>${running}</b> running</span><span><b>${done}</b> finished</span><span><b>${rows.length}</b> agents in total</span>`;
+  }
+
+  function renderWork(snap) {
+    const host = $("work");
+    if (snap.empty) return;
+    const rows = snap.docs.map((x) => Object.assign({ id: x.id }, x.data()));
+    rows.sort((a, b) => (a.order || 0) - (b.order || 0));
+    host.innerHTML = rows.map((w) => `
+      <div class="row">
+        <div><span class="pill ${esc(w.status || "pending")}">${esc((w.status || "pending").replace("_", " "))}</span></div>
+        <div class="t">${esc(w.title)}${w.detail ? `<div class="d">${esc(w.detail)}</div>` : ""}</div>
+      </div>`).join("");
+  }
+
+  function renderLog(doc) {
+    const host = $("log");
+    if (!doc || !doc.exists) return;
+    const entries = (doc.data().entries || []).slice().sort((a, b) => String(b.t).localeCompare(String(a.t)));
+    if (!entries.length) return;
+    host.innerHTML = entries.map((e) => `<div class="e ${esc(e.kind || "")}"><span class="t">${fmtTime(e.t)}</span><span class="m">${esc(e.text)}</span></div>`).join("");
+  }
+
+  async function start() {
+    const db = await (window.claude && window.claude.use ? window.claude.use("db") : Promise.resolve(null));
+    if (!db) { $("phase").textContent = "This view cannot reach the live store. Open the page signed in to see the running status."; return; }
+    db.doc("status/now").onSnapshot(renderStatus, (e) => console.warn("status", e));
+    db.collection("agents").onSnapshot(renderAgents, (e) => console.warn("agents", e));
+    db.collection("work").onSnapshot(renderWork, (e) => console.warn("work", e));
+    db.doc("log/events").onSnapshot(renderLog, (e) => console.warn("log", e));
+  }
+  start();
+})();
+</script>

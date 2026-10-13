@@ -93,6 +93,7 @@ goes in the bin.
 | `HALT_CAUSE` | governor → all | Cause, log head | Why the loop opened |
 | `CLEAR` | authority → the governor's mailbox | Signature | Clear the cause and close the loop at one governor, once the cause is in the log and a neighbor has acknowledged the checkpoint |
 | `CHECKPOINT` / `CHECKPOINT_ACK` | governor → neighbors → governor | Log Merkle root, size, head, signature; the acknowledgement names the head | Cross-linked logs; the acknowledgement is what CLEAR requires |
+| `LOOP_REPORT` | governor → all, in reply to the beacon the authority's heartbeat carries | Loop id, beacon sequence, own switch state, current sensed, signature | The loop roll call: a member reporting its switch open while current flows is jumpered |
 
 ### Roster formation
 

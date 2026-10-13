@@ -35,6 +35,8 @@ its artefact passes the hypotheses that level can test.
 | H14 | Partitions and epoch changes end in safe states, never in stale ones | A cut-off segment keeps running; an epoch applies unevenly | sim, rtl (heartbeat) | `tests/test_h14_partition.py` |
 | H15 | Production silicon has no debug path | A debug access succeeds in the production lifecycle state | sim, rtl (lifecycle), silicon | `tests/test_h15_tamper.py` |
 | H16 | The physical levers work without the GPU's cooperation | A GPU that ignores every software command keeps running after the governor asserts its levers | sim, silicon | `tests/test_h16_levers.py` |
+| H17 | No governed action initiates without a ticket, and no governed response leaves the rack without a release ticket | A strike, payment, message or shipment executes with no ticket, or a response reaches the user with no release ticket, or a forged, replayed, wrong-session or wrong-hash ticket is honoured | sim | `tests/test_h17_use_cases.py` |
+| H18 | Oversight survives the model: the observer is always invoked and cannot be impersonated, audit sampling is unpredictable, the evaluated model is the deployed model, compute and hazard budgets bind | A release passes with no observer verdict or with a verdict under the host's or the governor's own key; a sampled or hazard-class response leaves before the audit store's receipt; a model digest with no evaluation attestation gets its key; a budget is exceeded without a throttle or a license | sim | `tests/test_h18_oversight.py` |
 
 ## 2. Tiers in the simulation
 
@@ -91,7 +93,7 @@ property is small enough, a formal statement for a bounded model checker:
 | Governor firmware hang | Heartbeat not consumed; no tickets | Watchdog | Watchdog resets the governor into HALTED_INITIAL; loop opens |
 | Fuse read failure | Keys cannot derive | Boot | Boot refused; the sequencer never leaves HALTED_INITIAL |
 | NVM corruption | Policy or ledger unreadable | Authentication tag | Refuse to RUN; request a fresh policy image; reservations are rebuilt from the roster |
-| Loop sense comparator stuck "closed" | A real open is missed at one governor | Not detected by the model today; a member-count beacon on the message fabric is planned (`05-threat-model.md`) | The other governors' switches still open the loop; this governor's slot stops only when its own heartbeat expires |
+| Loop sense comparator stuck "closed" | A real open is missed at one governor | The loop beacon: a member whose own signed report says its switch is open while the loop carries current is named and the rack halts (`02-safety-fabric.md`) | The other governors' switches still open the loop; the beacon names the odd one out |
 | Fabric port failure | Partition | Heartbeat expiry | Safe mode for the cut-off segment |
 | Clock glitch | Counter or FSM corruption | Glitch detector | Zeroize, SAFE |
 
