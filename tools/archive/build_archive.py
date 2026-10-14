@@ -31,6 +31,11 @@ import zipfile
 BINARY_LIMIT = 15 * 1024 * 1024          # the publisher's limit for one binary file
 BUNDLE_TARGET = 13 * 1024 * 1024         # aim under the limit; bundles compress differently from packs
 TEXT = "text/plain"
+# the publisher serves these extensions; a document or archive (.docx, .zip, a git bundle) is not
+# served, so bundles go up as base64 text and Word files travel inside the bundles
+SERVED = {".html", ".css", ".js", ".mjs", ".wasm", ".json", ".map", ".geojson", ".webmanifest", ".txt", ".md",
+          ".csv", ".xml", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico", ".woff", ".woff2",
+          ".ttf", ".otf", ".mp3", ".wav", ".ogg", ".mp4", ".webm", ".pdf"}
 TYPES = {
     ".md": TEXT, ".py": TEXT, ".v": TEXT, ".sv": TEXT, ".csv": TEXT, ".toml": TEXT, ".sh": TEXT,
     ".yml": TEXT, ".yaml": TEXT, ".txt": TEXT, ".cff": TEXT, ".html": TEXT, ".js": TEXT, ".cfg": TEXT,
@@ -55,6 +60,11 @@ def media_type(path: str) -> str:
     if ext in TYPES:
         return TYPES[ext]
     return TEXT                       # Makefile, LICENSE, NOTICE, .gitignore and the like
+
+
+def served(path: str) -> bool:
+    ext = os.path.splitext(os.path.basename(path))[1].lower()
+    return ext in SERVED or ext == "" or media_type(path) == TEXT
 
 
 def human(n: int) -> str:
@@ -88,7 +98,7 @@ def copy_tree(info: dict, out: str) -> list[dict]:
         dst = os.path.join(out, info["name"], rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(src, dst)
-        rows.append({"path": f"{info['name']}/{rel}", "bytes": os.path.getsize(src), "type": media_type(rel)})
+        rows.append({"path": f"{info['name']}/{rel}", "bytes": os.path.getsize(src), "type": media_type(rel), "served": served(rel)})
     return rows
 
 
@@ -109,6 +119,16 @@ def bundle_segments(repo: str) -> list[tuple[str | None, str]]:
     return segments
 
 
+def as_text(bundle_path: str) -> tuple[str, int]:
+    """The publisher serves text, not archives: write the bundle as base64 lines beside it."""
+    import base64
+    txt = bundle_path + ".txt"
+    with open(bundle_path, "rb") as src, open(txt, "w", encoding="ascii") as dst:
+        data = base64.b64encode(src.read()).decode("ascii")
+        dst.write("\n".join(data[i:i + 76] for i in range(0, len(data), 76)) + "\n")
+    return txt, os.path.getsize(txt)
+
+
 def make_bundles(info: dict, out: str) -> list[dict]:
     repo, name = info["path"], info["name"]
     bdir = os.path.join(out, "bundles")
@@ -118,7 +138,9 @@ def make_bundles(info: dict, out: str) -> list[dict]:
     subprocess.run(["git", "bundle", "create", whole, "--all", "HEAD"], cwd=repo, check=True, capture_output=True)
     if os.path.getsize(whole) <= BINARY_LIMIT:
         subprocess.run(["git", "bundle", "verify", whole], cwd=repo, check=True, capture_output=True)
+        txt, tbytes = as_text(whole)
         rows.append({"path": f"bundles/{name}-all.bundle", "bytes": os.path.getsize(whole), "type": TYPES[".bundle"],
+                     "text": f"bundles/{name}-all.bundle.txt", "text_bytes": tbytes,
                      "refs": "all branches and tags, with HEAD", "requires": None,
                      "restore": f"git clone {name}-all.bundle {name}"})
         return rows
@@ -138,7 +160,9 @@ def make_bundles(info: dict, out: str) -> list[dict]:
         if size > BINARY_LIMIT:
             sys.exit(f"{part} is {human(size)}, over the per-file limit; lower BUNDLE_TARGET")
         last = i == len(segments)
+        txt, tbytes = as_text(part)
         rows.append({"path": f"bundles/{name}-part{i}.bundle", "bytes": size, "type": TYPES[".bundle"],
+                     "text": f"bundles/{name}-part{i}.bundle.txt", "text_bytes": tbytes,
                      "refs": f"{(start or 'root')[:7]}..{end[:7]} of {info['branch']}, as {ref}",
                      "requires": f"part {i - 1}" if start else None,
                      "restore": (f"git init {name} && git -C {name} fetch ../{name}-part1.bundle {ref}:refs/heads/{info['branch']}" if i == 1
@@ -176,14 +200,15 @@ def render(out: str, repos: list[dict], console_url: str, built: str) -> str:
         files = info["rows"]
         total = sum(r["bytes"] for r in files)
         bundles = "".join(
-            f'<li><a href="{e(b["path"])}">{e(os.path.basename(b["path"]))}</a> <span class="n">{human(b["bytes"])}</span>'
-            f'<span class="d">{e(b["refs"])}{"; needs " + e(b["requires"]) if b["requires"] else ""}</span></li>'
+            f'<li><a href="{e(b["text"])}">{e(os.path.basename(b["text"]))}</a> <span class="n">{human(b["text_bytes"])} as text, {human(b["bytes"])} decoded</span>'
+            f'<span class="d">git bundle, {e(b["refs"])}{"; needs " + e(b["requires"]) if b["requires"] else ""}; base64 text because the page cannot serve an archive</span></li>'
             for b in info["bundles"])
         z = info["zip"]
         groups = group(files, info["name"])
         tree = "".join(
             f'<details open><summary><span class="dir">{e(top)}</span><span class="n">{len(rows)} files</span></summary><ul class="files">'
-            + "".join(f'<li data-f="{e(r["rel"].lower())}"><a href="{e(r["path"])}">{e(r["rel"])}</a><span class="n">{human(r["bytes"])}</span></li>' for r in rows)
+            + "".join((f'<li data-f="{e(r["rel"].lower())}"><a href="{e(r["path"])}">{e(r["rel"])}</a><span class="n">{human(r["bytes"])}</span></li>' if r["served"]
+                       else f'<li data-f="{e(r["rel"].lower())}"><span class="unlinked">{e(r["rel"])}</span><span class="n">{human(r["bytes"])} · inside the bundle</span></li>') for r in rows)
             + "</ul></details>"
             for top, rows in groups.items())
         parts.append(f"""
@@ -200,7 +225,7 @@ def render(out: str, repos: list[dict], console_url: str, built: str) -> str:
       <h3>Whole repository</h3>
       <ul class="plain">
         {bundles}
-        <li><a href="{e(z['path'])}">{e(os.path.basename(z['path']))}</a> <span class="n">{human(z['bytes'])}</span><span class="d">the tracked files at this commit, without history</span></li>
+        <li><span class="unlinked">{e(os.path.basename(z['path']))}</span> <span class="n">{human(z['bytes'])}</span><span class="d">the tracked files at this commit as a zip; sent to the conversation and kept on the Mac, not servable from this page</span></li>
       </ul>
     </div>
     <h3>Every file</h3>
@@ -208,6 +233,7 @@ def render(out: str, repos: list[dict], console_url: str, built: str) -> str:
   </section>""")
     bundle_names = [os.path.basename(b["path"]) for info in repos for b in info["bundles"]]
     restore = "\n".join(
+        f"base64 -d {n}.txt > {n}" for n in bundle_names) + "\n" + "\n".join(
         f"git bundle verify {n}" for n in bundle_names) + "\n" + "\n".join(
         b["restore"] for info in repos for b in info["bundles"]) + "\ncd safety-governor && python3 -m pytest -q tests rtl/tests   # 200 + 20 tests"
     return f"""<title>Governor Program Archive</title>
@@ -256,7 +282,8 @@ def render(out: str, repos: list[dict], console_url: str, built: str) -> str:
   .dir {{ font-family: var(--font-mono); font-weight: 500; flex: 1; min-width: 0; }}
   ul.files {{ list-style: none; margin: 4px 0 2px; padding: 0 0 0 20px; display: grid; gap: 2px; }}
   ul.files li {{ display: flex; justify-content: space-between; gap: 10px; min-width: 0; }}
-  ul.files li a {{ font-family: var(--font-mono); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }}
+  ul.files li a, .unlinked {{ font-family: var(--font-mono); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }}
+  .unlinked {{ color: var(--muted); }}
   ul.files li.hide, .tree details.hide {{ display: none; }}
   pre {{ background: var(--accent-bg); border-radius: 6px; padding: 12px 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; margin: 0; }}
   .note {{ display: grid; gap: 10px; }}
@@ -275,7 +302,7 @@ def render(out: str, repos: list[dict], console_url: str, built: str) -> str:
 {''.join(parts)}
   <section class="note">
     <h3>Restoring a repository from this page</h3>
-    <p>A bundle is a complete copy of a repository's history in one file. Fetch each bundle to a computer with git, verify it, then clone. A repository that needed more than one part is cloned from part 1 and the later parts are fetched into it in order.</p>
+    <p>A bundle is a complete copy of a repository's history in one file. This page serves it as base64 text, because it cannot serve an archive directly. Save the text to a computer with git, decode it, verify it, then clone. A repository that needed more than one part is cloned from part 1 and the later parts are fetched into it in order.</p>
     <pre>{e(restore)}</pre>
     <p>A future Claude session can read any file here, bundles included, straight from this archive, so the repositories can be rebuilt from here even when GitHub is not reachable.</p>
     <h3>Where the rest lives</h3>
@@ -334,9 +361,8 @@ def main() -> None:
         fh.write(page)
     publish = [{"path": "index.html"}]
     for info in repos:
-        publish += [{"path": r["path"], "contentType": r["type"]} for r in info["rows"]]
-        publish += [{"path": b["path"], "contentType": b["type"]} for b in info["bundles"]]
-        publish += [{"path": info["zip"]["path"], "contentType": info["zip"]["type"]}]
+        publish += [{"path": r["path"], "contentType": r["type"]} for r in info["rows"] if r["served"]]
+        publish += [{"path": b["text"], "contentType": TEXT} for b in info["bundles"]]
     # the publisher takes at most 255 files in one call: split the list into pages
     pages = [publish[i:i + 255] for i in range(0, len(publish), 255)]
     for i, p in enumerate(pages, 1):
@@ -350,8 +376,8 @@ def main() -> None:
     for p in publish:
         full = os.path.join(out, p["path"])
         assert os.path.isfile(full), full
-        if p.get("contentType", "").startswith(("application/octet-stream", "application/zip", "application/vnd", "image/")):
-            assert os.path.getsize(full) <= BINARY_LIMIT, (full, os.path.getsize(full))
+        assert os.path.getsize(full) <= 16 * 1024 * 1024, (full, os.path.getsize(full))
+        assert served(p["path"]) or p["path"].endswith(".txt"), p
     assert os.path.getsize(os.path.join(out, "index.html")) < 16 * 1024 * 1024
     print(f"{len(publish)} files to publish in {len(pages)} call(s), {human(manifest['bytes'])}; page {human(os.path.getsize(os.path.join(out, 'index.html')))}; wrote {out}")
 
