@@ -28,6 +28,7 @@ summary and a "backed by" box.
 | `AUDIT-2026-10.md` | The audit: hallucinations and fake conditions found and fixed, sources checked, what is still unverified | §15 |
 | `../tools/console/` | The live program console published on claude.ai: agents, work items, event log | n/a |
 | `17-use-cases.md` | How the governor catches a safety issue before the action initiates: the five paths, a weapons release, a hazardous-knowledge request, an agent with a plan, and oversight that survives the model | all |
+| `18-viability-and-open-questions.md` | Is it plausible, is it a firewall, where its authority ends (a payment three hops away), who adopts first, whether it strengthens NVIDIA's promise, fourteen open questions and the next three moves | §15 |
 | `research/board-lever-register.md` | Evidence register: which boards expose which lever signals, with sources and evidence levels | §15 |
 | `research/nvswitch-management.md` | Evidence register: NVLink authority out of band and in band; the seven firmware asks | §7, §15 |
 
