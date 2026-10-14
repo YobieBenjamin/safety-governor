@@ -234,8 +234,9 @@ def render(out: str, repos: list[dict], console_url: str, built: str) -> str:
     bundle_names = [os.path.basename(b["path"]) for info in repos for b in info["bundles"]]
     restore = "\n".join(
         f"base64 -d {n}.txt > {n}" for n in bundle_names) + "\n" + "\n".join(
-        f"git bundle verify {n}" for n in bundle_names) + "\n" + "\n".join(
-        b["restore"] for info in repos for b in info["bundles"]) + "\ncd safety-governor && python3 -m pytest -q tests rtl/tests   # 200 + 20 tests"
+        b["restore"] for info in repos for b in info["bundles"]) + "\n" + "\n".join(
+        f"git -C {info['name']} bundle verify ../{os.path.basename(b['path'])}   # verify needs a repository to run in"
+        for info in repos for b in info["bundles"]) + "\ncd safety-governor && python3 -m pytest -q tests rtl/tests   # 200 + 20 tests"
     return f"""<title>Governor Program Archive</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
@@ -302,7 +303,7 @@ def render(out: str, repos: list[dict], console_url: str, built: str) -> str:
 {''.join(parts)}
   <section class="note">
     <h3>Restoring a repository from this page</h3>
-    <p>A bundle is a complete copy of a repository's history in one file. This page serves it as base64 text, because it cannot serve an archive directly. Save the text to a computer with git, decode it, verify it, then clone. A repository that needed more than one part is cloned from part 1 and the later parts are fetched into it in order.</p>
+    <p>A bundle is a complete copy of a repository's history in one file. This page serves it as base64 text, because it cannot serve an archive directly. Save the text to a computer with git, decode it, clone it, then verify it from inside the clone. A repository that needed more than one part is cloned from part 1 and the later parts are fetched into it in order.</p>
     <pre>{e(restore)}</pre>
     <p>A future Claude session can read any file here, bundles included, straight from this archive, so the repositories can be rebuilt from here even when GitHub is not reachable.</p>
     <h3>Where the rest lives</h3>
