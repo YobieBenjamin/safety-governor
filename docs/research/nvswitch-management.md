@@ -3,7 +3,7 @@
 An independent researcher's register of what a governor on the management card can do to NVLink traffic: Fabric Manager's partition APIs, the open NVSwitch driver's controls, the out-of-band surfaces (SMBPBI, NSM, the HMC's Redfish), the NVL72 switch trays, partition binding, confidential-computing modes, and the hardware straps. It ends with what is available today with no NVIDIA cooperation, what Fabric Manager honouring a governor-signed policy adds, and seven one-line firmware asks. Each row carries its evidence level and source.
 
 
-Scope: what a safety governor on the rack management card can do to NVLink traffic on HGX (NVSwitch gen3 "LS10"/H100, gen4 B200) and GB200/GB300 NVL72. Primary sources only: NVIDIA docs, NVIDIA open source (open-gpu-kernel-modules 615.78.08 @ca2d03e, nsmd @b6cddce, bmcweb @c29d780, phosphor-dbus-interfaces), OCP, NVIDIA forum staff replies. Limit: docs.nvidia.com pages/PDFs truncate at ~100 k chars in the fetch tool, so FM guide ch. 9–13 (HA modes, exclusion bodies) were unreadable; those items are PARTIAL.
+Scope: what a safety governor on the rack management card can do to NVLink traffic on HGX (NVSwitch gen3 "LS10"/H100, gen4 B200) and GB200/GB300 NVL72. Primary sources only: NVIDIA docs, NVIDIA open source (open-gpu-kernel-modules 615.78.08 @ca2d03e, nsmd @b6cddce, bmcweb @c29d780, phosphor-dbus-interfaces), OCP, NVIDIA forum staff replies. Limit: docs.nvidia.com pages/PDFs truncate at ~100 k chars in the fetch tool, so FM guide ch. 9 to 13 (HA modes, exclusion bodies) were unreadable; those items are PARTIAL.
 
 Legend: **V** VERIFIED (URL + quote) · **P** PARTIAL · **U** UNKNOWN. FM guide = https://docs.nvidia.com/datacenter/tesla/fabric-manager-user-guide/index.html ; OGKM = https://github.com/NVIDIA/open-gpu-kernel-modules.
 
@@ -19,7 +19,7 @@ Legend: **V** VERIFIED (URL + quote) · **P** PARTIAL · **U** UNKNOWN. FM guide
 | Persistence: state lives in FM + state file; hypervisor replays after restart; GPUs re-register after reset | V | `STATE_FILE_NAME` "save the FM states and restart FM after a crash"; `fmSetActivatedFabricPartitions` "If there are no active partitions when FM is restarted, this call must be made with the number of partitions as zero."; "the GPUs must register with the NVLink fabric." |
 | **No per-link/port disable API.** Only failure policies `ACCESS_LINK_FAILURE_MODE`, `TRUNK_LINK_FAILURE_MODE`, `NVSWITCH_FAILURE_MODE` (default 0) and manual exclusion (ch. 9.6 GPU/NVSwitch Exclusion: in-band, module params, nvidia-smi, "out-of-band query") | P | Mode 0/1 semantics unreadable. In-band exclusion verified in driver: `NVreg_ExcludedGpus` ("excluded GPUs … identified by a UUID", `kernel-open/nvidia/nv-reg.h`), `NvSwitchBlacklist=uuid[,uuid...]` (`linux_nvswitch.c`). **Settles:** FM guide PDF ch. 9. |
 | NVL5: routing + partition keys are NVLSM's | V | "the NVLSM service is responsible for configuring NVSwitch routing tables"; NVLSM "Programs the Partition Key (PKEY) for NVLink partitions." |
-| `nvswitch-audit` | P | Only readable: it "should be started from the same user/user group account" as FM; shown as "NVSwitch Audit Tool" in the stack figure. **Settles:** guide ch. 10–11 or `nvswitch-audit -h`. |
+| `nvswitch-audit` | P | Only readable: it "should be started from the same user/user group account" as FM; shown as "NVSwitch Audit Tool" in the stack figure. **Settles:** guide ch. 10 and 11 or `nvswitch-audit -h`. |
 
 ## 2. Open-source NVSwitch driver (PCIe, in-band) , all V
 
