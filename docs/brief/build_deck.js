@@ -73,8 +73,8 @@ async function main() {
 
   // helpers
   const card = (s, x, y, w, h, fill, name) => s.addShape(pres.ShapeType.roundRect, { x, y, w, h, rectRadius: 0.08, fill: { color: fill || C.background2 }, line: { color: fill || C.background2, width: 0 }, objectName: name || "card" });
-  const text = (s, t, o) => s.addText(t, Object.assign({ isTextBox: true, margin: 0, fontSize: 14, color: C.text1, valign: "top" }, o));
-  const eyebrow = (s, t, y) => text(s, t.toUpperCase(), { x: L, y: y ?? 1.3, w: CW, h: 0.3, fontSize: 11, bold: true, color: C.accent1, charSpacing: 2 });
+  const text = (s, t, o) => s.addText(t, Object.assign({ isTextBox: true, margin: 0, fontSize: 14, color: C.text1, valign: "top", fit: "shrink" }, o));
+  const eyebrow = (s, t, y) => text(s, t.toUpperCase(), { x: L, y: y ?? 1.3, w: CW, h: 0.3, fontSize: 11, bold: true, color: C.accent1 });
   const arrow = (s, x1, y1, x2, y2, color, width) => {
     const o = { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1), line: { color, width: width || 2, endArrowType: "triangle" }, objectName: "arrow" };
     if (x2 < x1) o.flipH = true;
@@ -87,20 +87,61 @@ async function main() {
     s.addImage({ data: await icon(name, fg), x: x + pad, y: y + pad, w: d - 2 * pad, h: d - 2 * pad, objectName: name });
   };
   const bullets = (items, size) => items.map((b, i) => ({ text: b, options: { bullet: { indent: 14 }, breakLine: i < items.length - 1, paraSpaceAfter: Math.round(size * 0.55) } }));
-  const table = (s, rows, opts) => {
-    const data = rows.map((r, i) => r.map((c, j) => ({
-      text: c,
-      options: i === 0
-        ? { bold: true, color: C.background1, fill: { color: C.text2 }, fontSize: opts.fontSize || 12, valign: "middle" }
-        : { fontSize: opts.fontSize || 12, color: C.text1, fill: { color: i % 2 ? H.lt1 : H.lt2 }, bold: j === 0 && opts.boldFirst !== false, valign: "top" },
-    })));
-    s.addTable(data, { x: opts.x ?? L, y: opts.y ?? TOP, w: opts.w ?? CW, colW: opts.colW, border: { type: "solid", color: H.lt2, pt: 1 }, margin: 0.08, rowH: opts.rowH, autoPage: false, objectName: opts.name || "table" });
+  // A table drawn as shapes, so every viewer shows the same geometry: a header band, zebra rows,
+  // each cell its own top-aligned text box. Row heights come from the text, then the rows are
+  // stretched to fill availH so the slide reads as composed. Optional icons or step numbers in
+  // the first column tie the technical slide to its plain twin.
+  const table = async (s, rows, opts) => {
+    const x0 = opts.x ?? L, y0 = opts.y ?? TOP, pad = 0.09;
+    const colW = opts.colW, w = colW.reduce((a, b) => a + b, 0);
+    const header = rows[0], body = rows.slice(1), headH = 0.42;
+    const mark = opts.icons || opts.numbers ? 0.55 : 0;
+    // Arial averages about 0.48 em per character including spaces; bold a little more. The
+    // estimate errs tall, and the font steps down (to 10.5 pt) until the grid fits availH.
+    let fs = opts.fontSize || 12, heights, total;
+    const measure = () => {
+      const lineH = (fs * 1.22) / 72;
+      const cpl = (cw, bold) => Math.max(8, Math.floor(((cw - 2 * pad) * (bold ? 136 : 148)) / fs));
+      const linesOf = (t, cw, bold) => Math.max(1, Math.ceil(t.length / cpl(cw, bold)));
+      heights = body.map((r) => Math.max(opts.minRowH || 0.46, ...r.map((c, j) => linesOf(c, colW[j] - (j === 0 ? mark : 0), j === 0) * lineH + 2 * pad)));
+      total = headH + heights.reduce((a, b) => a + b, 0);
+    };
+    measure();
+    while (opts.availH && total > opts.availH && fs > 10.5) { fs -= 0.5; measure(); }
+    if (opts.availH && total > opts.availH) console.warn(`grid on "${header[0]}" needs ${total.toFixed(2)} in, has ${opts.availH}`);
+    if (opts.availH && total < opts.availH) {
+      const extra = (opts.availH - total) / body.length;
+      for (let i = 0; i < heights.length; i++) heights[i] += extra;
+      total = opts.availH;
+    }
+    s.addShape(pres.ShapeType.rect, { x: x0, y: y0, w, h: headH, fill: { color: C.text2 }, line: { color: C.text2, width: 0 }, objectName: "table header" });
+    let cx = x0;
+    header.forEach((c, j) => { text(s, c, { x: cx + pad, y: y0, w: colW[j] - 2 * pad, h: headH, fontSize: fs, bold: true, color: C.background1, valign: "middle" }); cx += colW[j]; });
+    let cy = y0 + headH;
+    for (let i = 0; i < body.length; i++) {
+      const h = heights[i];
+      s.addShape(pres.ShapeType.rect, { x: x0, y: cy, w, h, fill: { color: i % 2 ? H.lt1 : H.lt2 }, line: { color: H.lt2, width: 0.75 }, objectName: "table row" });
+      cx = x0;
+      for (let j = 0; j < body[i].length; j++) {
+        let tx = cx + pad, tw = colW[j] - 2 * pad;
+        if (j === 0 && opts.icons) { await circleIcon(s, opts.icons[i], cx + pad, cy + pad, 0.42, C.accent1, H.lt1); tx += mark; tw -= mark; }
+        if (j === 0 && opts.numbers) {
+          s.addShape(pres.ShapeType.ellipse, { x: cx + pad, y: cy + pad, w: 0.42, h: 0.42, fill: { color: C.accent1 }, line: { color: C.accent1, width: 0 }, objectName: "step" });
+          text(s, String(i + 1), { x: cx + pad, y: cy + pad, w: 0.42, h: 0.42, fontSize: 13, bold: true, color: C.background1, align: "center", valign: "middle" });
+          tx += mark; tw -= mark;
+        }
+        text(s, body[i][j], { x: tx, y: cy + pad, w: tw, h: h - 2 * pad, fontSize: fs, bold: j === 0 && opts.boldFirst !== false, color: C.text1, valign: "top" });
+        cx += colW[j];
+      }
+      cy += h;
+    }
+    return total;
   };
   // the analogy strip: a dark band with a copper label and one sentence in plain words
   const analogy = (s, t, y, h) => {
     const yy = y ?? 6.0, hh = h ?? 0.75;
     s.addShape(pres.ShapeType.roundRect, { x: L, y: yy, w: CW, h: hh, rectRadius: 0.08, fill: { color: C.text1 }, line: { color: C.text1, width: 0 }, objectName: "analogy" });
-    text(s, "THE PICTURE", { x: L + 0.3, y: yy, w: 1.5, h: hh, fontSize: 10, bold: true, color: C.accent1, charSpacing: 2, valign: "middle" });
+    text(s, "THE PICTURE", { x: L + 0.3, y: yy, w: 1.5, h: hh, fontSize: 10, bold: true, color: C.accent1, valign: "middle" });
     text(s, t, { x: L + 1.9, y: yy, w: CW - 2.2, h: hh, fontSize: 14, color: C.accent6, valign: "middle", italic: true });
   };
 
@@ -180,22 +221,23 @@ async function main() {
     const s = pres.addSlide({ masterName: "LIGHT", sectionTitle: "Thesis" });
     s.addText("The thesis, technically: a reference monitor", { placeholder: "title" });
     eyebrow(s, "Anderson, 1972: tamperproof, always invoked, small enough to verify");
-    table(s, [
+    const gridH = await table(s, [
       ["Property", "What it means here", "How the governor meets it"],
       ["Tamperproof", "The host, the model and the operator cannot alter the decision logic or the keys", "A separate die. Device secret in fuses with no read port. Boot from ROM, extend-only measurement registers, an anti-rollback counter. The rulebook changes only with k-of-n signatures from keys held outside the rack."],
       ["Always invoked", "There is no path around it", "A comparator at every crossing: switch ports open only for roster peers; a device acts only on a ticket; the egress holds a response until a ticket releases it; weights are written only with a ticket; power, reset and clock answer to the governor. Default deny; fail closed."],
       ["Verifiable", "Small enough that its correctness can be checked", "About 2 mm² of core logic in the prototype. Invariants written down: no ticket without a rule and its witnesses, no bytes to a stranger, halt on silence, no governor clears its own halt. 200 model tests, 20 RTL tests, an independent audit."],
-    ], { y: 1.75, colW: [1.9, 3.3, 6.93], fontSize: 12 });
-    text(s, "THE FIVE CROSSINGS THE CHIP STANDS AT", { x: L, y: 4.55, w: CW, h: 0.3, fontSize: 11, bold: true, color: C.accent1, charSpacing: 2 });
+    ], { y: 1.75, colW: [1.9, 3.3, 6.933], fontSize: 12, availH: 2.9 });
+    const cy0 = 1.75 + gridH + 0.18;
+    text(s, "THE FIVE CROSSINGS THE CHIP STANDS AT", { x: L, y: cy0, w: CW, h: 0.3, fontSize: 11, bold: true, color: C.accent1 });
     const cross = [["FiShare2", "bytes leaving the GPU"], ["FiTarget", "a request to a device that acts"], ["FiLogOut", "a response leaving the rack"], ["FiDatabase", "a write to the weights"], ["FiPower", "GPU power, reset and clock"]];
     const cwid = (CW - 4 * 0.25) / 5;
     for (let i = 0; i < 5; i++) {
       const x = L + i * (cwid + 0.25);
-      card(s, x, 4.9, cwid, 0.95);
-      await circleIcon(s, cross[i][0], x + 0.15, 4.9 + 0.2, 0.55, C.text2, H.lt1);
-      text(s, cross[i][1], { x: x + 0.85, y: 4.9, w: cwid - 0.95, h: 0.95, fontSize: 12, bold: true, valign: "middle" });
+      card(s, x, cy0 + 0.33, cwid, 0.8);
+      await circleIcon(s, cross[i][0], x + 0.15, cy0 + 0.33 + 0.14, 0.52, C.text2, H.lt1);
+      text(s, cross[i][1], { x: x + 0.8, y: cy0 + 0.33, w: cwid - 0.9, h: 0.8, fontSize: 12, bold: true, valign: "middle" });
     }
-    analogy(s, "A firewall for actions, with a hand on the breaker: it decides what leaves, and when it must, it also pulls the plug.", 6.05, 0.7);
+    analogy(s, "A firewall for actions, with a hand on the breaker: it decides what leaves, and when it must, it also pulls the plug.", 6.05, 0.55);
     s.addNotes("The old idea the design stands on. Each property has a mechanism, not a promise. The five crossings are the whole attack surface the chip claims to cover; anything that does not pass a crossing is outside the claim.");
   }
 
@@ -325,12 +367,12 @@ async function main() {
       "The policy image and its epoch; the gate core (lookup and comparators); the ledger (budgets, rate windows); a hash-chained log whose head lives in a register",
       "Meter, heartbeat, lever drivers, loop I/O and the signed message fabric between governors",
     ], 11.5), { x: x2 + 0.3, y: TOP + 0.62, w: w2 - 0.6, h: 2.25, fontSize: 11.5 });
-    table(s, [
+    await table(s, [
       ["Tier", "Where the governor's authority comes from", "Status"],
       ["Rack", "Management-card levers, switch and DPU management paths, the halt loop", "Plan of record; needs a server OEM, nothing from NVIDIA's silicon"],
       ["Board", "Same firmware, policy format and fabric on a board without a baseboard connector of its own", "Fallback; the gaps it leaves are recorded, not hidden"],
       ["Integrated", "Buffer-class checkers in the GPU's copy engines and peer MMU; per-GPU reset", "Needs NVIDIA; closes the one gap the rack tier records"],
-    ], { y: 4.65, colW: [1.4, 6.4, 4.33], fontSize: 11, rowH: 0.36 });
+    ], { y: 4.6, colW: [1.4, 6.4, 4.333], fontSize: 11, availH: 1.98 });
     s.addNotes("The technical shape. Everything in the left column already exists on the boards; the governor is a new user of it. The right column is the die: a root of trust of the OpenTitan kind, plus the gate. The tiers are how the same design degrades or tightens depending on who cooperates.");
   }
 
@@ -370,7 +412,7 @@ async function main() {
   {
     const s = pres.addSlide({ masterName: "LIGHT", sectionTitle: "Layers" });
     s.addText("Layers, technically: mechanism, platform", { placeholder: "title" });
-    table(s, [
+    await table(s, [
       ["Layer", "Mechanism", "What it signs or checks", "On NVIDIA's platform"],
       ["5  Governance root", "k-of-n quorum over the policy image; rollback refused; expiry enforced", "The rulebook (allow-list), the approved-firmware list, revocations", "Keys held by a policy authority; OpenShell's policy prover checks the derived network rules"],
       ["4  Control plane", "Attestation check, rule lookup, witness collection, budget and rate, human hold, one-time ticket bound to a hash of the fields, hash-chained log", "Tickets, log checkpoints, the compliance report", "The governor module now; a DOCA application on BlueField-4 next; an I/O-stage block in the GPU eventually"],
@@ -378,7 +420,7 @@ async function main() {
       ["2  Provenance", "Watermark detector, retrieval, signed registry", "A verdict {registry, digest, exact | tampered | unknown}", "Runs beside the vendor's sampler"],
       ["1  Model and runtime", "Measured into the workload hash; routed through the switches and egress the governor controls", "Nothing. It can sign nothing the gate accepts", "The GPU, CUDA and the serving stack, unchanged"],
       ["0  Silicon root of trust", "Fused device secret, anti-rollback counter, extend-only measurement registers, DICE derivation, quote with a fresh nonce", "Quotes: the measurement, the key chain, the counter", "GPU confidential-computing attestation and the DPU's root, bound to the governor's own"],
-    ], { colW: [2.0, 4.1, 3.0, 3.03], fontSize: 11.5 });
+    ], { colW: [2.4, 3.9, 2.9, 2.933], fontSize: 11.5, availH: 5.0, icons: ["FiBook", "FiShield", "FiEye", "FiCreditCard", "FiUser", "FiLock"] });
     s.addNotes("The same six layers with the mechanism named. The column to watch is the third: what each layer can sign. Only layers 0, 4 and 5 produce something the gate trusts; layer 1 can sign nothing the gate will accept, which is the whole design in one cell.");
   }
 
@@ -417,7 +459,7 @@ async function main() {
   {
     const s = pres.addSlide({ masterName: "LIGHT", sectionTitle: "How it meets the model" });
     s.addText("The flow, technically: every check, every refusal", { placeholder: "title" });
-    table(s, [
+    await table(s, [
       ["Step", "What is checked", "Fails with (as the model prints it)", "Backed by"],
       ["Mailbox", "Sequence number, then rules edition, then signature; the first failure is reported", "a stale or forged frame is refused before the gate sees it", "H3 quorum and mailbox tests"],
       ["Who is asking", "The workload hash (GPU firmware, host firmware, model) and its evaluation attestation", "model.not_evaluated", "H1 attestation, H18 oversight"],
@@ -426,7 +468,7 @@ async function main() {
       ["Is the budget intact", "Compute budget and license, session hazard budget, byte budgets, rate windows", "release.session_hazard_budget_exceeded, COMPUTE_BUDGET", "H13 shared budget, H18"],
       ["The ticket", "Signed over the hash of the exact fields; one use; short expiry; bound to one endpoint", "ticket.missing, ticket.replay, ticket.bad_signature, ticket.wrong_endpoint", "H17: forged, replayed and wrong-hash tickets never deliver"],
       ["The crossings", "Switch ports open only for roster peers; the egress holds responses until released; bytes cross-checked", "ep.no_capability, OUTPUT_UNPRESENTED", "H2 enforcement points, the plot narration"],
-    ], { colW: [1.75, 4.3, 3.6, 2.48], fontSize: 11.5 });
+    ], { colW: [2.15, 4.1, 3.5, 2.383], fontSize: 11.5, availH: 5.0, numbers: true });
     s.addNotes("The same flow with the actual checks and the actual reason codes. Every row has a test behind it; the right column names the hypothesis set. If someone wants to see one, python -m govsim.cli usecase strike, hazard, plot or oversight prints the hops.");
   }
 
@@ -493,7 +535,7 @@ async function main() {
   {
     const s = pres.addSlide({ masterName: "LIGHT", sectionTitle: "Challenges" });
     s.addText("Challenges, technically: mechanism, status", { placeholder: "title" });
-    table(s, [
+    await table(s, [
       ["Challenge", "What the design does", "Status"],
       ["Reach: a payment system two or three hops out", "A: the comparator in the device. B: move the credential behind a ticket-checking adapter, so the model's runtime never holds the API key. C: open the DPU flow to the provider only under a live ticket. D: always the signed record", "A and C modelled and tested (H6, H2, H17). B is a pattern the endpoint model already expresses; the three-hop payment narration is the next piece of work"],
       ["Meaning: observers can be fooled", "Observer always invoked, cannot be impersonated, separate from the model; hazard classes, legibility floor, session hazard budget, TRNG audit sampling with escrow", "Guarantees tested (H17, H18). Observer error rates: open; needs a red team and a quorum of observers on high-hazard classes"],
@@ -501,7 +543,7 @@ async function main() {
       ["Levers on HGX", "Per-slot SMBus, power brake, PERST#, PWR_EN at the connector; grouped reset accepted as coarser; the evidence register names what is verified", "Evidence register done. Design guide under NDA still needed"],
       ["Cost", "P-384 on OTBN at 1,697,985 cycles (17 ms); one signature per 50 ms window; engine 34 percent busy batched; firmware share 0.01 percent of GPU time", "Modelled (H9). Silicon or FPGA measurement: open"],
       ["Governance and adoption", "k-of-n quorum with keys outside vendor and operator (G8); partitions and per-rule approvers; integrated-tier asks written", "Two tenants with two quorums on one baseboard: not designed. Integrated tier: needs NVIDIA"],
-    ], { colW: [2.3, 5.9, 3.93], fontSize: 11.5 });
+    ], { colW: [2.75, 5.6, 3.783], fontSize: 11.5, availH: 5.0, icons: ["FiGitBranch", "FiEyeOff", "FiAlertTriangle", "FiServer", "FiClock", "FiKey"] });
     s.addNotes("For each challenge, the mechanism and its status. The status column is the honest part: modelled is not measured, and three of the six end in an ask.");
   }
 
@@ -533,7 +575,7 @@ async function main() {
   {
     const s = pres.addSlide({ masterName: "LIGHT", sectionTitle: "What I need" });
     s.addText("What I need, technically: who, what, and why", { placeholder: "title" });
-    table(s, [
+    await table(s, [
       ["Who", "What I need", "What it settles"],
       ["A server OEM", "The management-module slot; the HGX design guide under NDA; the connector pinout", "Whether per-module levers reach the connector. If not, the rack tier is coarser than the design says"],
       ["NVIDIA", "Seven firmware asks: NSM port-disable semantics, per-GPU reset, buffer-class checkers in the copy engines and peer MMU", "The integrated tier; whether the recorded gap can be closed from inside the silicon"],
@@ -541,7 +583,7 @@ async function main() {
       ["A lab with an HGX or NVL rack", "An FPGA governor beside a real GPU for weeks", "The real overhead against the one percent goal; the false-halt rate; the loop beacon in the field"],
       ["A model lab's red team", "Disguised requests against the release gate and the observers", "The size of the semantic residual; whether a quorum of observers is enough"],
       ["Chip designers, an auditor", "Review of the RTL, the firmware plan and the proof-assumption list; formal proofs of the block invariants", "Verification before tape-out"],
-    ], { w: 8.6, colW: [1.9, 3.3, 3.4], fontSize: 11 });
+    ], { colW: [2.3, 3.1, 3.2], fontSize: 11, availH: 4.9, icons: ["FiBriefcase", "FiCpu", "FiHardDrive", "FiActivity", "FiTarget", "FiUsers"] });
     const dx = L + 8.6 + 0.33, dw = R - dx;
     card(s, dx, TOP, dw, 4.9, C.text1);
     text(s, "What would disprove it", { x: dx + 0.3, y: TOP + 0.25, w: dw - 0.6, h: 0.45, fontSize: 14, bold: true, fontFace: "Georgia", color: C.accent6 });

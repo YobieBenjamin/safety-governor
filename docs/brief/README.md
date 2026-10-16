@@ -11,8 +11,13 @@ cannot read the paperwork, the referee with a whistle and a rulebook he did not 
 bank with its board, teller, guard and vault, the boarding pass, the firewall at the
 building's edge, and the bridge whose drawings are done before the steel is ordered.
 
+`chip-that-says-no-brief.pdf` is the same deck rendered to PDF, the reference for how it is
+meant to look in any viewer.
+
 It is generated, not hand-made: `node docs/brief/build_deck.js [out.pptx]` rebuilds it with
-pptxgenjs (one theme, two layouts, named placeholders, sections, notes). The theme colours
+pptxgenjs (one theme, two layouts, named placeholders, sections, notes). Tables are drawn as
+shapes with row heights computed from the text, so every viewer shows the same geometry; the
+fonts are Georgia and Arial, which exist on Windows, Mac and iPhone. The theme colours
 are applied by `apply_theme.js` from the pptx skill; set `PPTX_APPLY_THEME` to its path, or
 the deck builds in Office's stock palette. Every number on the status slide comes from the
 repository: `python -m pytest tests rtl/tests`, `make loop`, `hw/README.md`, and the
