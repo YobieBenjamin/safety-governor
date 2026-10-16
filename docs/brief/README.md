@@ -6,10 +6,13 @@ the project is, the thesis, the logic behind it, the proposal, the six layers, h
 governor meets the model (one action start to finish), where it stands, the challenges, and
 what is needed to prove or disprove the thesis. Speaker notes on every slide.
 
-The pictures: the smoke alarm and the fire door (witness and lock), the customs officer who
-cannot read the paperwork, the referee with a whistle and a rulebook he did not write, the
-bank with its board, teller, guard and vault, the boarding pass, the firewall at the
-building's edge, and the bridge whose drawings are done before the steel is ordered.
+The pictures are the program's own: the judge model that can keep a gate shut but never be
+the gate, the customs officer who cannot read the paperwork, the referee with a whistle and a
+rulebook he did not write, biology's reflex that never fires the muscle by itself, the ticket
+whose hash breaks when the amount changes, the perimeter firewall that decides what leaves but
+not what the far server does. `SOURCES.md` traces every number, mechanism and picture on the
+slides to the document, test or post it comes from, and lists what was removed from earlier
+drafts for not being from the research.
 
 `chip-that-says-no-brief.pdf` is the same deck rendered to PDF, the reference for how it is
 meant to look in any viewer.
