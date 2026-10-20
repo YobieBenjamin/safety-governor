@@ -33,7 +33,7 @@ summary and a "backed by" box.
 | `18-viability-and-open-questions.md` | Is it plausible, is it a firewall, where its authority ends (a payment three hops away), who adopts first, whether it strengthens NVIDIA's promise, fourteen open questions and the next three moves | §15 |
 | `19-how-solid-is-the-theory.md` | What is a theorem (with the Z3 proofs in `../proofs/`), what is engineering, what is trust; the review protocol for another model | §15 |
 | `20-experiment-program.md` | The experiment program across `safety-governor`, `safety` and `autonomic-graph-regulation`: every claim's experiment, where it lives, what disproves it, the exit criteria; the ledger is `../EXPERIMENTS.md` | §15 |
-| `21-agent-run-plan.md` | Running the program with agents: waves, budgets, where the tokens go; the launcher is `../tools/agents/run_wave.sh`, the issues come from `../tools/github/experiments.json` | §15 |
+| `21-agent-run-plan.md` | Running the program with agents: waves, budgets, where the tokens go, the local model's share, the gates against hallucination; `../tools/agents/run_program.sh` runs the whole software phase, `run_wave.sh` one wave, `review_pr.sh` and `verify_pr.py` the gate; the issues come from `../tools/github/experiments.json`; `../audit/PROMPT.md` is for the external audit | §15 |
 | `research/board-lever-register.md` | Evidence register: which boards expose which lever signals, with sources and evidence levels | §15 |
 | `research/nvswitch-management.md` | Evidence register: NVLink authority out of band and in band; the seven firmware asks | §7, §15 |
 

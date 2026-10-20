@@ -92,6 +92,28 @@ Two more rules keep it honest and cheap: one local run at a time on the machine 
 
 Where the local model earns the most over the program: the repair passes (a failing test and its output is the kind of task a 27B coder handles), L6's mutant loop (hundreds of mechanical runs), and the bulk rows of the observer evaluation set once the cloud agent has pre-registered the scorer and the first rows. Where it should not be trusted: anything that becomes a number or a claim in a document without a test behind it.
 
+## 3c. The whole program in one command, and the gates against hallucination
+
+```bash
+bash ~/safety-governor/tools/agents/run_program.sh --detach     # waves 1, 2, 3, both repositories, gates between, backups after every step
+bash ~/safety-governor/tools/agents/run_program.sh --status     # where it is
+bash ~/safety-governor/tools/agents/run_program.sh --from 2     # resume; it also skips whatever is already merged
+```
+
+`run_program.sh` runs `launch.sh prepare`, then for each wave: the agents (`run_wave.sh`, in `safety-governor` and then in `safety`); then the gate on every branch the wave produced; then the audit packet; then the backup. An issue whose dependency has no merged pull request is not started, and the issue says so. An issue that already has an open pull request gets the gate, not a new agent. Nothing merges that the gate did not pass, and nothing that the gate did not pass is lost: it stays open with its review on it, for a person.
+
+The gate is three readers that cannot agree by accident, in order of cost:
+
+1. **The verifier** (`tools/agents/verify_pr.py`, free, deterministic). It blocks a merge when an existing test was deleted or lost assertions, when a skip or xfail marker appears, when a file outside the issue's owned paths changed, when the CI workflow changed, when an em dash was added, when the full test suite or the acceptance command fails in a clean checkout of the branch (not the agent's own worktree, which may hold untracked files). It warns on placeholder markers in code, on a result line that names a path that does not exist, and on a number added to a document that appears in no code, test, data or result file of the same branch.
+2. **The second reader** (the local model, free). With no tools and the diff on its input, it lists every claim the agent made and quotes the line of the diff that is the evidence, or writes "not found". It is wrong in both directions sometimes; it is a list of things to check, handed to the next reader.
+3. **The reviewer** (one bounded cloud session, read-only, `tools/agents/review_pr.sh` with `review_prompt.md`). It answers in a fixed JSON shape: a verdict, findings each with a kind, a severity, a file and a line, and the claims with where each is made and whether it is supported. The answer is then checked before it is believed: a finding that cites a file that exists neither in the diff, the checkout nor the packet marks the review untrusted, and an untrusted review never merges. An unsupported claim that reaches a document or the code blocks; one made only in the summary or a commit message is a warning.
+
+A branch merges when the verifier is clean, the verdict is `merge`, every citation is real, CI on GitHub is green, and every dependency has merged. The merge keeps the agent's commits and their `Agent:` trailers, so the provenance of every line survives.
+
+What this does and does not buy. It cannot make a model truthful. It makes an untrue statement expensive to get past: a number needs an artifact on the branch, a "passes" needs the test that the launcher and the verifier ran themselves, a review needs citations that resolve, and three independent readers (a script, a local model, a cloud model) must all fail to notice for a false claim to reach `main`. The remaining risk is a test that passes while testing the wrong thing, which is why the reviewer's second question is whether the acceptance tests what the brief says, and why `audit/PROMPT.md` exists: after the software phase, models that wrote none of this (Codex, Gemini) are pointed at the repository with that prompt, which asks them to run the tests, reproduce every number, find a change that would make each test fail, and name what the program's own disproof conditions required and it did not test. The packets they read are under `audit/wave-N/`, written by the gate, with a manifest.
+
+The backup. After every step, `run_program.sh` refreshes `/Volumes/External_4TB/Safety Experiments` (`BACKUP_DIR`): a full mirror of each of the four repositories (`mirrors/<repo>.git`, the `safety` one with its recordings), a browsable clone of each at `main` (`clones/<repo>`), the agents' logs and reports (`runs/<repo>/wave-N/`), the bundles, and `BACKUP.log` with the heads at each refresh. When the drive is not mounted, the step is skipped and said so; nothing waits on it.
+
 ## 4. Stop rules
 
 An agent stops when: its acceptance command passes; or it has spent its budget; or it has failed the same test three times; or it needs a decision the brief does not make (it files the question on the issue and stops). It never widens its scope, never edits files it does not own, and never deletes a failing test to make the build green. The reviewer treats a green build with a weakened test as a failure.

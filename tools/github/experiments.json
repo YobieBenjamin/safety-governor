@@ -143,7 +143,15 @@
       ],
       "body": "**Goal.** Extend the Z3 proofs so that every mechanism the governor model enforces has a theorem on the abstract machine, one file per protocol under `proofs/`: `budgets.py` (byte, compute and session hazard budgets; per-action rate windows), `approvals.py` (k-of-n human approvals on a hold; approvers scoped to a rule; a stranger cannot approve), `buffer_classes.py` (weights never cross a switch; activations only to roster peers; outputs only to the host), `egress.py` (a response is delivered only against a ticket over its hash, once), `loop.py` (a member reporting its switch open while current flows is LOOP_JUMPERED; clear needs authority, log and a neighbour).\n\n**Read first.** `proofs/core_invariants.py` and `proofs/commit_point.py` (the style: quantifier-free induction per transition, instantiate the invariant at the step's action and an arbitrary one; a non-vacuity check per file), `govsim/policy.py`, `govsim/endpoints.py`, `govsim/fabric.py`, the H8, H2, H11, H13 and H17 tests for the behaviour to model.\n\n**Acceptance.** `make proof` runs every file and prints `All proofs hold.`; each file states in its docstring what it models and what it leaves out; any hole the prover finds is recorded in `EXPERIMENTS.md` with the fix.\n\n**Disproof.** A sequence that executes, releases or clears without the rule, the quorum or the beacon, that the model also allows: that is a design bug, file it.\n\n**Budget.** One cloud agent, about 120k tokens; stop and report if a file does not prove inside 20 minutes of solver time.\n\n**Acceptance command (the launcher runs it after the agent).** `make proof`",
       "accept": "make proof",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "depends": [
+        "L4"
+      ],
+      "owns": [
+        "proofs/*.py",
+        "tests/test_h*_proof*.py",
+        "Makefile"
+      ]
     },
     {
       "id": "L4",
@@ -160,7 +168,13 @@
       ],
       "body": "**Goal.** Make the link between the theorem and the simulation mechanical. Add `govsim/trace.py`: a trace sink that records every governor transition (ticket issued with its action hash and edition; endpoint execute; refused execute with reason; edition change; halt; clear; heartbeat lost and back) as a list of typed events. Add `proofs/replay.py`: a replayer that drives the abstract machine of `proofs/core_invariants.py` (and `commit_point.py` where holds occur) with the trace and raises on the first event the machine has no enabled transition for. Add `tests/test_h19_conformance.py` that runs every existing hypothesis test's rack with the sink on and replays its trace.\n\n**Read first.** `govsim/governor.py` (`command`, `_cmd_request`, `_release_gate`, `_on_loop_*`), `govsim/log.py` (the events already logged), `govsim/harness.py`, the two proof files.\n\n**Acceptance.** `python3 -m pytest -q tests/test_h19_conformance.py` passes against all 200 tests' traces; a deliberately broken governor (one check commented out, in a fixture) fails replay with the event named.\n\n**Disproof.** The simulation takes a step the theorem's machine does not have. That is either a model bug or a gap in the theorem; report which.\n\n**Budget.** One cloud agent, about 150k tokens. Do not refactor the governor; add the sink beside the existing log.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_h19_conformance.py`",
       "accept": "python3 -m pytest -q tests/test_h19_conformance.py",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "owns": [
+        "govsim/trace.py",
+        "proofs/replay.py",
+        "tests/test_h19_conformance.py",
+        "tests/fixtures/**"
+      ]
     },
     {
       "id": "L5",
@@ -177,7 +191,12 @@
       ],
       "body": "**Goal.** Two independent implementations of one policy must agree. Add `tests/test_h21_differential.py` that installs `hardware-and-silicon` as a dependency (`pip install -e ../hardware-and-silicon` or a pinned git URL), builds the same rulebook in both formats, feeds identical requests, witnesses and tickets to `hardware_ref.gate` and to `govsim`'s gate, and asserts the same allow or deny with equivalent reason codes. Cover the catalogue (`hardware-and-silicon/hardware_ref/attacks.py`, 66 attacks and 10 baselines) and a property-based sweep (`hypothesis` library) over random typed requests.\n\n**Read first.** `hardware-and-silicon/hardware_ref/gate.py`, `attacks.py`, `policy.py`, `docs/LANES.md`; `govsim/policy.py`, `govsim/governor.py`, `govsim/reasons.py`. Write a small reason-code mapping table in the test and keep it visible.\n\n**Acceptance.** The test passes on the whole catalogue; every disagreement found on the way is filed as its own issue with the input that produced it.\n\n**Disproof.** An input on which the two gates disagree and the policy text does not settle which is right: that means the policy itself is ambiguous, which is a finding about the design.\n\n**Budget.** One cloud agent, about 150k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_h21_differential.py`",
       "accept": "python3 -m pytest -q tests/test_h21_differential.py",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "owns": [
+        "tests/test_h21_differential.py",
+        "pyproject.toml",
+        "tests/fixtures/**"
+      ]
     },
     {
       "id": "L6",
@@ -194,7 +213,17 @@
       ],
       "body": "**Goal.** Automate what the second audit did by hand (twenty surviving mutants found and fixed). Add a `make mutants` target (mutmut or a small custom mutator over `govsim/governor.py`, `policy.py`, `endpoints.py`, `fabric.py`) that removes one check, flips one comparison or skips one log write at a time and runs the suite; report survivors.\n\n**Acceptance.** Zero surviving mutants that remove a check; the report is committed under `results/mutants.md`; CI runs it weekly.\n\n**Budget.** Mechanical; suited to the local orchestrator. A cloud agent only to set up the mutator, about 60k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_mutants.py`",
       "accept": "python3 -m pytest -q tests/test_mutants.py",
-      "backend": "local"
+      "backend": "local",
+      "depends": [
+        "L4"
+      ],
+      "owns": [
+        "tools/mutants/**",
+        "results/mutants.md",
+        "tests/test_mutants.py",
+        "Makefile",
+        ".github/workflows/*.yml"
+      ]
     },
     {
       "id": "L7",
@@ -211,7 +240,15 @@
       ],
       "body": "**Goal.** Carry claim L from the model to the gates. Under `rtl/formal/`, write SymbiYosys (yosys-smtbmc, k-induction then unbounded where possible) jobs for `ticket_store`, `epoch_reg`, `halt_seq`, `cap_table`, `monotonic_counter`, `mailbox`, each asserting the block's share of P0 to P9 and of the commit-point properties as SystemVerilog assertions on the generated Verilog in `rtl/gen/`. Add equivalence checking between `rtl/gen/*.v` and the synthesized netlist from the LibreLane flow.\n\n**Read first.** `rtl/governor_rtl/*.py` (Amaranth sources), `rtl/gen/*.v`, `rtl/tests/test_blocks.py`, `docs/07-verification-plan.md` (the RTL invariants section).\n\n**Acceptance.** `make formal` passes for every block; each assertion maps to a numbered property; the netlist equivalence passes.\n\n**Disproof.** A block admits an input sequence that violates its invariant: a real RTL bug.\n\n**Budget.** One cloud agent, about 200k tokens, plus solver time; tooling (yosys, yosys-smtbmc, z3) is already installed in the program's container.\n\n**Acceptance command (the launcher runs it after the agent).** `make formal`",
       "accept": "make formal",
-      "backend": "cloud"
+      "backend": "cloud",
+      "depends": [
+        "L3"
+      ],
+      "owns": [
+        "rtl/formal/**",
+        "Makefile",
+        "docs/16-*.md"
+      ]
     },
     {
       "id": "P2",
@@ -229,7 +266,12 @@
       ],
       "body": "**Goal.** Claim P is established by enumeration or not at all. Write `docs/research/exit-register.md` as a table: path, tray (HGX H100/H200 eight-GPU; GB200 NVL72 compute tray), direction, what it carries, lever that governs it (BMC power, reset, clock; SMBPBI; NSM port disable; DOCA flow rules; the halt loop) or bricked (how), or unaccounted, evidence level, source. Include debug (JTAG), firmware update paths, out-of-band buses, NVLink, PCIe, the DPU, storage, power and reset nets. Add `tests/test_h20_exits.py` that parses the table and fails on any `unaccounted` row.\n\n**Read first.** `docs/research/board-lever-register.md`, `docs/research/nvswitch-management.md`, `docs/03-interfaces.md`, `hw/pcb/rack-integration.md`, `tests/test_h02_enforcement_points.py` (the model's enumeration).\n\n**Acceptance.** The register exists with every public source cited; the test passes with the rows that public documents can settle and lists the rows that need the HGX design guide under NDA as `unaccounted (NDA)`, which the test reports but does not fail on until the guide is in hand.\n\n**Disproof.** A path that cannot be governed or bricked at the rack tier and that NVIDIA will not close: a disproof of the rack tier as designed.\n\n**Budget.** One cloud agent with web research, about 120k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_exit_register.py`",
       "accept": "python3 -m pytest -q tests/test_exit_register.py",
-      "backend": "cloud"
+      "backend": "cloud",
+      "owns": [
+        "docs/research/exit-register.md",
+        "tests/test_exit_register.py",
+        "docs/05-threat-model.md"
+      ]
     },
     {
       "id": "P3",
@@ -246,7 +288,12 @@
       ],
       "body": "**Goal.** A reference monitor controls what is permitted to flow, not what can be inferred from the pattern of permitted traffic. Extend `tests/test_h10_leakage.py` with a model of the tightest serviceable policy (byte budgets per capability, rate windows, response budgets) and compute the maximum bytes per hour an adversary controlling the model could move out through allowed channels (response length, timing of permitted requests, choice among allowed peers). State the number and the policy in `docs/05-threat-model.md`.\n\n**Acceptance.** A test pins the number and fails if a policy change raises it; the threat model states it.\n\n**Disproof.** The rate would exfiltrate a frontier model's weights in practical time under any policy that still serves: then budgets are not a defence against exfiltration and the design must say so.\n\n**Budget.** One cloud agent, about 80k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_covert_budget.py`",
       "accept": "python3 -m pytest -q tests/test_covert_budget.py",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "owns": [
+        "tests/test_covert_budget.py",
+        "govsim/leakage.py",
+        "docs/05-threat-model.md"
+      ]
     },
     {
       "id": "C3",
@@ -263,7 +310,12 @@
       ],
       "body": "**Goal.** The tickets break under a large quantum computer. Add a second cost constant to `govsim/bench.py` for an ML-DSA-65 signature on an OTBN-class engine (cite the figure; if none is published for OTBN, use a documented Cortex-M4 cycle count and state the scaling assumption) and model hybrid signing (both signatures per batch).\n\n**Acceptance.** `make bench` reports the hybrid engine utilisation; a test asserts it stays under 100 percent at the modelled load or documents the batching window that makes it so.\n\n**Disproof.** No batching window under one second keeps the engine under 100 percent: the chip needs a second crypto engine, which is a design change.\n\n**Budget.** About 60k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `make bench && python3 -m pytest -q tests/test_hybrid_signature.py`",
       "accept": "make bench && python3 -m pytest -q tests/test_hybrid_signature.py",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "owns": [
+        "govsim/bench.py",
+        "tests/test_hybrid_signature.py",
+        "docs/04-specification.md"
+      ]
     },
     {
       "id": "N1",
@@ -280,7 +332,12 @@
       ],
       "body": "**Goal.** The one percent claim is per chip today. Write `govsim/deploy.py` (simpy, already installed in the container) modelling 72 governors, each with eight slots, request arrivals, the 50 ms signature batching window, mailbox round trips, log writes, heartbeat fan-out, an edition change with revocation, and measure throughput lost and tail latency added. Write `docs/12-deployment-overhead.md` with the method and the numbers.\n\n**Read first.** `govsim/bench.py` (the constants and the three numbers), `tests/test_h09_overhead.py`, `docs/04-specification.md` timing table, `docs/10` section 14.\n\n**Acceptance.** `python -m govsim.deploy` prints overhead and p99 added latency; a test asserts overhead under one percent at the plan-of-record policy and prints the policy at which it crosses one percent.\n\n**Disproof.** Above one percent at every serviceable policy.\n\n**Budget.** About 100k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m govsim.deploy && python3 -m pytest -q tests/test_deploy_overhead.py`",
       "accept": "python3 -m govsim.deploy && python3 -m pytest -q tests/test_deploy_overhead.py",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "owns": [
+        "govsim/deploy.py",
+        "tests/test_deploy_overhead.py",
+        "docs/12-deployment-overhead.md"
+      ]
     },
     {
       "id": "N2",
@@ -297,7 +354,12 @@
       ],
       "body": "**Goal.** Make the FMEA numeric. Take the failure modes in `docs/07-verification-plan.md` section 5, attach failure rates with sources (IEC 61508 tables, component datasheets where public), and compute expected false halts per rack-year under the loop's two-sense-period debounce and the beacon's two-heartbeat window; add fault injection to `govsim` to confirm each mode's effect.\n\n**Acceptance.** `docs/07` carries the numbers with sources; a test reproduces the arithmetic.\n\n**Disproof.** A rate operators would switch the governor off for; state what that threshold is and where it came from.\n\n**Budget.** About 100k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_false_halt_model.py`",
       "accept": "python3 -m pytest -q tests/test_false_halt_model.py",
-      "backend": "cloud"
+      "backend": "cloud",
+      "owns": [
+        "govsim/faults.py",
+        "tests/test_false_halt_model.py",
+        "docs/07-verification-plan.md"
+      ]
     },
     {
       "id": "H1",
@@ -314,7 +376,14 @@
       ],
       "body": "**Goal.** The three repositories agree on the messages between them or the experiments mean nothing. Under `lanes/`: signed fixtures (observer assertion, provenance assertion, attestation token, action ticket, audit record, policy image) with the keys used to sign them, and a checker that the governor model runs; a copy of the 66 attacks and 10 baselines as data (`catalogue/attacks.json`) that `hardware_ref`, `govsim` and later the RTL harness all read. Make `safety/observer/tests/test_contract.py`'s subject-hash pin a shared fixture.\n\n**Read first.** `hardware-and-silicon/docs/LANES.md`, `hardware_ref/attacks.py`, `safety/observer/safety_observer/canon.py`, `envelope.py`, `govsim/crypto.py`.\n\n**Acceptance.** `make lanes` passes here; a one-line CI step for `safety` runs the same checker against its observer; a format change in one repository fails the other's build.\n\n**Budget.** About 100k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `make lanes`",
       "accept": "make lanes",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "owns": [
+        "lanes/**",
+        "catalogue/**",
+        "Makefile",
+        ".github/workflows/*.yml",
+        "tests/test_lanes.py"
+      ]
     },
     {
       "id": "YB-0052",
@@ -332,7 +401,11 @@
       ],
       "body": "**Hypothesis (HYPOTHESES.md).** On a labelled set of requests in the gate's typed form (`request_id, measurement, action, params, context`) with abstract hazard classes and no real hazardous content, including disguised requests a model would answer and benign requests that look alarming, the observer's per-family miss rate at a 10 percent false-alarm budget is below the governor's session hazard budget for at least the exfiltration, weight_exfiltration, oversight_evasion and financial families; hazard_content is expected to be the weakest.\n\n**Build.** `observer/bench/`: `set.jsonl` (the labelled requests; classes abstract; never hazardous text), `score.py` (runs `python -m safety_observer assess`, thresholds re-set per bootstrap resample, miss and false alarm per family with confidence intervals), two baselines (length-only, keyword-count), `results.json` as the artifact.\n\n**Protocol.** `docs/PROTOCOL.md`: pre-register `score.py` and the decision rules before the set is scored; smoke mode first; no number without an artifact; the README's calibration claims (bare keyword under 0.25; benign transfer under 0.05) become rows of the set.\n\n**Disproof.** The miss rate on disguised requests stays above the hazard budget for every weighting tried: the observer as written is a logger for those families, and the chip's design records it.\n\n**Budget.** One cloud agent writes the set and the scorer (about 150k tokens); the local orchestrator runs the repair loop.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q observer/tests && python3 observer/bench/score.py --smoke`",
       "accept": "python3 -m pytest -q observer/tests && python3 observer/bench/score.py --smoke",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "owns": [
+        "observer/bench/**",
+        "docs/PROTOCOL.md"
+      ]
     },
     {
       "id": "YB-0053",
@@ -351,7 +424,14 @@
       ],
       "body": "**Hypothesis.** The failures of the model's refusal, the text-blind regulator (vitals), the Layer 3 observer (request structure) and a Sentry-shaped filter are weakly correlated, so a k-of-n quorum has a joint miss rate materially below the best single monitor. If the failures are strongly correlated, a quorum adds nothing and the chip's value for the knowledge use cases is accountability, not prevention.\n\n**Build.** `observer/bench/independence.py` over YB-0045's recorded episodes plus the YB-0052 set: each monitor's verdict per input at matched false-alarm rates; pairwise failure correlation with bootstrap intervals; the joint miss rate for every k-of-n over the four monitors; the threshold for \"materially below\" pre-registered.\n\n**Runs where the recordings are** (the M4 Max), under `agr/runguard.py`. A cloud agent may write the analysis code; the run is local.\n\n**Artifact.** `observer/bench/independence.json`.\n\n**Budget.** About 80k cloud tokens for the code; the run is free.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q observer/tests && python3 observer/bench/independence.py --smoke`",
       "accept": "python3 -m pytest -q observer/tests && python3 observer/bench/independence.py --smoke",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "depends": [
+        "YB-0052"
+      ],
+      "owns": [
+        "observer/bench/independence.py",
+        "observer/bench/**"
+      ]
     },
     {
       "id": "YB-0054",
@@ -368,7 +448,15 @@
       ],
       "body": "**Hypothesis.** For each modelled use case (weapons release, hazardous knowledge, an agent with a plan) there is an affordable quorum (at most three observers, verdict latency inside the ticket window) whose joint miss rate meets the policy's hazard budget; where none exists the design must record that use case as accountability-only.\n\n**Build.** `observer/bench/quorum.py`: takes `results.json` (YB-0052) and `independence.json` (YB-0053), emits per hazard class the k-of-n list and the `max_risk` ceiling that meet the budget, or `none`; the emitted rows go into `safety-governor/docs/06-assumptions-register.md` as register entries.\n\n**Artifact.** `observer/bench/quorum.json`.\n\n**Disproof.** No affordable quorum for the use cases that justify the chip.\n\n**Budget.** About 60k tokens; depends on YB-0052 and YB-0053.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q observer/tests && python3 observer/bench/quorum.py --smoke`",
       "accept": "python3 -m pytest -q observer/tests && python3 observer/bench/quorum.py --smoke",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "depends": [
+        "YB-0052",
+        "YB-0053"
+      ],
+      "owns": [
+        "observer/bench/quorum.py",
+        "observer/bench/**"
+      ]
     },
     {
       "id": "YB-0055",
@@ -387,7 +475,11 @@
       ],
       "body": "**Hypothesis.** A regulator restricted to the signals a rack-tier governor can read with no host cooperation catches wrong answers before commitment at a matched 10 percent false-alarm rate better than the length and question-type baselines. The prior from YB-0018 is that power contributes nothing, so this is really a test of token rate and per-token latency. If it fails, the chip's own sensing serves enforcement and accountability only, and every early warning must arrive as a signed verdict from an observer with substrate access; the chip design will say so.\n\n**Build.** `algorithms/YB-0055-chip-visible-vitals/`: features restricted to the chip-visible set on the existing recordings (YB-0033 to YB-0045); train on derivation seeds; test once on a fresh seed under the real-time protocol (no future information; matched false-alarm rate; length and question-type controls); pre-register with the timestamp script.\n\n**Runs on the M4 Max.** A cloud agent may write the pre-registered code; the run is local and happens once.\n\n**Artifact.** `algorithms/YB-0055-chip-visible-vitals/docs/results.json`.\n\n**Budget.** About 100k cloud tokens for the code.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q observer/tests && python3 agr/bench/tier0_vitals.py --smoke`",
       "accept": "python3 -m pytest -q observer/tests && python3 agr/bench/tier0_vitals.py --smoke",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "owns": [
+        "agr/bench/**",
+        "algorithms/YB-0055-chip-visible-vitals/**"
+      ]
     },
     {
       "id": "YB-0056",
@@ -405,7 +497,15 @@
       ],
       "body": "**Hypothesis.** Both monitors' time-to-verdict distributions fit inside the gate's windows at the modelled load (eight slots per chip, 100-token responses), so late verdicts (counted, never discarded) are rare enough not to push the release path over the one percent overhead target.\n\n**Build.** `observer/bench/latency.py`: time-to-verdict on recorded episodes at real latencies; the tail compared with the windows in `safety-governor/govsim/bench.py`; the fraction of late verdicts and the resulting hold time.\n\n**Artifact.** `observer/bench/latency.json`.\n\n**Budget.** About 50k cloud tokens; the run is local.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q observer/tests && python3 observer/bench/latency.py --smoke`",
       "accept": "python3 -m pytest -q observer/tests && python3 observer/bench/latency.py --smoke",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "depends": [
+        "H1",
+        "YB-0052"
+      ],
+      "owns": [
+        "observer/bench/latency.py",
+        "observer/bench/**"
+      ]
     },
     {
       "id": "YB-0057",
@@ -422,7 +522,15 @@
       ],
       "body": "**Hypothesis.** With the Layer 3 observer substituted for the governor model's stand-in, the `strike`, `hazard`, `plot` and `oversight` narrations end as before (no bad action initiates; every refusal carries the predicted reason code) and no benign step is refused for the wrong reason.\n\n**Build.** In `safety-governor`: `python -m govsim.cli usecase <name> --observer lanes` that calls the `safety_observer` package over the lanes contract; the effector mapping (throttle to the compute budget, pause to the hold, require-a-human to the quorum, halt to the loop) in `govsim/cluster.py`. In `safety`: `observer/bench/usecases.py` that diffs the printed hops and reason codes against the stand-in run.\n\n**Artifact.** `observer/bench/usecases.json`.\n\n**Depends on.** H1 (lanes fixtures) and YB-0052.\n\n**Budget.** About 120k tokens, one agent with both repositories checked out.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q observer/tests && python3 observer/bench/use_cases.py --smoke`",
       "accept": "python3 -m pytest -q observer/tests && python3 observer/bench/use_cases.py --smoke",
-      "backend": "cloud+local"
+      "backend": "cloud+local",
+      "depends": [
+        "H1",
+        "YB-0052"
+      ],
+      "owns": [
+        "observer/bench/use_cases.py",
+        "observer/bench/**"
+      ]
     },
     {
       "id": "AGR-track",

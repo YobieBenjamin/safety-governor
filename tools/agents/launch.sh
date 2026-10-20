@@ -5,12 +5,13 @@
 #
 #   bash ~/safety-governor/tools/agents/launch.sh 1            # wave 1: safety-governor (L4, L5, H1) and safety (YB-0052)
 #   START_AT=23:00 bash ~/safety-governor/tools/agents/launch.sh 2
+#   bash ~/safety-governor/tools/agents/launch.sh prepare      # only the CLI, the environments and the local model (run_program.sh uses this)
 #
 # Everything run_wave.sh accepts as an environment variable passes through (AGENT_MODEL, EFFORT,
 # MAX_TURNS, BUDGET_USD, PARALLEL, FIVE_HOUR_CEILING, ...). Safe to run again.
 set -euo pipefail
 set -E; trap 'echo "error: line $LINENO: $BASH_COMMAND (exit status $?)" >&2' ERR
-WAVE="${1:?usage: launch.sh <wave>}"
+WAVE="${1:?usage: launch.sh <wave> | launch.sh prepare}"   # "prepare": steps 1 to 3 only (the CLI, the environments, the local model)
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -80,6 +81,8 @@ else
   echo "no Ollama on this Mac (https://ollama.com/download); local work goes to the cloud this wave, or set LOCAL_URL=cloud for the cheap cloud model"
 fi
 export LOCAL_URL
+
+[ "$WAVE" = prepare ] && { step "Prepared"; exit 0; }
 
 # 4. Preflight, then the wave, in each repository that has issues in this wave.
 RUN="$HOME/safety-governor/tools/agents/run_wave.sh"

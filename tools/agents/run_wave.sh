@@ -102,6 +102,8 @@ CLAUDE_VERSION=$(claude -v 2>/dev/null | head -1)
 PROMPTS_FLAG=""
 if py version_ok "$CLAUDE_VERSION" 2.1.259; then PROMPTS_FLAG="--permission-prompts none"; else say "claude $CLAUDE_VERSION is older than 2.1.259: prompts are denied anyway in -p mode, but update it when you can"; fi
 python3 -c "import pytest" 2>/dev/null || fail "pytest is missing in this python3: pip3 install -e '.[dev]' (safety-governor) or pip3 install pytest"
+# the agents commit as the program's author; a machine with no git identity would fail every commit
+[ -n "$(git -C "$ROOT" config --get user.email || true)" ] || { git -C "$ROOT" config user.name "Yobie Benjamin"; git -C "$ROOT" config user.email "yobie@icloud.com"; say "git identity set for this clone: Yobie Benjamin <yobie@icloud.com>"; }
 git -C "$ROOT" fetch -q origin main
 [ "$(git -C "$ROOT" rev-parse main)" = "$(git -C "$ROOT" rev-parse origin/main)" ] || say "note: local main differs from origin/main; worktrees branch from local main"
 free_gb=$(df -g "$ROOT" 2>/dev/null | awk 'NR==2 {print $4}' || echo 99); [ "${free_gb:-99}" -ge 5 ] || fail "under 5 GB free on this disk"
@@ -315,7 +317,7 @@ if latest and ((latest[1] or 0) >= fh_ceil or (latest[2] or 0) >= sd_ceil):
 elif os.path.exists(flag):
     os.remove(flag)
 PY
-    say "tick: $(grep -c 'running' "$LOG"/*.state.json 2>/dev/null | awk -F: '{s+=$2} END {print s+0}') running; see $LOG/STATUS.md"
+    say "tick: $(grep -l '"phase": "running' "$LOG"/*.state.json 2>/dev/null | wc -l | tr -d ' ') running; see $LOG/STATUS.md"
   done
 }
 
@@ -351,5 +353,5 @@ stop_bg "$TICK"
 py status "$LOG" > "$LOG/STATUS.md"; py report "$LOG" > "$LOG/REPORT.md"
 failed=$(grep -L '"phase": "done' "$LOG"/*.state.json 2>/dev/null | wc -l | tr -d ' ')
 say "== wave $WAVE finished: report $LOG/REPORT.md; pull requests: gh pr list --repo $OWNER/$REPO"
-notify "Wave $WAVE finished" "$(grep -c '"phase": "done' "$LOG"/*.state.json 2>/dev/null | awk -F: '{s+=$2} END {print s+0}') done, $failed not; see REPORT.md"
+notify "Wave $WAVE finished" "$(grep -l '"phase": "done' "$LOG"/*.state.json 2>/dev/null | wc -l | tr -d ' ') done, $failed not; see REPORT.md"
 exit "$failed"

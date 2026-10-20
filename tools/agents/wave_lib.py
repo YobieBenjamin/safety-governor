@@ -93,7 +93,7 @@ def summarize_events(rows: list[dict]) -> dict:
         text = res.get("result")
         if not isinstance(text, str):
             text = json.dumps(text) if text is not None else ""
-        out["result"] = text.strip()[:400]
+        out["result"] = text.strip()[:6000]
         out["denials"] = max(out["denials"], len(res.get("permission_denials") or []))
         if res.get("is_error") and LIMIT_RE.search(text or ""):
             out["limit_hit"] = True
