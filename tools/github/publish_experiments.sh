@@ -52,25 +52,38 @@ while IFS=$'\t' read -r name color desc; do
 done
 echo "labels: done in $repos"
 
-# 3. One issue per experiment; update the body and labels if the title already exists.
-python3 -c "
+# 3. One issue per experiment; update the body and labels if the title already exists. The
+#    existing issues of each repository are listed once (no search: titles are long and contain
+#    quotes). A failure is reported with gh's message and the run continues; the exit status says
+#    whether every issue went through.
+failed=0
+for repo in $repos; do
+  have=$(mktemp)
+  gh issue list --repo "$OWNER/$repo" --state all --json number,title --limit 1000 > "$have" 2>/dev/null || echo "[]" > "$have"
+  python3 -c "
 import json, sys
 for i in json.load(open(sys.argv[1]))['issues']:
-    print(json.dumps(i))" "$SPEC" |
-while IFS= read -r line; do
-  repo=$(printf '%s' "$line" | python3 -c "import json,sys; print(json.load(sys.stdin)['repo'])")
-  title=$(printf '%s' "$line" | python3 -c "import json,sys; print(json.load(sys.stdin)['title'])")
-  labels=$(printf '%s' "$line" | python3 -c "import json,sys; print(','.join(json.load(sys.stdin)['labels']))")
-  body=$(mktemp); printf '%s' "$line" | python3 -c "import json,sys; sys.stdout.write(json.load(sys.stdin)['body'])" > "$body"
-  existing=$(gh issue list --repo "$OWNER/$repo" --search "in:title \"$title\"" --state all --json number,title --limit 5 2>/dev/null |
-             python3 -c "import json,sys; t=sys.argv[1]; m=[i for i in json.load(sys.stdin) if i['title']==t]; print(m[0]['number'] if m else '')" "$title")
-  if [ -n "$existing" ]; then
-    echo "== $repo #$existing (update): $title"
-    run gh issue edit "$existing" --repo "$OWNER/$repo" --body-file "$body" --add-label "$labels" >/dev/null
-  else
-    echo "== $repo (create): $title"
-    run gh issue create --repo "$OWNER/$repo" --title "$title" --body-file "$body" --label "$labels" >/dev/null
-  fi
-  rm -f "$body"
+    if i['repo'] == sys.argv[2]:
+        print(json.dumps(i))" "$SPEC" "$repo" |
+  while IFS= read -r line; do
+    title=$(printf '%s' "$line" | python3 -c "import json,sys; print(json.load(sys.stdin)['title'])")
+    labels=$(printf '%s' "$line" | python3 -c "import json,sys; print(','.join(json.load(sys.stdin)['labels']))")
+    body=$(mktemp); printf '%s' "$line" | python3 -c "import json,sys; sys.stdout.write(json.load(sys.stdin)['body'])" > "$body"
+    existing=$(python3 -c "
+import json, sys
+m = [i for i in json.load(open(sys.argv[1])) if i['title'] == sys.argv[2]]
+print(m[0]['number'] if m else '')" "$have" "$title")
+    if [ -n "$existing" ]; then
+      printf '== %s #%s (update): %s\n' "$repo" "$existing" "$title"
+      out=$(run gh issue edit "$existing" --repo "$OWNER/$repo" --body-file "$body" --add-label "$labels" 2>&1) && echo "   $out" || { echo "   FAILED: $out"; echo fail >> "$have.failed"; }
+    else
+      printf '== %s (create): %s\n' "$repo" "$title"
+      out=$(run gh issue create --repo "$OWNER/$repo" --title "$title" --body-file "$body" --label "$labels" 2>&1) && echo "   $out" || { echo "   FAILED: $out"; echo fail >> "$have.failed"; }
+    fi
+    rm -f "$body"
+  done
+  [ -f "$have.failed" ] && failed=$((failed + $(wc -l < "$have.failed" | tr -d ' ')))
+  rm -f "$have" "$have.failed"
 done
+if [ "$failed" -gt 0 ]; then echo "issues: $failed FAILED (see above)"; exit 1; fi
 echo "issues: done"
