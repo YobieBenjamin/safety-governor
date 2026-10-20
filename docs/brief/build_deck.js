@@ -72,7 +72,7 @@ async function main() {
     const s = pres.addSlide({ masterName: "DARK", sectionTitle: section });
     slideNo += 1;
     text(s, title, { x: L, y: 1.9, w: 8.4, h: 1.4, fontSize: 44, bold: true, fontFace: "Georgia", color: C.background1, valign: "bottom", objectName: "title" });
-    text(s, body, { x: L, y: 3.5, w: 8.0, h: 1.8, fontSize: 20, color: C.accent6, objectName: "subtitle" });
+    text(s, body, { x: L, y: 3.45, w: 8.4, h: 1.7, fontSize: 19, color: C.accent6, objectName: "subtitle" });
     text(s, "Yobie Benjamin  ·  yobie AT ieee DOT org  ·  linkedin.com/in/yobie", { x: L, y: 6.8, w: 9, h: 0.35, fontSize: 12, color: C.accent3, objectName: "footer" });
     return s;
   };
@@ -576,16 +576,19 @@ async function main() {
     s.addNotes("The asks by who can grant them, from docs/18 sections 8 and 9. The right-hand panel is the falsification list: if any of those six comes true, the design as written does not hold, and we should know early.");
   }
 
-  // ───────────────────────── 18. Close
+  // ───────────────────────── 18. Close: the project in one plain sentence
   pres.addSection({ title: "Close" });
   {
-    const s = dark("Close", "The one-sentence version", "The governor never knows what the model is thinking and does not need to, because thinking fires nothing. A ticket does, and the model cannot mint one.");
+    const s = dark("Close", "In one sentence", "A separate safety chip beside every AI GPU that checks each action the AI attempts against rules signed by people the AI cannot influence, stamps the allowed ones so the devices that carry them out can verify the stamp themselves, and cuts the power when something is wrong.");
     text(s, [
-      { text: "github.com/YobieBenjamin/safety-governor", options: { breakLine: true } },
-      { text: "github.com/YobieBenjamin/hardware-and-silicon", options: { breakLine: true } },
+      { text: "The AI can think whatever it likes. It cannot act without the stamp, and it cannot forge one.", options: { breakLine: true } },
+      { text: "Added to the server's own boards. Nothing changes in the GPU or in CUDA." },
+    ], { x: L, y: 5.25, w: 8.4, h: 0.9, fontSize: 14, italic: true, color: C.accent1, paraSpaceAfter: 4 });
+    text(s, [
+      { text: "github.com/YobieBenjamin/safety-governor   ·   github.com/YobieBenjamin/hardware-and-silicon", options: { breakLine: true } },
       { text: "The Chip That Says No, parts 1 to 4, and design documents 00 to 18", options: { color: C.accent3 } },
-    ], { x: L, y: 5.5, w: 9, h: 1.0, fontSize: 13, color: C.accent6 });
-    s.addNotes("Close on the sentence from docs/17, then questions. The repositories hold the model, the tests, the RTL, the circuit simulation and the audit; the blog series is the plain-English route in.");
+    ], { x: L, y: 6.15, w: 9.5, h: 0.6, fontSize: 11, color: C.accent6 });
+    s.addNotes("Close on the plain sentence: what it is, what it does, what it can stop. Then the two lines under it. The repositories hold the model, the tests, the RTL, the circuit simulation and the audit; the blog series is the plain-English route in.");
   }
 
   await pres.writeFile({ fileName: OUT });
