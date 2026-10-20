@@ -9,7 +9,8 @@
 #
 # Needs: gh (logged in), git, the claude CLI, python3. Run inside a clone of the repository the
 # wave's issues belong to; issues in another repository are listed, not started, with the command
-# to run there. Review each pull request before merging; the launcher never merges.
+# to run there. A sparse clone (the safety repository without its recordings) gives sparse
+# worktrees. Review each pull request before merging; the launcher never merges.
 set -euo pipefail
 WAVE="${1:?wave number}"; shift || true
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
@@ -51,7 +52,12 @@ while IFS=$'\t' read -r id repo title; do
   cmd="cd '$wt' && claude -p \"\$(cat '$brief')\" --model '$MODEL' --max-turns '$TURNS' > '$LOG/$id.log' 2>&1"
   echo "== $id -> $wt on $branch (issue #$number)"
   if [ "$DRY" = 1 ]; then echo "   $cmd"; continue; fi
-  git worktree add -q -B "$branch" "$wt" main 2>/dev/null || git worktree add -q "$wt" "$branch"
+  git worktree add -q --no-checkout -B "$branch" "$wt" main 2>/dev/null || git worktree add -q --no-checkout "$wt" "$branch"
+  if [ "$(git config --get core.sparseCheckout 2>/dev/null)" = true ]; then   # a sparse clone (safety: no recordings) stays sparse in its worktrees
+    # shellcheck disable=SC2046
+    git -C "$wt" sparse-checkout set --cone $(git sparse-checkout list)
+  fi
+  git -C "$wt" reset -q --hard
   bash -c "$cmd" &
   running=$((running + 1))
   if [ "$running" -ge "$PAR" ]; then wait -n; running=$((running - 1)); fi

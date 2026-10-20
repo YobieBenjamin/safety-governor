@@ -27,7 +27,7 @@ summary and a "backed by" box.
 | `11-loop-timing.md` | The halt loop as a circuit: ngspice simulation of propagation and detection time across 72 governors | §6 |
 | `AUDIT-2026-10.md` | The audit: hallucinations and fake conditions found and fixed, sources checked, what is still unverified | §15 |
 | `../tools/console/` | The live program console published on claude.ai: agents, work items, event log | n/a |
-| `../tools/github/` | `publish_experiments.sh`: labels and one issue per experiment in each repository, from `experiments.json`; `--apply-bundles DIR` first fast-forwards the clones and pushes | n/a |
+| `../tools/github/` | `setup_and_publish.sh`: one script for a fresh machine (gh, login, clones, bundles, push, publish); `publish_experiments.sh`: labels and one issue per experiment in each repository, from `experiments.json` | n/a |
 | `../tools/archive/` | The archive on claude.ai: `make archive` stages every file, full git bundles, zips and the index page, and builds the Project's consolidated documents | n/a |
 | `17-use-cases.md` | How the governor catches a safety issue before the action initiates: the five paths, a weapons release, a hazardous-knowledge request, an agent with a plan, and oversight that survives the model | all |
 | `18-viability-and-open-questions.md` | Is it plausible, is it a firewall, where its authority ends (a payment three hops away), who adopts first, whether it strengthens NVIDIA's promise, fourteen open questions and the next three moves | §15 |

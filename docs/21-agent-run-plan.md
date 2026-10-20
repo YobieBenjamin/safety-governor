@@ -42,6 +42,12 @@ Total build budget for the software phase: about 1.8 million tokens on the mid-t
 
 ## 3. Launching a wave
 
+Before the first wave, a machine with nothing on it is set up by one script: it installs `gh` if it is missing, logs in to GitHub in the browser, clones the three repositories (`safety` without its recordings: a blobless, sparse clone), applies any `<repo>-N.bundle` made in the program's container, pushes, and publishes the labels and issues:
+
+```bash
+bash ~/Downloads/setup_and_publish.sh    # tools/github/setup_and_publish.sh; bundles next to it, or a directory as the argument
+```
+
 Everything an agent needs is in its issue. The launcher reads the issue body as the brief, makes a worktree on a branch named after the issue, and starts a non-interactive agent on the mid-tier model with a turn cap:
 
 ```bash
