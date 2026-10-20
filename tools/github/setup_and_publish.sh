@@ -38,16 +38,26 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 gh --version | head -1
 
-# 2. Log in once, in the browser; gh then supplies git's credentials over HTTPS.
+# 2. Logged in as the owner of the repositories, not another account; gh then supplies git's
+#    credentials over HTTPS. A different account already in gh's keyring is switched to; otherwise
+#    the browser login runs (sign out of the other account on github.com first, or use a private
+#    window, or the browser will authorize the account it is signed in to).
 step "GitHub login"
-if ! gh auth status >/dev/null 2>&1; then
+want=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+login=""
+for attempt in 1 2 3; do
+  login=$(gh api user -q .login 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
+  [ "$login" = "$want" ] && break
+  if [ -n "$login" ]; then
+    echo "gh is logged in as $login; the repositories belong to $OWNER"
+    if gh auth switch --hostname github.com --user "$OWNER" >/dev/null 2>&1; then echo "switched to $OWNER"; continue; fi
+  fi
+  echo "log in as $OWNER in the browser"
   gh auth login --hostname github.com --git-protocol https --web
-fi
+done
+[ "$login" = "$want" ] || fail "gh is logged in as '${login:-nobody}', not $OWNER; run: gh auth login"
 gh auth setup-git >/dev/null 2>&1 || true
-gh auth status 2>&1 | grep -i 'logged in' | head -1
-login=$(gh api user -q .login 2>/dev/null || true)
-[ -n "$login" ] || fail "gh is not logged in"
-echo "account: $login"
+echo "account: $OWNER"
 
 # 3. Clones, where they are missing.
 step "Clones"
