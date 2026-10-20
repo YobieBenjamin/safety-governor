@@ -10,6 +10,6 @@ figures:  ; python3 docs/figures/make_figures.py
 docx:     ; python3 docs/tools/build_master_docx.py
 gds:      ; python3 -m pip install -q --upgrade librelane && librelane --dockerized --pdk-root $(HOME)/.ciel hw/librelane/governor_core/config.json
 loop:     ; python3 hw/loop/run_loop.py
-proof:    ; python3 proofs/core_invariants.py
+proof:    ; python3 proofs/core_invariants.py && python3 proofs/commit_point.py
 clean:    ; rm -rf .venv .pytest_cache govsim/__pycache__ tests/__pycache__ rtl/__pycache__ rtl/governor_rtl/__pycache__ rtl/tests/__pycache__ hw/librelane/governor_core/runs
 archive:  ; python3 tools/archive/build_archive.py --out build/archive --repo . --repo ../hardware-and-silicon && python3 tools/archive/build_project_docs.py --out build/project --governor . --stack ../hardware-and-silicon
