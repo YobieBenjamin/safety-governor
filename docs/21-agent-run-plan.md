@@ -51,11 +51,16 @@ bash ~/Downloads/setup_and_publish.sh    # tools/github/setup_and_publish.sh; bu
 Everything an agent needs is in its issue. The launcher reads the issue body as the brief, makes a worktree on a branch named after the issue, and starts a non-interactive agent on the mid-tier model. Nobody has to watch it:
 
 ```bash
+bash ~/safety-governor/tools/agents/launch.sh 1                 # the whole of wave 1: CLI, environments, preflight, both repositories, detached
+START_AT=23:00 bash ~/safety-governor/tools/agents/launch.sh 2  # wave 2 tonight, when the day's own use is over
+tail -f ~/safety-governor/.agents/wave-1/launcher.log           # or open .agents/wave-1/STATUS.md, rewritten every ten minutes
+```
+
+`launch.sh` installs the Claude CLI if it is missing and logs it in, makes a `.venv` with each repository's test dependencies (the launcher and the agents use it), runs the preflight, and starts `run_wave.sh <wave> --detach` in `safety-governor` and in `safety`. The pieces, for one repository or one issue:
+
+```bash
 cd ~/safety-governor && tools/agents/run_wave.sh 1 --check      # preflight only: gh, claude, pytest, the baseline tests
-cd ~/safety-governor && tools/agents/run_wave.sh 1 --detach     # wave 1 here (L4, L5, H1), in the background
-cd ~/safety && ~/safety-governor/tools/agents/run_wave.sh 1 --detach    # YB-0052, in the sparse clone
-START_AT=23:00 tools/agents/run_wave.sh 2 --detach              # wave 2 tonight, when the day's own use is over
-tail -f .agents/wave-1/launcher.log                             # or open .agents/wave-1/STATUS.md, rewritten every ten minutes
+cd ~/safety-governor && tools/agents/run_wave.sh 1 --only L4    # one issue, in the foreground
 ```
 
 What "unattended" means, mechanically:

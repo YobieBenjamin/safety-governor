@@ -43,6 +43,7 @@ FH_CEIL="${FIVE_HOUR_CEILING:-0.70}"; SD_CEIL="${SEVEN_DAY_CEILING:-0.85}"; BASE
 HERE="$(cd "$(dirname "$0")" && pwd)"
 LIB="$HERE/wave_lib.py"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"
 ROOT="$(git rev-parse --show-toplevel)"; REPO="$(basename "$ROOT")"
+[ -d "$ROOT/.venv/bin" ] && export PATH="$ROOT/.venv/bin:$PATH"   # the repository's own environment, for the launcher and the agents
 LOG="$ROOT/.agents/wave-$WAVE"; mkdir -p "$LOG"
 say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*"; }
 fail() { echo "error: $*" >&2; exit 1; }
@@ -97,14 +98,14 @@ done
 say "gh: $OWNER; claude $CLAUDE_VERSION ($MODEL, effort $EFFORT, $TURNS turns, \$$BUDGET cap); parallel $PAR; readable clones:${ADD_DIRS:- none}"
 if [ "$BASELINE" = 1 ] && [ "$MODE" != dry ]; then
   case "$REPO" in
-    safety-governor) base_cmd="python3 -m pytest -q -x tests" ;;
-    safety) base_cmd="python3 -m pytest -q -x observer/tests" ;;
+    safety-governor) base_cmd="python3 -m pytest -x tests" ;;        # the repository's pytest config already adds -q
+    safety) base_cmd="python3 -m pytest -x observer/tests" ;;
     *) base_cmd="" ;;
   esac
   if [ -n "$base_cmd" ]; then
     say "baseline: $base_cmd"
     (cd "$ROOT" && $base_cmd > "$LOG/baseline.log" 2>&1) || { tail -5 "$LOG/baseline.log"; fail "the repository's own tests fail on main; agents would chase that first. See $LOG/baseline.log"; }
-    say "baseline passes: $(grep -E 'passed|failed' "$LOG/baseline.log" | tail -1)"
+    say "baseline passes: $(grep -E 'passed|failed' "$LOG/baseline.log" | tail -1 || true)"
   fi
 fi
 [ "$MODE" = check ] && { say "preflight OK"; exit 0; }

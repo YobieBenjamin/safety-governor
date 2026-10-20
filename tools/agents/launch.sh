@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# One command for one wave: the Claude CLI (installed and logged in), a Python environment with the
+# dependencies in each repository, the preflight, then the wave in every repository that has issues
+# in it, detached, so the terminal can be closed.
+#
+#   bash ~/safety-governor/tools/agents/launch.sh 1            # wave 1: safety-governor (L4, L5, H1) and safety (YB-0052)
+#   START_AT=23:00 bash ~/safety-governor/tools/agents/launch.sh 2
+#
+# Everything run_wave.sh accepts as an environment variable passes through (AGENT_MODEL, EFFORT,
+# MAX_TURNS, BUDGET_USD, PARALLEL, FIVE_HOUR_CEILING, ...). Safe to run again.
+set -euo pipefail
+set -E; trap 'echo "error: line $LINENO: $BASH_COMMAND (exit status $?)" >&2' ERR
+WAVE="${1:?usage: launch.sh <wave>}"
+step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+export PATH="$HOME/.local/bin:$PATH"
+
+# 1. The Claude CLI: the native installer when it is missing (into ~/.local/bin, no sudo), then a login.
+step "Claude CLI"
+if ! command -v claude >/dev/null 2>&1; then
+  curl -fsSL https://claude.ai/install.sh | bash
+  grep -q '.local/bin' "$HOME/.zshrc" 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
+fi
+claude -v | head -1
+if ! claude auth status >/dev/null 2>&1; then
+  echo "log in to Claude in the browser (the account with the subscription)"
+  claude auth login
+fi
+claude auth status --text 2>/dev/null | head -2 || true
+
+# 2. A Python environment per repository, with its own tests' dependencies. run_wave.sh uses
+#    .venv/bin when it exists; so do the agents' python3 and pytest commands.
+step "Python environments"
+for repo in safety-governor safety; do
+  [ -d "$HOME/$repo/.git" ] || { echo "$repo: no clone at ~/$repo (run setup_and_publish.sh first)"; continue; }
+  cd "$HOME/$repo"
+  [ -x .venv/bin/python3 ] || python3 -m venv .venv
+  .venv/bin/python3 -m pip install -q --upgrade pip
+  case "$repo" in
+    safety-governor)
+      .venv/bin/python3 -m pip install -q -e ".[dev]"
+      [ -d "$HOME/hardware-and-silicon" ] && .venv/bin/python3 -m pip install -q -e "$HOME/hardware-and-silicon"
+      ;;
+    safety)
+      .venv/bin/python3 -m pip install -q -e "observer[dev]"
+      ;;
+  esac
+  echo "$repo: $(.venv/bin/python3 --version), pytest $(.venv/bin/python3 -c 'import pytest; print(pytest.__version__)')"
+done
+
+# 3. Preflight, then the wave, in each repository that has issues in this wave.
+RUN="$HOME/safety-governor/tools/agents/run_wave.sh"
+for repo in safety-governor safety; do
+  [ -d "$HOME/$repo/.git" ] || continue
+  cd "$HOME/$repo"
+  if ! python3 "$HOME/safety-governor/tools/agents/wave_lib.py" issues "$HOME/safety-governor/tools/github/experiments.json" "$WAVE" "$repo" | grep -q .; then
+    echo "$repo: no issues in wave $WAVE"; continue
+  fi
+  step "$repo: preflight"
+  bash "$RUN" "$WAVE" --check
+  step "$repo: wave $WAVE, detached"
+  bash "$RUN" "$WAVE" --detach
+done
+
+step "Running"
+echo "Close the terminal if you like. Progress: .agents/wave-$WAVE/STATUS.md in each repository (every ten minutes),"
+echo "the GitHub issues (a comment per finished agent), and a notification per agent. The wave ends with REPORT.md."
