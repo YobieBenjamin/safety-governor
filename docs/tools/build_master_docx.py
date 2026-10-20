@@ -39,6 +39,7 @@ CHAPTERS = [
     ("docs/18-viability-and-open-questions.md", None, 0),
     ("docs/19-how-solid-is-the-theory.md", None, 0),
     ("docs/20-experiment-program.md", None, 0),
+    ("docs/21-agent-run-plan.md", None, 0),
     ("hw/README.md", "hw · From Verilog to GDS, and into the rack", 0),
     ("hw/pcb/rack-integration.md", "hw · Rack integration reference", 0),
     ("docs/AUDIT-2026-10.md", None, 0),
