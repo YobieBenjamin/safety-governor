@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Helpers for tools/agents/run_wave.sh: the bits that are easier in Python than in bash 3.2.
 
-    wave_lib.py issues SPEC WAVE REPO [ID]   the wave's issues for one repository, as TSV: id, title, accept command
+    wave_lib.py issues SPEC WAVE REPO [ID]   the wave's issues for one repository, as TSV: id, title, accept command, backend
     wave_lib.py brief SPEC ID                 the issue body
     wave_lib.py summarize LOG.jsonl           one JSON object: what the agent run did (turns, cost, limits, errors)
     wave_lib.py status LOGDIR                 STATUS.md: one line per agent, from the logs, for the ticker
@@ -31,7 +31,7 @@ def issues(spec: str, wave: str, repo: str, only: str = "") -> None:
             continue
         if only and i["id"] != only:
             continue
-        print(i["id"], i["title"], i.get("accept", ""), sep="\t")
+        print(i["id"], i["title"], i.get("accept", ""), i.get("backend", "cloud+local"), sep="\t")
 
 
 def brief(spec: str, ident: str) -> None:
@@ -83,11 +83,11 @@ def summarize_events(rows: list[dict]) -> dict:
         if r.get("type") == "system" and r.get("subtype") == "permission_denied":
             out["denials"] += 1
     if results:
-        res = results[-1]
+        res = results[-1]   # the last run decides the outcome; turns, cost and time add up over all runs
         out["finished"] = True
-        out["turns"] = res.get("num_turns") or assistant_turns
-        out["cost_usd"] = round(float(res.get("total_cost_usd") or 0.0), 4)
-        out["duration_s"] = int((res.get("duration_ms") or 0) / 1000)
+        out["turns"] = sum(int(r.get("num_turns") or 0) for r in results) or assistant_turns
+        out["cost_usd"] = round(sum(float(r.get("total_cost_usd") or 0.0) for r in results), 4)
+        out["duration_s"] = int(sum(float(r.get("duration_ms") or 0) for r in results) / 1000)
         out["is_error"] = bool(res.get("is_error"))
         out["subtype"] = res.get("subtype")
         text = res.get("result")
@@ -153,13 +153,13 @@ def status(logdir: str) -> None:
 def report(logdir: str) -> None:
     ids = sorted({n.split(".")[0] for n in os.listdir(logdir) if n.endswith(".state.json")})
     lines = ["# Wave report", "", f"Generated {dt.datetime.now().strftime('%Y-%m-%d %H:%M')} from `{logdir}`.", "",
-             "| issue | outcome | acceptance | pull request | turns | est. cost | wall time | attempts |", "|---|---|---|---|---|---|---|---|"]
+             "| issue | backend | outcome | acceptance | pull request | turns | est. cost | wall time | attempts |", "|---|---|---|---|---|---|---|---|---|"]
     total = 0.0
     for ident in ids:
         st = state_of(logdir, ident)
         total += float(st.get("cost_usd") or 0)
         mins = int(st.get("wall_s") or st.get("duration_s") or 0) // 60
-        lines.append(f"| {ident} | {st.get('phase')} | {st.get('acceptance', 'not run')} | {st.get('pr', 'none')} | {st.get('turns')} | ${st.get('cost_usd', 0):.2f} | {mins} min | {st.get('attempts')} |")
+        lines.append(f"| {ident} | {st.get('backend', 'cloud')} | {st.get('phase')} | {st.get('acceptance', 'not run')} | {st.get('pr', 'none')} | {st.get('turns')} | ${st.get('cost_usd', 0):.2f} | {mins} min | {st.get('attempts')} |")
     lines += ["", f"Estimated API-equivalent spend for the wave: ${total:.2f} (Claude Code's client-side estimate; a subscription is billed by its windows, not by this figure).", ""]
     for ident in ids:
         st = state_of(logdir, ident)

@@ -17,6 +17,13 @@
 #   AGENT_TIMEOUT_MIN=120 (wall clock per attempt)   RETRIES=6 (resumes after a window pause)
 #   FIVE_HOUR_CEILING=0.70  SEVEN_DAY_CEILING=0.85 (no new agent starts above these utilizations)
 #   BASELINE=1 (run the repository's own tests before spending a token; 0 to skip)
+# The local model (Ollama's Anthropic-compatible API; free, one run at a time):
+#   LOCAL_URL=http://localhost:11434   LOCAL_MODEL=<an Ollama tag; auto-detected: the first qwen3 model>
+#   LOCAL_URL=cloud LOCAL_MODEL=haiku  (no local model: the cheapest cloud model takes the local tier's jobs)
+#   LOCAL_TURNS=80   LOCAL_TIMEOUT_MIN=240   BACKEND=cloud|local|cloud+local (overrides the spec for every issue)
+# Each issue's "backend" in experiments.json says who does it: cloud (the subscription), local (the
+# Mac's own model), or cloud+local (the cloud agent builds; if the acceptance command then fails,
+# the local model gets a repair pass in the same worktree before the pull request is opened).
 #
 # Needs: gh (logged in as the owner), the claude CLI (logged in), git, python3, and the experiments
 # spec tools/github/experiments.json. Run inside a clone of the repository whose issues the wave
@@ -40,6 +47,8 @@ OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 MODEL="${AGENT_MODEL:-sonnet}"; EFFORT="${EFFORT:-medium}"; TURNS="${MAX_TURNS:-40}"; BUDGET="${BUDGET_USD:-10}"
 PAR="${PARALLEL:-2}"; TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-120}"; RETRIES="${RETRIES:-6}"
 FH_CEIL="${FIVE_HOUR_CEILING:-0.70}"; SD_CEIL="${SEVEN_DAY_CEILING:-0.85}"; BASELINE="${BASELINE:-1}"
+LOCAL_URL="${LOCAL_URL:-http://localhost:11434}"; LOCAL_MODEL="${LOCAL_MODEL:-}"; LOCAL_TURNS="${LOCAL_TURNS:-80}"; LOCAL_TIMEOUT_MIN="${LOCAL_TIMEOUT_MIN:-240}"
+BACKEND_OVERRIDE="${BACKEND:-}"; LOCAL_LOCK="$HOME/.agents-local.lock"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 LIB="$HERE/wave_lib.py"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"
 ROOT="$(git rev-parse --show-toplevel)"; REPO="$(basename "$ROOT")"
@@ -49,6 +58,11 @@ say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*"; }
 fail() { echo "error: $*" >&2; exit 1; }
 notify() { command -v osascript >/dev/null 2>&1 && osascript -e "display notification \"$2\" with title \"$1\"" >/dev/null 2>&1 || true; }
 py() { python3 "$LIB" "$@"; }
+# The "local" tier: Ollama's Anthropic-compatible API at LOCAL_URL, or, with LOCAL_URL=cloud, the
+# cheapest cloud model (LOCAL_MODEL, default haiku) when no local model exists.
+claude_local() { if [ "$LOCAL_URL" = cloud ]; then claude "$@"; else ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$LOCAL_URL" claude "$@"; fi; }
+local_lock_wait() { until mkdir "$LOCAL_LOCK" 2>/dev/null; do sleep 30; done; echo $$ > "$LOCAL_LOCK/pid"; }   # one local run on the Mac at a time, across repositories
+local_lock_release() { rm -rf "$LOCAL_LOCK" 2>/dev/null || true; }
 stop_bg() { pkill -P "$1" 2>/dev/null || true; kill "$1" 2>/dev/null || true; wait "$1" 2>/dev/null || true; }
 watchdog() { ( trap - ERR; sleep "$1"; kill -INT "$2" 2>/dev/null || true; sleep 90; kill -TERM "$2" 2>/dev/null || true ) & disown $! 2>/dev/null || true; }
 jget() { python3 -c "import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print('' if v is None else v)" "$1" "$2"; }
@@ -96,6 +110,23 @@ for other in safety-governor safety hardware-and-silicon; do
   if [ "$other" != "$REPO" ] && [ -d "$HOME/$other/.git" ]; then ADD_DIRS="$ADD_DIRS $HOME/$other"; fi
 done
 say "gh: $OWNER; claude $CLAUDE_VERSION ($MODEL, effort $EFFORT, $TURNS turns, \$$BUDGET cap); parallel $PAR; readable clones:${ADD_DIRS:- none}"
+# The local model: an Ollama server answering at LOCAL_URL and a model tag. Missing is not an error
+# unless an issue is local-only; cloud+local then runs as cloud.
+LOCAL_OK=0
+if [ "$LOCAL_URL" = cloud ]; then
+  LOCAL_MODEL="${LOCAL_MODEL:-haiku}"; LOCAL_OK=1; say "local tier: no local model; the cheap cloud model $LOCAL_MODEL stands in for it"
+elif tags=$(curl -fs --max-time 5 "$LOCAL_URL/api/tags" 2>/dev/null); then
+  if [ -z "$LOCAL_MODEL" ]; then
+    LOCAL_MODEL=$(printf '%s' "$tags" | python3 -c "
+import json, sys
+names = [m['name'] for m in json.load(sys.stdin).get('models', [])]
+pick = [n for n in names if '-64k' in n] + [n for n in names if 'qwen3' in n.lower()] + names
+print(pick[0] if pick else '')")
+  fi
+  if [ -n "$LOCAL_MODEL" ]; then LOCAL_OK=1; say "local model: $LOCAL_MODEL at $LOCAL_URL (free; one run at a time)"; else say "local model: Ollama answers at $LOCAL_URL but has no model; ollama pull one"; fi
+else
+  say "local model: nothing answers at $LOCAL_URL; local work runs in the cloud instead (start Ollama to change that)"
+fi
 if [ "$BASELINE" = 1 ] && [ "$MODE" != dry ]; then
   case "$REPO" in
     safety-governor) base_cmd="python3 -m pytest -x tests" ;;        # the repository's pytest config already adds -q
@@ -132,11 +163,12 @@ DENY=( "WebFetch" "WebSearch" "Agent"
 
 # 3. One agent.
 run_agent() {
-  local id="$1" number="$2" title="$3" accept="$4"
-  local branch wt brief state session attempt log rc summary finished is_error limit subtype resets secs prompt t0 pr
+  local id="$1" number="$2" title="$3" accept="$4" backend="${5:-cloud}"
+  local branch wt brief state session attempt log rc summary finished is_error limit subtype resets secs prompt t0 pr primary
   branch="exp/$(echo "$id" | tr '[:upper:]' '[:lower:]')"; wt="$ROOT/.worktrees/$id"; brief="$LOG/$id.brief.md"; state="$LOG/$id.state.json"
   t0=$(date +%s)
-  setstate() { printf '{"id": "%s", "phase": "%s", "wall_s": %s, "acceptance": "%s", "pr": "%s", "issue": "%s"}\n' "$id" "$1" "$(( $(date +%s) - t0 ))" "${2:-not run}" "${3:-none}" "#$number" > "$state"; }
+  setstate() { printf '{"id": "%s", "phase": "%s", "wall_s": %s, "acceptance": "%s", "pr": "%s", "issue": "%s", "backend": "%s"}\n' "$id" "$1" "$(( $(date +%s) - t0 ))" "${2:-not run}" "${3:-none}" "#$number" "$backend" > "$state"; }
+  primary=cloud; [ "$backend" = local ] && primary=local
   setstate starting
   if [ ! -d "$wt" ]; then
     git -C "$ROOT" worktree add -q --no-checkout -B "$branch" "$wt" main 2>/dev/null || git -C "$ROOT" worktree add -q --no-checkout "$wt" "$branch"
@@ -167,7 +199,13 @@ run_agent() {
     say "$id: attempt $attempt on $MODEL, log $log"
     set +e
     cd "$wt" || { say "$id: no worktree at $wt"; break; }
-    if [ "$attempt" = 1 ]; then
+    if [ "$primary" = local ]; then
+      local_lock_wait
+      # shellcheck disable=SC2086
+      claude_local -p "$prompt" --session-id "$session" --model "$LOCAL_MODEL" --max-turns "$LOCAL_TURNS" \
+        --permission-mode acceptEdits $PROMPTS_FLAG --allowedTools "${ALLOW[@]}" --disallowedTools "${DENY[@]}" --add-dir "$LOG" $ADD_DIRS \
+        --output-format stream-json --verbose < /dev/null > "$log" 2> "$log.err" &
+    elif [ "$attempt" = 1 ]; then
       # shellcheck disable=SC2086
       claude -p "$prompt" --session-id "$session" --model "$MODEL" --effort "$EFFORT" --max-turns "$TURNS" --max-budget-usd "$BUDGET" \
         --permission-mode acceptEdits $PROMPTS_FLAG --allowedTools "${ALLOW[@]}" --disallowedTools "${DENY[@]}" --add-dir "$LOG" $ADD_DIRS \
@@ -180,15 +218,17 @@ run_agent() {
         --output-format stream-json --verbose < /dev/null > "$log" 2> "$log.err" &
     fi
     cpid=$!
-    watchdog "$((TIMEOUT_MIN * 60))" "$cpid"; wpid=$!
-    wait "$cpid"; rc=$?
+    if [ "$primary" = local ]; then watchdog "$((LOCAL_TIMEOUT_MIN * 60))" "$cpid"; else watchdog "$((TIMEOUT_MIN * 60))" "$cpid"; fi; wpid=$!
+    rc=0; wait "$cpid" || rc=$?
     stop_bg "$wpid"
+    [ "$primary" = local ] && local_lock_release
     cd "$ROOT"
     set -e
     summary=$(py summarize "$log")
     finished=$(jget "$summary" finished); is_error=$(jget "$summary" is_error); limit=$(jget "$summary" limit_hit); subtype=$(jget "$summary" subtype); resets=$(jget "$summary" resets_at)
     say "$id: attempt $attempt ended (exit $rc, $(jget "$summary" turns) turns, \$$(jget "$summary" cost_usd), window 5h $(jget "$summary" five_hour) 7d $(jget "$summary" seven_day), ${subtype:-no result})"
     if [ "$finished" = True ] && [ "$is_error" = False ]; then break; fi
+    if [ "$primary" = local ]; then say "$id: the local run ended without a clean result (exit $rc); see $log.err"; break; fi
     if [ "$rc" = 130 ] || [ "$rc" = 143 ]; then say "$id: stopped by the $TIMEOUT_MIN-minute watchdog"; break; fi
     case "$subtype" in *max_turns*|*budget*) say "$id: hit its cap ($subtype)"; break ;; esac
     if [ "$limit" = True ]; then
@@ -205,14 +245,34 @@ run_agent() {
     attempt=$((attempt + 1))
   done
 
-  # 4. Acceptance, by the launcher, in the worktree (free: no tokens), then the pull request and the issue comment.
-  local acc="not run" accfile="$LOG/$id.accept.log"
-  if [ -n "$accept" ]; then
+  # 4. Acceptance, by the launcher, in the worktree (free: no tokens). If it fails and the issue is
+  #    cloud+local, the local model gets one repair pass in the same worktree, then acceptance again.
+  local acc="not run" accfile="$LOG/$id.accept.log" repaired=""
+  run_acceptance() {
+    [ -n "$accept" ] || { acc="not run"; return 0; }
     set +e; (trap - ERR; cd "$wt" && bash -c "$accept") > "$accfile" 2>&1 & apid=$!
     watchdog 1800 "$apid"; awd=$!
-    wait "$apid"; arc=$?; stop_bg "$awd"; set -e
+    arc=0; wait "$apid" || arc=$?; stop_bg "$awd"; set -e
     if [ "$arc" = 0 ]; then acc="pass"; else acc="fail (exit $arc)"; fi
     say "$id: acceptance $acc: $accept"
+  }
+  run_acceptance
+  if [ "$backend" = "cloud+local" ] && [ "$LOCAL_OK" = 1 ] && [ "$acc" != pass ] && [ "$acc" != "not run" ]; then
+    setstate "local repair pass" "$acc"
+    say "$id: acceptance failed after the cloud run; the local model ($LOCAL_MODEL) gets a repair pass"
+    { echo "# Repair pass: $title"; echo; echo "The brief is in $brief. The work so far is committed on this branch. The acceptance command failed:"; echo; echo '```'; echo "$accept"; echo '```'; echo
+      echo "Its output (last 150 lines):"; echo; echo '```'; tail -150 "$accfile"; echo '```'; echo
+      echo "Fix the cause so the acceptance command passes. The rules of the brief hold: never weaken or delete a test, touch only the files the brief names and the files already created on this branch, no web, no sub-agents, commit when it passes with a message that names #$number and ends with: Agent: wave $WAVE, issue #$number (local repair). Run the acceptance command at most five times. If you cannot make it pass, commit nothing further and finish with three lines on what is wrong."; } > "$LOG/$id.repair.md"
+    local rlog="$LOG/$id.repair.jsonl"
+    set +e; cd "$wt"; local_lock_wait
+    # shellcheck disable=SC2086
+    claude_local -p "$(cat "$LOG/$id.repair.md")" --model "$LOCAL_MODEL" --max-turns "$LOCAL_TURNS" \
+      --permission-mode acceptEdits $PROMPTS_FLAG --allowedTools "${ALLOW[@]}" --disallowedTools "${DENY[@]}" --add-dir "$LOG" $ADD_DIRS \
+      --output-format stream-json --verbose < /dev/null > "$rlog" 2> "$rlog.err" &
+    cpid=$!; watchdog "$((LOCAL_TIMEOUT_MIN * 60))" "$cpid"; wpid=$!
+    rc=0; wait "$cpid" || rc=$?; stop_bg "$wpid"; local_lock_release; cd "$ROOT"; set -e
+    repaired=" after a local repair pass ($(jget "$(py summarize "$rlog")" turns) turns on $LOCAL_MODEL, exit $rc)"
+    run_acceptance
   fi
   local commits; commits=$(git -C "$wt" rev-list --count "main..$branch" 2>/dev/null || echo 0)
   if [ "$commits" -gt 0 ]; then
@@ -224,11 +284,11 @@ run_agent() {
       pr=$(gh pr create --repo "$OWNER/$REPO" --head "$branch" --base main --title "$id: $title" --body-file "$LOG/$id.pr.md" --label experiment 2>>"$LOG/launcher.err" || echo "none")
     fi
   fi
-  { echo "**Agent run, wave $WAVE** ($(date '+%Y-%m-%d %H:%M')): $(jget "$summary" turns) turns, estimated \$$(jget "$summary" cost_usd), $attempt attempt(s), $commits commit(s), acceptance \`${accept:-n/a}\`: **$acc**, pull request: $pr"
+  { echo "**Agent run, wave $WAVE** ($(date '+%Y-%m-%d %H:%M')): $primary ($([ "$primary" = local ] && echo "$LOCAL_MODEL" || echo "$MODEL, effort $EFFORT")), $(jget "$summary" turns) turns, estimated \$$(jget "$summary" cost_usd), $attempt attempt(s), $commits commit(s), acceptance \`${accept:-n/a}\`: **$acc**$repaired, pull request: $pr"
     echo; echo "Agent summary:"; echo; jget "$summary" result; } > "$LOG/$id.comment.md"
   gh issue comment "$number" --repo "$OWNER/$REPO" --body-file "$LOG/$id.comment.md" >/dev/null 2>>"$LOG/launcher.err" || say "$id: could not comment on #$number"
-  setstate "done: $commits commit(s), $(jget "$summary" turns) turns" "$acc" "$pr"
-  say "$id: done. $commits commit(s), acceptance $acc, PR $pr"
+  setstate "done: $commits commit(s), $(jget "$summary" turns) turns" "$acc$repaired" "$pr"
+  say "$id: done. $commits commit(s), acceptance $acc$repaired, PR $pr"
   notify "Wave $WAVE: $id finished" "acceptance $acc, $commits commits, \$$(jget "$summary" cost_usd)"
 }
 
@@ -262,19 +322,27 @@ PY
 # 6. Launch, PARALLEL at a time, never while the pause flag is up.
 say "== wave $WAVE: $(wc -l < "$LOG/issues.tsv" | tr -d ' ') issue(s) in $REPO"
 rm -f "$LOG/PAUSE"
+if [ -d "$LOCAL_LOCK" ] && ! kill -0 "$(cat "$LOCAL_LOCK/pid" 2>/dev/null || echo 0)" 2>/dev/null; then rm -rf "$LOCAL_LOCK"; fi
 [ "$MODE" = run ] && { ticker & TICK=$!; }
-while IFS=$'\t' read -r id title accept; do
+while IFS=$'\t' read -r id title accept backend; do
   number=$(number_of "$title")
+  backend="${BACKEND_OVERRIDE:-${backend:-cloud+local}}"
+  if [ "$LOCAL_OK" = 0 ]; then
+    case "$backend" in
+      local) say "-- $id: local-only and no local model is running; skipped"; continue ;;
+      cloud+local) backend=cloud ;;
+    esac
+  fi
   [ -n "$number" ] || { say "-- $id: no open issue with this title in $OWNER/$REPO; publish first (tools/github/publish_experiments.sh)"; continue; }
   if [ "$MODE" = dry ]; then
-    say "would run $id (#$number) in $ROOT/.worktrees/$id on exp/$(echo "$id" | tr '[:upper:]' '[:lower:]'): claude -p <brief> --model $MODEL --effort $EFFORT --max-turns $TURNS --max-budget-usd $BUDGET --permission-mode acceptEdits $PROMPTS_FLAG ...; acceptance: ${accept:-(none)}"
+    say "would run $id (#$number) as $backend in $ROOT/.worktrees/$id on exp/$(echo "$id" | tr '[:upper:]' '[:lower:]'): claude -p <brief> --model $([ "$backend" = local ] && echo "$LOCAL_MODEL via $LOCAL_URL" || echo "$MODEL --effort $EFFORT --max-budget-usd $BUDGET") --max-turns $([ "$backend" = local ] && echo "$LOCAL_TURNS" || echo "$TURNS") --permission-mode acceptEdits $PROMPTS_FLAG ...; acceptance: ${accept:-(none)}"
     continue
   fi
   while [ "$(jobs -rp | grep -vc "^$TICK$")" -ge "$PAR" ]; do sleep 20; done
   while [ -f "$LOG/PAUSE" ]; do
     secs=$(py sleep_until "$(head -1 "$LOG/PAUSE")"); say "subscription window above the ceiling ($(tail -1 "$LOG/PAUSE")); next agent in $((secs / 60)) minutes"; sleep "$secs"
   done
-  run_agent "$id" "$number" "$title" "$accept" &
+  run_agent "$id" "$number" "$title" "$accept" "$backend" &
   sleep 5
 done < "$LOG/issues.tsv"
 [ "$MODE" = dry ] && exit 0

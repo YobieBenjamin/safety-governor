@@ -56,7 +56,7 @@ START_AT=23:00 bash ~/safety-governor/tools/agents/launch.sh 2  # wave 2 tonight
 tail -f ~/safety-governor/.agents/wave-1/launcher.log           # or open .agents/wave-1/STATUS.md, rewritten every ten minutes
 ```
 
-`launch.sh` installs the Claude CLI if it is missing and logs it in, makes a `.venv` with each repository's test dependencies (the launcher and the agents use it), runs the preflight, and starts `run_wave.sh <wave> --detach` in `safety-governor` and in `safety`. The pieces, for one repository or one issue:
+`launch.sh` installs the Claude CLI if it is missing and logs it in, makes a `.venv` with each repository's test dependencies (the launcher and the agents use it), finds the local model if Ollama runs on the machine (section 3b), runs the preflight, and starts `run_wave.sh <wave> --detach` in `safety-governor` and in `safety`. The pieces, for one repository or one issue:
 
 ```bash
 cd ~/safety-governor && tools/agents/run_wave.sh 1 --check      # preflight only: gh, claude, pytest, the baseline tests
@@ -77,6 +77,20 @@ Where the tokens go, measured rather than guessed: the smoke run of the launcher
 For the `safety` experiments that must run on the recordings, the cloud agent writes the pre-registered code and opens the pull request; the run itself is `./mine` with the hypothesis's status flipped from `proposed` to `open`, on the machine that holds the data, under `agr/runguard.py`.
 
 When a wave's pull requests are in and CI is green, the reviewer (top model, one session) reads `REPORT.md` and the diffs against `docs/20`, merges in the order of the table, updates `EXPERIMENTS.md` with the result lines, and files any finding as a new issue. Then the next wave.
+
+## 3b. The local model
+
+The Mac mini has a Qwen3 model of its own, and Ollama serves it through an Anthropic-compatible API, so the same Claude CLI, the same launcher, the same worktrees, allow lists, acceptance commands and pull requests run on it; only the tokens are free (`ANTHROPIC_BASE_URL` pointed at Ollama, `--model` set to the local tag; the launcher does this itself when Ollama answers, and `launch.sh` makes a 64k-context variant of the model once, since the CLI needs that much). A local model of this size is not the cloud model: the `safety` program's own record with a local model (a hallucinated API, a stubbed function, a wrong closed form, all caught by the quality gate) is the reason for the division below, which gives it only work that a test decides.
+
+| Backend in `experiments.json` | Who does what | Issues |
+|---|---|---|
+| `local` | The local model does the whole issue. Work that is mechanical and fully decided by its acceptance command. | L6 (generate mutants, run the tests, record the survivors) |
+| `cloud+local` | The cloud agent builds; the launcher runs the acceptance command; if it fails, the local model gets one repair pass in the same worktree against the failing output, then acceptance again; the pull request opens either way, saying which it was. | L3, L4, L5, H1, P3, C3, N1, YB-0052 to YB-0057 |
+| `cloud` | Cloud only: judgment about sources, arithmetic with a paper trail, proofs on the Verilog. | L7, P2, N2 |
+
+Two more rules keep it honest and cheap: one local run at a time on the machine (a lock shared by the two repositories' launchers, so the model never serves two agents at once), and the local pass counts only through the same acceptance command and the same reviewer as the cloud pass. When Ollama is not running, `cloud+local` runs as `cloud` and `local` issues are skipped with a note; `LOCAL_URL=cloud` puts the cheapest cloud model in the local tier instead, which is how the repair pass was tested end to end before the launcher reached the Mac (the cloud agent wrote one word, the acceptance wanted two, the stand-in fixed it in five turns for a cent).
+
+Where the local model earns the most over the program: the repair passes (a failing test and its output is the kind of task a 27B coder handles), L6's mutant loop (hundreds of mechanical runs), and the bulk rows of the observer evaluation set once the cloud agent has pre-registered the scorer and the first rows. Where it should not be trusted: anything that becomes a number or a claim in a document without a test behind it.
 
 ## 4. Stop rules
 

@@ -47,7 +47,41 @@ for repo in safety-governor safety; do
   echo "$repo: $(.venv/bin/python3 --version), pytest $(.venv/bin/python3 -c 'import pytest; print(pytest.__version__)')"
 done
 
-# 3. Preflight, then the wave, in each repository that has issues in this wave.
+# 3. The local model, when Ollama is on this Mac: the Qwen3 tag (or LOCAL_MODEL), with a 64k context
+#    variant made once (Claude Code needs 64k or more; Ollama's default is smaller). Nothing here is
+#    fatal: without Ollama the local tier's jobs go to the cloud, or to the cheap cloud model with
+#    LOCAL_URL=cloud.
+step "Local model"
+LOCAL_URL="${LOCAL_URL:-http://localhost:11434}"
+if [ "$LOCAL_URL" = cloud ]; then
+  echo "LOCAL_URL=cloud: the cheap cloud model (${LOCAL_MODEL:-haiku}) takes the local tier's jobs"
+elif command -v ollama >/dev/null 2>&1; then
+  curl -fs --max-time 5 "$LOCAL_URL/api/tags" >/dev/null 2>&1 || { (ollama serve > /dev/null 2>&1 &) ; sleep 4; }
+  if curl -fs --max-time 5 "$LOCAL_URL/api/tags" >/dev/null 2>&1; then
+    base="${LOCAL_MODEL:-$(ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -i qwen3 | grep -v -- '-64k' | head -1)}"
+    if [ -n "$base" ]; then
+      case "$base" in
+        *-64k) tag="$base" ;;
+        *) tag="$(echo "$base" | tr ':' '-')-64k"
+           if ! ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "$tag:latest"; then
+             printf 'FROM %s\nPARAMETER num_ctx 65536\n' "$base" > /tmp/agents-64k.modelfile
+             ollama create "$tag" -f /tmp/agents-64k.modelfile >/dev/null && echo "made $tag: $base with a 64k context"
+           fi ;;
+      esac
+      export LOCAL_MODEL="$tag"
+      echo "local model: $LOCAL_MODEL (from $base) at $LOCAL_URL; it takes the local-only issues and the repair passes"
+    else
+      echo "Ollama runs but no qwen3 model is pulled; set LOCAL_MODEL=<tag> or: ollama pull qwen3.5"
+    fi
+  else
+    echo "Ollama is installed but not answering at $LOCAL_URL; local work goes to the cloud this wave"
+  fi
+else
+  echo "no Ollama on this Mac (https://ollama.com/download); local work goes to the cloud this wave, or set LOCAL_URL=cloud for the cheap cloud model"
+fi
+export LOCAL_URL
+
+# 4. Preflight, then the wave, in each repository that has issues in this wave.
 RUN="$HOME/safety-governor/tools/agents/run_wave.sh"
 for repo in safety-governor safety; do
   [ -d "$HOME/$repo/.git" ] || continue
