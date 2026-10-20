@@ -15,16 +15,25 @@ WAVE="${1:?usage: launch.sh <wave> | launch.sh prepare}"   # "prepare": steps 1 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 export PATH="$HOME/.local/bin:$PATH"
 
-# 1. The Claude CLI: the native installer when it is missing (into ~/.local/bin, no sudo), then a login.
+# 1. The Claude CLI, at a version the launcher needs (2.1.259 or later: --permission-prompts, --max-budget-usd,
+#    --json-schema, claude auth). An older or missing one is replaced by the native installer (into
+#    ~/.local/bin, first on PATH here, no sudo). Then a login, in the browser, when the stored one is not valid.
 step "Claude CLI"
-if ! command -v claude >/dev/null 2>&1; then
+MIN=2.1.259
+have=$(claude -v 2>/dev/null | head -1 || true)
+if [ -z "$have" ] || ! python3 "$HOME/safety-governor/tools/agents/wave_lib.py" version_ok "$have" "$MIN"; then
+  echo "claude ${have:-is missing}; installing the current one"
   curl -fsSL https://claude.ai/install.sh | bash
+  hash -r 2>/dev/null || true
   grep -q '.local/bin' "$HOME/.zshrc" 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
+  have=$(claude -v 2>/dev/null | head -1 || true)
+  python3 "$HOME/safety-governor/tools/agents/wave_lib.py" version_ok "$have" "$MIN" || { echo "claude is still $have at $(command -v claude); remove the old one and run again" >&2; exit 1; }
 fi
-claude -v | head -1
+echo "claude $have at $(command -v claude)"
 if ! claude auth status >/dev/null 2>&1; then
   echo "log in to Claude in the browser (the account with the subscription)"
   claude auth login
+  claude auth status >/dev/null 2>&1 || { echo "the Claude CLI is still not logged in" >&2; exit 1; }
 fi
 claude auth status --text 2>/dev/null | head -2 || true
 

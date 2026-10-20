@@ -172,6 +172,9 @@ run_agent() {
   setstate() { printf '{"id": "%s", "phase": "%s", "wall_s": %s, "acceptance": "%s", "pr": "%s", "issue": "%s", "backend": "%s"}\n' "$id" "$1" "$(( $(date +%s) - t0 ))" "${2:-not run}" "${3:-none}" "#$number" "$backend" > "$state"; }
   primary=cloud; [ "$backend" = local ] && primary=local
   setstate starting
+  if [ -d "$wt" ] && [ "$(git -C "$ROOT" rev-list --count "main..$branch" 2>/dev/null || echo 0)" = 0 ]; then
+    git -C "$wt" reset -q --hard main 2>/dev/null || true   # a worktree left by an earlier run with nothing on it: start from today's main
+  fi
   if [ ! -d "$wt" ]; then
     git -C "$ROOT" worktree add -q --no-checkout -B "$branch" "$wt" main 2>/dev/null || git -C "$ROOT" worktree add -q --no-checkout "$wt" "$branch"
     if [ "$(git -C "$ROOT" config --get core.sparseCheckout 2>/dev/null)" = true ]; then

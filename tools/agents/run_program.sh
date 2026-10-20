@@ -47,9 +47,11 @@ if [ "$MODE" = status ]; then
   exit 0
 fi
 if [ "$MODE" = detach ]; then
+  # preparation first, in this terminal: the Claude CLI login may need the browser, which a background process cannot drive
+  bash "$HERE/launch.sh" prepare 2>&1 | tee -a "$PROG/program.log" || { say "preparation failed; see $PROG/program.log"; exit 1; }
   WRAP=""; command -v caffeinate >/dev/null 2>&1 && WRAP="caffeinate -i -s"
   # shellcheck disable=SC2086
-  UNDER_CAFFEINATE=1 nohup $WRAP "$0" ${FROM:+--from "$FROM"} > "$PROG/launcher.log" 2>&1 < /dev/null &
+  PREPARED=1 UNDER_CAFFEINATE=1 nohup $WRAP "$0" ${FROM:+--from "$FROM"} > "$PROG/launcher.log" 2>&1 < /dev/null &
   echo "program started in the background (pid $!). Follow it with:"
   echo "  tail -f $PROG/program.log         # the program's own line per step"
   echo "  bash $0 --status                  # the waves' status tables"
@@ -172,7 +174,9 @@ if [ "$MODE" = dry ]; then
   for wave in $WAVES; do for repo in $REPOS; do echo "wave $wave, $repo:"; issues_of "$wave" "$repo" | while IFS=$'\t' read -r id title accept backend; do printf '  %-8s %-12s %s\n' "$id" "$backend" "$(pr_state "$id" "$repo" 2>/dev/null || echo '?')"; done; done; done
   exit 0
 fi
-bash "$HERE/launch.sh" prepare >> "$PROG/program.log" 2>&1 || { say "preparation failed; see $PROG/program.log"; exit 1; }
+if [ "${PREPARED:-0}" != 1 ]; then
+  bash "$HERE/launch.sh" prepare >> "$PROG/program.log" 2>&1 || { say "preparation failed; see $PROG/program.log"; exit 1; }
+fi
 backup
 if [ -n "${START_AT:-}" ]; then
   secs=$(python3 -c "
