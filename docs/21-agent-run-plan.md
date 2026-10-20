@@ -12,7 +12,7 @@ So the rules:
 2. **Mid-tier model for building, local model for repairing, top model for reviewing.** Build agents run on the mid-tier model (Sonnet class). Test-and-repair loops run through the local orchestrator. The top model (Fable or Opus class) reads only the diff and the test output of a finished wave, once.
 3. **Tests run in CI, not in agents.** Every repository already has a CI workflow; the agent's acceptance command is what CI runs. An agent reads the CI result instead of re-running the suite in its own context.
 4. **No two agents own the same file.** The waves below are arranged so that concurrent agents touch different modules. The reviewer merges in the stated order.
-5. **At most three cloud agents at a time, one wave per day.** A wave fits inside one usage window with room for the review. If the window runs out, the wave pauses; nothing is lost because every agent's state is its branch.
+5. **At most two cloud agents at a time, one wave per day.** A wave fits inside one usage window with room for the review and for the day's ordinary use. If the window runs out, the launcher pauses and resumes the agents in place; nothing is lost because every agent's state is its branch and its session.
 6. **No number without an artifact, no claim without a source.** The `safety` protocol applies to the whole program: a result exists when its script and output are committed.
 
 ## 2. The waves
@@ -48,16 +48,30 @@ Before the first wave, a machine with nothing on it is set up by one script: it 
 bash ~/Downloads/setup_and_publish.sh    # tools/github/setup_and_publish.sh; bundles next to it, or a directory as the argument
 ```
 
-Everything an agent needs is in its issue. The launcher reads the issue body as the brief, makes a worktree on a branch named after the issue, and starts a non-interactive agent on the mid-tier model with a turn cap:
+Everything an agent needs is in its issue. The launcher reads the issue body as the brief, makes a worktree on a branch named after the issue, and starts a non-interactive agent on the mid-tier model. Nobody has to watch it:
 
 ```bash
-tools/agents/run_wave.sh 1            # starts every wave-1 issue, three at a time, in worktrees
-tools/agents/run_wave.sh 1 --dry-run  # prints the briefs and commands without starting anything
+cd ~/safety-governor && tools/agents/run_wave.sh 1 --check      # preflight only: gh, claude, pytest, the baseline tests
+cd ~/safety-governor && tools/agents/run_wave.sh 1 --detach     # wave 1 here (L4, L5, H1), in the background
+cd ~/safety && ~/safety-governor/tools/agents/run_wave.sh 1 --detach    # YB-0052, in the sparse clone
+START_AT=23:00 tools/agents/run_wave.sh 2 --detach              # wave 2 tonight, when the day's own use is over
+tail -f .agents/wave-1/launcher.log                             # or open .agents/wave-1/STATUS.md, rewritten every ten minutes
 ```
+
+What "unattended" means, mechanically:
+
+- **No prompt can stall it.** The agent runs with `--permission-mode acceptEdits`, an allow list of the commands these tasks need (python, pytest, make, pip, the read-only git commands, commit), a deny list (push, checkout, reset, rebase, web access, sub-agents, `rm -rf`, sudo), and `--permission-prompts none`, so anything outside the lists is denied and the agent is told not to retry it. A denial is recorded in the run's log; nothing waits for a human.
+- **Nothing runs forever.** Each attempt has a turn cap (`MAX_TURNS`, 40), an estimated-spend cap (`BUDGET_USD`, 10), and a wall-clock watchdog (`AGENT_TIMEOUT_MIN`, 120). The acceptance command gets thirty minutes.
+- **The subscription window is respected, not fought.** Every request from the Claude CLI reports the five-hour and seven-day utilisation of the plan. The launcher reads it from the logs: an agent that stops because the window is exhausted is resumed, in the same session with its context intact, two minutes after the window resets (`RETRIES`, 6); and no new agent starts while the five-hour window is above `FIVE_HOUR_CEILING` (0.70) or the seven-day window above `SEVEN_DAY_CEILING` (0.85), which keeps the rest for the day's ordinary use.
+- **The Mac stays awake.** The run is wrapped in `caffeinate`; `--detach` puts it under `nohup` so the terminal can be closed.
+- **The result is written where it will be read.** When an agent ends, the launcher runs the acceptance command itself (free), pushes the branch, opens the pull request with the outcome in its body, comments the outcome on the issue (turns, estimated cost, attempts, acceptance, the agent's own summary) and shows a macOS notification. `STATUS.md` is rewritten every ten minutes; `REPORT.md` closes the wave with one table. The launcher never merges.
+- **Preflight before any token is spent.** It checks the GitHub account, the CLI login and version, pytest, free disk, and that the repository's own tests pass on `main`, so an agent never spends its budget on a failure that was already there.
+
+Where the tokens go, measured rather than guessed: the smoke run of the launcher (one two-turn task) cost $0.07 of API-equivalent estimate on the mid-tier model at medium effort; the Claude CLI prints this estimate for every run and the launcher records it per agent and per wave. The subscription is not billed by that figure but by its windows; the figure is still the right thing to minimise, since both scale with the same tokens. The cheapest settings that still do the work are the defaults: mid-tier model, medium effort (`EFFORT`), two agents at a time (`PARALLEL`), and briefs that name the files to read, so the agent does not read the repository to find them. Parallelism does not change the token count of a wave; it only changes how fast the window fills, which is why two, not three, is the default on a plan that is also used during the day.
 
 For the `safety` experiments that must run on the recordings, the cloud agent writes the pre-registered code and opens the pull request; the run itself is `./mine` with the hypothesis's status flipped from `proposed` to `open`, on the machine that holds the data, under `agr/runguard.py`.
 
-When a wave's pull requests are in and CI is green, the reviewer (top model, one session) reads the diffs against `docs/20`, merges in the order of the table, updates `EXPERIMENTS.md` with the result lines, and files any finding as a new issue. Then the next wave.
+When a wave's pull requests are in and CI is green, the reviewer (top model, one session) reads `REPORT.md` and the diffs against `docs/20`, merges in the order of the table, updates `EXPERIMENTS.md` with the result lines, and files any finding as a new issue. Then the next wave.
 
 ## 4. Stop rules
 
