@@ -42,15 +42,35 @@ if [ -n "$BUNDLES" ]; then
   done
 fi
 
-# 2. Labels, in every repository the spec names.
+# 1b. The spec itself, against GitHub's limits, before anything is touched: label descriptions at
+#     most 100 characters, titles at most 256, every label an issue uses defined, colors six hex digits.
+python3 - "$SPEC" <<'PY' || exit 1
+import json, re, sys
+s = json.load(open(sys.argv[1])); bad = []
+names = {l["name"] for l in s["labels"]}
+for l in s["labels"]:
+    if len(l["description"]) > 100: bad.append(f"label {l['name']}: description is {len(l['description'])} characters (max 100)")
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", l["color"]): bad.append(f"label {l['name']}: color {l['color']!r} is not six hex digits")
+for i in s["issues"]:
+    if len(i["title"]) > 256: bad.append(f"issue {i['id']}: title is {len(i['title'])} characters (max 256)")
+    for lab in i["labels"]:
+        if lab not in names: bad.append(f"issue {i['id']}: label {lab!r} is not defined")
+if bad:
+    print("experiments.json is not publishable:\n  " + "\n  ".join(bad), file=sys.stderr); sys.exit(1)
+print(f"spec: {len(s['labels'])} labels, {len(s['issues'])} issues, within GitHub's limits")
+PY
+
+# 2. Labels, in every repository the spec names. A failure is reported and the run continues.
 repos=$(python3 -c "import json,sys; s=json.load(open(sys.argv[1])); print(' '.join(sorted({i['repo'] for i in s['issues']})))" "$SPEC")
+lfail=$(mktemp)
 python3 -c "import json,sys; [print(l['name'], l['color'], l['description'], sep='\t') for l in json.load(open(sys.argv[1]))['labels']]" "$SPEC" |
 while IFS=$'\t' read -r name color desc; do
   for repo in $repos; do
-    run gh label create "$name" --repo "$OWNER/$repo" --color "$color" --description "$desc" --force >/dev/null
+    out=$(run gh label create "$name" --repo "$OWNER/$repo" --color "$color" --description "$desc" --force 2>&1) || { echo "label $name in $repo FAILED: $out"; echo fail >> "$lfail"; }
   done
 done
-echo "labels: done in $repos"
+if [ -s "$lfail" ]; then echo "labels: $(wc -l < "$lfail" | tr -d ' ') FAILED in $repos (see above)"; else echo "labels: done in $repos"; fi
+rm -f "$lfail"
 
 # 3. One issue per experiment; update the body and labels if the title already exists. The
 #    existing issues of each repository are listed once (no search: titles are long and contain

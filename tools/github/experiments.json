@@ -98,7 +98,7 @@
     {
       "name": "pre-register",
       "color": "d93f0b",
-      "description": "Follows safety/docs/PROTOCOL.md: code and decision rules committed and timestamped before the test data is touched"
+      "description": "Per safety/docs/PROTOCOL.md: code and decision rules committed and timestamped before data is read"
     }
   ],
   "issues": [
