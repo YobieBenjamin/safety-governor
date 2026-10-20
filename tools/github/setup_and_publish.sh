@@ -11,6 +11,7 @@
 # The safety repository is cloned without its 8 GB of recordings (a blobless, sparse clone); add a
 # directory later with: git -C ~/safety sparse-checkout add algorithms/<name>
 set -euo pipefail
+set -E; trap 'echo "error: line $LINENO: $BASH_COMMAND (exit status $?)" >&2' ERR   # nothing fails silently
 OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 BASE="${GITHUB_BASE:-https://github.com/$OWNER}"   # where the repositories are cloned from
 BUNDLES="${1:-$(cd "$(dirname "$0")" && pwd)}"
@@ -91,16 +92,18 @@ for repo in $REPOS; do
   branch=$(git -C "$clone" rev-parse --abbrev-ref HEAD)
   [ "$branch" = main ] || fail "$repo is on branch '$branch'; check out main and run again"
   [ -z "$(git -C "$clone" status --porcelain --untracked-files=no)" ] || fail "$repo has uncommitted changes; commit or stash them and run again"
-  git -C "$clone" fetch -q origin main
+  err=$(mktemp)
+  # "+" so the remote-tracking ref follows GitHub even if it was left ahead or aside; -q hides git's refusal otherwise
+  git -C "$clone" fetch -q origin "+refs/heads/main:refs/remotes/origin/main" 2>"$err" || { cat "$err" >&2; fail "$repo: could not fetch main from GitHub"; }
   git -C "$clone" merge -q --ff-only origin/main || fail "$repo has local commits that are not on GitHub; push or move them first"
   found=0
-  err=$(mktemp)
   for b in $(ls "$BUNDLES" 2>/dev/null | grep -E "^$repo-[0-9]+\.bundle$" | sed -E "s/^$repo-([0-9]+)\.bundle$/\1 &/" | sort -n | cut -d' ' -f2); do
     found=1
     path="$BUNDLES/$b"
-    # the bundle's head, read from the file: a bundle already in the clone's history is skipped unread
-    head=$(git bundle list-heads "$path" refs/heads/main 2>/dev/null | cut -d' ' -f1)
-    [ -n "$head" ] || fail "$repo: $b has no main branch; it is not one of the program's bundles"
+    # the bundle's head, read from the file (inside the clone: some git builds want a repository
+    # for this): a bundle already in the clone's history is skipped unread
+    head=$(git -C "$clone" bundle list-heads "$path" 2>"$err" | awk '$2 == "refs/heads/main" {print $1}' || true)
+    [ -n "$head" ] || { [ -s "$err" ] && cat "$err" >&2; fail "$repo: $b has no main branch or cannot be read"; }
     if git -C "$clone" cat-file -e "$head" 2>/dev/null && git -C "$clone" merge-base --is-ancestor "$head" HEAD; then
       echo "$repo: already contains $b"; continue
     fi
