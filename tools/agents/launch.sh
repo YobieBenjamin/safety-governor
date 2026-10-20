@@ -40,10 +40,25 @@ claude auth status --text 2>/dev/null | head -2 || true
 # 2. A Python environment per repository, with its own tests' dependencies. run_wave.sh uses
 #    .venv/bin when it exists; so do the agents' python3 and pytest commands.
 step "Python environments"
+# The repositories need Python 3.11 or later; macOS ships 3.9. Find one, or install one with Homebrew.
+PY=""
+for cand in python3.13 python3.12 python3.11 /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 /opt/homebrew/bin/python3.11 /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
+  if command -v "$cand" >/dev/null 2>&1 && "$cand" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then PY="$(command -v "$cand")"; break; fi
+done
+if [ -z "$PY" ]; then
+  command -v brew >/dev/null 2>&1 || { echo "no Python 3.11+ and no Homebrew to install one (https://brew.sh, then run again)" >&2; exit 1; }
+  echo "no Python 3.11+ on this Mac; installing python@3.12 with Homebrew"
+  brew install -q python@3.12
+  PY="$(brew --prefix python@3.12)/bin/python3.12"
+fi
+echo "python: $PY ($("$PY" --version 2>&1))"
 for repo in safety-governor safety; do
   [ -d "$HOME/$repo/.git" ] || { echo "$repo: no clone at ~/$repo (run setup_and_publish.sh first)"; continue; }
   cd "$HOME/$repo"
-  [ -x .venv/bin/python3 ] || python3 -m venv .venv
+  if [ -x .venv/bin/python3 ] && ! .venv/bin/python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+    echo "$repo: the existing .venv is $(.venv/bin/python3 --version 2>&1); remaking it"; rm -rf .venv
+  fi
+  [ -x .venv/bin/python3 ] || "$PY" -m venv .venv
   .venv/bin/python3 -m pip install -q --upgrade pip
   case "$repo" in
     safety-governor)
