@@ -32,7 +32,6 @@ for i in spec["issues"]:
         print(i["id"], i["repo"], i["title"], sep="\t")
 EOF
 
-running=0
 while IFS=$'\t' read -r id repo title; do
   branch="exp/$(echo "$id" | tr '[:upper:]' '[:lower:]')"
   if [ "$repo" != "$THIS_REPO" ]; then
@@ -59,8 +58,8 @@ while IFS=$'\t' read -r id repo title; do
   fi
   git -C "$wt" reset -q --hard
   bash -c "$cmd" &
-  running=$((running + 1))
-  if [ "$running" -ge "$PAR" ]; then wait -n; running=$((running - 1)); fi
+  # at most PAR agents at once (a polling wait: macOS ships bash 3.2, which has no "wait -n")
+  while [ "$(jobs -rp | wc -l | tr -d ' ')" -ge "$PAR" ]; do sleep 10; done
 done < "$LOG/issues.tsv"
 wait
 echo "wave $WAVE: agents finished; logs in $LOG; branches exp/*; review the pull requests before merging."

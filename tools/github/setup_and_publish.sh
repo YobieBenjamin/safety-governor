@@ -98,16 +98,21 @@ for repo in $REPOS; do
   for b in $(ls "$BUNDLES" 2>/dev/null | grep -E "^$repo-[0-9]+\.bundle$" | sed -E "s/^$repo-([0-9]+)\.bundle$/\1 &/" | sort -n | cut -d' ' -f2); do
     found=1
     path="$BUNDLES/$b"
-    if ! git -C "$clone" fetch -q "$path" main:refs/claude/incoming 2>"$err"; then
+    # the bundle's head, read from the file: a bundle already in the clone's history is skipped unread
+    head=$(git bundle list-heads "$path" refs/heads/main 2>/dev/null | cut -d' ' -f1)
+    [ -n "$head" ] || fail "$repo: $b has no main branch; it is not one of the program's bundles"
+    if git -C "$clone" cat-file -e "$head" 2>/dev/null && git -C "$clone" merge-base --is-ancestor "$head" HEAD; then
+      echo "$repo: already contains $b"; continue
+    fi
+    # "+" lets the scratch ref move backwards or sideways between bundles; it is never the branch
+    rc=0; git -C "$clone" fetch -q "$path" "+main:refs/claude/incoming" 2>"$err" || rc=$?
+    if [ "$rc" != 0 ]; then
       grep -q prerequisite "$err" && fail "$repo: $b builds on commits this clone does not have (a newer bundle may be needed, or an older one applied first)"
-      cat "$err" >&2; exit 1
+      [ -s "$err" ] && cat "$err" >&2
+      fail "$repo: git could not read $b (exit status $rc)"
     fi
-    if git -C "$clone" merge-base --is-ancestor refs/claude/incoming HEAD; then
-      echo "$repo: already contains $b"
-    else
-      git -C "$clone" merge -q --ff-only refs/claude/incoming
-      echo "$repo: applied $b -> $(git -C "$clone" log --oneline -1)"
-    fi
+    git -C "$clone" merge -q --ff-only refs/claude/incoming || fail "$repo: $b does not fast-forward main at $(git -C "$clone" rev-parse --short HEAD); it was made from a different line of history"
+    echo "$repo: applied $b -> $(git -C "$clone" log --oneline -1)"
   done
   rm -f "$err"
   if [ "$found" = 1 ]; then

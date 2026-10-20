@@ -35,7 +35,7 @@ if [ -n "$BUNDLES" ]; then
     for b in "$BUNDLES"/"$repo"-*.bundle; do
       [ -f "$b" ] || continue
       echo "== $repo: applying $(basename "$b")"
-      run git -C "$clone" fetch "$b" main:refs/claude/incoming
+      run git -C "$clone" fetch "$b" "+main:refs/claude/incoming"
       run git -C "$clone" merge --ff-only refs/claude/incoming
     done
     run git -C "$clone" push origin main
