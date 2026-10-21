@@ -58,7 +58,7 @@ if [ "$LOCAL_OK" = 1 ]; then
   if [ -n "$LOCAL_MODEL" ] && [ "$(wc -c < "$P/diff.patch")" -lt 400000 ]; then
     say "$ID: second reader on $LOCAL_MODEL"
     { cat "$P/summary.md"; echo; echo "=== DIFF ==="; cat "$P/diff.patch"; } > "$P/reader-input.txt"
-    reader() { claude_local -p "Below are an agent's summary of its work and the full diff. List every claim the summary and the commit messages make (one per line, numbered). For each, quote the line of the diff that is the evidence, or write NOT FOUND. Then list every number that appears in a changed document and where in the diff it is computed or recorded, or NOT FOUND. No other text." \
+    reader() { claude_local -p "$(local_prefix)Below are an agent's summary of its work and the full diff. List every claim the summary and the commit messages make (one per line, numbered). For each, quote the line of the diff that is the evidence, or write NOT FOUND. Then list every number that appears in a changed document and where in the diff it is computed or recorded, or NOT FOUND. No other text." \
       --model "$LOCAL_MODEL" --max-turns 1 --tools "" --permission-prompts none --output-format text < "$P/reader-input.txt" > "$P/claims-local.md" 2> "$P/reader.err"; }
     set +e; with_cap "$READER_MIN" reader; rrc=$?; set -e
     if [ "$rrc" = 124 ]; then echo "(second reader stopped after $READER_MIN minutes; the local model did not answer in time)" > "$P/claims-local.md"; say "$ID: second reader stopped after $READER_MIN minutes"

@@ -60,7 +60,7 @@ if [ "$backend" = local ]; then
   say "$ID: revision $ROUND on the local model $LOCAL_MODEL (fresh session; one local run at a time)"
   local_lock_wait
   # shellcheck disable=SC2086
-  claude_local -p "$(python3 "$HERE/wave_lib.py" brief "$SPEC" "$ID")
+  claude_local -p "$(local_prefix)$(python3 "$HERE/wave_lib.py" brief "$SPEC" "$ID")
 
 $(cat "$LOG/$ID.revise-$ROUND.md")" --model "$LOCAL_MODEL" --max-turns "$LOCAL_TURNS" \
     --permission-mode acceptEdits $PROMPTS_FLAG --allowedTools "${ALLOW[@]}" --disallowedTools "${DENY[@]}" --add-dir $ADD_DIRS \

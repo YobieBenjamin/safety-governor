@@ -3,6 +3,8 @@
 # LOCAL_URL: probes the API; if nothing answers, starts the Ollama app or the ollama binary from the
 # places the installers use; then picks (or makes, through the API) a qwen3 model with a 64k context.
 # LOCAL_URL=cloud means: no local model, the cheap cloud model (LOCAL_MODEL, default haiku) stands in.
+LOCAL_THINK="${LOCAL_THINK:-0}"
+local_prefix() { [ "$LOCAL_THINK" = 1 ] || printf '/no_think '; }   # Qwen3's soft switch; harmless for models without one
 ollama_answers() { curl -fs --noproxy '*' --max-time 5 "$1/api/tags" >/dev/null 2>&1; }
 find_local_model() {
   LOCAL_OK=0

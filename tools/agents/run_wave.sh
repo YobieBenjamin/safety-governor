@@ -191,7 +191,7 @@ run_agent() {
     if [ "$primary" = local ]; then
       local_lock_wait
       # shellcheck disable=SC2086
-      claude_local -p "$prompt" --session-id "$session" --model "$LOCAL_MODEL" --max-turns "$LOCAL_TURNS" \
+      claude_local -p "$(local_prefix)$prompt" --session-id "$session" --model "$LOCAL_MODEL" --max-turns "$LOCAL_TURNS" \
         --permission-mode acceptEdits $PROMPTS_FLAG --allowedTools "${ALLOW[@]}" --disallowedTools "${DENY[@]}" --add-dir "$LOG" $ADD_DIRS \
         --output-format stream-json --verbose < /dev/null > "$log" 2> "$log.err" &
     elif [ "$attempt" = 1 ]; then
@@ -255,7 +255,7 @@ run_agent() {
     local rlog="$LOG/$id.repair.jsonl"
     set +e; cd "$wt"; local_lock_wait
     # shellcheck disable=SC2086
-    claude_local -p "$(cat "$LOG/$id.repair.md")" --model "$LOCAL_MODEL" --max-turns "$LOCAL_TURNS" \
+    claude_local -p "$(local_prefix)$(cat "$LOG/$id.repair.md")" --model "$LOCAL_MODEL" --max-turns "$LOCAL_TURNS" \
       --permission-mode acceptEdits $PROMPTS_FLAG --allowedTools "${ALLOW[@]}" --disallowedTools "${DENY[@]}" --add-dir "$LOG" $ADD_DIRS \
       --output-format stream-json --verbose < /dev/null > "$rlog" 2> "$rlog.err" &
     cpid=$!; watchdog "$((LOCAL_TIMEOUT_MIN * 60))" "$cpid"; wpid=$!
