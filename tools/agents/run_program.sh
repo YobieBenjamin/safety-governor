@@ -106,10 +106,12 @@ mirror_job() {   # $1 repo. A first mirror that survives a dropped connection: h
   # `git clone --mirror` of the safety repository ran eight hours and died a few kilobytes short when the
   # connection blinked, twice; this never loses more than one batch.
   local repo="$1" m="$BACKUP_DIR/mirrors/$1.git" url="https://github.com/$OWNER/$1.git" log="$BACKUP_DIR/mirrors/$1.git.log" try=0 batch head
-  if [ ! -d "$m/objects" ]; then
-    rm -rf "$m"; git init -q --bare "$m" || return 1
+  if [ ! -d "$m/objects" ] || [ -z "$(git -C "$m" for-each-ref 2>/dev/null | head -1)" ]; then
+    rm -rf "$m"; git init -q --bare "$m" || return 1   # nothing fetched yet (or a clone that died before its first ref): start clean
     git -C "$m" remote add --mirror=fetch origin "$url"
   fi
+  find "$m" -name '*.lock' -mmin +30 -delete 2>/dev/null || true   # a lock older than half an hour belongs to a git that is gone
+  git -C "$m" config remote.origin.url "$url"; git -C "$m" config remote.origin.fetch '+refs/*:refs/*'; git -C "$m" config remote.origin.mirror true
   until git -C "$m" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=300 fetch -q --prune --filter=blob:none origin >>"$log" 2>&1; do
     try=$((try + 1)); [ "$try" -ge 20 ] && return 1; sleep $((try * 60))
   done
@@ -150,8 +152,8 @@ backup() {   # mirrors of all four repositories, a browsable clone of each, the 
         continue
       fi
     fi
-    if [ -d "$m" ] && [ ! -f "$m.cloning" ] && ! git -C "$m" rev-parse -q --verify main >/dev/null 2>&1; then
-      say "backup: $m has no main yet (an interrupted copy); resuming it in the background"
+    if [ -d "$m" ] && [ ! -f "$m.cloning" ] && { ! git -C "$m" rev-parse -q --verify main >/dev/null 2>&1 || [ "$(git -C "$m" config --get remote.origin.promisor 2>/dev/null)" = true ]; }; then
+      say "backup: $m is a partial copy (history without all its blobs, or no main yet); resuming it in the background"
       ( trap - ERR; mirror_job "$repo"; echo $? > "$m.rc" ) &
       echo $! > "$m.cloning"
       continue
@@ -163,6 +165,9 @@ backup() {   # mirrors of all four repositories, a browsable clone of each, the 
       ( trap - ERR; rm -f "$m.rc"; mirror_job "$repo"; echo $? > "$m.rc" ) &
       echo $! > "$m.cloning"
       continue
+    fi
+    if [ -d "$root/clones/$repo/.git" ] && ! git -C "$root/clones/$repo" rev-parse -q --verify HEAD >/dev/null 2>&1; then
+      rm -rf "$root/clones/$repo"   # a clone that never got a commit (made from an empty mirror): start it again
     fi
     if [ -d "$root/clones/$repo/.git" ]; then
       git -C "$root/clones/$repo" fetch -q origin main 2>/dev/null && git -C "$root/clones/$repo" merge -q --ff-only origin/main 2>/dev/null || say "backup: clone update of $repo failed"
@@ -188,7 +193,12 @@ gate() {   # wave repo: review every branch the wave produced here; merge what p
       none) say "$repo $id: no pull request (the agent produced no commit, or was skipped)"; continue ;;
     esac
     num="${st#open:}"
-    round=0
+    waiting="$HOME/$repo/.agents/wave-$wave/review/$id/waiting-for-a-person"
+    if [ -f "$waiting" ] && [ "$(cat "$waiting")" = "$(gh pr view "$num" --repo "$OWNER/$repo" --json headRefOid -q .headRefOid 2>/dev/null)" ]; then
+      say "$repo $id: PR #$num is waiting for a person (the gate said revise after $REVISE_ROUNDS revisions and the branch has not moved); skipped"; continue
+    fi
+    rm -f "$waiting"
+    round=$(ls "$HOME/$repo/.agents/wave-$wave/$id".revise-*.md 2>/dev/null | wc -l | tr -d ' ')   # rounds already run survive a restart
     while :; do
       say "$repo $id: gate on PR #$num$( [ "$round" -gt 0 ] && echo " (after revision $round)")"
       rc=0; bash "$HERE/review_pr.sh" "$wave" "$id" >> "$PROG/program.log" 2>&1 || rc=$?
@@ -216,6 +226,7 @@ gate() {   # wave repo: review every branch the wave produced here; merge what p
       fi
     else
       say "$repo $id: verdict $verdict after $round revision(s); left open for a person"
+      mkdir -p "$(dirname "$waiting")"; gh pr view "$num" --repo "$OWNER/$repo" --json headRefOid -q .headRefOid > "$waiting" 2>/dev/null || true
     fi
   done
 }
