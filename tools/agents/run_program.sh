@@ -38,6 +38,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 say() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$PROG/program.log"; }
+# one program at a time: a second start while one runs would race it on the same branches and pull requests
+if [ "$MODE" = run ] || [ "$MODE" = detach ]; then
+  if [ -f "$PROG/pid" ] && kill -0 "$(cat "$PROG/pid" 2>/dev/null || echo 0)" 2>/dev/null; then
+    echo "the program is already running (pid $(cat "$PROG/pid")); follow it with: tail -f $PROG/program.log" >&2; exit 0
+  fi
+fi
 notify() { command -v osascript >/dev/null 2>&1 && osascript -e "display notification \"$2\" with title \"$1\"" >/dev/null 2>&1 || true; }
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -169,6 +175,7 @@ Written by the program's gate for the external audit (Codex, Gemini) described i
 }
 
 # ---- the program ---------------------------------------------------------------------------------
+[ "$MODE" = run ] && echo $$ > "$PROG/pid"
 say "== program start (waves: $WAVES; merge: $MERGE; backup: $BACKUP_DIR)"
 if [ "$MODE" = dry ]; then
   for wave in $WAVES; do for repo in $REPOS; do echo "wave $wave, $repo:"; issues_of "$wave" "$repo" | while IFS=$'\t' read -r id title accept backend; do printf '  %-8s %-12s %s\n' "$id" "$backend" "$(pr_state "$id" "$repo" 2>/dev/null || echo '?')"; done; done; done

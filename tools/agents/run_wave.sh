@@ -112,23 +112,15 @@ for other in safety-governor safety hardware-and-silicon; do
   if [ "$other" != "$REPO" ] && [ -d "$HOME/$other/.git" ]; then ADD_DIRS="$ADD_DIRS $HOME/$other"; fi
 done
 say "gh: $OWNER; claude $CLAUDE_VERSION ($MODEL, effort $EFFORT, $TURNS turns, \$$BUDGET cap); parallel $PAR; readable clones:${ADD_DIRS:- none}"
-# The local model: an Ollama server answering at LOCAL_URL and a model tag. Missing is not an error
-# unless an issue is local-only; cloud+local then runs as cloud.
-LOCAL_OK=0
-if [ "$LOCAL_URL" = cloud ]; then
-  LOCAL_MODEL="${LOCAL_MODEL:-haiku}"; LOCAL_OK=1; say "local tier: no local model; the cheap cloud model $LOCAL_MODEL stands in for it"
-elif tags=$(curl -fs --max-time 5 "$LOCAL_URL/api/tags" 2>/dev/null); then
-  if [ -z "$LOCAL_MODEL" ]; then
-    LOCAL_MODEL=$(printf '%s' "$tags" | python3 -c "
-import json, sys
-names = [m['name'] for m in json.load(sys.stdin).get('models', [])]
-pick = [n for n in names if '-64k' in n] + [n for n in names if 'qwen3' in n.lower()] + names
-print(pick[0] if pick else '')")
-  fi
-  if [ -n "$LOCAL_MODEL" ]; then LOCAL_OK=1; say "local model: $LOCAL_MODEL at $LOCAL_URL (free; one run at a time)"; else say "local model: Ollama answers at $LOCAL_URL but has no model; ollama pull one"; fi
-else
-  say "local model: nothing answers at $LOCAL_URL; local work runs in the cloud instead (start Ollama to change that)"
-fi
+# The local model: the Ollama server at LOCAL_URL (started if it is installed but not running) and a
+# qwen3 tag with a 64k context. Missing is not an error unless an issue is local-only; cloud+local
+# then runs as cloud.
+# shellcheck source=tools/agents/local_model.sh
+. "$HERE/local_model.sh"
+find_local_model
+if [ "$LOCAL_URL" = cloud ]; then say "local tier: no local model; the cheap cloud model $LOCAL_MODEL stands in for it"
+elif [ "$LOCAL_OK" = 1 ]; then say "local model: $LOCAL_MODEL at $LOCAL_URL (free; one run at a time)"
+else say "local model: nothing answers at $LOCAL_URL and none could be started; local work runs in the cloud instead"; fi
 if [ "$BASELINE" = 1 ] && [ "$MODE" != dry ]; then
   case "$REPO" in
     safety-governor) base_cmd="python3 -m pytest -x tests" ;;        # the repository's pytest config already adds -q

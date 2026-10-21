@@ -8,6 +8,9 @@
     wave_lib.py report LOGDIR                 REPORT.md: the wave's table
     wave_lib.py version_ok HAVE MIN           exit 0 if version HAVE >= MIN
     wave_lib.py sleep_until RESETS_AT         seconds from now until the unix time (plus a margin), at least 60
+    wave_lib.py local URL [TAG]               the local model to use at an Ollama server: a qwen3 tag with a 64k
+                                              context (made through the API if missing); prints nothing if the
+                                              server does not answer or has no model
 """
 from __future__ import annotations
 
@@ -184,7 +187,37 @@ def sleep_until(resets_at: str) -> None:
     print(max(60, target - int(time.time()) + 120))
 
 
+def local(url: str, preferred: str = "") -> None:
+    import json as _json
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/api/tags", timeout=5) as r:
+            names = [m["name"] for m in _json.load(r).get("models", [])]
+    except Exception:
+        return
+    if not names:
+        return
+    if preferred and "-64k" in preferred and (preferred in names or preferred + ":latest" in names):
+        print(preferred if preferred in names else preferred + ":latest"); return
+    want = preferred.replace(":", "-") + "-64k" if preferred else ""
+    ready = [n for n in names if "-64k" in n and (not want or n.split(":")[0] == want)]
+    if ready:
+        print(ready[0]); return
+    base = preferred if preferred in names else (preferred + ":latest" if preferred + ":latest" in names else "") if preferred else ""
+    base = base or next((n for n in names if "qwen3" in n.lower()), names[0])
+    tag = base.replace(":", "-") + "-64k"
+    body = _json.dumps({"model": tag, "from": base, "parameters": {"num_ctx": 65536}, "stream": False}).encode()
+    try:
+        req = urllib.request.Request(url.rstrip("/") + "/api/create", data=body, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=600) as r:
+            r.read()
+        print(tag)
+    except Exception as e:
+        print(base, file=sys.stdout)   # the model without the larger context: usable, with the CLI's warning
+        print(f"could not make {tag} through the API ({e}); using {base}", file=sys.stderr)
+
+
 if __name__ == "__main__":
     cmd, args = sys.argv[1], sys.argv[2:]
     {"issues": issues, "brief": brief, "summarize": summarize, "status": status, "report": report,
-     "version_ok": version_ok, "sleep_until": sleep_until}[cmd](*args)
+     "version_ok": version_ok, "sleep_until": sleep_until, "local": local}[cmd](*args)

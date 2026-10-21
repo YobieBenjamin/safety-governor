@@ -41,15 +41,10 @@ say "$ID: verifier $( [ "$vrc" = 0 ] && echo clean || echo "found blocking probl
 
 # 2. A second reader on the local model, when one answers: claims and evidence, no tools, the diff on stdin.
 rm -f "$P/claims-local.md"
-if [ "$LOCAL_URL" = cloud ] || curl -fs --max-time 5 "$LOCAL_URL/api/tags" >/dev/null 2>&1; then
-  if [ -z "$LOCAL_MODEL" ] && [ "$LOCAL_URL" != cloud ]; then
-    LOCAL_MODEL=$(curl -fs "$LOCAL_URL/api/tags" | python3 -c "
-import json, sys
-names = [m['name'] for m in json.load(sys.stdin).get('models', [])]
-pick = [n for n in names if '-64k' in n] + [n for n in names if 'qwen3' in n.lower()] + names
-print(pick[0] if pick else '')")
-  fi
-  [ "$LOCAL_URL" = cloud ] && LOCAL_MODEL="${LOCAL_MODEL:-haiku}"
+# shellcheck source=tools/agents/local_model.sh
+. "$HERE/local_model.sh"
+find_local_model
+if [ "$LOCAL_OK" = 1 ]; then
   if [ -n "$LOCAL_MODEL" ] && [ "$(wc -c < "$P/diff.patch")" -lt 400000 ]; then
     say "$ID: second reader on $LOCAL_MODEL"
     { cat "$P/summary.md"; echo; echo "=== DIFF ==="; cat "$P/diff.patch"; } | claude_local -p "Below are an agent's summary of its work and the full diff. List every claim the summary and the commit messages make (one per line, numbered). For each, quote the line of the diff that is the evidence, or write NOT FOUND. Then list every number that appears in a changed document and where in the diff it is computed or recorded, or NOT FOUND. No other text." \

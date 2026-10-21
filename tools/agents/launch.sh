@@ -77,34 +77,12 @@ done
 #    fatal: without Ollama the local tier's jobs go to the cloud, or to the cheap cloud model with
 #    LOCAL_URL=cloud.
 step "Local model"
-LOCAL_URL="${LOCAL_URL:-http://localhost:11434}"
-if [ "$LOCAL_URL" = cloud ]; then
-  echo "LOCAL_URL=cloud: the cheap cloud model (${LOCAL_MODEL:-haiku}) takes the local tier's jobs"
-elif command -v ollama >/dev/null 2>&1; then
-  curl -fs --max-time 5 "$LOCAL_URL/api/tags" >/dev/null 2>&1 || { (ollama serve > /dev/null 2>&1 &) ; sleep 4; }
-  if curl -fs --max-time 5 "$LOCAL_URL/api/tags" >/dev/null 2>&1; then
-    base="${LOCAL_MODEL:-$(ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -i qwen3 | grep -v -- '-64k' | head -1)}"
-    if [ -n "$base" ]; then
-      case "$base" in
-        *-64k) tag="$base" ;;
-        *) tag="$(echo "$base" | tr ':' '-')-64k"
-           if ! ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx "$tag:latest"; then
-             printf 'FROM %s\nPARAMETER num_ctx 65536\n' "$base" > /tmp/agents-64k.modelfile
-             ollama create "$tag" -f /tmp/agents-64k.modelfile >/dev/null && echo "made $tag: $base with a 64k context"
-           fi ;;
-      esac
-      export LOCAL_MODEL="$tag"
-      echo "local model: $LOCAL_MODEL (from $base) at $LOCAL_URL; it takes the local-only issues and the repair passes"
-    else
-      echo "Ollama runs but no qwen3 model is pulled; set LOCAL_MODEL=<tag> or: ollama pull qwen3.5"
-    fi
-  else
-    echo "Ollama is installed but not answering at $LOCAL_URL; local work goes to the cloud this wave"
-  fi
-else
-  echo "no Ollama on this Mac (https://ollama.com/download); local work goes to the cloud this wave, or set LOCAL_URL=cloud for the cheap cloud model"
-fi
-export LOCAL_URL
+# shellcheck source=tools/agents/local_model.sh
+. "$HOME/safety-governor/tools/agents/local_model.sh"
+find_local_model
+if [ "$LOCAL_URL" = cloud ]; then echo "LOCAL_URL=cloud: the cheap cloud model ($LOCAL_MODEL) takes the local tier's jobs"
+elif [ "$LOCAL_OK" = 1 ]; then echo "local model: $LOCAL_MODEL at $LOCAL_URL; it takes the local-only issues, the repair passes and the second reading of every review"
+else echo "no Ollama server answers at $LOCAL_URL and none could be started (https://ollama.com/download; then: ollama pull qwen3.5:27b); local work goes to the cloud this wave"; fi
 
 [ "$WAVE" = prepare ] && { step "Prepared"; exit 0; }
 
