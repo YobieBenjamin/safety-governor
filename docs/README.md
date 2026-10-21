@@ -1,5 +1,7 @@
 # The design documents
 
+For the route through theory, logic, math and code, with every command, start at [`../START-HERE.md`](../START-HERE.md).
+
 Two reading orders. Both cover the whole design; they differ in depth.
 
 **Plain English first.** `10-plain-english-walkthrough.md` tells the design as one story in

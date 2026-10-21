@@ -30,7 +30,7 @@ slept. That is the whole idea. A model can think anything. The governor decides 
 
 ## Two ways to read this
 
-Every part of the design exists at two depths, and they point at each other.
+If you came to check the work rather than read about it, [`START-HERE.md`](START-HERE.md) is the route: the theory, the logic, the math, the code that proves the code, and what is still open, with every command. Otherwise, every part of the design exists at two depths, and they point at each other.
 
 | If you are | Start here | Then |
 |---|---|---|
