@@ -51,6 +51,19 @@ def fixtures_current() -> None:
               "run: python3 -m lanes.generate (only if the change is intended)")
 
 
+def chain_ok(audit: dict) -> bool:
+    """Hash chain from sha256("audit-genesis"), leaf = sha256(0x00 || core), a gate signature over each chain hash."""
+    head, good = bytes.fromhex(E.sha256_hex(b"audit-genesis")), True
+    for i, e in enumerate(audit["entries"]):
+        core = {k: e[k] for k in ("seq", "ts", "prev", "record")}
+        leaf = bytes.fromhex(E.sha256_hex(b"\x00" + E.canonical(core)))
+        chain = bytes.fromhex(E.sha256_hex(head + leaf))
+        good &= e["seq"] == i and e["prev"] == head.hex() and e["hash"] == chain.hex() \
+            and E.verify_sig(bytes.fromhex(audit["pub"]), base64.b64decode(e["sig"]), chain) and "event" in e["record"]
+        head = chain
+    return good
+
+
 def messages() -> None:
     keys, rq = load("keys.json"), load("request.json")
     req, now = rq["request"], rq["now"]
@@ -99,24 +112,17 @@ def messages() -> None:
     check("policy image: signed by the wrong key is rejected", not E.verify(pol, pub["gate"]))
 
     audit = load("audit-record.json")
-    head, good = bytes.fromhex(E.sha256_hex(b"audit-genesis")), True
-    for i, e in enumerate(audit["entries"]):
-        core = {k: e[k] for k in ("seq", "ts", "prev", "record")}
-        leaf = bytes.fromhex(E.sha256_hex(b"\x00" + E.canonical(core)))
-        chain = bytes.fromhex(E.sha256_hex(head + leaf))
-        good &= e["seq"] == i and e["prev"] == head.hex() and e["hash"] == chain.hex() \
-            and E.verify_sig(bytes.fromhex(audit["pub"]), base64.b64decode(e["sig"]), chain) and "event" in e["record"]
-        head = chain
-    check("audit record: chain, signatures and event fields verify", good and audit["pub"] == pub["gate"])
+    check("audit record: chain, signatures and event fields verify", chain_ok(audit) and audit["pub"] == pub["gate"])
     cp = audit["checkpoints"][0]
     check("audit record: checkpoint is gate-signed and commits to the head",
           E.verify(cp, pub["gate"]) and cp["payload"]["head"] == audit["entries"][-1]["hash"]
           and cp["payload"]["size"] == len(audit["entries"]))
     broken = copy.deepcopy(audit)
     broken["entries"][0]["record"]["rules"] = 2
-    e0 = broken["entries"][0]
-    leaf = bytes.fromhex(E.sha256_hex(b"\x00" + E.canonical({k: e0[k] for k in ("seq", "ts", "prev", "record")})))
-    check("audit record: editing an entry breaks its hash", bytes.fromhex(E.sha256_hex(b"" + leaf)).hex() != e0["hash"])
+    check("audit record: editing an entry is detected", not chain_ok(broken))
+    cut = copy.deepcopy(audit)
+    del cut["entries"][0]
+    check("audit record: deleting an entry is detected", not chain_ok(cut))
 
 
 def govsim_model() -> None:
@@ -137,6 +143,15 @@ def govsim_model() -> None:
           bytes.fromhex(signed["sig"]) == base64.b64decode(obs["sig"]))
     check("govsim: verifies the fixture signature under the anchored key",
           C.verify_object({"payload": obs["payload"], "signer": sk.key_id, "sig": base64.b64decode(obs["sig"]).hex()}, sk.public))
+    for name, signer in (("observer-assertion.json", "obs-main"), ("provenance-assertion.json", "wm-registry"),
+                         ("attestation-token.json", "verifier"), ("action-ticket.json", "gate"),
+                         ("policy-image.json", "governance")):
+        env = load(name)
+        vk = C.VerifyKey.from_hex(keys[signer]["pub"])
+        adapted = {"payload": env["payload"], "signer": vk.key_id, "sig": base64.b64decode(env["sig"]).hex()}
+        check(f"govsim: verifies {name} under the {signer} key", C.verify_object(adapted, vk))
+        adapted["payload"] = dict(env["payload"], expires_at=env["payload"].get("expires_at", 0) + 1, tampered=True)
+        check(f"govsim: rejects a tampered {name}", not C.verify_object(adapted, vk))
 
 
 def catalogue() -> None:
