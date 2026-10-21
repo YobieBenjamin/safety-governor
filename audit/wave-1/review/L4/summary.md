@@ -1,32 +1,31 @@
-**Agent run, wave 1** (2026-10-20 17:50): cloud (sonnet, effort medium), 43 turns, estimated $0.9419, 1 attempt(s), 2 commit(s), acceptance `python3 -m pytest -q tests/test_h19_conformance.py`: **pass**, pull request: https://github.com/YobieBenjamin/safety-governor/pull/14
+**Revision 2** (2026-10-21 02:52) on the local model qwen3.8-27b-64k:latest: 77 turns, estimated $0.0, acceptance `python3 -m pytest -q tests/test_h19_conformance.py`: **pass**. The gate reviews the branch again.
 
 Agent summary:
 
-The acceptance command `python3 -m pytest -q tests/test_h19_conformance.py` passes: 5 tests, run twice. The first run failed on three of the 200 traces; the second passed after fixes. Everything is committed on `exp/l4` (not pushed).
 
-**Built**
-- `govsim/trace.py`: a sink that records typed events. It wraps `_mint`, `_accept_policy`, `_apply_rung`, `_boot`, `Log.append` and `ActionEndpoint.execute` at class level and puts the originals back on stop. The governor is not changed.
-- `proofs/replay.py`: concrete Python versions of the `core_invariants.py` and `commit_point.py` machines, with the Z3 guards copied one for one. P1 to P4 are checked after every step, and the first unmatched event raises `NoTransition` naming it. z3 is not installed here, so this does not run the prover. A test checks the step names against the proof files.
-- `tests/test_h19_conformance.py` and `tests/h19_plugin.py`: the plugin reruns all 200 hypothesis tests with the sink on and replays each trace at teardown. Two broken-governor fixtures fail replay with the event named: a halted governor that still signs a ticket, and a stale-edition ticket that executes.
-
-**Disproof (model bug or gap in the theorem)**
-- **Theorem gap:** a power cycle is not a step. Govsim boots halted and reaches RUN on the first heartbeat with no clear. The replayer allows this as an explicit `arm` step only from a boot-caused halt. The theorem should add a boot step or constrain init.
-- **Theorem gap:** an endpoint burns a ticket and may then refuse it. The machine has no step for a spent ticket that was never executed.
-- **Injected fault, not a gap:** `test_governor_cannot_clear_itself` forces RUN with no clear. Replay must refuse it, and the plugin asserts that it does.
-- **No model bug found.**
-
-**Not checked**
-- The rule and witnesses behind each ticket (they are inputs to the machine).
-- Heartbeat, which is observed at issue and at execute rather than driven by events.
-- Quorum, which is taken as true for an accepted policy image and for an authority clear.
-
-The findings are also in `EXPERIMENTS.md`.
-
-**Open questions**
-- Should the theorem model boot and the `arm` step?
-- Should a burned-then-refused ticket count as a machine step?
 
 ## Commit messages
+- Revision 2: work left uncommitted by the agent, committed by the launcher (#4)
+Agent: wave 1, issue #4 (revision 2, launcher commit)
+
+- govsim/trace.py, proofs/replay.py, tests/test_h19_conformance.py: heartbeat as a first-class event; arm/burn gap tests (#4)
+Revision 1. The heartbeat is now a first-class event (heartbeat_back /
+heartbeat_lost) that drives the machine's heartbeat state, so the issue and
+execute guards read m.heartbeat -- a state the events set -- instead of a flag
+carried on the guarded event (the circularity finding). The endpoint's own
+expiry is recorded as a heartbeat_lost observed at the endpoint. Report.burned
+tracks the burn-without-execute gap (the endpoint burns the ticket before the
+commit and device checks and may refuse; the core machine has no such step),
+isolated by a test; the boot/arm gap is isolated the same way. The "one for
+one" claim is softened to a concrete re-encoding: step_names cross-checks the
+step names, but the guard logic is not compared symbolically (z3 is absent).
+The fault-injection assertion is widened to check the faulted set is exactly
+FAULT_INJECTION and that each refusal names its event and reason. EXPERIMENTS.md
+records the findings.
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+Agent: wave 1, issue #4 (revision 1)
+
 - govsim/trace.py, proofs/replay.py: boot, ticket owner, injected-fault test; EXPERIMENTS.md L4 findings (#4)
 Agent: wave 1, issue #4
 

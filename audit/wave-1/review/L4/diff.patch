@@ -1,54 +1,67 @@
 diff --git a/EXPERIMENTS.md b/EXPERIMENTS.md
-index 186c0cf..72f67b0 100644
+index 186c0cf..10322b5 100644
 --- a/EXPERIMENTS.md
 +++ b/EXPERIMENTS.md
-@@ -27,3 +27,16 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
+@@ -27,3 +27,17 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
  | N1 | N | Whole-deployment overhead simulation | `govsim/deploy.py` | open | the per-chip model gives 34 percent engine utilisation batched and under 0.1 percent firmware share |
  | N2 | N | False-halt rate model | `docs/07` FMEA, fault injection | open | |
  | N3 | N | FPGA beside a real GPU | pre-hardware plan, phase 4 | later | needs a lab with a rack |
 +
 +## L4 trace conformance (issue #4)
 +
-+`python3 -m pytest -q tests/test_h19_conformance.py` passes: every test of H0 to H18 is rerun with the trace sink on (`govsim/trace.py`) and its trace replayed through the machines of `proofs/` (`proofs/replay.py`). Two broken-governor fixtures (a halted governor that signs, a stale-edition ticket that executes) fail replay with the event named.
++`python3 -m pytest -q tests/test_h19_conformance.py` passes: every test of H0 to H18 is rerun with the trace sink on (`govsim/trace.py`) and its trace replayed through the machines of `proofs/` (`proofs/replay.py`). All traces replay clean **except one**: `test_governor_cannot_clear_itself` injects a firmware fault on purpose (a governor that forgets its cause and enters RUN with no clear); its trace is refused by the machines by design, and the plugin asserts the refusal names the event. So the set is 199 clean plus that one expected refusal. Two further broken-governor fixtures (a halted governor that signs, a stale-edition ticket that executes) fail replay with the event named.
 +
 +Findings from replay:
 +
-+- Gap in the theorem: a power cycle is not a step. `core_invariants.py` leaves `halted` free in the initial state, but govsim boots into HALTED_INITIAL and reaches RUN on the first heartbeat with no clear. The replayer accepts this as an explicit `arm` step, only from a halt that a boot put there (counted in `Report.arms`). The theorem should either add a boot/arm step or constrain init.
-+- Gap in the theorem: an endpoint burns a ticket before the governor commit and the device checks, and may then refuse. The machine has no burn-without-execute step (`used` without `executed`); the replayer tracks it as `burned`.
++- Gap in the theorem: a power cycle is not a step. `core_invariants.py` leaves `halted` free in the initial state, but govsim boots into HALTED_INITIAL and reaches RUN on the first heartbeat with no clear. The replayer accepts this as an explicit `arm` step, only from a halt that a boot put there (counted in `Report.arms`). It is isolated by `test_the_first_run_after_a_boot_is_a_named_gap_not_a_transition`. The theorem should either add a boot/arm step or constrain init.
++- Gap in the theorem: an endpoint burns a ticket before the governor commit and the device checks, and may then refuse. The machine has no burn-without-execute step (`used` without `executed`); the replayer absorbs the refusal as a stutter and tracks it in `Report.burned`. It is isolated by `test_a_burn_without_execute_is_a_stutter_the_machine_has_no_step_for`.
 +- Refusals for expiry, wrong endpoint, parameter mismatch and bad signature are stutter steps of `forged execute`; the machine is looser than the system there, which is sound.
-+- Not a gap: `test_governor_cannot_clear_itself` injects a firmware fault (RUN with no clear). Replay refuses it as it must; the plugin lists it in `FAULT_INJECTION` and asserts the refusal.
-+- Not modelled: `allows` and `witness` are inputs of the machine, so replay does not check that the rule and witnesses were right; heartbeat is observed (governor hb_expiry at issue, endpoint hb_expiry at execute), not driven by explicit events; `quorum` is taken as true for an accepted policy image and for an authority clear.
-+- z3 is not installed here, so replay executes the guards on concrete values (copied from the Z3 steps) and a test checks the step names against the proof files; it does not run the prover.
++- Not a gap: `test_governor_cannot_clear_itself` injects a firmware fault (RUN with no clear). Replay refuses it as it must; the plugin lists it in `FAULT_INJECTION` and asserts the refusal, and the conformance test checks the faulted names are exactly that set.
++- Not modelled: `allows` and `witness` are inputs of the machine, so replay does not check that the rule and witnesses were right; `quorum` is taken as true for an accepted policy image and for an authority clear.
++- Heartbeat is a first-class event, not a flag on the ticket or execute: `heartbeat_back`/`heartbeat_lost` move the machine's heartbeat, so the issue and execute guards read a state the events set and can fail on it (the endpoint's own expiry is recorded as a `heartbeat_lost` observed at the endpoint).
++- z3 is not installed here, so replay runs the guards on concrete values. The guards are a concrete re-encoding of the Z3 steps; a test checks the step *names* against the proof files but the guard logic is not compared symbolically (the prover is not run), so the re-encoding is checked by replaying the real traces and by the broken-governor fixtures rather than by Z3.
 diff --git a/govsim/trace.py b/govsim/trace.py
 new file mode 100644
-index 0000000..9c9e98a
+index 0000000..06f8010
 --- /dev/null
 +++ b/govsim/trace.py
-@@ -0,0 +1,219 @@
+@@ -0,0 +1,243 @@
 +"""A trace sink beside the log: every governor transition as a typed event, for replay against the abstract machines.
 +
 +    from govsim.trace import Trace
 +    with Trace() as tr:
 +        ...drive a rack...
-+    tr.events        # list[Event], in the order the transitions happened
++    tr.events        # list[Event], in the order the machines consume them (see the hold_released note below)
 +
 +The sink does not change the governor. ``Trace.start()`` wraps a handful of methods on the classes
-+(``Governor._mint``, ``_accept_policy``, ``_apply_rung``, ``ActionEndpoint.execute`` and the log's ``append``)
-+and ``stop()`` puts the originals back. Each wrapper records what happened and calls through.
++(``Governor._heartbeat``, ``_mint``, ``_accept_policy``, ``_apply_rung``, ``ActionEndpoint.execute`` and the log's
++``append``) and ``stop()`` puts the originals back. Each wrapper records what happened and calls through.
++
++The events are ordered for the machines, not strictly by wall clock: govsim mints the ticket that a hold
++releases *before* it logs the release (the gate signs inside the approve handler, then logs it), but in the
++abstract machine the clearance must precede the commit it licenses. So a ``hold_released`` is inserted ahead of
++its ``ticket_issued`` and the ``seq`` fields are renumbered to the replay position. Every other event is in the
++order it happened.
 +
 +Event kinds (``Event.kind``) and the fields in ``Event.data``:
 +
 +  boot               state, cause              the governor powered up (first boot or a restart)
 +  edition_set        edition                   the first edition this governor ran under (provisioning or boot)
 +  edition_change     old, new, via             a new policy edition accepted (via: commit | load | boot)
-+  ticket_issued      action, ticket_id, edition, state, hb, rule     the gate signed a ticket (action = request hash)
++  heartbeat_back     source                     the governor accepted a heartbeat: its heartbeat is live again
++  heartbeat_lost     source                     the governor's heartbeat expired (source: expiry | endpoint)
++  ticket_issued      action, ticket_id, edition, state, rule     the gate signed a ticket (action = request hash)
 +  hold_parked        action, hold_id           the gate parked a request for a human verdict
-+  hold_released      action, hold_id           the approvers released the hold (always precedes its ticket_issued)
-+  execute_ok         action, ticket_id, edition, endpoint_edition, hb, endpoint     an endpoint carried the action out
-+  execute_refused    action, ticket_id, edition, endpoint_edition, hb, endpoint, reason     an endpoint refused
++  hold_released      action, hold_id           the approvers released the hold (inserted before its ticket_issued)
++  execute_ok         action, ticket_id, edition, endpoint_edition, endpoint     an endpoint carried the action out
++  execute_refused    action, ticket_id, edition, endpoint_edition, endpoint, reason     an endpoint refused
 +  halt               cause, rung                the governor entered a safe-mode rung
 +  clear              cause, by                  the authority cleared the cause
 +  run_entered        via                        the governor entered RUN (via: clear | arm)
++
++The heartbeat is a first-class event, not a flag on the ticket or execute: the machine's heartbeat state is
++driven by ``heartbeat_back``/``heartbeat_lost`` so the issue and execute guards read a state the events set,
++not a value the event they guard carries (that coupling would let the guard never fail).
 +
 +``Event.gov`` names the governor (``name#serial``; the serial keeps two racks with the same names apart) or is
 +None for a refusal whose ticket names no governor of ours (missing, forged).
@@ -89,6 +102,7 @@ index 0000000..9c9e98a
 +        self._log_owner: dict[int, Any] = {}     # id(Log) -> governor
 +        self._holds: dict[str, str] = {}         # hold_id -> request hash
 +        self._cleared: set[str] = set()          # governors whose last clear has not yet been followed by RUN
++        self._ep_owner: dict[int, str] = {}      # id(endpoint) -> the governor that relays heartbeats to it
 +        self._orig: list[tuple[Any, str, Any]] = []
 +        self._booting: Any = None
 +
@@ -172,7 +186,7 @@ index 0000000..9c9e98a
 +                ticket = orig(gov, rhash, action, params, fp, rule, reservation, now)
 +                tr._ticket_gov[ticket["payload"]["ticket_id"]] = tr.gid(gov)
 +                tr.emit("ticket_issued", tr.gid(gov), action=rhash, ticket_id=ticket["payload"]["ticket_id"], edition=gov.epoch,
-+                        state=gov.state, hb=gov.hb_expiry > gov.clock.now(), rule=rule["id"])
++                        state=gov.state, rule=rule["id"])
 +                return ticket
 +            return _mint
 +
@@ -187,14 +201,16 @@ index 0000000..9c9e98a
 +
 +        def execute(orig):
 +            def _execute(ep, ticket, action, params):
-+                now = ep.clock.now()
-+                hb = now <= ep.hb_expiry
 +                t = (ticket or {}).get("payload") or {}
 +                edition, ep_edition = t.get("policy_epoch"), ep.epoch
 +                ok, why = orig(ep, ticket, action, params)
 +                gov = tr._ticket_gov.get(t.get("ticket_id"))       # None: no governor of ours minted this ticket
-+                data = dict(action=t.get("request_hash"), ticket_id=t.get("ticket_id"), edition=edition, endpoint_edition=ep_edition,
-+                            hb=hb, endpoint=ep.name)
++                # the endpoint's own heartbeat expiry is a heartbeat-lost event, observed at the endpoint, not a
++                # flag the execute carries: the machine's heartbeat guard must not read the event it guards
++                if not ok and why == reasons.ENDPOINT_HEARTBEAT_EXPIRED and gov is not None:
++                    tr.emit("heartbeat_lost", gov, source="endpoint")
++                data = dict(action=t.get("request_hash"), ticket_id=t.get("ticket_id"), edition=edition,
++                            endpoint_edition=ep_edition, endpoint=ep.name)
 +                if ok:
 +                    tr.emit("execute_ok", gov, **data)
 +                else:
@@ -202,9 +218,18 @@ index 0000000..9c9e98a
 +                return ok, why
 +            return _execute
 +
++        def hb(orig):
++            def _hb(gov, *a, **k):
++                result = orig(gov, *a, **k)
++                if isinstance(result, dict) and result.get("ok"):        # the governor accepted a heartbeat: live again
++                    tr.emit("heartbeat_back", tr.gid(gov), source="authority")
++                return result
++            return _hb
++
 +        self._wrap(G, "_boot", boot)
 +        self._wrap(L, "__init__", log_init)
 +        self._wrap(L, "append", append)
++        self._wrap(G, "_heartbeat", hb)
 +        self._wrap(G, "_accept_policy", accept)
 +        self._wrap(G, "_mint", mint)
 +        self._wrap(G, "_apply_rung", rung)
@@ -238,18 +263,18 @@ index 0000000..9c9e98a
 +                e.seq = i
 +        elif event == "halt.cause":
 +            self._cleared.discard(g)
++            if data.get("cause") == reasons.HEARTBEAT_LOST:
++                self.emit("heartbeat_lost", g, source="expiry")     # the heartbeat went out before the halt
 +            self.emit("halt", g, cause=data["cause"], rung=data["rung"])
 +        elif event == "halt.cleared":
 +            self._cleared.add(g)
 +            self.emit("clear", g, cause=data["cause"], by=data["by"])
-+        elif event == "policy.committed":
-+            pass          # the edition change itself is recorded by the _accept_policy wrapper
 diff --git a/proofs/replay.py b/proofs/replay.py
 new file mode 100644
-index 0000000..6f273c1
+index 0000000..8af602a
 --- /dev/null
 +++ b/proofs/replay.py
-@@ -0,0 +1,271 @@
+@@ -0,0 +1,330 @@
 +#!/usr/bin/env python3
 +"""Replay a govsim trace through the abstract machines of the proofs, and raise on the first event they refuse.
 +
@@ -258,20 +283,40 @@ index 0000000..6f273c1
 +    replay(trace.events)          # returns a Report, or raises NoTransition naming the event
 +
 +The machines are those of ``core_invariants.py`` (tickets, editions, halt, heartbeat) and ``commit_point.py``
-+(holds and their clearances), executed on concrete values instead of being handed to Z3. The guards are copied
-+from the Z3 steps one for one, and ``step_names()`` reads the step names out of the proof files so a test can
-+fail if the two drift apart. After every step the invariants P1 to P4 are checked on the concrete state.
++(holds and their clearances), executed on concrete values instead of being handed to Z3. The guards are a
++concrete re-encoding of those Z3 steps: ``step_names()`` reads the step names out of the proof files and
++``replayer_steps()`` reads the step labels the replayer actually drives, and a test cross-checks the two sets
++so a guard that names a step the proofs lack fails -- but the guard *logic* is not compared symbolically (z3 is
++not installed here, so the prover is not run). The re-encoding is checked instead by replaying the real traces
++and by broken-governor fixtures that must fail at a named event. After every step the invariants P1 to P4 are
++re-checked on the concrete state; because the guards already enforce them, the check is a consistency guard, not
++independent evidence that they hold.
 +
 +What each event is allowed to do:
 +
 +  ticket_issued    core ``issue``: not halted, heartbeat live, no ticket yet for this action. The rule and the
 +                   witnesses are inputs of the model (``allows``, ``witness``) and are taken as given. A ticket
-+                   that follows a hold must also be the commit of the commit-point machine, which needs the
-+                   reviewer clearance that ``hold_released`` records.
-+  execute_ok       core ``execute``: heartbeat live, the ticket carries the current edition, not yet spent.
++                   for an action the gate still holds is that action's release: it must be released (the
++                   commit-point ``reviewer clears`` step, driven at the ``hold_released`` event), else the
++                   commit has no clearance and has no enabled transition.
++  hold_parked      commit-point ``hold``: the gate parks a high-severity action for a human verdict.
++  hold_released    commit-point ``reviewer clears``: the approvers release the hold; the clearance is bound to
++                   the action's version. The commit is NOT fused here -- it is driven at the action's carry-out
++                   -- so a held action committed with no clearance is a transition the machine does not have.
++  heartbeat_back   core ``heartbeat back``: the machine's heartbeat goes live. The machine has one heartbeat
++                   (the authority's, live at the endpoint, ``core_invariants.py``); the sink observes it from
++                   the governor's accepted heartbeat and, at the endpoint, from the endpoint's own timer.
++  heartbeat_lost   core ``heartbeat lost``: the machine's heartbeat goes out. The issue and execute guards read
++                   this state, not a flag on their own event.
++  execute_ok       core ``execute``: heartbeat live, the ticket carries the current edition, not yet spent. A
++                   held action that is carried out is its commit point: the commit-point ``commit`` step, which
++                   needs the clearance the ``hold_released`` recorded.
 +  execute_refused  core ``forged execute``: nothing changes. A refusal is always allowed (the system may be
 +                   stricter than the machine), but a refusal for a reason that makes a claim about the machine
-+                   (replay, stale edition, heartbeat) must be backed by that state.
++                   (replay, stale edition, heartbeat) must be backed by that state. A ticket the endpoint burns
++                   and then refuses (a post-admit check fails) is a step the machine does not have; the replayer
++                   absorbs it as a stutter and tracks the burn in ``Report.burned`` (a gap in the theorem, not a
++                   model bug -- the endpoint's post-admit checks are not a step of the core machine).
 +  edition_change   core ``new edition``: a quorum (an accepted policy image carries the governance signatures).
 +  halt             core ``halt``.
 +  clear            core ``clear``: halted, quorum (the authority's signature), neighbour (the governor checked it).
@@ -279,6 +324,7 @@ index 0000000..6f273c1
 +                   RUN after a boot: this is NOT a step of the machine. The theorem's initial state leaves
 +                   ``halted`` free, and a power cycle is not a step in it. The replayer accepts it only when
 +                   the halt being left came from a boot, never from a cause, and counts it in ``Report.arms``.
++                   A RUN entered after a cause with no clear is the one step the machine refuses here.
 +"""
 +from __future__ import annotations
 +
@@ -286,16 +332,24 @@ index 0000000..6f273c1
 +from dataclasses import dataclass, field
 +from pathlib import Path
 +
++from govsim import reasons
++
 +HERE = Path(__file__).parent
 +
-+# refusal reasons that claim something about the machine's state, and what they claim
-+CLAIM_REPLAY = ("ticket.replay",)
-+CLAIM_STALE = ("ticket.stale_epoch",)
-+CLAIM_HB = ("endpoint.heartbeat_expired",)
++# The endpoint's admit checks, in the order ActionEndpoint.admit runs them (govsim/endpoints.py): a refusal for
++# any of these names an admit-check reason and is a stutter of ``forged execute``. They are the reasons
++# constants, not hard-coded strings, so a renamed or new reason shows up here instead of being silently
++# miscounted as a burn. A refusal for a reason not in this set (the endpoint's post-admit checks: the commit,
++# the device's own sensors) is a burn without an execute, the gap the theorem does not model.
++CLAIM_REPLAY = (reasons.TICKET_REPLAY,)
++CLAIM_STALE = (reasons.TICKET_STALE_EPOCH,)
++CLAIM_HB = (reasons.ENDPOINT_HEARTBEAT_EXPIRED,)
 +
 +
-+ADMIT_REFUSALS = ("ticket.bad_signature", "ticket.params_mismatch", "ticket.action_mismatch", "ticket.expired", "ticket.not_yet_valid",
-+                  "ticket.replay", "ticket.stale_epoch", "ticket.wrong_endpoint", "ticket.missing", "endpoint.heartbeat_expired")
++ADMIT_REFUSALS = (reasons.TICKET_BAD_SIGNATURE, reasons.TICKET_PARAMS_MISMATCH, reasons.TICKET_ACTION_MISMATCH,
++                  reasons.TICKET_EXPIRED, reasons.TICKET_NOT_YET_VALID, reasons.TICKET_REPLAY,
++                  reasons.TICKET_STALE_EPOCH, reasons.TICKET_WRONG_ENDPOINT, reasons.TICKET_MISSING,
++                  reasons.ENDPOINT_HEARTBEAT_EXPIRED)
 +
 +
 +class NoTransition(AssertionError):
@@ -313,6 +367,17 @@ index 0000000..6f273c1
 +    core_names = re.findall(r'\("([^"]+)", (?:issue|execute|forged_execute|new_epoch|halt|clear|beat_lost|beat_back|environment)\)', core.split("def step_list")[1])
 +    cp_names = re.findall(r'\("([^"]+)", (?:hold|reviewer_clears|regulator_allclear|reparameterise|budget_runs_out|commit|refused_commit)\)', cp)
 +    return {"core": core_names, "commit_point": cp_names}
++
++
++def replayer_steps() -> set[str]:
++    """The step labels the replayer actually drives, read out of its own source: the string a ``report.count``
++    or a ``NoTransition`` names. The conformance test cross-checks this against the proof files, so a guard
++    that names a step the proofs do not have shows up here (z3 is not run, so the guard *logic* is not
++    compared symbolically -- this ties the labels, not the logic)."""
++    src = Path(__file__).read_text()
++    driven = set(re.findall(r'self\.report\.count\("([^"]+)"', src))
++    driven |= set(re.findall(r'NoTransition\([^,]+,\s*"([^"]+)"', src))
++    return driven
 +
 +
 +class Core:
@@ -350,10 +415,18 @@ index 0000000..6f273c1
 +
 +class CommitPoint:
 +    """proofs/commit_point.py for the actions the gate parks: a hold, a reviewer clearance, then the commit.
-+    A parked action is high severity and irreversible by construction (the rule asked for a human)."""
++    A parked action is high severity and irreversible by construction (the rule asked for a human).
++
++    The clearance and the commit are separate steps driven at separate points of the trace, so the check that
++    a committed action carries a clearance for its version is not tautological: ``reviewer_clears`` happens at
++    the hold's release (``hold_released``) and ``commit`` at the action's carry-out (``execute_ok``). A held
++    action that is committed with no clearance -- a ticket the gate signed for a still-held action -- has no
++    enabled transition, and the replay names it. The version never moves (a re-parameterised action is a new
++    action hash in govsim), so a stale clearance is a non-issue here; the guard that bites is the missing one."""
 +
 +    def __init__(self) -> None:
 +        self.held: set[str] = set()
++        self.released: set[str] = set()
 +        self.cleared_for: dict[str, int] = {}
 +        self.version: dict[str, int] = {}
 +        self.committed: set[str] = set()
@@ -366,14 +439,17 @@ index 0000000..6f273c1
 +
 +    def reviewer_clears(self, event, a: str) -> None:
 +        if a not in self.held:
-+            raise NoTransition(event, "reviewer clears", "the action is not held")
++            raise NoTransition(event, "reviewer clears", "a clearance for an action the gate never held")
 +        self.cleared_for[a] = self.version[a]
++        self.released.add(a)
 +
 +    def commit(self, event, a: str) -> None:
 +        if a in self.committed:
 +            raise NoTransition(event, "commit", "the action already committed")
-+        if self.cleared_for.get(a, -1) != self.version.get(a, 0):
-+            raise NoTransition(event, "commit", "a high-severity action with no reviewer clearance for its version")
++        # a held action commits only on a clearance bound to its version; an action the gate never held is not
++        # this machine's concern (it is the core machine's issue/execute).
++        if a in self.held and self.cleared_for.get(a, -1) != self.version.get(a, 0):
++            raise NoTransition(event, "commit", "a held action committed with no reviewer clearance for its version")
 +        self.committed.add(a)
 +        self.held.discard(a)
 +
@@ -384,6 +460,7 @@ index 0000000..6f273c1
 +    steps: dict[str, int] = field(default_factory=dict)
 +    arms: int = 0
 +    stutters: dict[str, int] = field(default_factory=dict)
++    burned: int = 0
 +
 +    def count(self, step: str) -> None:
 +        self.steps[step] = self.steps.get(step, 0) + 1
@@ -393,7 +470,6 @@ index 0000000..6f273c1
 +    def __init__(self) -> None:
 +        self.core: dict[str, Core] = {}
 +        self.cp: dict[str, CommitPoint] = {}
-+        self.hb: dict[tuple[str, str], bool] = {}
 +        self.report = Report()
 +
 +    def machine(self, gov: str) -> Core:
@@ -402,13 +478,13 @@ index 0000000..6f273c1
 +            self.cp[gov] = CommitPoint()
 +        return self.core[gov]
 +
-+    def _observe_hb(self, m: Core, gov: str, observer: str, live: bool) -> None:
-+        """The heartbeat flag of the machine is what the observer sees. A change is a lost / back step."""
-+        m.heartbeat = live
-+        last = self.hb.get((gov, observer))
-+        if last is not None and last != live:
++    def _set_hb(self, m: Core, live: bool) -> None:
++        """A heartbeat_back / heartbeat_lost event moves the machine's heartbeat; a change is a lost / back step.
++        The issue and execute guards read ``m.heartbeat`` (a state the events set), never a flag on their own
++        event, so the guard can actually fail on what the heartbeat events say."""
++        if m.heartbeat != live:
 +            self.report.count("heartbeat back" if live else "heartbeat lost")
-+        self.hb[(gov, observer)] = live
++        m.heartbeat = live
 +
 +    def feed(self, e) -> None:
 +        self.report.events += 1
@@ -420,8 +496,11 @@ index 0000000..6f273c1
 +        m = self.machine(e.gov)
 +        k = e.kind
 +        if k == "boot":
-+            m.halted, m.halt_from = True, ("cause" if d.get("cause") else "boot")
-+            self.hb = {key: v for key, v in self.hb.items() if key[0] != e.gov or key[1] != e.gov}
++            m.halted, m.halt_from, m.heartbeat = True, ("cause" if d.get("cause") else "boot"), False
++        elif k == "heartbeat_back":
++            self._set_hb(m, True)
++        elif k == "heartbeat_lost":
++            self._set_hb(m, False)
 +        elif k == "edition_set":
 +            if m.names and m.names[m.epoch] != d["edition"]:
 +                raise NoTransition(e, "new edition", f"boot found edition {d['edition'][:8]} where the machine is at {m.names[m.epoch][:8]} and there was no edition change")
@@ -453,13 +532,17 @@ index 0000000..6f273c1
 +            self.cp[e.gov].hold(e, d["action"])
 +            self.report.count("hold")
 +        elif k == "hold_released":
++            # the clearance is its own step; the commit is driven later, at the action's carry-out (execute_ok),
++            # so a held action committed with no clearance has no enabled transition
 +            self.cp[e.gov].reviewer_clears(e, d["action"])
-+            self.cp[e.gov].commit(e, d["action"])
-+            self.report.count("reviewer clears + commit")
++            self.report.count("reviewer clears")
 +        elif k == "ticket_issued":
 +            self._issue(e, m)
 +        elif k == "execute_ok":
 +            self._execute(e, m)
++            if e.data["action"] in self.cp[e.gov].held:
++                self.cp[e.gov].commit(e, e.data["action"])    # a carried-out held action is its commit point
++                self.report.count("commit")
 +        elif k == "execute_refused":
 +            self._refuse(e, m)
 +        else:
@@ -468,9 +551,10 @@ index 0000000..6f273c1
 +
 +    def _issue(self, e, m: Core) -> None:
 +        a, d = e.data["action"], e.data
-+        self._observe_hb(m, e.gov, e.gov, d["hb"])
-+        if a in self.cp[e.gov].held:
-+            raise NoTransition(e, "commit", "a ticket for an action that is still held (no hold_released before it)")
++        # a ticket for an action the gate still holds (parked for a human) is its release: it must be released,
++        # which is the clearance the commit-point machine needs. A held action with no hold_released has none.
++        if a in self.cp[e.gov].held and a not in self.cp[e.gov].released:
++            raise NoTransition(e, "commit", "a ticket for an action the gate never released (no hold_released before it)")
 +        if m.halted:
 +            raise NoTransition(e, "issue", f"the machine is halted ({m.halt_from}); the governor was in {d['state']}")
 +        if not m.heartbeat:
@@ -485,7 +569,6 @@ index 0000000..6f273c1
 +
 +    def _execute(self, e, m: Core) -> None:
 +        a, d = e.data["action"], e.data
-+        self._observe_hb(m, e.gov, d["endpoint"], d["hb"])
 +        if not m.heartbeat:
 +            raise NoTransition(e, "execute", "the endpoint carried the action out with its heartbeat expired")
 +        if m.tk(a) != m.epoch:
@@ -500,13 +583,14 @@ index 0000000..6f273c1
 +
 +    def _refuse(self, e, m: Core) -> None:
 +        a, d, why = e.data["action"], e.data, e.data["reason"]
-+        self._observe_hb(m, e.gov, d["endpoint"], d["hb"])
 +        if why in CLAIM_REPLAY and a not in m.used and a not in m.burned:
 +            raise NoTransition(e, "forged execute (refused)", "refused as a replay, but the machine has no spent ticket for the action")
 +        if why in CLAIM_STALE and m.tk(a) == m.epoch and d["edition"] == d["endpoint_edition"]:
 +            raise NoTransition(e, "forged execute (refused)", "refused as a stale edition, but the ticket carries the current one")
 +        if why not in ADMIT_REFUSALS:
-+            m.burned.add(a)          # the endpoint burns the ticket before the commit and the device checks
++            if a not in m.burned:
++                m.burned.add(a)      # the endpoint burns the ticket before the commit and the device checks
++                self.report.burned += 1
 +        if why in CLAIM_HB and m.heartbeat:
 +            raise NoTransition(e, "forged execute (refused)", "refused for an expired heartbeat, but the machine's heartbeat is live")
 +        self.report.count("forged execute (refused)")
@@ -576,15 +660,18 @@ index 0000000..deec73e
 +        Path(path).write_text(json.dumps(RESULTS))
 diff --git a/tests/test_h19_conformance.py b/tests/test_h19_conformance.py
 new file mode 100644
-index 0000000..1a65dee
+index 0000000..73f8a29
 --- /dev/null
 +++ b/tests/test_h19_conformance.py
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,153 @@
 +"""H19: trace conformance. Every govsim trace is replayed through the abstract machines of the proofs.
 +Falsified if the simulation takes a step the theorem's machine does not have (a model bug or a gap in the theorem).
 +
 +The detailed tests of H0 to H18 are run again with the trace sink on (tests/h19_plugin.py) and each
 +test's trace is replayed at teardown: the first event the machines have no transition for fails that test.
++One of those tests, ``test_governor_cannot_clear_itself``, injects a firmware fault on purpose; its trace is
++refused by the machines by design, and the plugin asserts the refusal names the event. So the trace set is
++replayed clean for every test except that one injected fault.
 +"""
 +import json
 +import os
@@ -594,6 +681,7 @@ index 0000000..1a65dee
 +
 +import pytest
 +
++from govsim import reasons
 +from govsim.cluster import build_rack
 +from govsim.governor import Governor
 +from govsim.trace import Trace
@@ -601,6 +689,9 @@ index 0000000..1a65dee
 +
 +TESTS = Path(__file__).resolve().parent
 +ROOT = TESTS.parent
++sys.path.insert(0, str(TESTS))
++from h19_plugin import FAULT_INJECTION  # noqa: E402   the injected faults, by test name
++
 +PAY = {"amount": 100, "currency": "USD", "destination": "acct-1"}
 +
 +
@@ -619,6 +710,17 @@ index 0000000..1a65dee
 +            steps[k] = steps.get(k, 0) + v
 +    for needed in ("issue", "execute", "forged execute (refused)", "new edition", "halt", "clear"):
 +        assert steps.get(needed), f"no trace exercised the machine step '{needed}': {steps}"
++    # every trace replays clean except the injected fault(s); the faulted names are exactly FAULT_INJECTION,
++    # and each fault's refusal was asserted at teardown (it names the step and its reason). A test that never
++    # drives a governor produces no events and so vacuously conforms; the step checks above are what keep the
++    # aggregate non-vacuous.
++    faulted = {k.rsplit("::", 1)[-1] for k, r in results.items() if r.get("fault_detected")}
++    assert faulted == set(FAULT_INJECTION), f"faulted {sorted(faulted)}; expected the injected {sorted(FAULT_INJECTION)}"
++    for k, r in results.items():
++        if r.get("fault_detected"):
++            txt = r["fault_detected"]
++            step, why = FAULT_INJECTION[k.rsplit("::", 1)[-1]]
++            assert step in txt and why in txt, f"the faulted trace's refusal did not name its event: {txt}"
 +
 +
 +def test_step_names_match_the_proof_files():
@@ -680,3 +782,38 @@ index 0000000..1a65dee
 +    with pytest.raises(NoTransition) as exc:
 +        replay(tr.events)
 +    assert "execute_ok" in str(exc.value)
++
++
++def test_the_first_run_after_a_boot_is_a_named_gap_not_a_transition():
++    """Gap in the theorem: the initial state leaves ``halted`` free and there is no boot/arm step, so a
++    governor's first RUN after a boot is not a transition the machine has. The replayer names it ``arm``
++    (Report.arms) and accepts it only from a halt a boot put there -- so the gap is a documented count, not a
++    step the machine silently allows."""
++    with Trace() as tr:
++        rack = build_rack(4, "rack")
++        rack.bring_up()
++        t = _pay(rack)["ticket"]
++        rack.endpoints["payment-switch"].execute(t, "payments.transfer", PAY)
++    rep = replay(tr.events)
++    assert rep.arms >= 1                                     # each governor's boot-to-RUN; the machine has no step for it
++    assert "arm" not in rep.steps                             # it is a named gap, not a machine step the machines accept
++    assert rep.steps.get("issue") and rep.steps.get("execute")   # and the rack did real work, so the arms are not vacuous
++
++
++def test_a_burn_without_execute_is_a_stutter_the_machine_has_no_step_for(monkeypatch):
++    """Gap in the theorem: the endpoint burns the ticket before the commit and the device checks and may then
++    refuse. The core machine has no ``used``-without-``executed`` step, so the replayer absorbs the refusal as a
++    stutter and tracks the burn in Report.burned. This test isolates the burn (a burned, un-executed ticket that
++    the machine accepts) so the gap rests on a trace, not on the replayer's bookkeeping alone."""
++    with Trace() as tr:
++        rack = build_rack(4, "rack")
++        rack.bring_up()
++        t = _pay(rack)["ticket"]
++        rack.halt(rack.nodes[0].governor)                   # the committing governor is halted: the commit will fail
++        ep = rack.endpoints["payment-switch"]
++        ok, why = ep.execute(t, "payments.transfer", PAY)
++        assert not ok and why in (reasons.COMMIT_REJECTED, reasons.COMMIT_UNREACHABLE)
++        assert t["payload"]["ticket_id"] in ep.consumed and not ep.executed    # the ticket was burned, nothing carried out
++    rep = replay(tr.events)                                 # accepted: the machine has no burn step, so it is a stutter
++    assert rep.burned >= 1
++    assert "forged execute (refused)" in rep.steps

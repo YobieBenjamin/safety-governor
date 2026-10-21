@@ -2,30 +2,24 @@
  "id": "L5",
  "branch": "exp/l5",
  "base": "main",
- "head": "78da3eb",
- "commits": 2,
- "agent_trailers": 2,
+ "head": "3dbe3d3",
+ "commits": 5,
+ "agent_trailers": 5,
  "files": 4,
- "added": 506,
+ "added": 634,
  "removed": 0,
- "ok": false,
- "findings": [
-  {
-   "severity": "block",
-   "finding": "a file outside the issue's owned paths changed",
-   "where": "tests/requirements-differential.txt"
-  }
- ],
+ "ok": true,
+ "findings": [],
  "runs": {
   "suite": {
    "command": "python3 -m pytest -x tests",
    "exit": 0,
-   "tail": "........................................................................ [ 31%]\n........................................................................ [ 62%]\n........................................................................ [ 93%]\n..............                                                           [100%]\n230 passed in 6.01s\n"
+   "tail": "........................................................................ [ 31%]\n........................................................................ [ 62%]\n........................................................................ [ 93%]\n...............                                                          [100%]\n231 passed in 6.83s\n"
   },
   "acceptance": {
    "command": "python3 -m pytest -q tests/test_h21_differential.py",
    "exit": 0,
-   "tail": "..............................                                           [100%]\n"
+   "tail": "...............................                                          [100%]\n"
   }
  }
 }

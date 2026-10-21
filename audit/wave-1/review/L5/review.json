@@ -2,142 +2,172 @@
  "id": "L5",
  "verdict": "revise",
  "trusted": true,
- "verifier_ok": false,
- "verifier_blocks": 1,
+ "verifier_ok": true,
+ "verifier_blocks": 0,
  "review_blocks": 2,
- "unsupported_claims": 3,
- "unsupported_soft": 1,
+ "unsupported_claims": 6,
+ "unsupported_soft": 0,
  "bad_citations": [],
- "review_cost_usd": 0.2690854,
- "review_turns": 6,
+ "review_cost_usd": 0.3318562,
+ "review_turns": 8,
  "review_exit": 0,
  "review": {
   "verdict": "revise",
-  "summary": "The test passes, but it compares 21 hand-built scenarios, not the 87 catalogue entries; the other 66 are only listed.\nPassing depends on five pinned disagreements, and the G1 and G5 excuse predicates are broad enough to hide real ones.\nThe design-ambiguity claim (G3, G4, G5) is made in EXPERIMENTS.md without reading docs/LANES.md or govsim's docs.\nFor G3 the evidence cited points to a govsim bug, not an ambiguity.\nThe acceptance asks for one filed issue per disagreement; none were filed.\ntests/requirements-differential.txt is outside the owned paths (verify.json flags it). It is reasonable for the brief's install step, so I rate it warn.\nNot checked: the claims about gate.py and governor internals (G2 'no log line', G4 'marked seen before deciding'). My shell access to the other repositories was denied.\nQuestion: does the brief intend 'cover the catalogue' to mean the actual attack inputs, or analogous scenarios?",
+  "summary": "The acceptance command passes (verify.json), but it tests less than the brief says. Only 20 of 87 catalogue entries are compared; 67 sit in NOT_COMPARED, several with a bare label such as \"L0\" and no reason.\nThe brief's acceptance also requires each disagreement to be filed as its own issue. G1 to G5 are only written up in results/l5-disagreements.md, and the agent says so.\nThe reason-code table collapses classes (attestation.*, observer.*, min and max) and only the first reason is compared. The sweep accepts any outcome pair that matches a GAPS signature.\nThe \"pinned checkout\" comment at test line 497 is unsupported: requirements-differential.txt uses an unpinned editable sibling path.\nQuestion for the design owner: for G3, govsim/governor.py:513 reads witnesses only in observer mode. The comment at governor.py:509 (\"a human lane parks it unread\") suggests that is deliberate. The agent's \"ambiguous\" label is softened correctly but still rests on docstrings only.\nNot found: evidence that the 31-test count is computed by any test, or that test_h13_shared_budget.py covers TX.concurrent_overspend (line 463 asserts it).",
   "findings": [
    {
     "kind": "test_integrity",
-    "severity": "warn",
-    "file": "tests/test_h21_differential.py",
-    "line": 352,
-    "detail": "'Replayed in both gates' is not the catalogue's input: REPLAYED holds hand-written Scn analogues keyed by attack name; the catalogue supplies only the name and the expect flag. L4.token_wrong_workload is replayed as a forged token (line 358), which is a different attack. L4.no_capability and L4.weights_exfiltration use new params. Only test_the_reference_catalogue_holds_on_its_own runs the real entries, and only on the reference."
-   },
-   {
-    "kind": "test_integrity",
     "severity": "block",
     "file": "tests/test_h21_differential.py",
-    "line": 329,
-    "detail": "The brief says feed the catalogue to both gates and pass on the whole catalogue. 66 of 87 entries are in NOT_COMPARED and never reach govsim; some reasons are thin ('L0', 'restart', 'approval protocol'). Several are plausibly gate decisions: the L4 approval cases and L2 provenance. The acceptance therefore tests less than the brief states. The shortfall is disclosed in results/l5-disagreements.md, but the brief's coverage was not met."
-   },
-   {
-    "kind": "test_integrity",
-    "severity": "warn",
-    "file": "tests/test_h21_differential.py",
-    "line": 298,
-    "detail": "The G5 excuse accepts any deny/deny pair whose reasons both start with 'constraint.'; it does not require the two-rule case it describes. The max/min vs above_max/below_min merge (line 108) makes a swapped bound unobservable. The G1 excuse (line 307) only checks that the corrected request agrees, not that govsim allowed. The sweep can therefore pass over disagreements outside the five documented gaps."
-   },
-   {
-    "kind": "test_integrity",
-    "severity": "warn",
-    "file": "tests/test_h21_differential.py",
-    "line": 460,
-    "detail": "The property sweep runs 120 examples with derandomize=True, so it is one fixed sample. Only the first reason is compared. No artifact shows how many examples agreed, how many were excused, or that each of G1 to G5 was hit by the sweep. EXPERIMENTS.md says the gates agree 'on the random sweep'; that number is not shown."
-   },
-   {
-    "kind": "unsupported_claim",
-    "severity": "block",
-    "file": "EXPERIMENTS.md",
-    "line": 33,
-    "detail": "'G3, G4 and G5 are ambiguities in the policy text, a finding about the design' is asserted in a document. The summary admits govsim's docs were not read, and docs/LANES.md (named in the brief's Read first) was not read. For G3 the cited reference text ('observer threshold ... checked first') and govsim accepting observers/max_risk on a human rule point to a govsim bug, not an ambiguity. The design finding is not shown."
-   },
-   {
-    "kind": "unsupported_claim",
-    "severity": "warn",
-    "file": "results/l5-disagreements.md",
-    "line": 17,
-    "detail": "Specifics not backed by any test or artifact in the diff: 'no decision, no log line' (G2), and the causes in G4 (hash marked seen before the decision; ledger.mark only on decided requests). The pinned tests show only the outcome pairs."
-   },
-   {
-    "kind": "correctness",
-    "severity": "warn",
-    "file": "tests/test_h21_differential.py",
-    "line": 358,
-    "detail": "Mapping L4.token_wrong_workload to token='forged' in both rigs can never exercise the reference gate's measurement_mismatch reason, and the mapping table collapses attestation.* reasons into 'not_attested' (line 24 of the file). An implementation that returns the wrong attestation reason would still agree."
+    "line": 469,
+    "detail": "The brief asks for the test to pass on the whole catalogue (75 attacks, 12 baselines). REPLAYED covers 20 entries and 67 are excluded through NOT_COMPARED (line 442). Several excluded entries are not shown by any test, for example L0.*, EP.*, AU.*, NV.*, L2.provenance_*, L5.*. Their reasons are one-word labels such as \"L0\". Some of them (L4.token_missing style token checks, TX.budget_exhausted) are gate decisions that were replayed, but entries such as TX.ticket_after_policy_change and TX.commit_* are excluded on the agent's say-so only. The acceptance passes by testing about a quarter of the catalogue."
    },
    {
     "kind": "protocol",
+    "severity": "block",
+    "file": "results/l5-disagreements.md",
+    "line": 54,
+    "detail": "The brief's acceptance says every disagreement found is filed as its own issue with the input that produced it. G1 to G5 are written up in one file and not filed (lines 54 to 55). The agent says it is open, but the acceptance is not met."
+   },
+   {
+    "kind": "test_integrity",
+    "severity": "warn",
+    "file": "tests/test_h21_differential.py",
+    "line": 159,
+    "detail": "The reason-code table maps several distinct codes to one class (attestation.* to not_attested; observer.signature, subject_mismatch and not_registered to witness_missing; HW_KINDS max/min to range at line 177). Only res.reasons[0] is compared (line 238). The brief asks for equivalent reason codes; this checks a coarser equivalence. A mismatch in the observer subject-swap case would not be seen."
+   },
+   {
+    "kind": "test_integrity",
+    "severity": "warn",
+    "file": "tests/test_h21_differential.py",
+    "line": 580,
+    "detail": "The sweep passes whenever gap_of() matches a signature. G3's signature (line 379) accepts any hw witness-class deny against govsim hold or allow in the large amount range. G1 and G5 (lines 390 and 412) accept a disagreement if a corrected input agrees, which can hide a second cause. The sweep cannot fail on these classes; it is run with only 120 derandomized examples."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "warn",
+    "file": "tests/test_h21_differential.py",
+    "line": 497,
+    "detail": "The comment says the catalogue at the pinned checkout has 75 and 12. Nothing is pinned: tests/requirements-differential.txt line 2 is an editable ../hardware-and-silicon path, not a commit or git URL."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "warn",
+    "file": "tests/test_h21_differential.py",
+    "line": 463,
+    "detail": "The reason says govsim's own H13 covers the concurrent form of TX.concurrent_overspend. The summary admits this was not checked. The brief names only govsim/policy.py, governor.py and reasons.py, so the exclusion has no evidence. tests/test_h13_shared_budget.py:19 has a concurrent-request test, but the diff does not connect it to the attack."
+   },
+   {
+    "kind": "unsupported_claim",
     "severity": "warn",
     "file": "results/l5-disagreements.md",
-    "line": 34,
-    "detail": "The acceptance requires every disagreement found to be filed as its own issue with its input. None were filed (deferred to the launcher). The inputs are written up, but the acceptance is not met."
+    "line": 42,
+    "detail": "G3 is labelled a hypothesis, which is right, but the design question is left open. reference policy.py:22 says a human rule may still set an observer threshold checked first. govsim/governor.py:513 reads witnesses only for observer mode, and governor.py:509 says a human lane parks the request unread. That points to an intentional difference. The Disproof clause (ambiguous policy is a design finding) is reached from docstrings only, with no check of docs/LANES.md, which the brief names."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "warn",
+    "file": "EXPERIMENTS.md",
+    "line": 14,
+    "detail": "The document says 31 tests and 'the random sweep agrees except for five pinned disagreements'. No test asserts the test count or that the sweep actually hits each of G1 to G5. The 17 of 20 count is computed by test_replayed_agreement_count (test line 660); 67 and 31 are only prose."
    },
    {
     "kind": "scope",
     "severity": "warn",
     "file": "tests/requirements-differential.txt",
     "line": 1,
-    "detail": "New file outside the owned paths (flagged in verify.json). It serves the brief's install step with a relative editable path, so it is arguably needed; the owner should confirm it. EXPERIMENTS.md gets a new section rather than an update of the H21 row, and the row's status is unchanged."
+    "detail": "The brief owns only the test file. The requirements file and results/l5-disagreements.md were added, and EXPERIMENTS.md was edited with a success write-up although the brief only asks for failure notes there. This is reasonable support but unrequested; the summary states it."
    }
   ],
   "claims": [
    {
-    "claim": "The two gates agree on 18 of 21 replayed catalogue entries",
+    "claim": "The two gates agree on 17 of 20 replayed catalogue entries",
     "where": "document",
-    "evidence": "EXPERIMENTS.md line 33; EXPECT_GAP has 3 entries asserted hw != gov and the rest asserted hw == gov, in test_catalogue_replayed_in_both_gates (test line 417). Supported as to the hand-built scenarios, not the real catalogue inputs.",
+    "evidence": "tests/test_h21_differential.py:660 asserts (len(REPLAYED), agree, len(gaps)) == (20, 17, 3)",
     "supported": true
    },
    {
-    "claim": "The gates agree on the random sweep except for five pinned disagreements G1 to G5",
+    "claim": "The other 67 of 87 catalogue entries are listed in NOT_COMPARED with reasons",
     "where": "document",
-    "evidence": "test_random_typed_requests_agree passes with gap_of excusing any signature match. No artifact shows the sweep hit each gap or how many examples agreed. The G1 and G5 signatures are broad.",
+    "evidence": "87 = 75 + 12 is asserted at line 498; 67 is not computed but follows from the classification test at line 495. Several reasons are one-word labels.",
+    "supported": true
+   },
+   {
+    "claim": "The gates agree on the random sweep except for five pinned disagreements",
+    "where": "document",
+    "evidence": "test_random_typed_requests_agree accepts any signature-matching gap; no test shows all five occur in the sweep; the sweep is 120 derandomized examples",
     "supported": false
    },
    {
-    "claim": "G3, G4 and G5 are ambiguities in the policy text (a finding about the design)",
+    "claim": "The file now has 31 tests and the acceptance command passes",
     "where": "document",
-    "evidence": "No policy text of govsim or LANES.md was read; the document's own G3 quote favours the reference.",
+    "evidence": "verify.json acceptance exit 0; test count is 20+5+6 functions by reading, not asserted by a test",
+    "supported": true
+   },
+   {
+    "claim": "G1: govsim allows a bad destination where the reference denies constraint.destination.pattern",
+    "where": "document",
+    "evidence": "GAP_CASES line 541 pins it; govsim/policy.py has no regex kind",
+    "supported": true
+   },
+   {
+    "claim": "G2: govsim raises TypeError on a non-numeric amount",
+    "where": "document",
+    "evidence": "GAP_CASES line 542 pins crash:TypeError; govsim/policy.py:212 compares v < c['min']",
+    "supported": true
+   },
+   {
+    "claim": "G3: govsim ignores the observer on a human-mode rule, and the policy text does not settle which is right",
+    "where": "document",
+    "evidence": "Pinned at line 543 and governor.py:513 reads witnesses only for observer mode; the 'ambiguous' part rests on docstrings only, with governor.py:509 suggesting intent",
     "supported": false
    },
    {
-    "claim": "All 87 catalogue entries are classified: 21 replayed, 66 listed with a reason",
-    "where": "summary",
-    "evidence": "test_every_catalogue_entry_is_classified (test line 379) pins 75 and 12 and checks REPLAYED and NOT_COMPARED partition the names. The brief's 66 and 10 differ from the checkout, and the test pins the checkout's counts.",
+    "claim": "G4: the reference marks a request seen before deciding, govsim only after deciding",
+    "where": "document",
+    "evidence": "Pinned at line 544; governor.py:529 marks after the checks and policy-level seen check at line 489 (reference side not re-read)",
     "supported": true
    },
    {
-    "claim": "The test covers the catalogue (brief) and covers the whole catalogue",
-    "where": "summary",
-    "evidence": "Only 21 of 87 are compared across the two gates.",
-    "supported": false
-   },
-   {
-    "claim": "G2: non-numeric amount raises TypeError in govsim with no decision and no log line",
+    "claim": "G5: the reference reports the first candidate's violation and govsim the last",
     "where": "document",
-    "evidence": "GAP_CASES pins crash:TypeError; 'no log line' is not tested.",
-    "supported": false
-   },
-   {
-    "claim": "G1: govsim has no destination regex so acct-evil is allowed",
-    "where": "document",
-    "evidence": "GAP_CASES G1 pins deny constraint.destination.pattern vs allow; test_pinned_disagreement.",
+    "evidence": "govsim/policy.py:197-203 returns the last violation; pinned at line 545; reference side not re-read",
     "supported": true
    },
    {
-    "claim": "G4: the reference marks a request seen before deciding; govsim repeats the original denial",
-    "where": "document",
-    "evidence": "GAP_CASES G4 pins deny:replay vs deny:witness_missing; the causal mechanism is not in the diff and I could not read the sources.",
-    "supported": true
-   },
-   {
-    "claim": "All 30 test functions pass (called directly) and the acceptance command passes",
-    "where": "document",
-    "evidence": "verify.json: acceptance exit 0, suite 230 passed. The count of 30 matches 3+21+5+1.",
-    "supported": true
-   },
-   {
-    "claim": "One neutral rulebook is rendered into both formats; a test checks they say the same thing",
+    "claim": "The 67 excluded entries are not gate decisions in govsim",
     "where": "code",
-    "evidence": "test_the_two_rulebooks_say_the_same_thing checks the reference side fully and the govsim side for mode, risk, amount, currency, rate and budget. Destination and type are omitted from govsim, by design.",
+    "evidence": "Per-entry reasons at lines 443-466; shown by test only for http, token_wrong_workload and the approval attacks; the rest are asserted by label",
+    "supported": false
+   },
+   {
+    "claim": "TX.concurrent_overspend is covered by govsim's H13",
+    "where": "code",
+    "evidence": "Line 463; summary admits it was not checked; tests/test_h13_shared_budget.py:19 has a concurrent test but the diff does not link it",
+    "supported": false
+   },
+   {
+    "claim": "The catalogue at the pinned checkout has 75 and 12",
+    "where": "code",
+    "evidence": "Asserted at line 498, but no pin exists in requirements-differential.txt",
+    "supported": false
+   },
+   {
+    "claim": "The disagreements are filed as issues",
+    "where": "document",
+    "evidence": "Not filed; the document and the summary both say so",
+    "supported": false
+   },
+   {
+    "claim": "The reference stack behaves as the catalogue says before it is used as an oracle",
+    "where": "code",
+    "evidence": "test_the_reference_catalogue_holds_on_its_own runs all 87 entries against the reference node",
+    "supported": true
+   },
+   {
+    "claim": "The two rulebooks say the same thing (except for regex and type, which govsim cannot express)",
+    "where": "code",
+    "evidence": "test_the_two_rulebooks_say_the_same_thing, lines 512-523",
     "supported": true
    }
   ]
@@ -146,30 +176,24 @@
   "id": "L5",
   "branch": "exp/l5",
   "base": "main",
-  "head": "78da3eb",
-  "commits": 2,
-  "agent_trailers": 2,
+  "head": "3dbe3d3",
+  "commits": 5,
+  "agent_trailers": 5,
   "files": 4,
-  "added": 506,
+  "added": 634,
   "removed": 0,
-  "ok": false,
-  "findings": [
-   {
-    "severity": "block",
-    "finding": "a file outside the issue's owned paths changed",
-    "where": "tests/requirements-differential.txt"
-   }
-  ],
+  "ok": true,
+  "findings": [],
   "runs": {
    "suite": {
     "command": "python3 -m pytest -x tests",
     "exit": 0,
-    "tail": "........................................................................ [ 31%]\n........................................................................ [ 62%]\n........................................................................ [ 93%]\n..............                                                           [100%]\n230 passed in 6.01s\n"
+    "tail": "........................................................................ [ 31%]\n........................................................................ [ 62%]\n........................................................................ [ 93%]\n...............                                                          [100%]\n231 passed in 6.83s\n"
    },
    "acceptance": {
     "command": "python3 -m pytest -q tests/test_h21_differential.py",
     "exit": 0,
-    "tail": "..............................                                           [100%]\n"
+    "tail": "...............................                                          [100%]\n"
    }
   }
  }

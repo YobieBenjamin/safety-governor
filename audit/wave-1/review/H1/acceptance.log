@@ -1,0 +1,71 @@
+python3 -m lanes.check --observer ../../../safety/observer --hardware ../../../hardware-and-silicon
+ok    fixture keys.json is what generate.py produces
+ok    fixture request.json is what generate.py produces
+ok    fixture observer-assertion.json is what generate.py produces
+ok    fixture provenance-assertion.json is what generate.py produces
+ok    fixture content.json is what generate.py produces
+ok    fixture attestation-token.json is what generate.py produces
+ok    fixture action-ticket.json is what generate.py produces
+ok    fixture policy-image.json is what generate.py produces
+ok    fixture audit-record.json is what generate.py produces
+ok    subject hash equals the pinned value
+ok    canonical core equals the pinned bytes
+ok    observer assertion: gate checks pass
+ok    observer assertion: subject binds this request
+ok    observer assertion: fresh and risk in [0,1]
+ok    observer assertion: another request's hash is a subject mismatch
+ok    observer assertion: forged key rejected despite valid signature
+ok    observer assertion: tampered payload rejected
+ok    observer assertion: wrong signer field rejected
+ok    observer assertion: expired is stale
+ok    provenance assertion: gate checks pass
+ok    provenance assertion: digest binds the content
+ok    provenance assertion: other content does not match
+ok    attestation token: gate checks pass
+ok    attestation token: measurement equals the request's
+ok    action ticket: endpoint checks pass
+ok    action ticket: binds action and presented params
+ok    action ticket: params changed after issue do not match
+ok    action ticket: request_hash binds the request
+ok    policy image: governance-signed gate-policy
+ok    policy image: default deny
+ok    policy image: signed by the wrong key is rejected
+ok    audit record: chain, signatures and event fields verify
+ok    audit record: checkpoint is gate-signed and commits to the head
+ok    audit record: editing an entry is detected
+ok    audit record: deleting an entry is detected
+ok    govsim: canonical bytes equal the fixtures'
+ok    govsim: digest of the request core is the pinned subject
+ok    govsim: same seed gives the fixture public key
+ok    govsim: signing the fixture payload reproduces the fixture signature
+ok    govsim: verifies the fixture signature under the anchored key
+ok    govsim: verifies observer-assertion.json under the obs-main key
+ok    govsim: rejects a tampered observer-assertion.json
+ok    govsim: verifies provenance-assertion.json under the wm-registry key
+ok    govsim: rejects a tampered provenance-assertion.json
+ok    govsim: verifies attestation-token.json under the verifier key
+ok    govsim: rejects a tampered attestation-token.json
+ok    govsim: verifies action-ticket.json under the gate key
+ok    govsim: rejects a tampered action-ticket.json
+ok    govsim: verifies policy-image.json under the governance key
+ok    govsim: rejects a tampered policy-image.json
+ok    catalogue: names are unique
+ok    catalogue: every entry has name, layer, expect, description
+ok    catalogue: declared counts match the entries
+ok    catalogue: baselines are exactly the baseline.* names
+ok    hardware_ref: AuditLog.verify_export accepts the audit fixture
+ok    hardware_ref: AuditLog.verify_export rejects an edited entry
+ok    hardware_ref: AuditLog.verify_export rejects a truncation the checkpoint covers
+ok    observer: public key derived from the fixture seed matches
+ok    observer: canonical core bytes equal the pin
+ok    observer: subject equals the pin
+ok    observer: assertion carries the contract fields
+ok    observer: its envelope verifies under the reference checker
+ok    observer: the fixture envelope verifies under the observer's verifier
+ok    observer: its verifier accepts provenance-assertion.json
+ok    observer: its verifier accepts attestation-token.json
+ok    observer: its verifier accepts action-ticket.json
+ok    observer: its verifier accepts policy-image.json
+
+lanes: all checks passed
+python3 catalogue/export.py ../../../hardware-and-silicon --check

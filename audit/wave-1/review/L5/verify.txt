@@ -1,3 +1,2 @@
-L5 exp/l5 (78da3eb): 4 files, +506 -0, 2 commits (2 with agent trailers)
-  [block] a file outside the issue's owned paths changed: tests/requirements-differential.txt
-  verdict: 1 blocking finding(s)
+L5 exp/l5 (3dbe3d3): 4 files, +634 -0, 5 commits (5 with agent trailers)
+  verdict: nothing blocks

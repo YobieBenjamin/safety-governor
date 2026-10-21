@@ -1,4 +1,2 @@
-L4 exp/l4 (75cde4a): 5 files, +650 -0, 2 commits (2 with agent trailers)
-  [block] a file outside the issue's owned paths changed: tests/h19_plugin.py
-  [warn] a placeholder marker in added code: govsim/trace.py:219: pass          # the edition change itself is recorded by the _accept_policy wrap
-  verdict: 1 blocking finding(s)
+L4 exp/l4 (8840eef): 5 files, +787 -0, 4 commits (4 with agent trailers)
+  verdict: nothing blocks

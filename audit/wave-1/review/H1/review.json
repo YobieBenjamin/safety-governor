@@ -1,0 +1,174 @@
+{
+ "id": "H1",
+ "verdict": "revise",
+ "trusted": true,
+ "verifier_ok": true,
+ "verifier_blocks": 0,
+ "review_blocks": 2,
+ "unsupported_claims": 2,
+ "unsupported_soft": 2,
+ "bad_citations": [],
+ "review_cost_usd": 0.40040079999999995,
+ "review_turns": 13,
+ "review_exit": 0,
+ "review": {
+  "verdict": "revise",
+  "summary": "make lanes passes in a clean checkout, and the lanes/ checks look sound: the audit tamper checks can now fail, and every signed fixture goes through govsim. The brief's cross-repository acceptance is not met, and the notes say so honestly.\n- Both patches under patches/ have hunk headers that don't match their bodies, so they are probably corrupt. The commit message calls them \"applyable\", and git apply --check was never run (Bash was denied here too).\n- Neither the safety CI step nor the shared pin exists outside an unapplied patch. Nothing was shown to fail when a format changes in one repository.\n- No code reads catalogue/attacks.json except lanes/check.py and tests/test_lanes.py. The brief wanted hardware_ref, govsim and the RTL harness to read it; instead it is exported from hardware_ref and compared against it.\n- Question: does the fixture's use of sha256(\"audit-genesis\") and the merkle root match what hardware_ref expects? verify_export accepts the audit fixture (acceptance.log), and the merkle code is only checked through the checkpoint.",
+  "findings": [
+   {
+    "kind": "correctness",
+    "severity": "block",
+    "file": "patches/safety/lanes.patch",
+    "line": 5,
+    "detail": "Hunk header says +1,8 but the new-file body (lines 6-15) has 10 lines. git apply will reject it as a corrupt patch, so the safety CI step cannot be applied as written. The commit message 'applyable git diffs' is unsupported: the summary and EXPERIMENTS.md say git apply --check was not run. Regenerate the patch with git diff, and run git apply --check against /Users/yb/safety."
+   },
+   {
+    "kind": "correctness",
+    "severity": "block",
+    "file": "patches/hardware-and-silicon/lanes.patch",
+    "line": 20,
+    "detail": "Hunk header says +1,10 for tests/test_catalogue_data.py but the body (lines 21-31) has 11 lines. The patch is corrupt as written. The CI step on line 15 runs this test, so the hardware-side build check would never start."
+   },
+   {
+    "kind": "test_integrity",
+    "severity": "warn",
+    "file": "EXPERIMENTS.md",
+    "line": 17,
+    "detail": "The brief's acceptance has three parts: make lanes, a one-line CI step for safety, and a format change in one repository failing the other's build. Only the first is shown. The CI step and the shared pin live in an unapplied patch, and the notes concede the third part was not demonstrated. Show it, for example by applying the patches to scratch clones and flipping a byte in a fixture."
+   },
+   {
+    "kind": "scope",
+    "severity": "warn",
+    "file": "catalogue/__init__.py",
+    "line": 1,
+    "detail": "The docstring says load() is what govsim, hardware_ref and the RTL harness read. No code in this diff reads attacks.json except lanes/check.py and tests/test_lanes.py (the hardware patch's test reads it too, but only if the patch applies). The brief wanted the data to be the shared source, but hardware_ref is still the source, and attacks.json is a generated copy compared by export.py --check. Reword the docstring to say what is true."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "warn",
+    "file": "lanes/generate.py",
+    "line": 31,
+    "detail": "The docstring says the Merkle root and chain are 'as hardware_ref.audit.merkle_root' and 'AuditLog does'. verify_export passing on the fixture (acceptance.log) supports the chain and the checkpoint. The tests do not compare the root independently, so the Merkle claim is only supported through the checkpoint check. Low risk."
+   },
+   {
+    "kind": "test_integrity",
+    "severity": "warn",
+    "file": "lanes/check.py",
+    "line": 171,
+    "detail": "The observer check calls verify_object(m) with no expected key on the provenance, attestation, ticket and policy fixtures. That proves only that each envelope is self-consistent, not that it is anchored to the right key. The govsim checks do anchor to the key. Add the expected_pub_hex argument to the observer calls."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "warn",
+    "file": "EXPERIMENTS.md",
+    "line": 14,
+    "detail": "The note says the pin in test_contract.py becomes a shared fixture via the patch. Because the patch is corrupt (see above), the brief's 'make the subject-hash pin a shared fixture' is not done in any applyable form. In safety, the pin is still a literal (observer/tests/test_contract.py:18)."
+   }
+  ],
+  "claims": [
+   {
+    "claim": "make lanes passes here, including a run of the safety observer and a live comparison of the catalogue (75 attacks, 12 baselines) with hardware_ref.attacks",
+    "where": "document",
+    "evidence": "acceptance.log and verify.json show exit 0 with the observer and catalogue lines; tests/test_lanes.py asserts 75 and 12",
+    "supported": true
+   },
+   {
+    "claim": "Every signed fixture (observer, provenance, attestation, ticket, policy) goes through govsim verify_object and a tampered copy of each is rejected",
+    "where": "summary",
+    "evidence": "lanes/check.py govsim_model loop (diff lines 795-803) and acceptance.log govsim lines",
+    "supported": true
+   },
+   {
+    "claim": "The audit tamper checks now detect an edited and a deleted entry",
+    "where": "summary",
+    "evidence": "lanes/check.py chain_ok chains each hash from the previous head (diff 703-713). Two tamper checks run it (diff 769-774). hardware_ref verify_export rejects an edit and a truncation (diff 830-835).",
+    "supported": true
+   },
+   {
+    "claim": "The audit fixture chains from sha256('audit-genesis') and passes AuditLog.verify_export",
+    "where": "document",
+    "evidence": "hardware_ref/audit.py:172 and :226 use the same genesis; acceptance.log has 'ok hardware_ref: AuditLog.verify_export accepts the audit fixture'",
+    "supported": true
+   },
+   {
+    "claim": "patches/safety/lanes.patch and patches/hardware-and-silicon/lanes.patch are applyable git diffs",
+    "where": "commit",
+    "evidence": "Hunk headers do not match the bodies (safety lanes.yml +1,8 vs 10 lines; hardware test +1,10 vs 11 lines). git apply --check was not run.",
+    "supported": false
+   },
+   {
+    "claim": "A one-line CI step for safety runs the same checker against its observer",
+    "where": "summary",
+    "evidence": "Exists only in the unapplied, malformed patches/safety/lanes.patch, line 15",
+    "supported": false
+   },
+   {
+    "claim": "A format change in one repository fails the other's build",
+    "where": "document",
+    "evidence": "EXPERIMENTS.md:17 itself says this is not demonstrated",
+    "supported": false
+   },
+   {
+    "claim": "lanes/audit.py was deleted because nothing imported it and its 'byte for byte' claim was unsupported",
+    "where": "summary",
+    "evidence": "The file is absent from the diff; the logic is in check.py chain_ok",
+    "supported": true
+   },
+   {
+    "claim": "EXPERIMENTS.md no longer names tests/test_catalogue_data.py as if it were on the branch",
+    "where": "summary",
+    "evidence": "EXPERIMENTS.md:14 says it exists only inside the hardware patch; verify.json still warns on the path at line 35",
+    "supported": true
+   },
+   {
+    "claim": "The pin in lanes/generate.py is a literal on purpose so one canonicalisation change cannot move both sides",
+    "where": "code",
+    "evidence": "lanes/generate.py:15-19 (the pin written out, not computed); check.py compares computed values to it",
+    "supported": true
+   },
+   {
+    "claim": "govsim's envelope differs from the contract (16-hex signer, hex signature, no embedded pub)",
+    "where": "document",
+    "evidence": "The govsim_model adapter in check.py (diff 800) converts the signature to hex and swaps the signer. I did not read govsim/crypto.py.",
+    "supported": true
+   },
+   {
+    "claim": "Catalogue is the data that hardware_ref, govsim and the RTL harness read",
+    "where": "code",
+    "evidence": "catalogue/__init__.py:1. No reader besides lanes/check.py, tests/test_lanes.py and the unapplied hardware patch test; hardware_ref remains the source.",
+    "supported": false
+   }
+  ]
+ },
+ "verify": {
+  "id": "H1",
+  "branch": "exp/h1",
+  "base": "main",
+  "head": "b8fc9fd",
+  "commits": 6,
+  "agent_trailers": 6,
+  "files": 21,
+  "added": 1297,
+  "removed": 1,
+  "ok": true,
+  "findings": [
+   {
+    "severity": "warn",
+    "finding": "a result line names a path that does not exist on the branch",
+    "where": "EXPERIMENTS.md:35: tests/test_catalogue_data.py"
+   }
+  ],
+  "runs": {
+   "suite": {
+    "command": "python3 -m pytest -x tests",
+    "exit": 0,
+    "tail": "........................................................................ [ 35%]\n........................................................................ [ 71%]\n..........................................................               [100%]\n202 passed in 3.03s\n"
+   },
+   "acceptance": {
+    "command": "make lanes",
+    "exit": 0,
+    "tail": "ampered provenance-assertion.json\nok    govsim: verifies attestation-token.json under the verifier key\nok    govsim: rejects a tampered attestation-token.json\nok    govsim: verifies action-ticket.json under the gate key\nok    govsim: rejects a tampered action-ticket.json\nok    govsim: verifies policy-image.json under the governance key\nok    govsim: rejects a tampered policy-image.json\nok    catalogue: names are unique\nok    catalogue: every entry has name, layer, expect, description\nok    catalogue: declared counts match the entries\nok    catalogue: baselines are exactly the baseline.* names\nok    hardware_ref: AuditLog.verify_export accepts the audit fixture\nok    hardware_ref: AuditLog.verify_export rejects an edited entry\nok    hardware_ref: AuditLog.verify_export rejects a truncation the checkpoint covers\nok    observer: public key derived from the fixture seed matches\nok    observer: canonical core bytes equal the pin\nok    observer: subject equals the pin\nok    observer: assertion carries the contract fields\nok    observer: its envelope verifies under the reference checker\nok    observer: the fixture envelope verifies under the observer's verifier\nok    observer: its verifier accepts provenance-assertion.json\nok    observer: its verifier accepts attestation-token.json\nok    observer: its verifier accepts action-ticket.json\nok    observer: its verifier accepts policy-image.json\n\nlanes: all checks passed\npython3 catalogue/export.py /Users/yb/hardware-and-silicon --check\n"
+   }
+  }
+ }
+}

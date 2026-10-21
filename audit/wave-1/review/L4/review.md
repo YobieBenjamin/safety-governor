@@ -1,63 +1,53 @@
 ## Review of `exp/l4`: **revise**
 
-Verifier: 1 blocking finding(s); model review on ?: 1 blocking, 10 warnings, 3 unsupported claim(s) of 12; estimated $0.76, 11 turns.
+Verifier: clean; model review on ?: 2 blocking, 7 warnings, 4 unsupported claim(s) of 10; estimated $0.32, 9 turns.
 
 ### Reviewer's summary
 
-The acceptance command passes and tests what the brief says: 200 traced tests plus two broken-governor fixtures that fail replay with the event named.
-Block: tests/h19_plugin.py is outside the owned paths (verify.json); the brief owns only trace.py, replay.py and the test file. Either get it approved or move the plugin into the test file.
-The brief asks for heartbeat lost/back events. No such events are recorded; heartbeat is read off flags on issue and execute, so heartbeat lost/back are not driven and the Z3 steps beat_lost/beat_back are not exercised.
-The commit_point replay is almost a stub: hold_released does reviewer_clears and commit in one step with version never changing, so only a double commit or a missing hold can fail it. The ordering hack in trace.py (hold_released inserted before the ticket) is what lets it pass.
-Documents say refusals are "stutter steps ... sound" and that the guards are copied "one for one" from the Z3 steps. Replay allows any refusal, which is looser than forged_execute's guard. I found no test that checks the guard copy, and z3 is not run.
-Questions: should "no model bug found" stand when the replayer was widened (arm, burned) to accept what the simulation does? Is a name-keyed fault-injection allowlist acceptable?
-
-### Verifier findings
-
-- [block] a file outside the issue's owned paths changed: `tests/h19_plugin.py`
-- [warn] a placeholder marker in added code: `govsim/trace.py:219: pass          # the edition change itself is recorded by the _accept_policy wrap`
+The sink, replayer and tests exist, and the acceptance command passes (verify.json). Three things are asserted without being shown: that the replay "cross-checks" the proof files, that 199 traces are clean, and that the heartbeat guard "can fail". summary.md is empty, so there are no agent claims there.
+Not met: the replayer re-encodes the guards as copies and does not drive the machine of core_invariants.py/commit_point.py as the brief says. The step-name test only checks literal names, not the replayer's steps.
+The endpoint-expiry heartbeat check in replay.py is circular: the sink emits heartbeat_lost immediately before it, so the check cannot fail.
+The "broken governor" fixtures check only the event kind in the message, not the step or reason, so they would pass on an unrelated refusal.
+Question: should a replay exempt a test by name (FAULT_INJECTION)? It is documented, but it means 199 of 200 conform.
 
 ### Reviewer findings
 
-- [block] scope at `tests/h19_plugin.py:1`: New file outside the paths the brief assigns (govsim/trace.py, proofs/replay.py, tests/test_h19_conformance.py); verify.json flags it. It is the mechanism that reruns all 200 tests, so the acceptance depends on a file the brief did not own. Needs explicit approval or a move into the test file.
-- [warn] test_integrity at `tests/h19_plugin.py:24`: FAULT_INJECTION exempts test_governor_cannot_clear_itself by test name, and for that test replay is expected to fail. The test is not skipped, but its pass now depends on a name-keyed allowlist. A reviewer should confirm that this is the only test whose trace the machine must refuse.
-- [warn] correctness at `proofs/replay.py:153`: Brief requires 'heartbeat lost and back' events. None are emitted by govsim/trace.py. _observe_hb sets m.heartbeat from the flag carried on the issue or execute event itself, so there is no stateful heartbeat in the machine and the beat_lost/beat_back steps are only counted when the flag differs between observations. Observers are also mixed (governor at issue, endpoint at execute) into one machine variable.
-- [warn] correctness at `proofs/replay.py:99`: CommitPoint replay cannot fail meaningfully: hold_released performs reviewer_clears and commit back to back (line ~265 of the feed), version[a] is never changed, so the 'cleared for this version' guard always holds. 'commit_point.py where holds occur' is covered in name only; the reparameterise/regulator steps are absent and not reported as unmodelled in EXPERIMENTS.md.
-- [warn] correctness at `govsim/trace.py:206`: hold_released is inserted into the event list before the already recorded ticket_issued and the events are renumbered. The trace is then not in the order the transitions happened, contradicting the module docstring ('in the order the transitions happened'), and the fallback appends it at the end if no ticket is found. The reordering is what lets the commit-point guard pass.
-- [warn] correctness at `proofs/replay.py:249`: _refuse accepts any refusal whatever the state (core forged_execute is only enabled when ticket != epoch, used, or no heartbeat; core_invariants.py:126). Only replay, stale and heartbeat reasons are cross-checked. EXPERIMENTS.md calls this 'sound' without a test. Report.stutters (line 134) is declared and never used. _refuse_unknown (line 262) accepts every ownerless refusal with no check.
-- [warn] correctness at `proofs/replay.py:85`: check_invariants checks P1 to P4 on state the replayer builds itself (okay_at_issue is set only in _issue, which already requires the guards), so P1 to P3 cannot fail independently. P6 and P7 of core_invariants.py are not checked. The summary and the docstring say the invariants are 'checked after every step' without saying this.
-- [warn] unsupported_claim at `EXPERIMENTS.md:16`: 'No model bug found' (summary) and the two 'gap in the theorem' findings rest on a replayer that was widened to accept what govsim does (arm step, burned set). That is a defensible finding, but the claim 'counted in Report.arms' has no test asserting it: no test asserts arms > 0 or inspects h19_plugin RESULTS.
-- [warn] style at `govsim/trace.py:219`: Dead branch: 'policy.committed: pass' is flagged by verify.json as a placeholder marker. Remove it or record the event.
-- [warn] test_integrity at `tests/test_h19_conformance.py:24`: The 200-test check runs the tests in a subprocess and requires only len(results) >= 200 and that six step names occur at least once across all traces. It does not require hold, heartbeat or arm to occur, and does not check that the 200 tests produce non-empty traces. The brief's acceptance 'against all 200 tests' traces' is met in count only.
-- [warn] test_integrity at `tests/test_h19_conformance.py:55`: The brief says a broken governor with one check commented out, in a fixture. The fixtures monkeypatch instead: test 1 forces self.state to RUN around Governor.command, test 2 removes two checks at once (endpoint epoch and commit_from_endpoint). They show replay catches those faults, not the removal of a single named check from governor.py.
+- [block] unsupported_claim at `proofs/replay.py:11`: The docstring says a test cross-checks step_names() against replayer_steps(). replayer_steps() (line 95) is called nowhere in the repository; I grepped for it. tests/test_h19_conformance.py::test_step_names_match_the_proof_files only asserts that step_names() contains a hard-coded set of names. EXPERIMENTS.md line 43 repeats the claim. A guard that names a step the proofs lack is therefore not caught.
+- [block] test_integrity at `proofs/replay.py:317`: Replay cannot fail on the endpoint heartbeat refusal. govsim/trace.py line 182 emits heartbeat_lost for the governor just before every execute_refused with reason ENDPOINT_HEARTBEAT_EXPIRED. So m.heartbeat is always False when the 'refused for an expired heartbeat, but heartbeat is live' check runs. This is the same circularity the revision claimed to remove. EXPERIMENTS.md line 41 says the guards 'can fail on it'; that is shown only for the governor-side expiry (halt.cause), not for the endpoint-side expiry. No test makes the check fail.
+- [warn] scope at `proofs/replay.py:1`: The brief asks for a replayer that drives the abstract machine of core_invariants.py and commit_point.py. Replay instead executes a hand-copied concrete re-encoding. Its guards are compared with the Z3 steps neither symbolically nor by a test. The docstring (lines 8-14) admits this. Taken together with the finding at line 11, the link between theorem and simulation is not mechanical. Please report this as a deviation, not as completion.
+- [warn] test_integrity at `tests/test_h19_conformance.py:118`: The stale-edition fixture asserts only that 'execute_ok' is in the message. Every NoTransition message contains the event string, so any refusal at an execute_ok passes. Line 100 for the halted-issue fixture is stronger ('halted'), but it too does not pin the step. The fixtures also bypass the check by monkeypatching (state set to RUN, commit_from_endpoint stubbed, ep.epoch overwritten) rather than commenting out one check. Assert the step name and reason.
+- [warn] unsupported_claim at `EXPERIMENTS.md:33`: '199 clean plus that one expected refusal' is not backed by a committed artifact or an exact-count assertion. The acceptance test asserts only len(results) >= 200 (tests/test_h19_conformance.py line 40). H19_REPORT is not committed. The glob test_h*.py counts every test in those files, and tests that drive no governor pass vacuously (the test file admits this at line 49). The acceptance wording 'all 200 tests' is therefore not shown.
+- [warn] unsupported_claim at `EXPERIMENTS.md:35`: 'the machine is looser than the system there, which is sound' (stutters for expiry, wrong endpoint, parameter mismatch, bad signature) is asserted. No test shows these refusals are stutters in the sense of the proof. Whether endpoints.py really burns before commit and device checks (line 36) was not checked against endpoints.py. It is supported only by the single test at tests/test_h19_conformance.py line 137.
+- [warn] scope at `tests/h19_plugin.py:24`: FAULT_INJECTION exempts an existing test by name and turns its teardown into an expected failure. The reason is documented and asserted, so this is not gaming, but the brief says all traces replay. The disproof outcome ('a step the machine does not have') should be filed in EXPERIMENTS.md as such, which was done at line 38. Also, tests/h19_plugin.py is a new, unlisted file; check that the brief allows it.
+- [warn] correctness at `govsim/trace.py:86`: hold_released is inserted into the event list ahead of its ticket_issued and every seq is renumbered, so the trace is not the order things happened. This is documented (lines 40-44). The reordering decides whether the commit-point check passes, so the 'a ticket without clearance fails' result rests on the sink's heuristic: it matches the last ticket for the same action hash. If no ticket is found, the release is appended.
+- [warn] correctness at `tests/test_h19_conformance.py:132`: 'assert "arm" not in rep.steps' is vacuous, because arms are counted in Report.arms and never via report.count('arm'). The test shows only that arms >= 1.
 
 ### Claims
 
-- supported (summary): The acceptance command passes (5 tests) and traces all 200 hypothesis tests (evidence: verify.json acceptance exit 0; test_every_hypothesis_test_trace_replays asserts len(results) >= 200; suite 205 passed)
-- supported (code): The sink does not change the governor; it wraps methods at class level and restores them on stop (evidence: govsim/trace.py start()/stop() wrap and restore; diff touches no governor file. Note: it wraps behaviour at runtime, which is the 'beside the log' approach the brief allows)
-- supported (summary): The trace records heartbeat lost and back (brief) / heartbeat is observed rather than driven by events (evidence: Summary admits it is observed. No heartbeat event kind exists in trace.py's event list)
-- NOT SUPPORTED (document): Z3 guards are copied one for one into the concrete machines, and a test checks the step names against the proof files (evidence: Names are checked by test_step_names_match_the_proof_files (names only). The guard copy was not shown by a test; z3 not run. _refuse is looser than forged_execute)
-- NOT SUPPORTED (summary): P1 to P4 are checked after every step (evidence: check_invariants runs after each feed (replay.py:85), but on replayer-built state; P1-P3 cannot fail independently)
-- supported (document): Two broken-governor fixtures fail replay with the event named (evidence: tests in test_h19_conformance.py assert 'ticket_issued'/'halted' and 'execute_ok' in the NoTransition message)
-- supported (document): Theorem gap: a power cycle is not a step; govsim reaches RUN with no clear, accepted as an explicit arm step (evidence: replay.py arm branch in feed(); core_invariants leaves halted free at init. Arm count is not asserted by a test)
-- NOT SUPPORTED (document): Theorem gap: an endpoint burns a ticket and may then refuse; machine has no burn-without-execute step (evidence: Core.burned and _refuse in replay.py; the machine has no such step in core_invariants.py. No test shows a trace that needs it)
-- NOT SUPPORTED (document): Refusals for expiry, wrong endpoint, parameter mismatch and bad signature are stutter steps of forged execute; the machine is looser than the system, which is sound (evidence: _refuse allows these without checking; 'sound' is asserted, with no test or proof)
-- supported (document): test_governor_cannot_clear_itself injects a firmware fault; replay refuses it as it must (evidence: FAULT_INJECTION in tests/h19_plugin.py asserts NoTransition naming run_entered and 'RUN entered with no clear')
-- NOT SUPPORTED (summary): No model bug found (evidence: All 200 traces replay after the replayer was extended with arm and burned handling; that absence is only as strong as the replayer's guards (see findings))
-- supported (document): Not modelled: allows/witness, heartbeat events, quorum (evidence: Stated in EXPERIMENTS.md and consistent with the code; commit_point's version/reparameterise steps are not listed)
+- NOT SUPPORTED (document): All traces of the H0 to H18 tests replay clean except one injected fault: 199 clean plus 1 expected refusal (evidence: tests/test_h19_conformance.py asserts len(results) >= 200 and faulted == FAULT_INJECTION. There is no exact count and no committed artifact. The suite total of 207 less the 7 acceptance tests gives 200.)
+- supported (document): Two broken-governor fixtures (halted governor signs, stale-edition ticket executes) fail replay with the event named (evidence: Both tests exist and pass. They name only the event kind, and both bypass the checks by monkeypatching.)
+- NOT SUPPORTED (code): A test cross-checks the step names the replayer drives against the proof files (evidence: replayer_steps() is defined but never called. The test only checks that step_names() contains a literal set.)
+- NOT SUPPORTED (document): The heartbeat is a first-class event, so the issue and execute guards read state the events set and can fail on it (evidence: The governor-side halt.cause path is real. The endpoint-expiry path emits heartbeat_lost immediately before the guard that reads it, so the CLAIM_HB check at proofs/replay.py line 317 cannot fail.)
+- supported (document): Gap in the theorem: a power cycle is not a step; govsim boots HALTED_INITIAL and reaches RUN with no clear (evidence: core_invariants.py has no boot step, and 'halted' is free in the init state. The replayer counts arms, and test_the_first_run_after_a_boot... shows arms >= 1. I did not read govsim/governor.py.)
+- supported (document): Gap in the theorem: the endpoint burns a ticket before commit and device checks and may then refuse (burn without execute) (evidence: A fixture burns a ticket via a halted committer and asserts consumed and not executed. I did not read endpoints.py.)
+- NOT SUPPORTED (document): Refusals for expiry, wrong endpoint, parameter mismatch and bad signature are stutters of forged execute; the machine is looser, which is sound (evidence: The code treats them as stutters (ADMIT_REFUSALS). No test or proof shows soundness.)
+- supported (code): The guards are a concrete re-encoding of the Z3 steps; the guard logic is not compared symbolically (evidence: This is an honest caveat, consistent with proofs/replay.py. The guards do match the issue/execute/forged_execute guards in core_invariants.py lines 87-104 when read by eye.)
+- supported (code): P1 to P4 re-checked after each step is a consistency guard, not independent evidence (evidence: check_invariants in proofs/replay.py. The claim is self-limiting and accurate.)
+- supported (summary): Acceptance: pytest -q tests/test_h19_conformance.py passes against all 200 tests' traces (evidence: verify.json: exit 0. The replay runs in a subprocess with a >= 200 threshold. The summary is empty, so this is the brief's claim, not the agent's.)
 
 ### suite in a clean checkout: exit 0
 
 ```
-........................................................................ [ 35%]
-........................................................................ [ 70%]
-.............................................................            [100%]
-205 passed in 6.05s
+........................................................................ [ 34%]
+........................................................................ [ 69%]
+...............................................................          [100%]
+207 passed in 6.36s
 
 ```
 
 ### acceptance in a clean checkout: exit 0
 
 ```
-.....                                                                    [100%]
+.......                                                                  [100%]
 
 ```

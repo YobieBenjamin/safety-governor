@@ -1,0 +1,1433 @@
+diff --git a/EXPERIMENTS.md b/EXPERIMENTS.md
+index 186c0cf..bf77a82 100644
+--- a/EXPERIMENTS.md
++++ b/EXPERIMENTS.md
+@@ -27,3 +27,13 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
+ | N1 | N | Whole-deployment overhead simulation | `govsim/deploy.py` | open | the per-chip model gives 34 percent engine utilisation batched and under 0.1 percent firmware share |
+ | N2 | N | False-halt rate model | `docs/07` FMEA, fault injection | open | |
+ | N3 | N | FPGA beside a real GPU | pre-hardware plan, phase 4 | later | needs a lab with a rack |
++
++## H1 (#13): lanes conformance suite and the catalogue as data
++
++- `lanes/` holds signed fixtures (`lanes/fixtures`), the generator (`python3 -m lanes.generate`) and the checker (`python3 -m lanes.check [--observer DIR]`). `make lanes` passes here, including a run of the `safety` observer and a live comparison of `catalogue/attacks.json` (75 attacks, 12 baselines) with `hardware_ref.attacks`.
++- Known gap: govsim's envelope differs from the contract (16-hex signer, hex signature, no embedded pub). The checker pins only what must agree today: canonical bytes, digest, and the deterministic signature.
++- `patches/safety/lanes.patch` and `patches/hardware-and-silicon/lanes.patch` are diffs in git format: a CI workflow in each, a `tests/test_catalogue_data.py` that exists only inside the hardware patch, and `test_contract.py` reading its pin from `lanes/fixtures/request.json` for safety. They are not applied, and `git apply --check` was not run against those repositories (this run could not). The workflows clone safety-governor `main`, so they bite only once these fixtures are merged there.
++- The audit fixture chains from `sha256("audit-genesis")` and `make lanes` runs it through `hardware_ref.audit.AuditLog.verify_export`. `make lanes` now fails, not skips, when `../safety` or `../hardware-and-silicon` cannot be found (override with `SAFETY=` and `HW=`).
++- govsim does not read the catalogue yet; `catalogue.load()` is ready for it.
++- Not demonstrated, stated plainly: that a format change in one repository fails the other's build. It needs the patches applied and this branch merged (the workflows clone `main`). The pin in `lanes/generate.py` is deliberately a literal as well, so a canonicalisation change cannot move both sides.
++- `govsim` gets every signed fixture through an adapter and rejects tampered copies; the native envelope mismatch stays a gap. hardware_ref's `AuditLog.verify_export` runs under `make lanes` (`--hardware`), not under `tests/test_lanes.py`.
+diff --git a/Makefile b/Makefile
+index 1de2ddf..1016d78 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,4 +1,4 @@
+-.PHONY: figures docx run test rtl rtl-test sweep demo bench gds loop clean
++.PHONY: lanes figures docx run test rtl rtl-test sweep demo bench gds loop clean
+ run:      ; ./run.sh
+ test:     ; python3 -m pytest -q tests
+ rtl-test: ; python3 -m pytest -q rtl/tests
+@@ -13,3 +13,10 @@ loop:     ; python3 hw/loop/run_loop.py
+ proof:    ; python3 proofs/core_invariants.py && python3 proofs/commit_point.py
+ clean:    ; rm -rf .venv .pytest_cache govsim/__pycache__ tests/__pycache__ rtl/__pycache__ rtl/governor_rtl/__pycache__ rtl/tests/__pycache__ hw/librelane/governor_core/runs
+ archive:  ; python3 tools/archive/build_archive.py --out build/archive --repo . --repo ../hardware-and-silicon && python3 tools/archive/build_project_docs.py --out build/project --governor . --stack ../hardware-and-silicon
++HW ?= $(firstword $(wildcard ../hardware-and-silicon ../../../hardware-and-silicon $(HOME)/hardware-and-silicon))
++SAFETY ?= $(firstword $(wildcard ../safety ../../../safety $(HOME)/safety))
++lanes:
++	@test -n "$(SAFETY)" || { echo "lanes: the safety repository was not found; set SAFETY=<path>"; exit 1; }
++	@test -n "$(HW)" || { echo "lanes: hardware-and-silicon was not found; set HW=<path>"; exit 1; }
++	python3 -m lanes.check --observer $(SAFETY)/observer --hardware $(HW)
++	python3 catalogue/export.py $(HW) --check
+diff --git a/catalogue/__init__.py b/catalogue/__init__.py
+new file mode 100644
+index 0000000..a9e880c
+--- /dev/null
++++ b/catalogue/__init__.py
+@@ -0,0 +1,13 @@
++"""The attack and baseline catalogue as data. `load()` is what govsim, hardware_ref and the RTL harness read."""
++import json
++import pathlib
++
++PATH = pathlib.Path(__file__).with_name("attacks.json")
++
++
++def load() -> list[dict]:
++    return json.loads(PATH.read_text())["entries"]
++
++
++def names(expect: str | None = None) -> list[str]:
++    return [e["name"] for e in load() if expect is None or e["expect"] == expect]
+diff --git a/catalogue/attacks.json b/catalogue/attacks.json
+new file mode 100644
+index 0000000..09aa120
+--- /dev/null
++++ b/catalogue/attacks.json
+@@ -0,0 +1,529 @@
++{
++ "source": "hardware_ref/attacks.py",
++ "attacks": 75,
++ "baselines": 12,
++ "entries": [
++  {
++   "name": "baseline.attest",
++   "layer": "L0",
++   "expect": "allowed",
++   "description": "Golden firmware on both chips attests and receives a token"
++  },
++  {
++   "name": "baseline.pay_small",
++   "layer": "L4",
++   "expect": "allowed",
++   "description": "Small payment with a fresh low-risk observer verdict is allowed and executed"
++  },
++  {
++   "name": "baseline.pay_large_hold_approve",
++   "layer": "L4",
++   "expect": "allowed",
++   "description": "Large payment is held, then released by a registered approver and executed"
++  },
++  {
++   "name": "baseline.mail_with_provenance",
++   "layer": "L2",
++   "expect": "allowed",
++   "description": "Outbound mail whose body the registry recorded as exact is allowed"
++  },
++  {
++   "name": "baseline.http_auto",
++   "layer": "L4",
++   "expect": "allowed",
++   "description": "Allow-listed internal URL under an auto rule needs no observer"
++  },
++  {
++   "name": "baseline.audit_verifies",
++   "layer": "AU",
++   "expect": "allowed",
++   "description": "Chain, checkpoint, inclusion and consistency proofs all verify on the honest log"
++  },
++  {
++   "name": "L0.firmware_tamper",
++   "layer": "L0",
++   "expect": "blocked",
++   "description": "CPU boots a patched runtime image; measurement no longer in the reference allowlist"
++  },
++  {
++   "name": "L0.lying_firmware",
++   "layer": "L0",
++   "expect": "blocked",
++   "description": "Patched firmware signs a report claiming the golden register values"
++  },
++  {
++   "name": "L0.rollback_fused",
++   "layer": "L0",
++   "expect": "blocked",
++   "description": "Chip with anti-rollback fuses is asked to boot an older, vulnerable runtime"
++  },
++  {
++   "name": "L0.rollback_unfused",
++   "layer": "L0",
++   "expect": "blocked",
++   "description": "Chip without fuses boots the old runtime; verifier must catch it by svn and measurement"
++  },
++  {
++   "name": "L0.cloned_device",
++   "layer": "L0",
++   "expect": "blocked",
++   "description": "A chip endorsed by an unknown manufacturer CA presents golden measurements"
++  },
++  {
++   "name": "L0.revoked_device",
++   "layer": "L0",
++   "expect": "blocked",
++   "description": "Governance revokes the CPU's device id after a compromise report"
++  },
++  {
++   "name": "L0.nonce_replay",
++   "layer": "L0",
++   "expect": "blocked",
++   "description": "A previously verified bundle is presented again"
++  },
++  {
++   "name": "L0.nonce_expired",
++   "layer": "L0",
++   "expect": "blocked",
++   "description": "Evidence is presented after the nonce's lifetime"
++  },
++  {
++   "name": "L0.nonce_foreign",
++   "layer": "L0",
++   "expect": "blocked",
++   "description": "Attester picks its own nonce instead of the verifier's challenge"
++  },
++  {
++   "name": "L0.gpu_swap",
++   "layer": "L0",
++   "expect": "blocked",
++   "description": "Clean CPU quote paired with a quote from a different, individually clean GPU"
++  },
++  {
++   "name": "L5.reference_values_forged",
++   "layer": "L5",
++   "expect": "blocked",
++   "description": "Attacker publishes reference values (signed with their own key) that allow the patched firmware"
++  },
++  {
++   "name": "L5.policy_forged",
++   "layer": "L5",
++   "expect": "blocked",
++   "description": "Attacker-signed policy grants shell.exec; the gate must keep the governance policy"
++  },
++  {
++   "name": "L5.policy_default_allow",
++   "layer": "L5",
++   "expect": "blocked",
++   "description": "A governance-signed policy with default=allow must be refused at load"
++  },
++  {
++   "name": "L4.token_missing",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Request carries no attestation token"
++  },
++  {
++   "name": "L4.token_forged",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Token signed by a key that is not the verifier's"
++  },
++  {
++   "name": "L4.token_expired",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Token presented after its lifetime"
++  },
++  {
++   "name": "L4.token_wrong_workload",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Request claims a measurement that differs from the one in the token"
++  },
++  {
++   "name": "L4.no_capability",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Attested workload asks for shell.exec, which no rule grants"
++  },
++  {
++   "name": "L4.weights_exfiltration",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Attested workload asks to export its own weights; no rule grants it"
++  },
++  {
++   "name": "L4.amount_over_limit",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Payment above every grant's ceiling"
++  },
++  {
++   "name": "L4.currency_not_allowed",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Payment in a currency outside the allow list"
++  },
++  {
++   "name": "L4.destination_pattern",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Destination that does not match the account pattern"
++  },
++  {
++   "name": "L4.type_confusion",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Amount passed as a string to slip past a numeric ceiling"
++  },
++  {
++   "name": "L4.url_outside_allowlist",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "POST to a host outside the allow-listed API"
++  },
++  {
++   "name": "L4.rate_limit_burst",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Fourth small payment inside the 60 s window (limit is 3)"
++  },
++  {
++   "name": "L4.request_replay",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "The same request object is submitted to the gate twice"
++  },
++  {
++   "name": "L3.observer_missing",
++   "layer": "L3",
++   "expect": "blocked",
++   "description": "Observer-gated action submitted with no observer verdict"
++  },
++  {
++   "name": "L3.observer_forged",
++   "layer": "L3",
++   "expect": "blocked",
++   "description": "Low-risk verdict signed by a key that is not obs-main's"
++  },
++  {
++   "name": "L3.observer_stale",
++   "layer": "L3",
++   "expect": "blocked",
++   "description": "Genuine low-risk verdict reused after the freshness window"
++  },
++  {
++   "name": "L3.observer_subject_swap",
++   "layer": "L3",
++   "expect": "blocked",
++   "description": "Genuine low-risk verdict about a different request attached to this one"
++  },
++  {
++   "name": "L3.observer_high_risk",
++   "layer": "L3",
++   "expect": "blocked",
++   "description": "Observer flags the action (risk 0.95); policy threshold is 0.3"
++  },
++  {
++   "name": "L2.provenance_missing",
++   "layer": "L2",
++   "expect": "blocked",
++   "description": "Outbound mail without a registry assertion"
++  },
++  {
++   "name": "L2.provenance_tampered",
++   "layer": "L2",
++   "expect": "blocked",
++   "description": "Registry reports the body was altered after generation"
++  },
++  {
++   "name": "L2.provenance_content_swap",
++   "layer": "L2",
++   "expect": "blocked",
++   "description": "An 'exact' assertion for one body attached to a request carrying a different body"
++  },
++  {
++   "name": "L2.provenance_forged",
++   "layer": "L2",
++   "expect": "blocked",
++   "description": "'exact' assertion signed by a key that is not the registry's"
++  },
++  {
++   "name": "L4.hold_bypass",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Held request executed at the endpoint without waiting for approval"
++  },
++  {
++   "name": "L4.approval_forged",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Approval signed by a key that is not a registered approver"
++  },
++  {
++   "name": "L4.approval_wrong_request",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Genuine approver signs the hold id but a different request hash"
++  },
++  {
++   "name": "L4.approval_replay",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "A valid approval is submitted a second time to mint a second ticket"
++  },
++  {
++   "name": "L4.approval_expired",
++   "layer": "L4",
++   "expect": "blocked",
++   "description": "Approval arrives after the hold's lifetime"
++  },
++  {
++   "name": "EP.no_ticket",
++   "layer": "EP",
++   "expect": "blocked",
++   "description": "Endpoint called directly, bypassing the gate"
++  },
++  {
++   "name": "EP.ticket_replay",
++   "layer": "EP",
++   "expect": "blocked",
++   "description": "One ticket used for two executions"
++  },
++  {
++   "name": "EP.ticket_param_swap",
++   "layer": "EP",
++   "expect": "blocked",
++   "description": "Ticket minted for 250 USD presented with 250000 USD"
++  },
++  {
++   "name": "EP.ticket_action_swap",
++   "layer": "EP",
++   "expect": "blocked",
++   "description": "Ticket minted for payments.transfer presented to shell.exec"
++  },
++  {
++   "name": "EP.ticket_forged",
++   "layer": "EP",
++   "expect": "blocked",
++   "description": "Ticket signed by a key that is not the gate's"
++  },
++  {
++   "name": "EP.ticket_expired",
++   "layer": "EP",
++   "expect": "blocked",
++   "description": "Ticket presented after its lifetime"
++  },
++  {
++   "name": "AU.modify_record",
++   "layer": "AU",
++   "expect": "blocked",
++   "description": "An allow decision in the log is edited to look like a deny"
++  },
++  {
++   "name": "AU.delete_middle",
++   "layer": "AU",
++   "expect": "blocked",
++   "description": "One entry removed from the middle of the log"
++  },
++  {
++   "name": "AU.truncate_tail",
++   "layer": "AU",
++   "expect": "blocked",
++   "description": "Entries after a signed checkpoint are dropped"
++  },
++  {
++   "name": "AU.reorder",
++   "layer": "AU",
++   "expect": "blocked",
++   "description": "Two entries swapped"
++  },
++  {
++   "name": "AU.forge_checkpoint",
++   "layer": "AU",
++   "expect": "blocked",
++   "description": "Checkpoint re-signed by an attacker key over a shortened log"
++  },
++  {
++   "name": "AU.fork_after_checkpoint",
++   "layer": "AU",
++   "expect": "blocked",
++   "description": "History rewritten after an old checkpoint; consistency proof must fail"
++  },
++  {
++   "name": "AU.inclusion_forged_leaf",
++   "layer": "AU",
++   "expect": "blocked",
++   "description": "Inclusion proof presented for a modified entry"
++  },
++  {
++   "name": "baseline.openshell_supervised_action",
++   "layer": "NV",
++   "expect": "allowed",
++   "description": "Sandboxed agent's POST reaches the supervisor; gate allows, ticket attached, endpoint executes"
++  },
++  {
++   "name": "baseline.openshell_policy_derived",
++   "layer": "NV",
++   "expect": "allowed",
++   "description": "OpenShell network_policies derived from the signed gate policy grants exactly the gate's egress hosts"
++  },
++  {
++   "name": "NV.unrouted_passthrough_no_ticket",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Request to a host with no route passes to OpenShell's own policy, but carries no ticket, so a consequential endpoint still refuses it"
++  },
++  {
++   "name": "NV.unattested_sandbox",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Sandbox whose host never attested (no token bound) asks for a consequential action"
++  },
++  {
++   "name": "NV.stale_host_token",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Sandbox's host token expired and was not refreshed"
++  },
++  {
++   "name": "NV.sentry_drift_quarantine",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Sentry telemetry reports drift 0.95: gate denies and Sentry quarantines the sandbox; its next request is refused outright"
++  },
++  {
++   "name": "NV.sentry_identity_unverified",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Sentry's identity governance cannot verify the agent's delegated authority"
++  },
++  {
++   "name": "NV.repeated_denials_quarantine",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Agent keeps probing an ungranted endpoint; the fifth denial in the window trips drift quarantine"
++  },
++  {
++   "name": "NV.ticket_replay_across_sandboxes",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Ticket minted for sandbox-a's request presented again by sandbox-b"
++  },
++  {
++   "name": "NV.weights_export_via_supervisor",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Agent routes a weight-export call through the supervisor; no rule grants it"
++  },
++  {
++   "name": "baseline.dual_witness_allow",
++   "layer": "NV",
++   "expect": "allowed",
++   "description": "Rule lists both witnesses; Sentry and obs-main both report low risk → allowed"
++  },
++  {
++   "name": "NV.dual_witness_sentry_high",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Both required; obs-main says low, Sentry reports drift 0.95 → denied (one high verdict is enough to stop it)"
++  },
++  {
++   "name": "NV.dual_witness_obs_main_high",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Both required; Sentry says low, the safety observer flags the action → denied"
++  },
++  {
++   "name": "NV.dual_witness_second_forged",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Both required; Sentry genuine and low, the obs-main verdict signed by an attacker's key → denied"
++  },
++  {
++   "name": "NV.dual_witness_second_missing",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Both required; the safety lane is absent → denied even with a clean Sentry verdict (fail closed, not open)"
++  },
++  {
++   "name": "baseline.high_authority_dual_witness",
++   "layer": "NV",
++   "expect": "allowed",
++   "description": "Recommended config: only human-held actions demand both witnesses; a large payment with both verdicts is held, approved, executed"
++  },
++  {
++   "name": "NV.high_authority_single_witness",
++   "layer": "NV",
++   "expect": "blocked",
++   "description": "Recommended config; a large payment arrives with Sentry's verdict only → denied before it can even be held"
++  },
++  {
++   "name": "baseline.hold_survives_restart",
++   "layer": "TX",
++   "expect": "allowed",
++   "description": "A held payment survives a restart of the gate and can still be approved and executed"
++  },
++  {
++   "name": "baseline.budget_recovers_after_ticket_expiry",
++   "layer": "TX",
++   "expect": "allowed",
++   "description": "A ticket that was never executed gives its reservation back when it expires"
++  },
++  {
++   "name": "TX.budget_exhausted",
++   "layer": "TX",
++   "expect": "blocked",
++   "description": "Three 900 USD payments against a shared 2,000 USD hourly budget; the third is refused at the gate"
++  },
++  {
++   "name": "TX.concurrent_overspend",
++   "layer": "TX",
++   "expect": "blocked",
++   "description": "40 concurrent 250 USD requests against a 2,000 USD budget; more than 8 allowed would be an overspend"
++  },
++  {
++   "name": "TX.ticket_after_policy_change",
++   "layer": "TX",
++   "expect": "blocked",
++   "description": "Ticket minted under one policy presented after governance loaded a stricter one"
++  },
++  {
++   "name": "TX.epoch_forged",
++   "layer": "TX",
++   "expect": "blocked",
++   "description": "An attacker tries to move the endpoint to a policy epoch the gate never signed"
++  },
++  {
++   "name": "TX.ticket_replay_after_restart",
++   "layer": "TX",
++   "expect": "blocked",
++   "description": "A consumed ticket is presented again after the endpoint restarts from durable state"
++  },
++  {
++   "name": "TX.request_replay_after_restart",
++   "layer": "TX",
++   "expect": "blocked",
++   "description": "A request already decided before the restart is submitted again afterwards"
++  },
++  {
++   "name": "TX.commit_unreachable",
++   "layer": "TX",
++   "expect": "blocked",
++   "description": "The endpoint holds a valid ticket but cannot reach the gate to commit the reservation (partition)"
++  },
++  {
++   "name": "TX.risk_label_ignored",
++   "layer": "TX",
++   "expect": "blocked",
++   "description": "A compromised broker labels a 25,000 USD payment 'reversible' and asks for the auto path"
++  },
++  {
++   "name": "TX.commit_forged_ticket",
++   "layer": "TX",
++   "expect": "blocked",
++   "description": "A ticket re-signed by a key that is not the gate's is offered for commit"
++  }
++ ]
++}
+diff --git a/catalogue/export.py b/catalogue/export.py
+new file mode 100644
+index 0000000..0b2c196
+--- /dev/null
++++ b/catalogue/export.py
+@@ -0,0 +1,41 @@
++"""Write catalogue/attacks.json from hardware_ref/attacks.py (the source of truth for the entries today).
++
++    python3 catalogue/export.py ../hardware-and-silicon            # rewrite attacks.json
++    python3 catalogue/export.py ../hardware-and-silicon --check    # fail if attacks.json differs from the live catalogue
++
++Only data is exported: name, layer, expect, description. The attack bodies stay code in hardware_ref.
++"""
++import json
++import pathlib
++import sys
++
++HERE = pathlib.Path(__file__).parent
++
++
++def live(repo: str) -> list[dict]:
++    sys.dont_write_bytecode = True
++    sys.path.insert(0, repo)
++    from hardware_ref.attacks import CATALOGUE
++    return [{"name": a.name, "layer": a.layer, "expect": a.expect, "description": a.description} for a in CATALOGUE]
++
++
++def document(entries: list[dict]) -> dict:
++    return {"source": "hardware_ref/attacks.py", "attacks": sum(e["expect"] == "blocked" for e in entries),
++            "baselines": sum(e["expect"] == "allowed" for e in entries), "entries": entries}
++
++
++def main(argv: list[str]) -> int:
++    repo = argv[1]
++    text = json.dumps(document(live(repo)), indent=1, ensure_ascii=False) + "\n"
++    target = HERE / "attacks.json"
++    if "--check" in argv:
++        if target.read_text() != text:
++            print("catalogue/attacks.json differs from hardware_ref.attacks.CATALOGUE; rerun export.py")
++            return 1
++        return 0
++    target.write_text(text)
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv))
+diff --git a/lanes/__init__.py b/lanes/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/lanes/check.py b/lanes/check.py
+new file mode 100644
+index 0000000..0822f4c
+--- /dev/null
++++ b/lanes/check.py
+@@ -0,0 +1,233 @@
++"""Lanes conformance checker.
++
++    python3 -m lanes.check                         # fixtures, catalogue, governor model
++    python3 -m lanes.check --observer ../safety/observer   # also run a safety observer against the fixtures
++
++Every check is fail-closed and prints one line; the exit status is the number of failures (capped at 1).
++"""
++import argparse
++import base64
++import copy
++import json
++import pathlib
++import sys
++
++from . import envelope as E
++from . import generate as G
++
++ROOT = pathlib.Path(__file__).resolve().parent.parent
++FIX = pathlib.Path(__file__).parent / "fixtures"
++FAILS: list[str] = []
++
++
++def check(name: str, ok: bool, detail: str = "") -> None:
++    print(("ok    " if ok else "FAIL  ") + name + ("" if ok else f"  {detail}"))
++    if not ok:
++        FAILS.append(name)
++
++
++def load(name: str):
++    return json.loads((FIX / name).read_text())
++
++
++def gate_checks(env: dict, anchor_pub: str, ptype: str, now: float) -> list[str]:
++    """What the gate or endpoint does with a message of this type: anchored key, signature, type, expiry."""
++    why = []
++    if not E.verify(env, expected_pub_hex=anchor_pub):
++        why.append("signature")
++        return why
++    p = env["payload"]
++    if p.get("type") != ptype:
++        why.append("type")
++    if p.get("expires_at", 0) < now:
++        why.append("expired")
++    return why
++
++
++def fixtures_current() -> None:
++    for name, obj in G.build().items():
++        path = FIX / name
++        check(f"fixture {name} is what generate.py produces", path.exists() and path.read_text() == G.render(obj),
++              "run: python3 -m lanes.generate (only if the change is intended)")
++
++
++def chain_ok(audit: dict) -> bool:
++    """Hash chain from sha256("audit-genesis"), leaf = sha256(0x00 || core), a gate signature over each chain hash."""
++    head, good = bytes.fromhex(E.sha256_hex(b"audit-genesis")), True
++    for i, e in enumerate(audit["entries"]):
++        core = {k: e[k] for k in ("seq", "ts", "prev", "record")}
++        leaf = bytes.fromhex(E.sha256_hex(b"\x00" + E.canonical(core)))
++        chain = bytes.fromhex(E.sha256_hex(head + leaf))
++        good &= e["seq"] == i and e["prev"] == head.hex() and e["hash"] == chain.hex() \
++            and E.verify_sig(bytes.fromhex(audit["pub"]), base64.b64decode(e["sig"]), chain) and "event" in e["record"]
++        head = chain
++    return good
++
++
++def messages() -> None:
++    keys, rq = load("keys.json"), load("request.json")
++    req, now = rq["request"], rq["now"]
++    pub = {k: v["pub"] for k, v in keys.items()}
++
++    check("subject hash equals the pinned value", E.request_hash(req) == rq["subject"], E.request_hash(req))
++    check("canonical core equals the pinned bytes", E.canonical(E.request_core(req)).decode() == rq["canonical_core"])
++
++    obs = load("observer-assertion.json")
++    check("observer assertion: gate checks pass", not gate_checks(obs, pub["obs-main"], "observer-assertion", now))
++    p = obs["payload"]
++    check("observer assertion: subject binds this request", p["subject"] == E.request_hash(req))
++    check("observer assertion: fresh and risk in [0,1]", p["issued_at"] <= now <= p["expires_at"] and 0 <= p["risk"] <= 1)
++    other = dict(req, request_id="r-2")
++    check("observer assertion: another request's hash is a subject mismatch", p["subject"] != E.request_hash(other))
++    forged = E.sign(E.seed_for("attacker"), p)
++    check("observer assertion: forged key rejected despite valid signature", not E.verify(forged, pub["obs-main"]) and E.verify(forged))
++    tampered = copy.deepcopy(obs)
++    tampered["payload"]["risk"] = 0.99
++    check("observer assertion: tampered payload rejected", not E.verify(tampered))
++    wrong_signer = dict(obs, signer="00" * 8)
++    check("observer assertion: wrong signer field rejected", not E.verify(wrong_signer))
++    check("observer assertion: expired is stale", bool(gate_checks(obs, pub["obs-main"], "observer-assertion", p["expires_at"] + 1)))
++
++    prov = load("provenance-assertion.json")
++    content = load("content.json")["content"]
++    check("provenance assertion: gate checks pass", not gate_checks(prov, pub["wm-registry"], "provenance-assertion", now))
++    check("provenance assertion: digest binds the content", prov["payload"]["content_digest"] == E.sha256_hex(content.encode())
++          and prov["payload"]["status"] == "exact")
++    check("provenance assertion: other content does not match", prov["payload"]["content_digest"] != E.sha256_hex(b"hello, w0rld"))
++
++    tok = load("attestation-token.json")
++    check("attestation token: gate checks pass", not gate_checks(tok, pub["verifier"], "attestation-token", now))
++    check("attestation token: measurement equals the request's", tok["payload"]["measurement"] == req["measurement"])
++
++    tic = load("action-ticket.json")
++    tp = tic["payload"]
++    check("action ticket: endpoint checks pass", not gate_checks(tic, pub["gate"], "action-ticket", now))
++    check("action ticket: binds action and presented params", tp["action"] == req["action"] and tp["params_digest"] == E.digest(req["params"]))
++    check("action ticket: params changed after issue do not match", tp["params_digest"] != E.digest(dict(req["params"], amount=9999)))
++    check("action ticket: request_hash binds the request", tp["request_hash"] == E.request_hash(req))
++
++    pol = load("policy-image.json")
++    check("policy image: governance-signed gate-policy", E.verify(pol, pub["governance"]) and pol["payload"]["type"] == "gate-policy")
++    check("policy image: default deny", pol["payload"]["policy"].get("default", "deny") == "deny")
++    check("policy image: signed by the wrong key is rejected", not E.verify(pol, pub["gate"]))
++
++    audit = load("audit-record.json")
++    check("audit record: chain, signatures and event fields verify", chain_ok(audit) and audit["pub"] == pub["gate"])
++    cp = audit["checkpoints"][0]
++    check("audit record: checkpoint is gate-signed and commits to the head",
++          E.verify(cp, pub["gate"]) and cp["payload"]["head"] == audit["entries"][-1]["hash"]
++          and cp["payload"]["size"] == len(audit["entries"]))
++    broken = copy.deepcopy(audit)
++    broken["entries"][0]["record"]["rules"] = 2
++    check("audit record: editing an entry is detected", not chain_ok(broken))
++    cut = copy.deepcopy(audit)
++    del cut["entries"][0]
++    check("audit record: deleting an entry is detected", not chain_ok(cut))
++
++
++def govsim_model() -> None:
++    """The governor model must agree with the fixtures on bytes. Its envelope shape differs (16-hex signer, hex sig,
++    no embedded pub); that is a known gap tracked in EXPERIMENTS.md, so here we pin what must agree: the canonical
++    bytes and, because Ed25519 is deterministic, the signature itself."""
++    sys.path.insert(0, str(ROOT))
++    from govsim import crypto as C
++    keys, rq = load("keys.json"), load("request.json")
++    core = E.request_core(rq["request"])
++    check("govsim: canonical bytes equal the fixtures'", C.canonical(core) == E.canonical(core))
++    check("govsim: digest of the request core is the pinned subject", C.digest(core) == rq["subject"])
++    obs = load("observer-assertion.json")
++    sk = C.SigningKey.from_seed(bytes.fromhex(keys["obs-main"]["seed"]))
++    check("govsim: same seed gives the fixture public key", sk.public.hex == keys["obs-main"]["pub"])
++    signed = sk.sign(obs["payload"])
++    check("govsim: signing the fixture payload reproduces the fixture signature",
++          bytes.fromhex(signed["sig"]) == base64.b64decode(obs["sig"]))
++    check("govsim: verifies the fixture signature under the anchored key",
++          C.verify_object({"payload": obs["payload"], "signer": sk.key_id, "sig": base64.b64decode(obs["sig"]).hex()}, sk.public))
++    for name, signer in (("observer-assertion.json", "obs-main"), ("provenance-assertion.json", "wm-registry"),
++                         ("attestation-token.json", "verifier"), ("action-ticket.json", "gate"),
++                         ("policy-image.json", "governance")):
++        env = load(name)
++        vk = C.VerifyKey.from_hex(keys[signer]["pub"])
++        adapted = {"payload": env["payload"], "signer": vk.key_id, "sig": base64.b64decode(env["sig"]).hex()}
++        check(f"govsim: verifies {name} under the {signer} key", C.verify_object(adapted, vk))
++        adapted["payload"] = dict(env["payload"], expires_at=env["payload"].get("expires_at", 0) + 1, tampered=True)
++        check(f"govsim: rejects a tampered {name}", not C.verify_object(adapted, vk))
++
++
++def catalogue() -> None:
++    sys.path.insert(0, str(ROOT))
++    import catalogue as K
++    doc = json.loads(K.PATH.read_text())
++    entries = doc["entries"]
++    names = [e["name"] for e in entries]
++    check("catalogue: names are unique", len(names) == len(set(names)))
++    check("catalogue: every entry has name, layer, expect, description",
++          all(set(e) == {"name", "layer", "expect", "description"} and e["expect"] in ("blocked", "allowed") for e in entries))
++    check("catalogue: declared counts match the entries",
++          doc["attacks"] == sum(e["expect"] == "blocked" for e in entries)
++          and doc["baselines"] == sum(e["expect"] == "allowed" for e in entries) and doc["attacks"] + doc["baselines"] == len(entries))
++    check("catalogue: baselines are exactly the baseline.* names",
++          {e["name"] for e in entries if e["expect"] == "allowed"} == {n for n in names if n.startswith("baseline.")})
++
++
++def hardware(path: str) -> None:
++    """The reference verifier of the hardware lane, run on the audit fixture (docs/LANES.md names it)."""
++    sys.path.insert(0, str(pathlib.Path(path).resolve()))
++    sys.dont_write_bytecode = True
++    from hardware_ref.audit import AuditLog
++    audit = load("audit-record.json")
++    rep = AuditLog.verify_export(audit)
++    check("hardware_ref: AuditLog.verify_export accepts the audit fixture", rep.ok, str(rep))
++    bad = copy.deepcopy(audit)
++    bad["entries"][1]["record"]["decision"] = "deny"
++    check("hardware_ref: AuditLog.verify_export rejects an edited entry", not AuditLog.verify_export(bad).ok)
++    cut = copy.deepcopy(audit)
++    cut["entries"] = cut["entries"][:1]
++    check("hardware_ref: AuditLog.verify_export rejects a truncation the checkpoint covers", not AuditLog.verify_export(cut).ok)
++
++
++def observer(path: str) -> None:
++    """Run a safety_observer against the fixtures: same subject, same envelope format, anchored-key rejection."""
++    sys.path.insert(0, str(pathlib.Path(path).resolve()))
++    sys.dont_write_bytecode = True
++    from safety_observer import SafetyObserver
++    from safety_observer.canon import canonical, digest
++    from safety_observer.envelope import SigningKey, verify_object
++    keys, rq = load("keys.json"), load("request.json")
++    req, now = rq["request"], rq["now"]
++    key = SigningKey(bytes.fromhex(keys["obs-main"]["seed"]))
++    check("observer: public key derived from the fixture seed matches", key.public_raw.hex() == keys["obs-main"]["pub"])
++    check("observer: canonical core bytes equal the pin", canonical({k: req[k] for k in ("request_id", "measurement", "action", "params")}).decode() == rq["canonical_core"])
++    check("observer: subject equals the pin", digest({k: req[k] for k in ("request_id", "measurement", "action", "params")}) == rq["subject"])
++    env = SafetyObserver("obs-main", key, ttl=60).assess(req, now=now)
++    p = env["payload"]
++    check("observer: assertion carries the contract fields",
++          p["type"] == "observer-assertion" and p["observer"] == "obs-main" and p["subject"] == rq["subject"]
++          and p["issued_at"] == now and p["expires_at"] == now + 60 and isinstance(p["risk"], float) and isinstance(p["flags"], list))
++    check("observer: its envelope verifies under the reference checker", E.verify(env, keys["obs-main"]["pub"]))
++    fx = load("observer-assertion.json")
++    check("observer: the fixture envelope verifies under the observer's verifier", verify_object(fx, expected_pub_hex=keys["obs-main"]["pub"]))
++    for name in ("provenance-assertion.json", "attestation-token.json", "action-ticket.json", "policy-image.json"):
++        m = load(name)
++        check(f"observer: its verifier accepts {name}", verify_object(m))
++
++
++def main() -> int:
++    ap = argparse.ArgumentParser()
++    ap.add_argument("--hardware", help="directory containing hardware_ref (hardware-and-silicon checkout)")
++    ap.add_argument("--observer", help="directory containing the safety_observer package")
++    args = ap.parse_args()
++    fixtures_current()
++    messages()
++    govsim_model()
++    catalogue()
++    if args.hardware:
++        hardware(args.hardware)
++    if args.observer:
++        observer(args.observer)
++    print(f"\n{len(FAILS)} failed" if FAILS else "\nlanes: all checks passed")
++    return 1 if FAILS else 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/lanes/envelope.py b/lanes/envelope.py
+new file mode 100644
+index 0000000..1c0e877
+--- /dev/null
++++ b/lanes/envelope.py
+@@ -0,0 +1,80 @@
++"""Reference canonical JSON and signed envelope for the lanes contract (docs/LANES.md in hardware-and-silicon).
++
++Stand-alone on purpose: the checker must not import code from the lane it is judging.
++"""
++import base64
++import hashlib
++import json
++
++from cryptography.exceptions import InvalidSignature
++from cryptography.hazmat.primitives import serialization
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
++
++
++def canonical(obj) -> bytes:
++    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
++
++
++def sha256_hex(data: bytes) -> str:
++    return hashlib.sha256(data).hexdigest()
++
++
++def digest(obj) -> str:
++    return sha256_hex(canonical(obj))
++
++
++def request_core(req: dict) -> dict:
++    return {k: req[k] for k in ("request_id", "measurement", "action", "params")}
++
++
++def request_hash(req: dict) -> str:
++    return digest(request_core(req))
++
++
++def key_id(pub_raw: bytes) -> str:
++    return hashlib.sha256(pub_raw).digest()[:8].hex()
++
++
++def seed_for(name: str) -> bytes:
++    """Fixture keys are public test keys derived from their name. Never use them for anything else."""
++    return hashlib.sha256(b"lanes-fixture-key/" + name.encode()).digest()
++
++
++def public_raw(seed: bytes) -> bytes:
++    return Ed25519PrivateKey.from_private_bytes(seed).public_key().public_bytes(
++        serialization.Encoding.Raw, serialization.PublicFormat.Raw)
++
++
++def sign_bytes(seed: bytes, data: bytes) -> bytes:
++    return Ed25519PrivateKey.from_private_bytes(seed).sign(data)
++
++
++def sign(seed: bytes, payload: dict) -> dict:
++    pub = public_raw(seed)
++    return {"payload": payload, "signer": key_id(pub), "pub": pub.hex(),
++            "sig": base64.b64encode(sign_bytes(seed, canonical(payload))).decode("ascii")}
++
++
++def verify_sig(pub: bytes, sig: bytes, data: bytes) -> bool:
++    try:
++        Ed25519PublicKey.from_public_bytes(pub).verify(sig, data)
++    except (InvalidSignature, ValueError):
++        return False
++    return True
++
++
++def verify(env, expected_pub_hex: str | None = None) -> bool:
++    if not isinstance(env, dict):
++        return False
++    try:
++        pub_hex = env["pub"]
++        pub = bytes.fromhex(pub_hex)
++        sig = base64.b64decode(env["sig"], validate=True)
++        payload = env["payload"]
++    except (KeyError, ValueError, TypeError):
++        return False
++    if expected_pub_hex is not None and pub_hex != expected_pub_hex:
++        return False
++    if env.get("signer") != key_id(pub):
++        return False
++    return verify_sig(pub, sig, canonical(payload))
+diff --git a/lanes/fixtures/action-ticket.json b/lanes/fixtures/action-ticket.json
+new file mode 100644
+index 0000000..f70cb17
+--- /dev/null
++++ b/lanes/fixtures/action-ticket.json
+@@ -0,0 +1,16 @@
++{
++  "payload": {
++    "action": "payments.transfer",
++    "expires_at": 1800000060.0,
++    "issued_at": 1800000000.0,
++    "measurement": "abababababababababababababababab",
++    "params_digest": "5090fb94d70de11be571c9ad74f9fe747bf99bc3be5b2457869b5d90d1262d3c",
++    "request_hash": "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae",
++    "rule": "pay-small",
++    "ticket_id": "00112233445566778899aabbccddeeff",
++    "type": "action-ticket"
++  },
++  "pub": "69670d5260ca49776703c7a133d2a7c4db848ce8f176ae129c497264bbc543c0",
++  "sig": "RUKeIoOpvZkdttaaVoIjNrG5VCXMMLVczOQ2mMETkM0zxnoWcVYbPZ2bxxjuZo5VCuuZ10oyA0mPlVmFfFBqBA==",
++  "signer": "6bc61058f6dd43a4"
++}
+diff --git a/lanes/fixtures/attestation-token.json b/lanes/fixtures/attestation-token.json
+new file mode 100644
+index 0000000..2b9dce5
+--- /dev/null
++++ b/lanes/fixtures/attestation-token.json
+@@ -0,0 +1,25 @@
++{
++  "payload": {
++    "devices": {
++      "cpu-tee": {
++        "device_id": "cpu-0",
++        "fw": "tee-runtime:2.4.0",
++        "svn": 3
++      },
++      "gpu": {
++        "device_id": "gpu-0",
++        "fw": "gpu-firmware:96.00.5E",
++        "svn": 5
++      }
++    },
++    "expires_at": 1800000300.0,
++    "issued_at": 1800000000.0,
++    "issuer": "verifier",
++    "measurement": "abababababababababababababababab",
++    "nonce": "n-1",
++    "type": "attestation-token"
++  },
++  "pub": "3d8eef3a3640c6b663e9f1ed93cf2b78314bd6c9540cb5a88b6a4255c1ac2c92",
++  "sig": "N0x1KWKmijxDqBEHEzLG+uHV0GCjSvrdm3RTaVqwP33RhggtFlDHAY8YvljYFdP8K22SCgkI6jJfSAjCFR/qCw==",
++  "signer": "fd955b09cebc9d33"
++}
+diff --git a/lanes/fixtures/audit-record.json b/lanes/fixtures/audit-record.json
+new file mode 100644
+index 0000000..56a6eae
+--- /dev/null
++++ b/lanes/fixtures/audit-record.json
+@@ -0,0 +1,47 @@
++{
++  "checkpoints": [
++    {
++      "payload": {
++        "head": "ed9e84aa1864c1e29259ecd7e626ca7af2fb3dfa724d56d99b25192e42504148",
++        "log": "gate-audit",
++        "root": "cfa1a666224307f1f2b630e7e3bc26bdc59e67c7eeca32b42ae63aecf49fafc9",
++        "size": 2,
++        "ts": 1800000002.0,
++        "type": "audit-checkpoint"
++      },
++      "pub": "69670d5260ca49776703c7a133d2a7c4db848ce8f176ae129c497264bbc543c0",
++      "sig": "u7SuHRo+rGpqzDZAQc2CvYrd+WdawbC9vTC5wi8N0z0eD10VSMOexWd9jJvOudidxT/3VQEXS4zHPkt9Ky0pBw==",
++      "signer": "6bc61058f6dd43a4"
++    }
++  ],
++  "entries": [
++    {
++      "hash": "cdbdedf1cdf8c1281b1d3ae0266e1808b2d0f737714eff1dc55a09e20066ab30",
++      "prev": "0b183dd2ce07a00d3dfcd589c118a3d9600066afa79ae5f78f4fc3bd8e4bc8a1",
++      "record": {
++        "event": "gate.policy_loaded",
++        "policy_id": "439ea3efad0bcee3",
++        "rules": 1
++      },
++      "seq": 0,
++      "sig": "vevLPJGf5Q9SZAhavE3BkA5dIwJP9wXA1tlqdjPOSlHqdedLT8ZNS+wippvf9bILqIPHjneLxR14Hs+erEHnDg==",
++      "ts": 1800000000.0
++    },
++    {
++      "hash": "ed9e84aa1864c1e29259ecd7e626ca7af2fb3dfa724d56d99b25192e42504148",
++      "prev": "cdbdedf1cdf8c1281b1d3ae0266e1808b2d0f737714eff1dc55a09e20066ab30",
++      "record": {
++        "decision": "allow",
++        "event": "gate.decision",
++        "request_hash": "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae",
++        "rule": "pay-small",
++        "ticket_id": "00112233445566778899aabbccddeeff"
++      },
++      "seq": 1,
++      "sig": "C8r1e+wRuE8LoHFBjc9UpjYbExr2j/8+3a1NTzJTBfw/SlQqDDvxpy7Bgf47RmkSfxZcozjCbQ8vAQgM4Ce3Bw==",
++      "ts": 1800000001.0
++    }
++  ],
++  "log": "gate-audit",
++  "pub": "69670d5260ca49776703c7a133d2a7c4db848ce8f176ae129c497264bbc543c0"
++}
+diff --git a/lanes/fixtures/content.json b/lanes/fixtures/content.json
+new file mode 100644
+index 0000000..d33dfc3
+--- /dev/null
++++ b/lanes/fixtures/content.json
+@@ -0,0 +1,3 @@
++{
++  "content": "hello, world"
++}
+diff --git a/lanes/fixtures/keys.json b/lanes/fixtures/keys.json
+new file mode 100644
+index 0000000..89a9bff
+--- /dev/null
++++ b/lanes/fixtures/keys.json
+@@ -0,0 +1,32 @@
++{
++  "gate": {
++    "pub": "69670d5260ca49776703c7a133d2a7c4db848ce8f176ae129c497264bbc543c0",
++    "seed": "a871cc7d14fe99c1bd2a3a30750726fb74cd45fe91739efede11ce274a930f70",
++    "signer": "6bc61058f6dd43a4"
++  },
++  "governance": {
++    "pub": "50e5d10998c3c056a251205d93b21bda5182ec26b1f3f0cf8a091abac0c03cfc",
++    "seed": "47e1a65f0bc13881e584aaf21c6c47a070781a8e26cb38208fc24b8b4661e3d3",
++    "signer": "0117838d8b06a514"
++  },
++  "obs-main": {
++    "pub": "63e2ec1aa9ef6284970f7a01cd7df9a43416335a2e18f1bd5236c298a921df6d",
++    "seed": "33ad0a6a881e5073d19b9aa0c7917d87f4369c3745435fd01e596663961a25d3",
++    "signer": "3dd4eb68f25c4e34"
++  },
++  "sentry": {
++    "pub": "5249eb03628ce2927319619bc06c0bad21b6144a1a6ff119e2d8ba524a4b622d",
++    "seed": "c2f4be04dbab2b2fdf372c5f3761583b2b88aa4dad586569633a5a0f3bc3ec5e",
++    "signer": "3cda73124afab04f"
++  },
++  "verifier": {
++    "pub": "3d8eef3a3640c6b663e9f1ed93cf2b78314bd6c9540cb5a88b6a4255c1ac2c92",
++    "seed": "b57bd6181b97064fa271be0f56b04b30ceea5cb6eab6d9705113a7480598b562",
++    "signer": "fd955b09cebc9d33"
++  },
++  "wm-registry": {
++    "pub": "0e94718be8817544deb68519b7d2054b12315e49e5f43a708fc1b8f7417c6632",
++    "seed": "dae248c1126cd0bb60caa3d12cf33ef794260e066a7f3d620c9a2ba1da51d0b2",
++    "signer": "15819035db6bc230"
++  }
++}
+diff --git a/lanes/fixtures/observer-assertion.json b/lanes/fixtures/observer-assertion.json
+new file mode 100644
+index 0000000..5613b85
+--- /dev/null
++++ b/lanes/fixtures/observer-assertion.json
+@@ -0,0 +1,16 @@
++{
++  "payload": {
++    "expires_at": 1800000060.0,
++    "flags": [
++      "benign"
++    ],
++    "issued_at": 1800000000.0,
++    "observer": "obs-main",
++    "risk": 0.12,
++    "subject": "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae",
++    "type": "observer-assertion"
++  },
++  "pub": "63e2ec1aa9ef6284970f7a01cd7df9a43416335a2e18f1bd5236c298a921df6d",
++  "sig": "i4cjpiK3gCe2em0kuPnTIaKCKNkBkBzNeb9ByRCir1SxNgGkkg4nQ6Ksv9R3rcW3+O8m2xgvU7hKwL8gRMLiAQ==",
++  "signer": "3dd4eb68f25c4e34"
++}
+diff --git a/lanes/fixtures/policy-image.json b/lanes/fixtures/policy-image.json
+new file mode 100644
+index 0000000..a25b58d
+--- /dev/null
++++ b/lanes/fixtures/policy-image.json
+@@ -0,0 +1,30 @@
++{
++  "payload": {
++    "policy": {
++      "default": "deny",
++      "hold_ttl_s": 3600,
++      "observer_freshness_s": 60,
++      "rules": [
++        {
++          "action": "payments.transfer",
++          "constraints": {
++            "amount": {
++              "max": 1000
++            }
++          },
++          "id": "pay-small",
++          "requirement": {
++            "max_risk": 0.5,
++            "mode": "observer",
++            "observer": "obs-main"
++          },
++          "workload": "*"
++        }
++      ]
++    },
++    "type": "gate-policy"
++  },
++  "pub": "50e5d10998c3c056a251205d93b21bda5182ec26b1f3f0cf8a091abac0c03cfc",
++  "sig": "54qHFoeXwsjquGkBUfEf1plKngP8p0YovUzl2v52Opmyg51ltcJzd5aTX/vrGh7TgmGwBQmdvGeBSliM2zx/DA==",
++  "signer": "0117838d8b06a514"
++}
+diff --git a/lanes/fixtures/provenance-assertion.json b/lanes/fixtures/provenance-assertion.json
+new file mode 100644
+index 0000000..bda2f69
+--- /dev/null
++++ b/lanes/fixtures/provenance-assertion.json
+@@ -0,0 +1,13 @@
++{
++  "payload": {
++    "content_digest": "09ca7e4eaa6e8ae9c7d261167129184883644d07dfba7cbfbc4c8a2e08360d5b",
++    "expires_at": 1800000300.0,
++    "issued_at": 1800000000.0,
++    "registry": "wm-registry",
++    "status": "exact",
++    "type": "provenance-assertion"
++  },
++  "pub": "0e94718be8817544deb68519b7d2054b12315e49e5f43a708fc1b8f7417c6632",
++  "sig": "76AdlPIVhJmgVfV7awFI+6SCjLsuKHLASwM99iX4GOHZtQ210ApOhygF7lg4YvcRlYLt346G/Suh+6IInOGVDQ==",
++  "signer": "15819035db6bc230"
++}
+diff --git a/lanes/fixtures/request.json b/lanes/fixtures/request.json
+new file mode 100644
+index 0000000..203c2d6
+--- /dev/null
++++ b/lanes/fixtures/request.json
+@@ -0,0 +1,15 @@
++{
++  "canonical_core": "{\"action\":\"payments.transfer\",\"measurement\":\"abababababababababababababababab\",\"params\":{\"amount\":12.5,\"note\":\"rent\",\"to\":\"acct-7\"},\"request_id\":\"r-1\"}",
++  "now": 1800000000.0,
++  "request": {
++    "action": "payments.transfer",
++    "measurement": "abababababababababababababababab",
++    "params": {
++      "amount": 12.5,
++      "note": "rent",
++      "to": "acct-7"
++    },
++    "request_id": "r-1"
++  },
++  "subject": "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae"
++}
+diff --git a/lanes/generate.py b/lanes/generate.py
+new file mode 100644
+index 0000000..e072ce1
+--- /dev/null
++++ b/lanes/generate.py
+@@ -0,0 +1,108 @@
++"""Regenerate lanes/fixtures. Ed25519 is deterministic, so the output is byte-stable.
++
++    python3 -m lanes.generate
++
++Run it only when the contract changes on purpose; `make lanes` fails if the committed files drift.
++"""
++import base64
++import json
++import pathlib
++
++from . import envelope as E
++
++OUT = pathlib.Path(__file__).parent / "fixtures"
++NOW = 1800000000.0
++KEYS = ["obs-main", "sentry", "wm-registry", "verifier", "gate", "governance"]
++
++REQUEST = {"request_id": "r-1", "measurement": "ab" * 16, "action": "payments.transfer",
++           "params": {"amount": 12.5, "to": "acct-7", "note": "rent"}}
++# The pin safety/observer/tests/test_contract.py asserts. Written out here, not computed, so a change to
++# canonicalisation cannot move both sides at once.
++PINNED_SUBJECT = "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae"
++PINNED_CORE = ('{"action":"payments.transfer","measurement":"abababababababababababababababab",'
++               '"params":{"amount":12.5,"note":"rent","to":"acct-7"},"request_id":"r-1"}')
++CONTENT = "hello, world"
++POLICY = {"default": "deny", "observer_freshness_s": 60, "hold_ttl_s": 3600, "rules": [
++    {"id": "pay-small", "workload": "*", "action": "payments.transfer",
++     "requirement": {"mode": "observer", "observer": "obs-main", "max_risk": 0.5},
++     "constraints": {"amount": {"max": 1000}}}]}
++GENESIS = bytes.fromhex(E.sha256_hex(b"audit-genesis"))
++TICKET_ID = "00112233445566778899aabbccddeeff"
++
++
++def merkle_root(leaves: list[bytes]) -> bytes:
++    """RFC 6962 tree hash, as hardware_ref.audit.merkle_root."""
++    if not leaves:
++        return bytes.fromhex(E.sha256_hex(b""))
++    if len(leaves) == 1:
++        return leaves[0]
++    k = 1
++    while k * 2 < len(leaves):
++        k *= 2
++    return bytes.fromhex(E.sha256_hex(b"\x01" + merkle_root(leaves[:k]) + merkle_root(leaves[k:])))
++
++
++def audit_entries(gate_seed: bytes, subject: str):
++    """Chain starts at sha256("audit-genesis"), as hardware_ref.audit.AuditLog does. Chain hash = sha256(prev || leaf); leaf = sha256(0x00 || canonical{seq,ts,prev,record}); sig over the chain hash."""
++    head, entries, leaves = GENESIS, [], []
++    records = [{"event": "gate.policy_loaded", "policy_id": E.digest(POLICY)[:16], "rules": 1},
++               {"event": "gate.decision", "rule": "pay-small", "decision": "allow",
++                "request_hash": subject, "ticket_id": TICKET_ID}]
++    for seq, rec in enumerate(records):
++        entry = {"seq": seq, "ts": NOW + seq, "prev": head.hex(), "record": rec}
++        leaf = bytes.fromhex(E.sha256_hex(b"\x00" + E.canonical(entry)))
++        chain = bytes.fromhex(E.sha256_hex(head + leaf))
++        entry["hash"] = chain.hex()
++        entry["sig"] = base64.b64encode(E.sign_bytes(gate_seed, chain)).decode()
++        entries.append(entry)
++        leaves.append(leaf)
++        head = chain
++    return entries, leaves, head
++
++
++def build() -> dict:
++    seed = {k: E.seed_for(k) for k in KEYS}
++    subject = E.request_hash(REQUEST)
++    iss, exp = NOW, NOW + 60
++    fx: dict = {}
++    fx["keys.json"] = {k: {"seed": seed[k].hex(), "pub": E.public_raw(seed[k]).hex(),
++                           "signer": E.key_id(E.public_raw(seed[k]))} for k in KEYS}
++    fx["request.json"] = {"now": NOW, "request": REQUEST, "subject": PINNED_SUBJECT, "canonical_core": PINNED_CORE}
++    fx["observer-assertion.json"] = E.sign(seed["obs-main"], {
++        "type": "observer-assertion", "observer": "obs-main", "subject": subject, "risk": 0.12,
++        "flags": ["benign"], "issued_at": iss, "expires_at": exp})
++    fx["provenance-assertion.json"] = E.sign(seed["wm-registry"], {
++        "type": "provenance-assertion", "registry": "wm-registry",
++        "content_digest": E.sha256_hex(CONTENT.encode()), "status": "exact",
++        "issued_at": iss, "expires_at": NOW + 300})
++    fx["content.json"] = {"content": CONTENT}
++    fx["attestation-token.json"] = E.sign(seed["verifier"], {
++        "type": "attestation-token", "issuer": "verifier", "measurement": REQUEST["measurement"], "nonce": "n-1",
++        "devices": {"cpu-tee": {"device_id": "cpu-0", "fw": "tee-runtime:2.4.0", "svn": 3},
++                    "gpu": {"device_id": "gpu-0", "fw": "gpu-firmware:96.00.5E", "svn": 5}},
++        "issued_at": iss, "expires_at": NOW + 300})
++    fx["action-ticket.json"] = E.sign(seed["gate"], {
++        "type": "action-ticket", "ticket_id": TICKET_ID, "request_hash": subject, "action": REQUEST["action"],
++        "params_digest": E.digest(REQUEST["params"]), "measurement": REQUEST["measurement"], "rule": "pay-small",
++        "issued_at": iss, "expires_at": exp})
++    fx["policy-image.json"] = E.sign(seed["governance"], {"type": "gate-policy", "policy": POLICY})
++    entries, leaves, head = audit_entries(seed["gate"], subject)
++    cp = E.sign(seed["gate"], {"type": "audit-checkpoint", "log": "gate-audit", "size": len(entries),
++                               "root": merkle_root(leaves).hex(), "head": head.hex(), "ts": NOW + len(entries)})
++    fx["audit-record.json"] = {"log": "gate-audit", "pub": E.public_raw(seed["gate"]).hex(),
++                               "entries": entries, "checkpoints": [cp]}
++    return fx
++
++
++def render(obj) -> str:
++    return json.dumps(obj, indent=2, sort_keys=True) + "\n"
++
++
++def main() -> None:
++    OUT.mkdir(exist_ok=True)
++    for name, obj in build().items():
++        (OUT / name).write_text(render(obj))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/patches/hardware-and-silicon/lanes.patch b/patches/hardware-and-silicon/lanes.patch
+new file mode 100644
+index 0000000..597bd82
+--- /dev/null
++++ b/patches/hardware-and-silicon/lanes.patch
+@@ -0,0 +1,31 @@
++diff --git a/.github/workflows/lanes.yml b/.github/workflows/lanes.yml
++new file mode 100644
++--- /dev/null
+++++ b/.github/workflows/lanes.yml
++@@ -0,0 +1,10 @@
+++name: lanes
+++on: [push, pull_request]
+++jobs:
+++  lanes:
+++    runs-on: ubuntu-latest
+++    steps:
+++      - uses: actions/checkout@v4
+++      - run: git clone --depth 1 https://github.com/YobieBenjamin/safety-governor ../safety-governor
+++      - run: python3 -m pip install cryptography pytest
+++      - run: cd ../safety-governor && python3 -m lanes.check --hardware "$GITHUB_WORKSPACE" && python3 catalogue/export.py "$GITHUB_WORKSPACE" --check && cd "$GITHUB_WORKSPACE" && python3 -m pytest -q tests/test_catalogue_data.py
++diff --git a/tests/test_catalogue_data.py b/tests/test_catalogue_data.py
++new file mode 100644
++--- /dev/null
+++++ b/tests/test_catalogue_data.py
++@@ -0,0 +1,10 @@
+++import json
+++import os
+++import pathlib
+++
+++from hardware_ref.attacks import CATALOGUE
+++
+++
+++def test_catalogue_matches_shared_data():
+++    path = pathlib.Path(os.environ.get("SG_CATALOGUE", pathlib.Path(__file__).resolve().parents[2] / "safety-governor" / "catalogue" / "attacks.json"))
+++    entries = json.loads(path.read_text())["entries"]
+++    assert [(a.name, a.layer, a.expect, a.description) for a in CATALOGUE] == [(e["name"], e["layer"], e["expect"], e["description"]) for e in entries]
+diff --git a/patches/safety/lanes.patch b/patches/safety/lanes.patch
+new file mode 100644
+index 0000000..09c3501
+--- /dev/null
++++ b/patches/safety/lanes.patch
+@@ -0,0 +1,37 @@
++diff --git a/.github/workflows/lanes.yml b/.github/workflows/lanes.yml
++new file mode 100644
++--- /dev/null
+++++ b/.github/workflows/lanes.yml
++@@ -0,0 +1,8 @@
+++name: lanes
+++on: [push, pull_request]
+++jobs:
+++  lanes:
+++    runs-on: ubuntu-latest
+++    steps:
+++      - uses: actions/checkout@v4
+++      - run: git clone --depth 1 https://github.com/YobieBenjamin/safety-governor ../safety-governor
+++      - run: python3 -m pip install cryptography
+++      - run: cd ../safety-governor && python3 -m lanes.check --observer "$GITHUB_WORKSPACE/observer"
++diff --git a/observer/tests/test_contract.py b/observer/tests/test_contract.py
++--- a/observer/tests/test_contract.py
+++++ b/observer/tests/test_contract.py
++@@ -6,3 +6,7 @@
++ """
++
+++import json
+++import os
+++import pathlib
+++
++ from safety_observer import SafetyObserver
++@@ -17,7 +21,5 @@
++ }
++-GATE_SUBJECT = "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae"
++-GATE_CANONICAL_CORE = (
++-    '{"action":"payments.transfer","measurement":"abababababababababababababababab",'
++-    '"params":{"amount":12.5,"note":"rent","to":"acct-7"},"request_id":"r-1"}'
++-)
+++_LANES = pathlib.Path(os.environ.get("SG_LANES", pathlib.Path(__file__).resolve().parents[3] / "safety-governor" / "lanes"))
+++_PIN = json.loads((_LANES / "fixtures" / "request.json").read_text())
+++GATE_SUBJECT, GATE_CANONICAL_CORE = _PIN["subject"], _PIN["canonical_core"]
++
+diff --git a/tests/test_lanes.py b/tests/test_lanes.py
+new file mode 100644
+index 0000000..d953fb9
+--- /dev/null
++++ b/tests/test_lanes.py
+@@ -0,0 +1,14 @@
++import subprocess
++import sys
++
++import catalogue
++
++
++def test_catalogue_counts():
++    assert len(catalogue.names("blocked")) == 75
++    assert len(catalogue.names("allowed")) == 12
++
++
++def test_lanes_checker_passes():
++    r = subprocess.run([sys.executable, "-m", "lanes.check"], capture_output=True, text=True)
++    assert r.returncode == 0, r.stdout

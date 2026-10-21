@@ -1,26 +1,36 @@
-**Agent run, wave 1** (2026-10-20 17:51): cloud (sonnet, effort medium), 30 turns, estimated $1.2002, 1 attempt(s), 2 commit(s), acceptance `python3 -m pytest -q tests/test_h21_differential.py`: **pass**, pull request: https://github.com/YobieBenjamin/safety-governor/pull/15
+**Revision 2** (2026-10-21 07:56) on sonnet: 12 turns, estimated $0.7141, acceptance `python3 -m pytest -q tests/test_h21_differential.py`: **pass**. The gate reviews the branch again.
 
 Agent summary:
 
-**L5 summary (issue #5)**
+I fixed the wrong numbers and the unsupported wording. I did not widen the test, and the blocking finding about filing the disagreements as issues is still open. The acceptance command passed once more with 31 tests (one of three runs). The fixes are in commit 3dbe3d3, and nothing is pushed.
 
-- **Built:** `tests/test_h21_differential.py`, `tests/requirements-differential.txt` (hypothesis, plus an editable install of hardware-and-silicon) and `results/l5-disagreements.md`. One neutral payment rulebook is rendered into both formats. A mapping table of reason codes sits at the top of the test. A catalogue-classification test fails if a new attack is added that nobody has sorted.
-- **Catalogue:** the brief says 66 attacks and 10 baselines, but the checkout has 75 and 12. The test pins that count. 21 entries replay in both gates. The other 66 are listed with a reason, for example "audit chain" or "OASP supervisor".
-- **Sweep:** a hypothesis run over random typed requests, witnesses, tokens, prior payments and resubmits. A disagreement passes only if it matches one of the pinned signatures G1 to G5; anything else fails.
-- **Result:** the two gates agree on 18 of the 21 replayed entries. The other 3 are pinned disagreements.
-- **Pinned disagreements:** each has its input in `results/l5-disagreements.md`.
-  - **G1:** govsim has no destination regex, so `acct-evil` is allowed.
-  - **G2:** a string or `None` amount raises `TypeError` inside govsim's gate instead of denying.
-  - **G3:** govsim ignores the observer on human-hold rules. It holds where the reference denies.
-  - **G4:** the reference marks a request seen before deciding, so a denied request resubmitted is "replayed". govsim repeats the original denial.
-  - **G5:** when no rule fits, the two report different rules' violations. The decision is the same.
-- **Ambiguous in the policy text (design findings):** G3, G4 and G5. I did not read govsim's docs, only the code.
-- **What passes:** the acceptance command passed in no run I made. My three pytest runs failed or were filtered. After fixing the failures I called the 30 test functions directly through a scratch script, not pytest, and all passed. I did that to avoid a fourth pytest run, so please treat the launcher's run as the real check.
-- **Issues not filed:** the brief asks for one issue per disagreement, but I have no network authority here. Please file G1 to G5 from `results/l5-disagreements.md`.
-- **Reads beyond the brief:** to build the rigs I also read the hardware-and-silicon `system.py`, govsim's `cluster.py`, `conftest.py` and a few existing tests.
-- **Open question:** should govsim gain a regex, a type check and a witness check on human rules, or should the shared rulebook be limited to what both can express?
+**Changed**
+- **Counts:** `EXPERIMENTS.md` now says 17 of 20 replayed entries agree, with the other 67 of 87 listed in `NOT_COMPARED`. Its test counts are corrected to 31, with the earlier 30 noted as the count at that time. `results/l5-disagreements.md:7` now says 20 replayed and 67 listed.
+- **G3 to G5:** both documents now call the ambiguity a hypothesis from reading the docstrings only, not a settled finding about the design.
+- **Stale comment:** `tests/test_h21_differential.py:519` no longer claims the disagreements are filed under `results/issues/`. It points to `results/l5-disagreements.md` and says filing is still open.
+
+**Not changed**
+- **Filing G1 to G5 as separate issues:** `gh` is denied in this sandbox, so this remains for the launcher or YB.
+- **Widening the catalogue replay from 20 of 87:** the 67 excluded entries are not gate decisions in govsim, so each would need a new comparison harness. That is more than this revision could safely add.
+- **Reason-code table:** it still maps several distinct codes to one class (the `attestation.*` codes, `min` and `max`), and only the first reason is compared. Splitting the classes would need govsim's equivalents confirmed in `reasons.py`, which I did not re-read.
+- **Sweep tolerance:** the random-request sweep still accepts any disagreement that matches a `GAPS` signature. Tightening it needs the same re-read.
+- **`TX.concurrent_overspend`:** the `NOT_COMPARED` reason says govsim's H13 covers it. I did not check that `tests/test_h13_shared_budget.py` does, and the reviewer asks for that evidence too.
+- **`tests/requirements-differential.txt` and the results file:** I left both. They were not named in the brief, and I judged them necessary support for it.
 
 ## Commit messages
+- L5: correct counts (17 of 20 agree, 31 tests, 67 not compared), soften G3 to G5 claim, fix stale comment (#16)
+Agent: wave 1, issue #16 (revision 2)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+
+- Revision 1: work left uncommitted by the agent, committed by the launcher (#16)
+Agent: wave 1, issue #16 (revision 1, launcher commit)
+
+- EXPERIMENTS.md: L5 acceptance run passes under pytest; disagreement issues still to be filed (#16)
+Agent: wave 1, issue #16
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+
 - EXPERIMENTS.md: correct the agreement count (#5)
 Agent: wave 1, issue #5
 

@@ -1,0 +1,31 @@
+{
+ "id": "H1",
+ "branch": "exp/h1",
+ "base": "main",
+ "head": "b8fc9fd",
+ "commits": 6,
+ "agent_trailers": 6,
+ "files": 21,
+ "added": 1297,
+ "removed": 1,
+ "ok": true,
+ "findings": [
+  {
+   "severity": "warn",
+   "finding": "a result line names a path that does not exist on the branch",
+   "where": "EXPERIMENTS.md:35: tests/test_catalogue_data.py"
+  }
+ ],
+ "runs": {
+  "suite": {
+   "command": "python3 -m pytest -x tests",
+   "exit": 0,
+   "tail": "........................................................................ [ 35%]\n........................................................................ [ 71%]\n..........................................................               [100%]\n202 passed in 3.03s\n"
+  },
+  "acceptance": {
+   "command": "make lanes",
+   "exit": 0,
+   "tail": "ampered provenance-assertion.json\nok    govsim: verifies attestation-token.json under the verifier key\nok    govsim: rejects a tampered attestation-token.json\nok    govsim: verifies action-ticket.json under the gate key\nok    govsim: rejects a tampered action-ticket.json\nok    govsim: verifies policy-image.json under the governance key\nok    govsim: rejects a tampered policy-image.json\nok    catalogue: names are unique\nok    catalogue: every entry has name, layer, expect, description\nok    catalogue: declared counts match the entries\nok    catalogue: baselines are exactly the baseline.* names\nok    hardware_ref: AuditLog.verify_export accepts the audit fixture\nok    hardware_ref: AuditLog.verify_export rejects an edited entry\nok    hardware_ref: AuditLog.verify_export rejects a truncation the checkpoint covers\nok    observer: public key derived from the fixture seed matches\nok    observer: canonical core bytes equal the pin\nok    observer: subject equals the pin\nok    observer: assertion carries the contract fields\nok    observer: its envelope verifies under the reference checker\nok    observer: the fixture envelope verifies under the observer's verifier\nok    observer: its verifier accepts provenance-assertion.json\nok    observer: its verifier accepts attestation-token.json\nok    observer: its verifier accepts action-ticket.json\nok    observer: its verifier accepts policy-image.json\n\nlanes: all checks passed\npython3 catalogue/export.py /Users/yb/hardware-and-silicon --check\n"
+  }
+ }
+}
