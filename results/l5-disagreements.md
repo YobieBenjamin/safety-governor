@@ -4,7 +4,7 @@ Found by `tests/test_h21_differential.py` (issue #5). Each is pinned in the test
 Shared rulebook: pay-small (amount 0..1000, USD, destination `acct-[0-9]{6}`, observer risk <= 0.3, 3 per 60 s, 2000 per hour) and pay-large (amount 1000.01..50000, USD, same destination, human hold, observer risk <= 0.3).
 govsim cannot express a destination regex or a type check, so its rendering of the rulebook omits them (the test `test_the_two_rulebooks_say_the_same_thing` checks the rest is identical).
 
-Brief versus repository: the brief says 66 attacks and 10 baselines; the catalogue at hardware-and-silicon (editable install) has 75 attacks and 12 baselines. All 87 are classified: 21 replayed in both gates, 66 listed with the reason they are not gate decisions in govsim.
+Brief versus repository: the brief says 66 attacks and 10 baselines; the catalogue at hardware-and-silicon (editable install) has 75 attacks and 12 baselines. All 87 are classified: 20 replayed in both gates, 67 listed with the reason they are not gate decisions in govsim.
 
 ## G1 destination regex (govsim is more permissive; fail-open relative to the reference)
 Input: payments.transfer, params `{"amount": 250, "currency": "USD", "destination": "acct-evil"}`, valid token, low-risk witness.
@@ -19,7 +19,7 @@ Verdict: govsim is wrong (a gate that raises is not a gate that fails closed; th
 ## G3 human-mode rule ignores the observer in govsim
 Input: amount 25000, USD, `acct-654321`, no witness (or a forged, stale, or swapped one).
 Reference: deny `observer.missing` (and the other witness reasons). govsim: hold `gate.held_for_human`; after two approvals and 60 s, allow.
-Policy text: hardware_ref/policy.py says a human rule "may still set an observer threshold, checked first". govsim `make_rule` accepts `observers` and `max_risk` on a human rule, and `_cmd_request` reads witnesses only when `mode == "observer"`. The rule declares an input (observer-verdict) it never uses. The govsim text I read does not say which is intended: AMBIGUOUS, a finding about the design. A human sees a held request whose witness never ran.
+Policy text: hardware_ref/policy.py says a human rule "may still set an observer threshold, checked first". govsim `make_rule` accepts `observers` and `max_risk` on a human rule, and `_cmd_request` reads witnesses only when `mode == "observer"`. The rule declares an input (observer-verdict) it never uses. The govsim text I read does not say which is intended: looks AMBIGUOUS on the docstrings alone, a hypothesis about the design, not settled. A human sees a held request whose witness never ran.
 
 ## G4 a denied request resubmitted
 Input: payments.transfer 250 USD with no witness, the identical signed request submitted twice.
