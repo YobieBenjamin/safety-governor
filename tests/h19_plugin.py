@@ -15,15 +15,28 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from govsim.trace import Trace  # noqa: E402
-from proofs.replay import replay  # noqa: E402
+from proofs.replay import NoTransition, replay  # noqa: E402
 
 RESULTS: dict[str, dict] = {}
+
+# Tests that inject a fault into the governor on purpose (firmware that forgets its cause). The fault is a step the
+# machine does not have, so the replay MUST refuse it; the test passes replay only if the machines name that event.
+FAULT_INJECTION = {
+    "test_governor_cannot_clear_itself": ("run_entered", "RUN entered with no clear"),
+}
 
 
 @pytest.fixture(autouse=True)
 def h19_trace(request):
     with Trace() as tr:
         yield tr
+    fault = FAULT_INJECTION.get(request.node.name)
+    if fault is not None:
+        with pytest.raises(NoTransition) as exc:
+            replay(tr.events)
+        assert fault[0] in str(exc.value) and fault[1] in str(exc.value), str(exc.value)
+        RESULTS[request.node.nodeid] = {"events": len(tr.events), "steps": {}, "arms": 0, "fault_detected": str(exc.value)}
+        return
     rep = replay(tr.events)         # raises NoTransition, naming the first event the machines refuse
     RESULTS[request.node.nodeid] = {"events": rep.events, "steps": rep.steps, "arms": rep.arms}
 
