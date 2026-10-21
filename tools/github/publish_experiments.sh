@@ -79,7 +79,7 @@ rm -f "$lfail"
 failed=0
 for repo in $repos; do
   have=$(mktemp)
-  gh issue list --repo "$OWNER/$repo" --state all --json number,title --limit 1000 > "$have" 2>/dev/null || echo "[]" > "$have"
+  gh issue list --repo "$OWNER/$repo" --state all --json number,title,state --limit 1000 > "$have" 2>/dev/null || echo "[]" > "$have"
   python3 -c "
 import json, sys
 for i in json.load(open(sys.argv[1]))['issues']:
@@ -89,10 +89,27 @@ for i in json.load(open(sys.argv[1]))['issues']:
     title=$(printf '%s' "$line" | python3 -c "import json,sys; print(json.load(sys.stdin)['title'])")
     labels=$(printf '%s' "$line" | python3 -c "import json,sys; print(','.join(json.load(sys.stdin)['labels']))")
     body=$(mktemp); printf '%s' "$line" | python3 -c "import json,sys; sys.stdout.write(json.load(sys.stdin)['body'])" > "$body"
-    existing=$(python3 -c "
+    # the issue is matched by its exact title, else by its id prefix ("L5 · ") when a brief's title was
+    # corrected; the lowest-numbered one is kept and retitled, later duplicates are closed
+    ident=$(printf '%s' "$line" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+    match=$(python3 -c "
 import json, sys
-m = [i for i in json.load(open(sys.argv[1])) if i['title'] == sys.argv[2]]
-print(m[0]['number'] if m else '')" "$have" "$title")
+issues = json.load(open(sys.argv[1])); title, ident = sys.argv[2], sys.argv[3]
+exact = [i for i in issues if i['title'] == title]
+pref = sorted([i for i in issues if i['title'].startswith(ident + ' \u00b7 ') and i.get('state', 'OPEN') == 'OPEN'], key=lambda i: i['number'])
+cands = sorted({i['number']: i for i in exact + pref}.values(), key=lambda i: i['number'])
+keep = cands[0] if cands else None   # the oldest issue is the issue: pull requests and comments point at it
+dupes = [i['number'] for i in pref if keep and i['number'] != keep['number']]
+print((str(keep['number']) if keep else '') + '|' + ' '.join(map(str, dupes)) + '|' + ('retitle' if keep and keep['title'] != title else ''))" "$have" "$title" "$ident")
+    existing="${match%%|*}"; rest="${match#*|}"; dupes="${rest%%|*}"; retitle="${rest#*|}"
+    if [ -n "$existing" ] && [ "$retitle" = retitle ]; then
+      printf '== %s #%s: title updated to match the corrected brief\n' "$repo" "$existing"
+      run gh issue edit "$existing" --repo "$OWNER/$repo" --title "$title" >/dev/null 2>&1 || echo "   could not retitle #$existing"
+    fi
+    for d in $dupes; do
+      printf '== %s #%s: closed as a duplicate of #%s\n' "$repo" "$d" "$existing"
+      run gh issue close "$d" --repo "$OWNER/$repo" --comment "Duplicate of #$existing: the brief's title changed when it was corrected, and the publisher matched by title. #$existing is the issue; nothing else changes." >/dev/null 2>&1 || echo "   could not close #$d"
+    done
     if [ -n "$existing" ]; then
       printf '== %s #%s (update): %s\n' "$repo" "$existing" "$title"
       out=$(run gh issue edit "$existing" --repo "$OWNER/$repo" --body-file "$body" --add-label "$labels" 2>&1) && echo "   $out" || { echo "   FAILED: $out"; echo fail >> "$have.failed"; }
