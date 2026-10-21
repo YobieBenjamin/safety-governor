@@ -381,8 +381,11 @@ NOT_COMPARED = {
     "L4.url_outside_allowlist": "http.post is absent from the shared rulebook (govsim has no regex constraint for the URL allow-list), so both gates deny with no_rule -- shown in test_excluded_gate_decisions_are_shown", "L2.provenance_missing": "provenance lane", "L2.provenance_tampered": "provenance lane",
     "L2.provenance_content_swap": "provenance lane", "L2.provenance_forged": "provenance lane",
     "L4.token_wrong_workload": "the reference detects a measurement that differs from the token's as attestation.measurement_mismatch; govsim's request carries no measurement field, so the check is unexpressible there (shown in test_excluded_gate_decisions_are_shown)",
-    "L4.hold_bypass": "endpoint refuses a held ticket; endpoints are not the gate", "L4.approval_forged": "approval protocol differs (single signature vs quorum, floor, reason); the release path is compared in baseline.pay_large_hold_approve",
-    "L4.approval_wrong_request": "approval protocol", "L4.approval_replay": "approval protocol", "L4.approval_expired": "approval protocol",
+    "L4.hold_bypass": "endpoint refuses a held ticket; endpoints are not the gate",
+    "L4.approval_forged": "the approval protocol differs (reference: one approver; govsim: a quorum-2 rack with a latency floor); both refuse a forged approver -- shown in test_excluded_gate_decisions_are_shown, and the release path in baseline.pay_large_hold_approve",
+    "L4.approval_wrong_request": "the approval protocol differs; both gates refuse a wrong request hash -- shown in test_excluded_gate_decisions_are_shown",
+    "L4.approval_replay": "the approval protocol differs; govsim has no hold replay guard (a released hold is gone from the table) while the reference refuses a replayed hold -- shown in test_excluded_gate_decisions_are_shown",
+    "L4.approval_expired": "the reference expires a hold after its ttl; govsim has no hold ceiling, so a hold stays releasable -- shown in test_excluded_gate_decisions_are_shown",
     **{k: "endpoint ticket checks" for k in ("EP.no_ticket", "EP.ticket_replay", "EP.ticket_param_swap", "EP.ticket_action_swap", "EP.ticket_forged", "EP.ticket_expired")},
     **{k: "audit trail" for k in ("AU.modify_record", "AU.delete_middle", "AU.truncate_tail", "AU.reorder", "AU.forge_checkpoint", "AU.fork_after_checkpoint", "AU.inclusion_forged_leaf")},
     **{k: "OASP supervisor" for k in ("NV.unrouted_passthrough_no_ticket", "NV.unattested_sandbox", "NV.stale_host_token", "NV.sentry_drift_quarantine", "NV.sentry_identity_unverified",
@@ -513,7 +516,7 @@ def test_random_typed_requests_agree(scn):
 # Where a check is unexpressible in govsim's constraint language, the gate that would govern it is
 # absent from the shared rulebook, so both gates deny the input with no_rule (a shared deny, not a
 # govsim-only allow); where the approval protocol differs, the difference is named and pinned.
-# Each is filed under results/issues/ rather than excused.
+# Each is written up in results/l5-disagreements.md; filing them as GitHub issues is still open.
 # ---------------------------------------------------------------------------------------
 
 def _ref_hold():
