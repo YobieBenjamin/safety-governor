@@ -111,4 +111,6 @@ Answer per claim, L, P, C, S, N, and say for each whether you consider it a theo
 - `rtl/governor_rtl/` and `rtl/tests/`: the hard-core blocks and 20 simulation tests; formal proofs on the Verilog are the next step in `docs/07-verification-plan.md`.
 - `hw/loop/results.md`: the ngspice loop simulation, 39 configurations.
 - `docs/research/`: the evidence registers for boards and NVLink management, with what is verified and what is not.
-- `docs/17-use-cases.md` and `docs/18-viability-and-open-questions.md`: the use cases, the semantic residual, the hops, the asks.
+- `docs/17-use-cases.md` and `docs/18-viability-and-open-questions.md`: the use cases, the semantic residual, the hops, the asks; §8b of `18` places the design next to the hardware-governance literature.
+
+The literature that design sits beside, cited in `18` §8b: Petrie, Aarne, Ammann and Dalrymple, *Flexible Hardware-Enabled Guarantees: Part I, Overview*, for ARIA, April 2025, https://arxiv.org/abs/2506.15093; Ansari, *Hardware-Level Governance of AI Compute: A Feasibility Taxonomy for Regulatory Compliance and Treaty Verification*, 6 April 2026, https://arxiv.org/abs/2604.04712; *Secure, Governable Chips*, Center for a New American Security, January 2024; and RAND's reports on hardware-enabled governance mechanisms. The classical result claim L rests on is the reference monitor, Anderson's 1972 Computer Security Technology Planning Study.
