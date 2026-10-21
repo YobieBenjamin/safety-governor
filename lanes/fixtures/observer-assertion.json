@@ -1,0 +1,16 @@
+{
+  "payload": {
+    "expires_at": 1800000060.0,
+    "flags": [
+      "benign"
+    ],
+    "issued_at": 1800000000.0,
+    "observer": "obs-main",
+    "risk": 0.12,
+    "subject": "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae",
+    "type": "observer-assertion"
+  },
+  "pub": "63e2ec1aa9ef6284970f7a01cd7df9a43416335a2e18f1bd5236c298a921df6d",
+  "sig": "i4cjpiK3gCe2em0kuPnTIaKCKNkBkBzNeb9ByRCir1SxNgGkkg4nQ6Ksv9R3rcW3+O8m2xgvU7hKwL8gRMLiAQ==",
+  "signer": "3dd4eb68f25c4e34"
+}
