@@ -26,12 +26,25 @@ POLICY = {"default": "deny", "observer_freshness_s": 60, "hold_ttl_s": 3600, "ru
     {"id": "pay-small", "workload": "*", "action": "payments.transfer",
      "requirement": {"mode": "observer", "observer": "obs-main", "max_risk": 0.5},
      "constraints": {"amount": {"max": 1000}}}]}
+GENESIS = bytes.fromhex(E.sha256_hex(b"audit-genesis"))
 TICKET_ID = "00112233445566778899aabbccddeeff"
 
 
-def audit_entries(gate_seed: bytes, subject: str) -> list[dict]:
-    """Chain hash = sha256(prev || leaf); leaf = sha256(0x00 || canonical{seq,ts,prev,record}); sig over the chain hash."""
-    head, entries = b"", []
+def merkle_root(leaves: list[bytes]) -> bytes:
+    """RFC 6962 tree hash, as hardware_ref.audit.merkle_root."""
+    if not leaves:
+        return bytes.fromhex(E.sha256_hex(b""))
+    if len(leaves) == 1:
+        return leaves[0]
+    k = 1
+    while k * 2 < len(leaves):
+        k *= 2
+    return bytes.fromhex(E.sha256_hex(b"\x01" + merkle_root(leaves[:k]) + merkle_root(leaves[k:])))
+
+
+def audit_entries(gate_seed: bytes, subject: str):
+    """Chain starts at sha256("audit-genesis"), as hardware_ref.audit.AuditLog does. Chain hash = sha256(prev || leaf); leaf = sha256(0x00 || canonical{seq,ts,prev,record}); sig over the chain hash."""
+    head, entries, leaves = GENESIS, [], []
     records = [{"event": "gate.policy_loaded", "policy_id": E.digest(POLICY)[:16], "rules": 1},
                {"event": "gate.decision", "rule": "pay-small", "decision": "allow",
                 "request_hash": subject, "ticket_id": TICKET_ID}]
@@ -42,8 +55,9 @@ def audit_entries(gate_seed: bytes, subject: str) -> list[dict]:
         entry["hash"] = chain.hex()
         entry["sig"] = base64.b64encode(E.sign_bytes(gate_seed, chain)).decode()
         entries.append(entry)
+        leaves.append(leaf)
         head = chain
-    return entries
+    return entries, leaves, head
 
 
 def build() -> dict:
@@ -72,8 +86,11 @@ def build() -> dict:
         "params_digest": E.digest(REQUEST["params"]), "measurement": REQUEST["measurement"], "rule": "pay-small",
         "issued_at": iss, "expires_at": exp})
     fx["policy-image.json"] = E.sign(seed["governance"], {"type": "gate-policy", "policy": POLICY})
+    entries, leaves, head = audit_entries(seed["gate"], subject)
+    cp = E.sign(seed["gate"], {"type": "audit-checkpoint", "log": "gate-audit", "size": len(entries),
+                               "root": merkle_root(leaves).hex(), "head": head.hex(), "ts": NOW + len(entries)})
     fx["audit-record.json"] = {"log": "gate-audit", "pub": E.public_raw(seed["gate"]).hex(),
-                               "entries": audit_entries(seed["gate"], subject)}
+                               "entries": entries, "checkpoints": [cp]}
     return fx
 
 

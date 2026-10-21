@@ -99,7 +99,7 @@ def messages() -> None:
     check("policy image: signed by the wrong key is rejected", not E.verify(pol, pub["gate"]))
 
     audit = load("audit-record.json")
-    head, good = b"", True
+    head, good = bytes.fromhex(E.sha256_hex(b"audit-genesis")), True
     for i, e in enumerate(audit["entries"]):
         core = {k: e[k] for k in ("seq", "ts", "prev", "record")}
         leaf = bytes.fromhex(E.sha256_hex(b"\x00" + E.canonical(core)))
@@ -108,6 +108,10 @@ def messages() -> None:
             and E.verify_sig(bytes.fromhex(audit["pub"]), base64.b64decode(e["sig"]), chain) and "event" in e["record"]
         head = chain
     check("audit record: chain, signatures and event fields verify", good and audit["pub"] == pub["gate"])
+    cp = audit["checkpoints"][0]
+    check("audit record: checkpoint is gate-signed and commits to the head",
+          E.verify(cp, pub["gate"]) and cp["payload"]["head"] == audit["entries"][-1]["hash"]
+          and cp["payload"]["size"] == len(audit["entries"]))
     broken = copy.deepcopy(audit)
     broken["entries"][0]["record"]["rules"] = 2
     e0 = broken["entries"][0]
@@ -151,6 +155,22 @@ def catalogue() -> None:
           {e["name"] for e in entries if e["expect"] == "allowed"} == {n for n in names if n.startswith("baseline.")})
 
 
+def hardware(path: str) -> None:
+    """The reference verifier of the hardware lane, run on the audit fixture (docs/LANES.md names it)."""
+    sys.path.insert(0, str(pathlib.Path(path).resolve()))
+    sys.dont_write_bytecode = True
+    from hardware_ref.audit import AuditLog
+    audit = load("audit-record.json")
+    rep = AuditLog.verify_export(audit)
+    check("hardware_ref: AuditLog.verify_export accepts the audit fixture", rep.ok, str(rep))
+    bad = copy.deepcopy(audit)
+    bad["entries"][1]["record"]["decision"] = "deny"
+    check("hardware_ref: AuditLog.verify_export rejects an edited entry", not AuditLog.verify_export(bad).ok)
+    cut = copy.deepcopy(audit)
+    cut["entries"] = cut["entries"][:1]
+    check("hardware_ref: AuditLog.verify_export rejects a truncation the checkpoint covers", not AuditLog.verify_export(cut).ok)
+
+
 def observer(path: str) -> None:
     """Run a safety_observer against the fixtures: same subject, same envelope format, anchored-key rejection."""
     sys.path.insert(0, str(pathlib.Path(path).resolve()))
@@ -179,12 +199,15 @@ def observer(path: str) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--hardware", help="directory containing hardware_ref (hardware-and-silicon checkout)")
     ap.add_argument("--observer", help="directory containing the safety_observer package")
     args = ap.parse_args()
     fixtures_current()
     messages()
     govsim_model()
     catalogue()
+    if args.hardware:
+        hardware(args.hardware)
     if args.observer:
         observer(args.observer)
     print(f"\n{len(FAILS)} failed" if FAILS else "\nlanes: all checks passed")
