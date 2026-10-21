@@ -101,27 +101,44 @@ ci_green() {   # number repo -> 0 when every check passed, or the repository has
 push_main() { git -C "$HOME/$1" push -q origin HEAD:main 2>>"$PROG/program.err" || say "$1: push of main failed (see program.err)"; }
 
 backup() {   # mirrors of all four repositories, a browsable clone of each, the agents' logs, the bundles
-  local root="$BACKUP_DIR" repo
+  local root="$BACKUP_DIR" repo m
   if [ ! -d "$(dirname "$root")" ]; then say "backup: $(dirname "$root") is not mounted; skipped"; return 0; fi
   mkdir -p "$root/mirrors" "$root/clones" "$root/runs" "$root/bundles"
   for repo in $ALL_REPOS; do
-    if [ -d "$root/mirrors/$repo.git" ]; then
-      git -C "$root/mirrors/$repo.git" remote update --prune >/dev/null 2>&1 || say "backup: mirror update of $repo failed"
-    else
-      say "backup: first mirror of $repo (safety carries its recordings; this one takes a while)"
-      git clone -q --mirror "https://github.com/$OWNER/$repo.git" "$root/mirrors/$repo.git" 2>>"$PROG/program.err" || { say "backup: mirror of $repo failed"; continue; }
+    m="$root/mirrors/$repo.git"
+    # A first mirror can be large (safety carries its recordings): it is cloned in the background and
+    # never holds up a wave. A marker file holds the clone's pid; its exit status lands beside it.
+    if [ -f "$m.cloning" ]; then
+      if kill -0 "$(cat "$m.cloning" 2>/dev/null || echo 0)" 2>/dev/null; then
+        say "backup: first mirror of $repo still copying in the background ($(du -sh "$m" 2>/dev/null | cut -f1) so far)"; continue
+      elif [ "$(cat "$m.rc" 2>/dev/null || echo 1)" = 0 ]; then
+        rm -f "$m.cloning" "$m.rc"; say "backup: first mirror of $repo complete"
+      else
+        say "backup: the first mirror of $repo did not complete (see $m.log); starting it again"; rm -rf "$m" "$m.cloning" "$m.rc"
+      fi
+    fi
+    if [ -d "$m" ] && [ ! -f "$m.cloning" ] && ! git -C "$m" rev-parse -q --verify main >/dev/null 2>&1; then
+      say "backup: $m is an incomplete mirror (an interrupted copy); removing it"; rm -rf "$m"
+    fi
+    if [ -d "$m" ] && [ ! -f "$m.cloning" ]; then
+      git -C "$m" remote update --prune >/dev/null 2>&1 || say "backup: mirror update of $repo failed"
+    elif [ ! -d "$m" ]; then
+      say "backup: first mirror of $repo starts in the background (the safety one carries 8 GB of recordings)"
+      ( rm -f "$m.rc"; git clone -q --mirror "https://github.com/$OWNER/$repo.git" "$m" > "$m.log" 2>&1; echo $? > "$m.rc" ) &
+      echo $! > "$m.cloning"
+      continue
     fi
     if [ -d "$root/clones/$repo/.git" ]; then
       git -C "$root/clones/$repo" fetch -q origin main 2>/dev/null && git -C "$root/clones/$repo" merge -q --ff-only origin/main 2>/dev/null || say "backup: clone update of $repo failed"
     else
-      git clone -q "$root/mirrors/$repo.git" "$root/clones/$repo" 2>>"$PROG/program.err" || say "backup: clone of $repo failed"
+      git clone -q "$m" "$root/clones/$repo" 2>>"$PROG/program.err" || say "backup: clone of $repo failed"
     fi
   done
   for repo in $REPOS; do
     [ -d "$HOME/$repo/.agents" ] && { mkdir -p "$root/runs/$repo"; cp -R "$HOME/$repo/.agents/." "$root/runs/$repo/" 2>/dev/null || true; }
   done
   ls "$HOME"/Downloads/*.bundle >/dev/null 2>&1 && cp "$HOME"/Downloads/*.bundle "$root/bundles/" 2>/dev/null || true
-  { date '+%Y-%m-%d %H:%M'; for repo in $ALL_REPOS; do printf '  %-28s %s\n' "$repo" "$(git -C "$root/mirrors/$repo.git" rev-parse --short main 2>/dev/null || echo '?')"; done; } >> "$root/BACKUP.log"
+  { date '+%Y-%m-%d %H:%M'; for repo in $ALL_REPOS; do printf '  %-28s %s\n' "$repo" "$(git -C "$root/mirrors/$repo.git" rev-parse --short main 2>/dev/null || echo 'copying')"; done; } >> "$root/BACKUP.log"
   say "backup refreshed at $root"
 }
 
