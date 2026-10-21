@@ -28,7 +28,8 @@ Read in this order. Each one stands alone.
 4. What the design is for and what it refuses to claim: [docs/00-objectives.md](docs/00-objectives.md), goals G1 to G8, requirements R1 to R32 with where each is tested, non-goals N1 to N7.
 5. How solid any of it is: [docs/19-how-solid-is-the-theory.md](docs/19-how-solid-is-the-theory.md).
 6. Why there is no kill switch for AI and why there is one at the exits, with the theorem and the check: [docs/23-there-is-no-kill-switch.md](docs/23-there-is-no-kill-switch.md).
-7. Where it sits next to the hardware-governance literature (flexHEGs and the rest), and what it borrows from them: [docs/18 §8b](docs/18-viability-and-open-questions.md). It takes the story apart into claims (L the logic, P the physical paths, C the cryptography, S the semantics, N the numbers) and says for each whether it is a theorem, engineering, trust, or not yet measured.
+7. The ladder every safety measure sits on, from a prompt that says "don't" to the chip to a person with a key, with what each rung catches, how it gets removed and the paper that showed it: [docs/24-the-ladder.md](docs/24-the-ladder.md).
+8. Where it sits next to the hardware-governance literature (flexHEGs and the rest), and what it borrows from them: [docs/18 §8b](docs/18-viability-and-open-questions.md). It takes the story apart into claims (L the logic, P the physical paths, C the cryptography, S the semantics, N the numbers) and says for each whether it is a theorem, engineering, trust, or not yet measured.
 
 ## 2. Follow the logic
 
