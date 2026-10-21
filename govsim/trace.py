@@ -3,25 +3,37 @@
     from govsim.trace import Trace
     with Trace() as tr:
         ...drive a rack...
-    tr.events        # list[Event], in the order the transitions happened
+    tr.events        # list[Event], in the order the machines consume them (see the hold_released note below)
 
 The sink does not change the governor. ``Trace.start()`` wraps a handful of methods on the classes
-(``Governor._mint``, ``_accept_policy``, ``_apply_rung``, ``ActionEndpoint.execute`` and the log's ``append``)
-and ``stop()`` puts the originals back. Each wrapper records what happened and calls through.
+(``Governor._heartbeat``, ``_mint``, ``_accept_policy``, ``_apply_rung``, ``ActionEndpoint.execute`` and the log's
+``append``) and ``stop()`` puts the originals back. Each wrapper records what happened and calls through.
+
+The events are ordered for the machines, not strictly by wall clock: govsim mints the ticket that a hold
+releases *before* it logs the release (the gate signs inside the approve handler, then logs it), but in the
+abstract machine the clearance must precede the commit it licenses. So a ``hold_released`` is inserted ahead of
+its ``ticket_issued`` and the ``seq`` fields are renumbered to the replay position. Every other event is in the
+order it happened.
 
 Event kinds (``Event.kind``) and the fields in ``Event.data``:
 
   boot               state, cause              the governor powered up (first boot or a restart)
   edition_set        edition                   the first edition this governor ran under (provisioning or boot)
   edition_change     old, new, via             a new policy edition accepted (via: commit | load | boot)
-  ticket_issued      action, ticket_id, edition, state, hb, rule     the gate signed a ticket (action = request hash)
+  heartbeat_back     source                     the governor accepted a heartbeat: its heartbeat is live again
+  heartbeat_lost     source                     the governor's heartbeat expired (source: expiry | endpoint)
+  ticket_issued      action, ticket_id, edition, state, rule     the gate signed a ticket (action = request hash)
   hold_parked        action, hold_id           the gate parked a request for a human verdict
-  hold_released      action, hold_id           the approvers released the hold (always precedes its ticket_issued)
-  execute_ok         action, ticket_id, edition, endpoint_edition, hb, endpoint     an endpoint carried the action out
-  execute_refused    action, ticket_id, edition, endpoint_edition, hb, endpoint, reason     an endpoint refused
+  hold_released      action, hold_id           the approvers released the hold (inserted before its ticket_issued)
+  execute_ok         action, ticket_id, edition, endpoint_edition, endpoint     an endpoint carried the action out
+  execute_refused    action, ticket_id, edition, endpoint_edition, endpoint, reason     an endpoint refused
   halt               cause, rung                the governor entered a safe-mode rung
   clear              cause, by                  the authority cleared the cause
   run_entered        via                        the governor entered RUN (via: clear | arm)
+
+The heartbeat is a first-class event, not a flag on the ticket or execute: the machine's heartbeat state is
+driven by ``heartbeat_back``/``heartbeat_lost`` so the issue and execute guards read a state the events set,
+not a value the event they guard carries (that coupling would let the guard never fail).
 
 ``Event.gov`` names the governor (``name#serial``; the serial keeps two racks with the same names apart) or is
 None for a refusal whose ticket names no governor of ours (missing, forged).
@@ -145,7 +157,7 @@ class Trace:
                 ticket = orig(gov, rhash, action, params, fp, rule, reservation, now)
                 tr._ticket_gov[ticket["payload"]["ticket_id"]] = tr.gid(gov)
                 tr.emit("ticket_issued", tr.gid(gov), action=rhash, ticket_id=ticket["payload"]["ticket_id"], edition=gov.epoch,
-                        state=gov.state, hb=gov.hb_expiry > gov.clock.now(), rule=rule["id"])
+                        state=gov.state, rule=rule["id"])
                 return ticket
             return _mint
 
@@ -160,14 +172,16 @@ class Trace:
 
         def execute(orig):
             def _execute(ep, ticket, action, params):
-                now = ep.clock.now()
-                hb = now <= ep.hb_expiry
                 t = (ticket or {}).get("payload") or {}
                 edition, ep_edition = t.get("policy_epoch"), ep.epoch
                 ok, why = orig(ep, ticket, action, params)
                 gov = tr._ticket_gov.get(t.get("ticket_id"))       # None: no governor of ours minted this ticket
-                data = dict(action=t.get("request_hash"), ticket_id=t.get("ticket_id"), edition=edition, endpoint_edition=ep_edition,
-                            hb=hb, endpoint=ep.name)
+                # the endpoint's own heartbeat expiry is a heartbeat-lost event, observed at the endpoint, not a
+                # flag the execute carries: the machine's heartbeat guard must not read the event it guards
+                if not ok and why == reasons.ENDPOINT_HEARTBEAT_EXPIRED and gov is not None:
+                    tr.emit("heartbeat_lost", gov, source="endpoint")
+                data = dict(action=t.get("request_hash"), ticket_id=t.get("ticket_id"), edition=edition,
+                            endpoint_edition=ep_edition, endpoint=ep.name)
                 if ok:
                     tr.emit("execute_ok", gov, **data)
                 else:
@@ -175,9 +189,18 @@ class Trace:
                 return ok, why
             return _execute
 
+        def hb(orig):
+            def _hb(gov, *a, **k):
+                result = orig(gov, *a, **k)
+                if isinstance(result, dict) and result.get("ok"):        # the governor accepted a heartbeat: live again
+                    tr.emit("heartbeat_back", tr.gid(gov), source="authority")
+                return result
+            return _hb
+
         self._wrap(G, "_boot", boot)
         self._wrap(L, "__init__", log_init)
         self._wrap(L, "append", append)
+        self._wrap(G, "_heartbeat", hb)
         self._wrap(G, "_accept_policy", accept)
         self._wrap(G, "_mint", mint)
         self._wrap(G, "_apply_rung", rung)
@@ -211,9 +234,9 @@ class Trace:
                 e.seq = i
         elif event == "halt.cause":
             self._cleared.discard(g)
+            if data.get("cause") == reasons.HEARTBEAT_LOST:
+                self.emit("heartbeat_lost", g, source="expiry")     # the heartbeat went out before the halt
             self.emit("halt", g, cause=data["cause"], rung=data["rung"])
         elif event == "halt.cleared":
             self._cleared.add(g)
             self.emit("clear", g, cause=data["cause"], by=data["by"])
-        elif event == "policy.committed":
-            pass          # the edition change itself is recorded by the _accept_policy wrapper

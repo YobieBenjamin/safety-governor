@@ -6,9 +6,12 @@
     replay(trace.events)          # returns a Report, or raises NoTransition naming the event
 
 The machines are those of ``core_invariants.py`` (tickets, editions, halt, heartbeat) and ``commit_point.py``
-(holds and their clearances), executed on concrete values instead of being handed to Z3. The guards are copied
-from the Z3 steps one for one, and ``step_names()`` reads the step names out of the proof files so a test can
-fail if the two drift apart. After every step the invariants P1 to P4 are checked on the concrete state.
+(holds and their clearances), executed on concrete values instead of being handed to Z3. The guards are a
+concrete re-encoding of those Z3 steps: ``step_names()`` reads the step names out of the proof files so a test
+fails if the two drift, but the guard *logic* is not compared symbolically (z3 is not installed here, so the
+prover is not run); the re-encoding is checked instead by replaying the real traces and by two broken-governor
+fixtures that must fail at a named event. After every step the invariants P1 to P4 are checked on the concrete
+state.
 
 What each event is allowed to do:
 
@@ -16,10 +19,16 @@ What each event is allowed to do:
                    witnesses are inputs of the model (``allows``, ``witness``) and are taken as given. A ticket
                    that follows a hold must also be the commit of the commit-point machine, which needs the
                    reviewer clearance that ``hold_released`` records.
+  heartbeat_back   core ``heartbeat back``: the machine's heartbeat goes live.
+  heartbeat_lost   core ``heartbeat lost``: the machine's heartbeat goes out. The issue and execute guards read
+                   this state, not a flag on their own event.
   execute_ok       core ``execute``: heartbeat live, the ticket carries the current edition, not yet spent.
   execute_refused  core ``forged execute``: nothing changes. A refusal is always allowed (the system may be
                    stricter than the machine), but a refusal for a reason that makes a claim about the machine
-                   (replay, stale edition, heartbeat) must be backed by that state.
+                   (replay, stale edition, heartbeat) must be backed by that state. A ticket the endpoint burns
+                   and then refuses (a post-admit check fails) is a step the machine does not have; the replayer
+                   absorbs it as a stutter and tracks the burn in ``Report.burned`` (a gap in the theorem, not a
+                   model bug -- the endpoint's post-admit checks are not a step of the core machine).
   edition_change   core ``new edition``: a quorum (an accepted policy image carries the governance signatures).
   halt             core ``halt``.
   clear            core ``clear``: halted, quorum (the authority's signature), neighbour (the governor checked it).
@@ -132,6 +141,7 @@ class Report:
     steps: dict[str, int] = field(default_factory=dict)
     arms: int = 0
     stutters: dict[str, int] = field(default_factory=dict)
+    burned: int = 0
 
     def count(self, step: str) -> None:
         self.steps[step] = self.steps.get(step, 0) + 1
@@ -141,7 +151,6 @@ class Replayer:
     def __init__(self) -> None:
         self.core: dict[str, Core] = {}
         self.cp: dict[str, CommitPoint] = {}
-        self.hb: dict[tuple[str, str], bool] = {}
         self.report = Report()
 
     def machine(self, gov: str) -> Core:
@@ -150,13 +159,13 @@ class Replayer:
             self.cp[gov] = CommitPoint()
         return self.core[gov]
 
-    def _observe_hb(self, m: Core, gov: str, observer: str, live: bool) -> None:
-        """The heartbeat flag of the machine is what the observer sees. A change is a lost / back step."""
-        m.heartbeat = live
-        last = self.hb.get((gov, observer))
-        if last is not None and last != live:
+    def _set_hb(self, m: Core, live: bool) -> None:
+        """A heartbeat_back / heartbeat_lost event moves the machine's heartbeat; a change is a lost / back step.
+        The issue and execute guards read ``m.heartbeat`` (a state the events set), never a flag on their own
+        event, so the guard can actually fail on what the heartbeat events say."""
+        if m.heartbeat != live:
             self.report.count("heartbeat back" if live else "heartbeat lost")
-        self.hb[(gov, observer)] = live
+        m.heartbeat = live
 
     def feed(self, e) -> None:
         self.report.events += 1
@@ -168,8 +177,11 @@ class Replayer:
         m = self.machine(e.gov)
         k = e.kind
         if k == "boot":
-            m.halted, m.halt_from = True, ("cause" if d.get("cause") else "boot")
-            self.hb = {key: v for key, v in self.hb.items() if key[0] != e.gov or key[1] != e.gov}
+            m.halted, m.halt_from, m.heartbeat = True, ("cause" if d.get("cause") else "boot"), False
+        elif k == "heartbeat_back":
+            self._set_hb(m, True)
+        elif k == "heartbeat_lost":
+            self._set_hb(m, False)
         elif k == "edition_set":
             if m.names and m.names[m.epoch] != d["edition"]:
                 raise NoTransition(e, "new edition", f"boot found edition {d['edition'][:8]} where the machine is at {m.names[m.epoch][:8]} and there was no edition change")
@@ -216,7 +228,6 @@ class Replayer:
 
     def _issue(self, e, m: Core) -> None:
         a, d = e.data["action"], e.data
-        self._observe_hb(m, e.gov, e.gov, d["hb"])
         if a in self.cp[e.gov].held:
             raise NoTransition(e, "commit", "a ticket for an action that is still held (no hold_released before it)")
         if m.halted:
@@ -233,7 +244,6 @@ class Replayer:
 
     def _execute(self, e, m: Core) -> None:
         a, d = e.data["action"], e.data
-        self._observe_hb(m, e.gov, d["endpoint"], d["hb"])
         if not m.heartbeat:
             raise NoTransition(e, "execute", "the endpoint carried the action out with its heartbeat expired")
         if m.tk(a) != m.epoch:
@@ -248,13 +258,14 @@ class Replayer:
 
     def _refuse(self, e, m: Core) -> None:
         a, d, why = e.data["action"], e.data, e.data["reason"]
-        self._observe_hb(m, e.gov, d["endpoint"], d["hb"])
         if why in CLAIM_REPLAY and a not in m.used and a not in m.burned:
             raise NoTransition(e, "forged execute (refused)", "refused as a replay, but the machine has no spent ticket for the action")
         if why in CLAIM_STALE and m.tk(a) == m.epoch and d["edition"] == d["endpoint_edition"]:
             raise NoTransition(e, "forged execute (refused)", "refused as a stale edition, but the ticket carries the current one")
         if why not in ADMIT_REFUSALS:
-            m.burned.add(a)          # the endpoint burns the ticket before the commit and the device checks
+            if a not in m.burned:
+                m.burned.add(a)      # the endpoint burns the ticket before the commit and the device checks
+                self.report.burned += 1
         if why in CLAIM_HB and m.heartbeat:
             raise NoTransition(e, "forged execute (refused)", "refused for an expired heartbeat, but the machine's heartbeat is live")
         self.report.count("forged execute (refused)")
