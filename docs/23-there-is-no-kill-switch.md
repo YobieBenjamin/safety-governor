@@ -39,6 +39,16 @@ Two consequences follow with no further assumptions.
 
 **The smallest separators sit at the smaller end.** You can cut at the sources, one per instance, or at the effectors, one per effector. By the first correction above, the sources are the larger and faster-growing set and nobody owns the list. The effectors that cannot be undone are a smaller, slower, better-known set: there are far fewer wire-transfer switches, release lines and motor drivers in the world than model instances, and they do not multiply when someone uploads a weight file. That is why the design gates the exits and treats the compute-side gate as the second lock, not the only one. It is also why the governor at the compute matters where it can be had: a source-side gate catches an action before it ever reaches the network, and does so with the levers to stop the machine.
 
+### 3a. The same thing as three claims
+
+Stated so they can be checked line by line, with the three assumptions the whole argument rests on: (1) replication, many sources, no complete list; (2) no middle, at least k vertex-disjoint paths through the network between any source's access node and any target's, k at least two; (3) local loops, at least one source joined to a target by a path that never enters the network.
+
+- **Claim 1. No network-only kill switch exists.** Any set K of network vertices leaves the local path of assumption 3 intact, so some source still reaches some target, so K is not a separator. Assumption 3 alone is enough.
+- **Claim 2. Without local loops, a network separator costs at least k vertices per machine and takes bystanders with it.** For any one source and one target, assumption 2 and Menger give at least k vertices to separate them; the vertices are network vertices, so every bystander path through them is cut too. Measured: 43 of 60 core nodes, 19 percent of bystander pairs.
+- **Claim 3. Every separator has at least min(|sources|, |targets|) vertices, and the smaller end achieves it.** Vertex-disjoint source-to-target paths use distinct sources and distinct targets, so there are at most min(|S|, |T|) of them, and with assumption 2 exactly that many; by Menger the minimum separator has that size; the compute nodes and the controllers are separators of sizes |S| and |T|.
+
+Together: there is no switch, only a gate per machine, and the gates go to the smaller, better-known end, the devices that act, with a second gate on the compute wherever it can be had. Part 6 of the blog carries this proof for a general reader.
+
 ## 4. The check you can run
 
 `../proofs/no_global_kill_switch.py` builds a graph in exactly that shape, a random 6-regular core of 60 nodes (an expander, the kind of network you get when you design for no single point of failure), 12 instances and 10 effectors each attached to 6 core nodes through their own compute node or controller, 20 users and 20 services as bystanders, and one local pair, a model wired to its actuator with no network between them. It computes minimum separators by max-flow over split nodes, cross-checks the smallest instance by brute force, and asserts:
