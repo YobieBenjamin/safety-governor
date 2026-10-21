@@ -27,7 +27,7 @@ OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 HERE="$(cd "$(dirname "$0")" && pwd)"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"
 WAVES="${WAVES:-1 2 3}"; MERGE="${MERGE:-1}"; REVISE_ROUNDS="${REVISE_ROUNDS:-2}"
 BACKUP_DIR="${BACKUP_DIR:-/Volumes/External_4TB/Safety Experiments}"
-REPOS="${PROGRAM_REPOS:-safety-governor safety}"; ALL_REPOS="${BACKUP_REPOS:-safety-governor safety hardware-and-silicon autonomic-graph-regulation}"
+REPOS="${PROGRAM_REPOS:-safety-governor safety}"; ALL_REPOS="${BACKUP_REPOS:-safety-governor safety hardware-and-silicon autonomic-graph-regulation Watermark}"
 PROG="$HOME/safety-governor/.agents/program"; mkdir -p "$PROG"
 MODE=run; FROM=""
 while [ $# -gt 0 ]; do

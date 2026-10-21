@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # One script for a Mac that has nothing set up yet. In order: make sure gh is installed, log in to
-# GitHub in the browser if needed, clone the three repositories where they are missing, bring each
+# GitHub in the browser if needed, clone the four repositories where they are missing, bring each
 # clone up to date, apply the bundles made in the program's container, push, then publish the
-# experiments as labels and issues in all three repositories.
+# experiments as labels and issues in the three repositories that carry them.
 #
 #   bash ~/Downloads/setup_and_publish.sh              # bundles are looked for next to the script
 #   bash ~/Downloads/setup_and_publish.sh ~/some/dir   # or in the directory given
@@ -15,7 +15,7 @@ set -E; trap 'echo "error: line $LINENO: $BASH_COMMAND (exit status $?)" >&2' ER
 OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 BASE="${GITHUB_BASE:-https://github.com/$OWNER}"   # where the repositories are cloned from
 BUNDLES="${1:-$(cd "$(dirname "$0")" && pwd)}"
-REPOS="${REPOS:-safety-governor safety hardware-and-silicon}"
+REPOS="${REPOS:-safety-governor safety hardware-and-silicon Watermark}"   # Watermark carries no experiments; it is cloned, fast-forwarded from its bundles and pushed like the others
 SAFETY_DIRS="agr data docs miner observer orchestrator sandbox scripts"
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 fail() { echo "error: $*" >&2; exit 1; }
@@ -141,6 +141,6 @@ PUB="$HOME/safety-governor/tools/github/publish_experiments.sh"
 bash "$PUB"
 
 step "Done"
-for repo in $REPOS autonomic-graph-regulation; do
+for repo in safety-governor safety hardware-and-silicon autonomic-graph-regulation; do
   echo "https://github.com/$OWNER/$repo/issues"
 done
