@@ -1,0 +1,37 @@
+diff --git a/.github/workflows/lanes.yml b/.github/workflows/lanes.yml
+new file mode 100644
+--- /dev/null
++++ b/.github/workflows/lanes.yml
+@@ -0,0 +1,10 @@
++name: lanes
++on: [push, pull_request]
++jobs:
++  lanes:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - run: git clone --depth 1 https://github.com/YobieBenjamin/safety-governor ../safety-governor
++      - run: python3 -m pip install cryptography
++      - run: cd ../safety-governor && python3 -m lanes.check --observer "$GITHUB_WORKSPACE/observer"
+diff --git a/observer/tests/test_contract.py b/observer/tests/test_contract.py
+--- a/observer/tests/test_contract.py
++++ b/observer/tests/test_contract.py
+@@ -6,3 +6,7 @@
+ """
+
++import json
++import os
++import pathlib
++
+ from safety_observer import SafetyObserver
+@@ -17,7 +21,5 @@
+ }
+-GATE_SUBJECT = "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae"
+-GATE_CANONICAL_CORE = (
+-    '{"action":"payments.transfer","measurement":"abababababababababababababababab",'
+-    '"params":{"amount":12.5,"note":"rent","to":"acct-7"},"request_id":"r-1"}'
+-)
++_LANES = pathlib.Path(os.environ.get("SG_LANES", pathlib.Path(__file__).resolve().parents[3] / "safety-governor" / "lanes"))
++_PIN = json.loads((_LANES / "fixtures" / "request.json").read_text())
++GATE_SUBJECT, GATE_CANONICAL_CORE = _PIN["subject"], _PIN["canonical_core"]
+
