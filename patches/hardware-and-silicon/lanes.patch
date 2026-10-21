@@ -1,0 +1,31 @@
+diff --git a/.github/workflows/lanes.yml b/.github/workflows/lanes.yml
+new file mode 100644
+--- /dev/null
++++ b/.github/workflows/lanes.yml
+@@ -0,0 +1,10 @@
++name: lanes
++on: [push, pull_request]
++jobs:
++  lanes:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - run: git clone --depth 1 https://github.com/YobieBenjamin/safety-governor ../safety-governor
++      - run: python3 -m pip install cryptography pytest
++      - run: cd ../safety-governor && python3 -m lanes.check --hardware "$GITHUB_WORKSPACE" && python3 catalogue/export.py "$GITHUB_WORKSPACE" --check && cd "$GITHUB_WORKSPACE" && python3 -m pytest -q tests/test_catalogue_data.py
+diff --git a/tests/test_catalogue_data.py b/tests/test_catalogue_data.py
+new file mode 100644
+--- /dev/null
++++ b/tests/test_catalogue_data.py
+@@ -0,0 +1,10 @@
++import json
++import os
++import pathlib
++
++from hardware_ref.attacks import CATALOGUE
++
++
++def test_catalogue_matches_shared_data():
++    path = pathlib.Path(os.environ.get("SG_CATALOGUE", pathlib.Path(__file__).resolve().parents[2] / "safety-governor" / "catalogue" / "attacks.json"))
++    entries = json.loads(path.read_text())["entries"]
++    assert [(a.name, a.layer, a.expect, a.description) for a in CATALOGUE] == [(e["name"], e["layer"], e["expect"], e["description"]) for e in entries]
