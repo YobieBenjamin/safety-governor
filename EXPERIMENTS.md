@@ -30,5 +30,5 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
 
 ## L5 / H21: differential test of the reference gate against govsim (issue #5)
 `tests/test_h21_differential.py`. Install: `pip install -r tests/requirements-differential.txt`.
-The two gates agree on 16 of 21 replayed catalogue entries and on the random sweep except for five pinned disagreements, G1 to G5, described with inputs in `results/l5-disagreements.md`. G3, G4 and G5 are ambiguities in the policy text, a finding about the design.
+The two gates agree on 18 of 21 replayed catalogue entries and on the random sweep except for five pinned disagreements, G1 to G5, described with inputs in `results/l5-disagreements.md`. G3, G4 and G5 are ambiguities in the policy text, a finding about the design.
 Process note: the acceptance command was run twice with a failure each (a catalogue-size assertion from the brief's stale count, then three catalogue pins and a bad prior in the generator), plus one filtered run; after that the test functions were called directly once (all 30 pass), not through pytest, so the final pytest result is left to the launcher.
