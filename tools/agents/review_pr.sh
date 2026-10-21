@@ -14,6 +14,7 @@ set -E; trap 'echo "error: line $LINENO: $BASH_COMMAND (exit status $?)" >&2' ER
 WAVE="${1:?wave}"; ID="${2:?issue id}"
 OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 RMODEL="${REVIEW_MODEL:-sonnet}"; REFFORT="${REVIEW_EFFORT:-high}"; RTURNS="${REVIEW_TURNS:-12}"; RBUDGET="${REVIEW_BUDGET_USD:-3}"
+READER_MIN="${SECOND_READER_MIN:-25}"; REVIEW_MIN="${REVIEW_MIN:-45}"   # wall-clock caps: a stuck local model or review must not stall the gate
 LOCAL_URL="${LOCAL_URL:-http://localhost:11434}"; LOCAL_MODEL="${LOCAL_MODEL:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"
 ROOT="$(git rev-parse --show-toplevel)"; REPO="$(basename "$ROOT")"
@@ -23,6 +24,15 @@ BRANCH="exp/$(echo "$ID" | tr '[:upper:]' '[:lower:]')"
 say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*"; }
 jget() { python3 -c "import json,sys; v=json.load(open(sys.argv[1])).get(sys.argv[2]); print(json.dumps(v) if isinstance(v,(dict,list)) else ('' if v is None else v))" "$1" "$2"; }
 claude_local() { if [ "$LOCAL_URL" = cloud ]; then claude "$@"; else ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$LOCAL_URL" claude "$@"; fi; }
+# run a command in the background with a wall-clock cap (minutes); returns its exit status, 124 when the cap hit
+with_cap() {
+  local mins="$1"; shift
+  ( trap - ERR; "$@" ) & local pid=$!
+  ( trap - ERR; sleep "$((mins * 60))"; kill -INT "$pid" 2>/dev/null || true; sleep 60; kill -TERM "$pid" 2>/dev/null || true ) & local wd=$!; disown $wd 2>/dev/null || true
+  local rc=0; wait "$pid" || rc=$?
+  if kill -0 "$wd" 2>/dev/null; then pkill -P "$wd" 2>/dev/null || true; kill "$wd" 2>/dev/null || true; else rc=124; fi
+  return $rc
+}
 
 git -C "$ROOT" rev-parse -q --verify "$BRANCH" >/dev/null || git -C "$ROOT" fetch -q origin "$BRANCH:$BRANCH" || { echo "no branch $BRANCH"; exit 3; }
 title=$(python3 -c "import json,sys; print(next(i['title'] for i in json.load(open(sys.argv[1]))['issues'] if i['id']==sys.argv[2]))" "$SPEC" "$ID")
@@ -47,8 +57,13 @@ find_local_model
 if [ "$LOCAL_OK" = 1 ]; then
   if [ -n "$LOCAL_MODEL" ] && [ "$(wc -c < "$P/diff.patch")" -lt 400000 ]; then
     say "$ID: second reader on $LOCAL_MODEL"
-    { cat "$P/summary.md"; echo; echo "=== DIFF ==="; cat "$P/diff.patch"; } | claude_local -p "Below are an agent's summary of its work and the full diff. List every claim the summary and the commit messages make (one per line, numbered). For each, quote the line of the diff that is the evidence, or write NOT FOUND. Then list every number that appears in a changed document and where in the diff it is computed or recorded, or NOT FOUND. No other text." \
-      --model "$LOCAL_MODEL" --max-turns 1 --tools "" --permission-prompts none --output-format text > "$P/claims-local.md" 2>/dev/null || echo "(second reader failed)" > "$P/claims-local.md"
+    { cat "$P/summary.md"; echo; echo "=== DIFF ==="; cat "$P/diff.patch"; } > "$P/reader-input.txt"
+    reader() { claude_local -p "Below are an agent's summary of its work and the full diff. List every claim the summary and the commit messages make (one per line, numbered). For each, quote the line of the diff that is the evidence, or write NOT FOUND. Then list every number that appears in a changed document and where in the diff it is computed or recorded, or NOT FOUND. No other text." \
+      --model "$LOCAL_MODEL" --max-turns 1 --tools "" --permission-prompts none --output-format text < "$P/reader-input.txt" > "$P/claims-local.md" 2> "$P/reader.err"; }
+    set +e; with_cap "$READER_MIN" reader; rrc=$?; set -e
+    if [ "$rrc" = 124 ]; then echo "(second reader stopped after $READER_MIN minutes; the local model did not answer in time)" > "$P/claims-local.md"; say "$ID: second reader stopped after $READER_MIN minutes"
+    elif [ "$rrc" != 0 ] || [ ! -s "$P/claims-local.md" ]; then echo "(second reader failed: $(tail -1 "$P/reader.err" 2>/dev/null))" > "$P/claims-local.md"; say "$ID: second reader failed (see reader.err)"; fi
+    rm -f "$P/reader-input.txt"
   fi
 fi
 
@@ -59,16 +74,17 @@ WT="$ROOT/.worktrees/review-$ID"; git -C "$ROOT" worktree remove -f "$WT" 2>/dev
 git -C "$ROOT" worktree add -q --detach "$WT" "$BRANCH"
 say "$ID: cloud review on $RMODEL (effort $REFFORT, $RTURNS turns, \$$RBUDGET cap)"
 set +e
-# shellcheck disable=SC2086
-(cd "$WT" && claude -p "$(cat "$HERE/review_prompt.md")
+review_run() { (cd "$WT" && claude -p "$(cat "$HERE/review_prompt.md")
 
 The packet directory is $P. Begin with brief.md, verify.json and summary.md, then diff.patch; open files of the checkout only where the diff needs context.${SIBLINGS:+ The other repositories of the program are readable at:$SIBLINGS (for LANES.md, the catalogue, the observer).}" \
   --model "$RMODEL" --effort "$REFFORT" --max-turns "$RTURNS" --max-budget-usd "$RBUDGET" \
   --permission-mode default --permission-prompts none --tools "Read,Glob,Grep,Bash" \
   --allowedTools "Read" "Glob" "Grep" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git blame *)" \
   --disallowedTools "Edit" "Write" "WebFetch" "WebSearch" "Agent" --add-dir "$P" $SIBLINGS \
-  --output-format json --json-schema "$SCHEMA" < /dev/null > "$P/review.raw.json" 2> "$P/review.err")
-rrc=$?
+  --output-format json --json-schema "$SCHEMA" < /dev/null > "$P/review.raw.json" 2> "$P/review.err"); }
+# shellcheck disable=SC2086
+with_cap "$REVIEW_MIN" review_run; rrc=$?
+[ "$rrc" = 124 ] && say "$ID: the review stopped after $REVIEW_MIN minutes"
 set -e
 git -C "$ROOT" worktree remove -f "$WT" 2>/dev/null || true
 
