@@ -28,11 +28,11 @@ from hypothesis import HealthCheck, given, settings, strategies as st
 from govsim import reasons as G
 from govsim.cluster import Rack
 from govsim.crypto import SigningKey as GovKey, random_id
-from govsim.policy import make_rule
+from govsim.policy import make_rule, check_constraints
 
 from hardware_ref.assertions import observer_assertion
 from hardware_ref.attacks import CATALOGUE
-from hardware_ref.gate import request_hash as hw_request_hash
+from hardware_ref.gate import request_hash as hw_request_hash, make_approval
 from hardware_ref.keys import SigningKey as HwKey, sign_object
 from hardware_ref.system import build_node, default_policy
 
@@ -217,9 +217,11 @@ class GovRig:
             return Outcome("allow")
         return Outcome("hold" if r["why"] == G.GATE_HELD else "deny", gov_class(r["why"]))
 
-    def submit(self, scn: Scn, token="ok", witness="low", repeat=False, approve=False, **_) -> Outcome:
+    def body(self, scn: Scn, token="ok", witness="low") -> dict:
+        """The signed request the govsim gate sees. Its core is (request_id, token, action, params,
+        witnesses): the workload is the token's, so a request carries no measurement of its own (the
+        L4.token_wrong_workload exclusion, demonstrated in test_excluded_gate_decisions_are_shown)."""
         rack, node = self.rack, self.node
-        g = node.governor
         tok = node.token
         if token == "missing":
             tok = None
@@ -237,21 +239,34 @@ class GovRig:
             wit = [rack.witness(rack.request_hash_for(node, random_id(8), scn.action, {**params, "destination": "acct-999999"}), risk=LOW)]
         elif witness == "forged":
             wit = [GovKey.generate().sign({"type": "observer-verdict", "request_hash": rh, "risk": 0.0, "expires_at": self.clock.now() + 30})]
-        elif witness == "stale":
-            pass
-        body = {"request_id": rid, "measurement_token": tok, "action": scn.action, "params": params, "witnesses": wit}
+        out = {"request_id": rid, "measurement_token": tok, "action": scn.action, "params": params, "witnesses": wit}
         if scn.labels:
-            body["requirement"] = {"mode": "auto"}
+            out["requirement"] = {"mode": "auto"}
+        return out
+
+    def request(self, scn: Scn, token="ok", witness="low") -> dict:
+        """The raw REQUEST result, so a hold's id and request hash can be named (for the approval attacks)."""
+        body = self.body(scn, token, witness)
+        if witness == "stale":
+            self.advance(61)            # the fresh verdict ages past its freshness window
+        return self.node.governor.command("REQUEST", {}, self.node.host_sign(body, self.node.governor.epoch))
+
+    def hold(self, amount: int = 25000) -> dict:
+        return self.request(pay(amount))
+
+    def submit(self, scn: Scn, token="ok", witness="low", repeat=False, approve=False, **_) -> Outcome:
+        g = self.node.governor
+        body = self.body(scn, token, witness)     # one body, reused for a repeat; a stale verdict ages below
         if witness == "stale":
             self.advance(61)
-        r = g.command("REQUEST", {}, node.host_sign(body, g.epoch))
+        r = g.command("REQUEST", {}, self.node.host_sign(body, g.epoch))
         if repeat:
-            r = g.command("REQUEST", {}, node.host_sign(body, g.epoch))
+            r = g.command("REQUEST", {}, self.node.host_sign(body, g.epoch))
         if not r["ok"] and r["why"] == G.GATE_HELD and approve:
             self.advance(61)
-            keys = rack.approvers["payments.transfer.large"]
-            rack.approve(g, r["hold_id"], r["request_hash"], keys[0])
-            r = rack.approve(g, r["hold_id"], r["request_hash"], keys[1])
+            keys = self.rack.approvers["payments.transfer.large"]
+            self.rack.approve(g, r["hold_id"], r["request_hash"], keys[0])
+            r = self.rack.approve(g, r["hold_id"], r["request_hash"], keys[1])
         return self.outcome(r)
 
 
@@ -288,15 +303,14 @@ def _dest_bad(scn: Scn) -> bool:
 
 
 GAPS = {
-    "G2 non-numeric amount": ("govsim has no type check; comparing a non-number with a number raises TypeError inside the gate instead of denying",
-                              lambda scn, hw, gov: gov.decision == "crash" and not _num(scn.params.get("amount"))),
+    "G2 non-numeric amount": ("govsim has no type check: a non-number amount raises TypeError inside the gate "
+                              "where the reference denies with constraint.amount.type",
+                              lambda scn, hw, gov: gov.decision == "crash" and hw.decision == "deny" and not _num(scn.params.get("amount"))),
     "G3 human rule witness": ("govsim never reads witnesses on a human-mode rule; the reference gate checks the observer first (policy.py: 'an observer threshold may still be set and is checked first')",
                               lambda scn, hw, gov: hw.decision == "deny" and hw.klass.startswith("witness") and gov.decision in ("hold", "allow")
                               and _num(scn.params.get("amount")) and NEUTRAL["large"]["amount"]["min"] <= scn.params["amount"] <= NEUTRAL["large"]["amount"]["max"]),
     "G4 resubmit after deny": ("the reference gate marks a request seen before it decides, so a denied request resubmitted is 'replayed'; govsim marks only decided requests",
                                lambda scn, hw, gov: scn.repeat and hw == Outcome("deny", "replay") and gov.decision == "deny" and gov.klass != "replay"),
-    "G5 which rule's violation": ("a request that fits neither payment rule: the reference gate reports the first candidate's violation, govsim the last candidate's (same decision, different reason)",
-                                  lambda scn, hw, gov: hw.decision == gov.decision == "deny" and hw.klass.startswith("constraint.") and gov.klass.startswith("constraint.")),
 }
 
 
@@ -305,8 +319,12 @@ def _other_gap(scn: Scn, hw: Outcome, gov: Outcome) -> str | None:
 
 
 def _g1(scn: Scn, hw: Outcome, gov: Outcome) -> bool:
-    """The destination is the only cause: with it corrected the two stacks agree, or differ only by another known gap."""
-    if not (_dest_bad(scn) and hw.decision == "deny" and hw.klass.startswith("constraint.")):
+    """The destination is the only cause: govsim (having no destination constraint) neither denies nor
+    holds on a bad destination -- it allows or holds on the amount and currency -- while the reference
+    denies on the pattern. With the destination corrected the two stacks then agree, or differ only by
+    another known gap."""
+    if not (_dest_bad(scn) and hw.decision == "deny" and hw.klass.startswith("constraint.")
+            and gov.decision in ("allow", "hold")):
         return False
     fixed = replace(scn, params={**scn.params, "destination": "acct-123456"})
     h, g = both(fixed)
@@ -314,6 +332,32 @@ def _g1(scn: Scn, hw: Outcome, gov: Outcome) -> bool:
 
 
 GAPS["G1 destination regex"] = ("govsim has no regex constraint (nor a presence check on a field no constraint names): a destination that is missing or does not match the account pattern is not refused for that reason", _g1)
+
+
+def _g234(scn: Scn, hw: Outcome, gov: Outcome) -> str | None:
+    """A known gap other than G1/G5 -- used by the G5 characterisation below, so it does not recurse into _g5."""
+    return next((name for name in ("G2 non-numeric amount", "G3 human rule witness", "G4 resubmit after deny")
+                 if GAPS[name][1](scn, hw, gov)), None)
+
+
+def _g5(scn: Scn, hw: Outcome, gov: Outcome) -> bool:
+    """A request that fits neither payment rule: both deny, but the reference reports the first candidate's
+    violation and govsim the last candidate's -- a different reason for the same decision. Characterised
+    narrowly so it cannot mask a per-field mismatch: the two classes must differ (a type-versus-missing or
+    any per-field mismatch is not this), and a fix to the non-structural params (currency -> USD,
+    destination -> a valid account) must make the two stacks agree, differing only by another known gap."""
+    if not (hw.decision == gov.decision == "deny"
+            and hw.klass.startswith("constraint.") and gov.klass.startswith("constraint.")
+            and hw.klass != gov.klass):
+        return False
+    fixed = replace(scn, params={**scn.params, "currency": "USD", "destination": "acct-123456"})
+    h, g = both(fixed)
+    return h == g or _g234(fixed, h, g) is not None
+
+
+GAPS["G5 which rule's violation"] = ("a request that fits neither payment rule: the reference reports the first "
+                                     "candidate's violation, govsim the last candidate's (same deny, a different reason)",
+                                     _g5)
 
 
 def gap_of(scn: Scn, hw: Outcome, gov: Outcome) -> str | None:
@@ -327,15 +371,16 @@ def gap_of(scn: Scn, hw: Outcome, gov: Outcome) -> str | None:
 
 NOT_A_GATE_DECISION = "not a gate decision in govsim"
 NOT_COMPARED = {
-    "baseline.attest": "L0 attestation flow", "baseline.audit_verifies": "audit chain", "baseline.http_auto": "action http.post is not in the shared rulebook (govsim has no regex constraint to express its URL allow-list)",
+    "baseline.attest": "L0 attestation flow", "baseline.audit_verifies": "audit chain", "baseline.http_auto": "the URL allow-list is a regex, which govsim has no constraint kind for, so the http.post rule is absent from the shared rulebook and both gates deny it with no_rule (shown in test_excluded_gate_decisions_are_shown)",
     "baseline.mail_with_provenance": "provenance lane: govsim's gate has no provenance check", "baseline.openshell_supervised_action": "OASP supervisor",
     "baseline.openshell_policy_derived": "OASP network policy", "baseline.dual_witness_allow": "OASP dual witness", "baseline.high_authority_dual_witness": "OASP dual witness",
     "baseline.hold_survives_restart": "restart of durable state", "baseline.budget_recovers_after_ticket_expiry": "ticket expiry and reservation release (ledger, not gate)",
     "L0.firmware_tamper": "L0", "L0.lying_firmware": "L0", "L0.rollback_fused": "L0", "L0.rollback_unfused": "L0", "L0.cloned_device": "L0", "L0.revoked_device": "L0",
     "L0.nonce_replay": "L0", "L0.nonce_expired": "L0", "L0.nonce_foreign": "L0", "L0.gpu_swap": "L0", "L5.reference_values_forged": "L5 reference values",
     "L5.policy_forged": "policy loading, not a request decision", "L5.policy_default_allow": "policy loading, not a request decision",
-    "L4.url_outside_allowlist": "action http.post is not in the shared rulebook", "L2.provenance_missing": "provenance lane", "L2.provenance_tampered": "provenance lane",
+    "L4.url_outside_allowlist": "http.post is absent from the shared rulebook (govsim has no regex constraint for the URL allow-list), so both gates deny with no_rule -- shown in test_excluded_gate_decisions_are_shown", "L2.provenance_missing": "provenance lane", "L2.provenance_tampered": "provenance lane",
     "L2.provenance_content_swap": "provenance lane", "L2.provenance_forged": "provenance lane",
+    "L4.token_wrong_workload": "the reference detects a measurement that differs from the token's as attestation.measurement_mismatch; govsim's request carries no measurement field, so the check is unexpressible there (shown in test_excluded_gate_decisions_are_shown)",
     "L4.hold_bypass": "endpoint refuses a held ticket; endpoints are not the gate", "L4.approval_forged": "approval protocol differs (single signature vs quorum, floor, reason); the release path is compared in baseline.pay_large_hold_approve",
     "L4.approval_wrong_request": "approval protocol", "L4.approval_replay": "approval protocol", "L4.approval_expired": "approval protocol",
     **{k: "endpoint ticket checks" for k in ("EP.no_ticket", "EP.ticket_replay", "EP.ticket_param_swap", "EP.ticket_action_swap", "EP.ticket_forged", "EP.ticket_expired")},
@@ -355,7 +400,6 @@ REPLAYED = {
     "L4.token_missing": Scn(token="missing", witness="none"),
     "L4.token_forged": Scn(token="forged"),
     "L4.token_expired": Scn(token="expired"),
-    "L4.token_wrong_workload": Scn(token="forged"),      # govsim binds the measurement inside the signed token; tampering it is a forged token
     "L4.no_capability": Scn(action="shell.exec", params={"cmd": "cat /etc/shadow"}),
     "L4.weights_exfiltration": Scn(action="model.weights.export", params={"destination": "s3://attacker/weights"}),
     "L4.amount_over_limit": pay(500000),
@@ -462,3 +506,83 @@ scn_st = st.builds(
 def test_random_typed_requests_agree(scn):
     hw, gov = both(scn)
     assert hw == gov or gap_of(scn, hw, gov), f"reference {hw} vs govsim {gov} for {scn}"
+
+
+# ---------------------------------------------------------------------------------------
+# The catalogue entries that are not a gate decision in govsim, shown -- not asserted away.
+# Where a check is unexpressible in govsim's constraint language, the gate that would govern it is
+# absent from the shared rulebook, so both gates deny the input with no_rule (a shared deny, not a
+# govsim-only allow); where the approval protocol differs, the difference is named and pinned.
+# Each is filed under results/issues/ rather than excused.
+# ---------------------------------------------------------------------------------------
+
+def _ref_hold():
+    """A reference hold from the large human rule, with its hold id and request hash (the approval protocol)."""
+    hw = HwRig()
+    n = hw.node
+    tok = n.attest().token
+    req = n.build_request("payments.transfer", {"amount": 25000, "currency": "USD", "destination": "acct-654321"}, tok, observe=True, risk=LOW)
+    res = n.gate.request(req)
+    assert res.decision.value == "hold", res.reasons
+    return n, res.hold_id, res.request_hash
+
+
+def test_excluded_gate_decisions_are_shown():
+    # baseline.http_auto and L4.url_outside_allowlist: a URL allow-list is a regex, and govsim's
+    # constraint language has no regex kind (only min/max/in/not_in_list/in_list), so check_constraints
+    # silently ignores it. The gate that would govern the URL (an http.post rule) is therefore absent
+    # from the shared rulebook, so BOTH gates deny every URL with no_rule -- the exclusion is a shared
+    # deny, not a govsim-only allow the exclusion could hide.
+    for url in ("https://api.internal.example.com/v1/ping", "https://exfil.example.net/drop"):
+        ok, why = check_constraints({"constraints": {"url": {"regex": r"https://api\.internal\.example\.com/.*"}}}, {"url": url}, {})
+        assert ok and why == "ok", f"govsim's check_constraints treated a regex as a constraint: {why}"
+        hw, gov = both(Scn(action="http.post", params={"url": url}))
+        assert hw == gov == Outcome("deny", "no_rule"), (url, hw, gov)
+
+    # L4.token_wrong_workload: the reference checks that the request's measurement matches the token's;
+    # govsim's request carries no measurement field at all, so the check is unexpressible there.
+    hw = HwRig()
+    tok = hw.node.attest().token
+    mismatched = hw.node.build_request("payments.transfer", {"amount": 250, "currency": "USD", "destination": "acct-123456"}, tok, measurement="f" * 32)
+    res = hw.node.gate.request(mismatched)
+    assert res.decision.value == "deny" and "attestation.measurement_mismatch" in res.reasons, res.reasons
+    assert "measurement" not in GovRig().body(Scn())     # the field the reference checks is not in govsim's request
+
+    # The approval protocol. Both gates refuse a forged approver and a wrong request hash; they differ
+    # on time: the reference expires a hold after its ttl, govsim has no hold ceiling (only a floor),
+    # so a hold stays releasable long after the reference would have refused it.
+    n, hold_id, rh = _ref_hold()
+    assert not n.gate.approve(make_approval(HwKey.generate(), "ops-lead", hold_id, rh, n.clock.now())).allowed, "reference must refuse a forged approver"
+    assert not n.gate.approve(make_approval(n.approver_key, "ops-lead", hold_id, "0" * 64, n.clock.now())).allowed, "reference must refuse a wrong request hash"
+    n.clock.advance(n.gate.policy["hold_ttl_s"] + 1)
+    assert not n.gate.approve(make_approval(n.approver_key, "ops-lead", hold_id, rh, n.clock.now())).allowed, "reference must expire a held request"
+
+    g = GovRig()
+    h = g.hold()
+    gov_g, approvers = g.node, g.rack.approvers["payments.transfer.large"]
+    assert g.rack.approve(gov_g.governor, h["hold_id"], "0" * 64, approvers[0])["why"] == "approve.bad_signature.request_mismatch", "govsim must refuse a wrong request hash"
+    assert g.rack.approve(gov_g.governor, h["hold_id"], h["request_hash"], GovKey.generate())["why"] == G.APPROVE_BAD_SIGNATURE, "govsim must refuse a forged approver"
+    g.clock.advance(3601)                              # well past the reference's 3600s hold ttl
+    o1 = g.rack.approve(gov_g.governor, h["hold_id"], h["request_hash"], approvers[0])
+    o2 = g.rack.approve(gov_g.governor, h["hold_id"], h["request_hash"], approvers[1])
+    assert not o1["ok"] and o2["ok"], (o1, o2)         # the hold is still releasable: govsim has no hold ceiling
+
+
+def test_replayed_agreement_count():
+    """The number behind EXPERIMENTS.md's 'agree on N of M replayed catalogue entries' is computed here,
+    not asserted by hand, so the write-up can cite this test and the count cannot drift from the
+    catalogue. Every disagreement must be one of the pinned gaps; the concrete counts are pinned so a
+    change to the catalogue (or a gap) is noticed in both the test and the write-up."""
+    agree = 0
+    gaps = []
+    for name in sorted(REPLAYED):
+        hw, gov = both(REPLAYED[name])
+        if hw == gov:
+            agree += 1
+        else:
+            gaps.append((name, gap_of(REPLAYED[name], hw, gov)))
+    gaps.sort()
+    assert all(name in EXPECT_GAP and gap_of(REPLAYED[name], *both(REPLAYED[name])) == EXPECT_GAP[name] for name, _ in gaps), gaps
+    assert len(gaps) == len(EXPECT_GAP) == 3, gaps
+    assert agree + len(gaps) == len(REPLAYED)
+    assert (len(REPLAYED), agree, len(gaps)) == (20, 17, 3), (len(REPLAYED), agree, len(gaps))
