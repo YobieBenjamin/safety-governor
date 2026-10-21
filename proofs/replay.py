@@ -7,22 +7,33 @@
 
 The machines are those of ``core_invariants.py`` (tickets, editions, halt, heartbeat) and ``commit_point.py``
 (holds and their clearances), executed on concrete values instead of being handed to Z3. The guards are a
-concrete re-encoding of those Z3 steps: ``step_names()`` reads the step names out of the proof files so a test
-fails if the two drift, but the guard *logic* is not compared symbolically (z3 is not installed here, so the
-prover is not run); the re-encoding is checked instead by replaying the real traces and by two broken-governor
-fixtures that must fail at a named event. After every step the invariants P1 to P4 are checked on the concrete
-state.
+concrete re-encoding of those Z3 steps: ``step_names()`` reads the step names out of the proof files and
+``replayer_steps()`` reads the step labels the replayer actually drives, and a test cross-checks the two sets
+so a guard that names a step the proofs lack fails -- but the guard *logic* is not compared symbolically (z3 is
+not installed here, so the prover is not run). The re-encoding is checked instead by replaying the real traces
+and by broken-governor fixtures that must fail at a named event. After every step the invariants P1 to P4 are
+re-checked on the concrete state; because the guards already enforce them, the check is a consistency guard, not
+independent evidence that they hold.
 
 What each event is allowed to do:
 
   ticket_issued    core ``issue``: not halted, heartbeat live, no ticket yet for this action. The rule and the
                    witnesses are inputs of the model (``allows``, ``witness``) and are taken as given. A ticket
-                   that follows a hold must also be the commit of the commit-point machine, which needs the
-                   reviewer clearance that ``hold_released`` records.
-  heartbeat_back   core ``heartbeat back``: the machine's heartbeat goes live.
+                   for an action the gate still holds is that action's release: it must be released (the
+                   commit-point ``reviewer clears`` step, driven at the ``hold_released`` event), else the
+                   commit has no clearance and has no enabled transition.
+  hold_parked      commit-point ``hold``: the gate parks a high-severity action for a human verdict.
+  hold_released    commit-point ``reviewer clears``: the approvers release the hold; the clearance is bound to
+                   the action's version. The commit is NOT fused here -- it is driven at the action's carry-out
+                   -- so a held action committed with no clearance is a transition the machine does not have.
+  heartbeat_back   core ``heartbeat back``: the machine's heartbeat goes live. The machine has one heartbeat
+                   (the authority's, live at the endpoint, ``core_invariants.py``); the sink observes it from
+                   the governor's accepted heartbeat and, at the endpoint, from the endpoint's own timer.
   heartbeat_lost   core ``heartbeat lost``: the machine's heartbeat goes out. The issue and execute guards read
                    this state, not a flag on their own event.
-  execute_ok       core ``execute``: heartbeat live, the ticket carries the current edition, not yet spent.
+  execute_ok       core ``execute``: heartbeat live, the ticket carries the current edition, not yet spent. A
+                   held action that is carried out is its commit point: the commit-point ``commit`` step, which
+                   needs the clearance the ``hold_released`` recorded.
   execute_refused  core ``forged execute``: nothing changes. A refusal is always allowed (the system may be
                    stricter than the machine), but a refusal for a reason that makes a claim about the machine
                    (replay, stale edition, heartbeat) must be backed by that state. A ticket the endpoint burns
@@ -36,6 +47,7 @@ What each event is allowed to do:
                    RUN after a boot: this is NOT a step of the machine. The theorem's initial state leaves
                    ``halted`` free, and a power cycle is not a step in it. The replayer accepts it only when
                    the halt being left came from a boot, never from a cause, and counts it in ``Report.arms``.
+                   A RUN entered after a cause with no clear is the one step the machine refuses here.
 """
 from __future__ import annotations
 
@@ -43,16 +55,24 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from govsim import reasons
+
 HERE = Path(__file__).parent
 
-# refusal reasons that claim something about the machine's state, and what they claim
-CLAIM_REPLAY = ("ticket.replay",)
-CLAIM_STALE = ("ticket.stale_epoch",)
-CLAIM_HB = ("endpoint.heartbeat_expired",)
+# The endpoint's admit checks, in the order ActionEndpoint.admit runs them (govsim/endpoints.py): a refusal for
+# any of these names an admit-check reason and is a stutter of ``forged execute``. They are the reasons
+# constants, not hard-coded strings, so a renamed or new reason shows up here instead of being silently
+# miscounted as a burn. A refusal for a reason not in this set (the endpoint's post-admit checks: the commit,
+# the device's own sensors) is a burn without an execute, the gap the theorem does not model.
+CLAIM_REPLAY = (reasons.TICKET_REPLAY,)
+CLAIM_STALE = (reasons.TICKET_STALE_EPOCH,)
+CLAIM_HB = (reasons.ENDPOINT_HEARTBEAT_EXPIRED,)
 
 
-ADMIT_REFUSALS = ("ticket.bad_signature", "ticket.params_mismatch", "ticket.action_mismatch", "ticket.expired", "ticket.not_yet_valid",
-                  "ticket.replay", "ticket.stale_epoch", "ticket.wrong_endpoint", "ticket.missing", "endpoint.heartbeat_expired")
+ADMIT_REFUSALS = (reasons.TICKET_BAD_SIGNATURE, reasons.TICKET_PARAMS_MISMATCH, reasons.TICKET_ACTION_MISMATCH,
+                  reasons.TICKET_EXPIRED, reasons.TICKET_NOT_YET_VALID, reasons.TICKET_REPLAY,
+                  reasons.TICKET_STALE_EPOCH, reasons.TICKET_WRONG_ENDPOINT, reasons.TICKET_MISSING,
+                  reasons.ENDPOINT_HEARTBEAT_EXPIRED)
 
 
 class NoTransition(AssertionError):
@@ -70,6 +90,17 @@ def step_names() -> dict[str, list[str]]:
     core_names = re.findall(r'\("([^"]+)", (?:issue|execute|forged_execute|new_epoch|halt|clear|beat_lost|beat_back|environment)\)', core.split("def step_list")[1])
     cp_names = re.findall(r'\("([^"]+)", (?:hold|reviewer_clears|regulator_allclear|reparameterise|budget_runs_out|commit|refused_commit)\)', cp)
     return {"core": core_names, "commit_point": cp_names}
+
+
+def replayer_steps() -> set[str]:
+    """The step labels the replayer actually drives, read out of its own source: the string a ``report.count``
+    or a ``NoTransition`` names. The conformance test cross-checks this against the proof files, so a guard
+    that names a step the proofs do not have shows up here (z3 is not run, so the guard *logic* is not
+    compared symbolically -- this ties the labels, not the logic)."""
+    src = Path(__file__).read_text()
+    driven = set(re.findall(r'self\.report\.count\("([^"]+)"', src))
+    driven |= set(re.findall(r'NoTransition\([^,]+,\s*"([^"]+)"', src))
+    return driven
 
 
 class Core:
@@ -107,10 +138,18 @@ class Core:
 
 class CommitPoint:
     """proofs/commit_point.py for the actions the gate parks: a hold, a reviewer clearance, then the commit.
-    A parked action is high severity and irreversible by construction (the rule asked for a human)."""
+    A parked action is high severity and irreversible by construction (the rule asked for a human).
+
+    The clearance and the commit are separate steps driven at separate points of the trace, so the check that
+    a committed action carries a clearance for its version is not tautological: ``reviewer_clears`` happens at
+    the hold's release (``hold_released``) and ``commit`` at the action's carry-out (``execute_ok``). A held
+    action that is committed with no clearance -- a ticket the gate signed for a still-held action -- has no
+    enabled transition, and the replay names it. The version never moves (a re-parameterised action is a new
+    action hash in govsim), so a stale clearance is a non-issue here; the guard that bites is the missing one."""
 
     def __init__(self) -> None:
         self.held: set[str] = set()
+        self.released: set[str] = set()
         self.cleared_for: dict[str, int] = {}
         self.version: dict[str, int] = {}
         self.committed: set[str] = set()
@@ -123,14 +162,17 @@ class CommitPoint:
 
     def reviewer_clears(self, event, a: str) -> None:
         if a not in self.held:
-            raise NoTransition(event, "reviewer clears", "the action is not held")
+            raise NoTransition(event, "reviewer clears", "a clearance for an action the gate never held")
         self.cleared_for[a] = self.version[a]
+        self.released.add(a)
 
     def commit(self, event, a: str) -> None:
         if a in self.committed:
             raise NoTransition(event, "commit", "the action already committed")
-        if self.cleared_for.get(a, -1) != self.version.get(a, 0):
-            raise NoTransition(event, "commit", "a high-severity action with no reviewer clearance for its version")
+        # a held action commits only on a clearance bound to its version; an action the gate never held is not
+        # this machine's concern (it is the core machine's issue/execute).
+        if a in self.held and self.cleared_for.get(a, -1) != self.version.get(a, 0):
+            raise NoTransition(event, "commit", "a held action committed with no reviewer clearance for its version")
         self.committed.add(a)
         self.held.discard(a)
 
@@ -213,13 +255,17 @@ class Replayer:
             self.cp[e.gov].hold(e, d["action"])
             self.report.count("hold")
         elif k == "hold_released":
+            # the clearance is its own step; the commit is driven later, at the action's carry-out (execute_ok),
+            # so a held action committed with no clearance has no enabled transition
             self.cp[e.gov].reviewer_clears(e, d["action"])
-            self.cp[e.gov].commit(e, d["action"])
-            self.report.count("reviewer clears + commit")
+            self.report.count("reviewer clears")
         elif k == "ticket_issued":
             self._issue(e, m)
         elif k == "execute_ok":
             self._execute(e, m)
+            if e.data["action"] in self.cp[e.gov].held:
+                self.cp[e.gov].commit(e, e.data["action"])    # a carried-out held action is its commit point
+                self.report.count("commit")
         elif k == "execute_refused":
             self._refuse(e, m)
         else:
@@ -228,8 +274,10 @@ class Replayer:
 
     def _issue(self, e, m: Core) -> None:
         a, d = e.data["action"], e.data
-        if a in self.cp[e.gov].held:
-            raise NoTransition(e, "commit", "a ticket for an action that is still held (no hold_released before it)")
+        # a ticket for an action the gate still holds (parked for a human) is its release: it must be released,
+        # which is the clearance the commit-point machine needs. A held action with no hold_released has none.
+        if a in self.cp[e.gov].held and a not in self.cp[e.gov].released:
+            raise NoTransition(e, "commit", "a ticket for an action the gate never released (no hold_released before it)")
         if m.halted:
             raise NoTransition(e, "issue", f"the machine is halted ({m.halt_from}); the governor was in {d['state']}")
         if not m.heartbeat:

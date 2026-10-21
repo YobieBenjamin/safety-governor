@@ -74,6 +74,7 @@ class Trace:
         self._log_owner: dict[int, Any] = {}     # id(Log) -> governor
         self._holds: dict[str, str] = {}         # hold_id -> request hash
         self._cleared: set[str] = set()          # governors whose last clear has not yet been followed by RUN
+        self._ep_owner: dict[int, str] = {}      # id(endpoint) -> the governor that relays heartbeats to it
         self._orig: list[tuple[Any, str, Any]] = []
         self._booting: Any = None
 
