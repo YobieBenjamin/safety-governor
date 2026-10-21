@@ -1,0 +1,682 @@
+diff --git a/EXPERIMENTS.md b/EXPERIMENTS.md
+index 186c0cf..72f67b0 100644
+--- a/EXPERIMENTS.md
++++ b/EXPERIMENTS.md
+@@ -27,3 +27,16 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
+ | N1 | N | Whole-deployment overhead simulation | `govsim/deploy.py` | open | the per-chip model gives 34 percent engine utilisation batched and under 0.1 percent firmware share |
+ | N2 | N | False-halt rate model | `docs/07` FMEA, fault injection | open | |
+ | N3 | N | FPGA beside a real GPU | pre-hardware plan, phase 4 | later | needs a lab with a rack |
++
++## L4 trace conformance (issue #4)
++
++`python3 -m pytest -q tests/test_h19_conformance.py` passes: every test of H0 to H18 is rerun with the trace sink on (`govsim/trace.py`) and its trace replayed through the machines of `proofs/` (`proofs/replay.py`). Two broken-governor fixtures (a halted governor that signs, a stale-edition ticket that executes) fail replay with the event named.
++
++Findings from replay:
++
++- Gap in the theorem: a power cycle is not a step. `core_invariants.py` leaves `halted` free in the initial state, but govsim boots into HALTED_INITIAL and reaches RUN on the first heartbeat with no clear. The replayer accepts this as an explicit `arm` step, only from a halt that a boot put there (counted in `Report.arms`). The theorem should either add a boot/arm step or constrain init.
++- Gap in the theorem: an endpoint burns a ticket before the governor commit and the device checks, and may then refuse. The machine has no burn-without-execute step (`used` without `executed`); the replayer tracks it as `burned`.
++- Refusals for expiry, wrong endpoint, parameter mismatch and bad signature are stutter steps of `forged execute`; the machine is looser than the system there, which is sound.
++- Not a gap: `test_governor_cannot_clear_itself` injects a firmware fault (RUN with no clear). Replay refuses it as it must; the plugin lists it in `FAULT_INJECTION` and asserts the refusal.
++- Not modelled: `allows` and `witness` are inputs of the machine, so replay does not check that the rule and witnesses were right; heartbeat is observed (governor hb_expiry at issue, endpoint hb_expiry at execute), not driven by explicit events; `quorum` is taken as true for an accepted policy image and for an authority clear.
++- z3 is not installed here, so replay executes the guards on concrete values (copied from the Z3 steps) and a test checks the step names against the proof files; it does not run the prover.
+diff --git a/govsim/trace.py b/govsim/trace.py
+new file mode 100644
+index 0000000..9c9e98a
+--- /dev/null
++++ b/govsim/trace.py
+@@ -0,0 +1,219 @@
++"""A trace sink beside the log: every governor transition as a typed event, for replay against the abstract machines.
++
++    from govsim.trace import Trace
++    with Trace() as tr:
++        ...drive a rack...
++    tr.events        # list[Event], in the order the transitions happened
++
++The sink does not change the governor. ``Trace.start()`` wraps a handful of methods on the classes
++(``Governor._mint``, ``_accept_policy``, ``_apply_rung``, ``ActionEndpoint.execute`` and the log's ``append``)
++and ``stop()`` puts the originals back. Each wrapper records what happened and calls through.
++
++Event kinds (``Event.kind``) and the fields in ``Event.data``:
++
++  boot               state, cause              the governor powered up (first boot or a restart)
++  edition_set        edition                   the first edition this governor ran under (provisioning or boot)
++  edition_change     old, new, via             a new policy edition accepted (via: commit | load | boot)
++  ticket_issued      action, ticket_id, edition, state, hb, rule     the gate signed a ticket (action = request hash)
++  hold_parked        action, hold_id           the gate parked a request for a human verdict
++  hold_released      action, hold_id           the approvers released the hold (always precedes its ticket_issued)
++  execute_ok         action, ticket_id, edition, endpoint_edition, hb, endpoint     an endpoint carried the action out
++  execute_refused    action, ticket_id, edition, endpoint_edition, hb, endpoint, reason     an endpoint refused
++  halt               cause, rung                the governor entered a safe-mode rung
++  clear              cause, by                  the authority cleared the cause
++  run_entered        via                        the governor entered RUN (via: clear | arm)
++
++``Event.gov`` names the governor (``name#serial``; the serial keeps two racks with the same names apart) or is
++None for a refusal whose ticket names no governor of ours (missing, forged).
++"""
++from __future__ import annotations
++
++import itertools
++from dataclasses import dataclass, field
++from typing import Any
++
++from . import endpoints as _endpoints
++from . import governor as _governor
++from . import log as _log
++from . import reasons
++
++
++@dataclass
++class Event:
++    kind: str
++    gov: str | None
++    data: dict[str, Any] = field(default_factory=dict)
++    seq: int = 0
++
++    def __str__(self) -> str:
++        body = ", ".join(f"{k}={v}" for k, v in self.data.items())
++        return f"#{self.seq} {self.kind} [{self.gov}] {body}"
++
++
++_active: "Trace | None" = None
++
++
++class Trace:
++    def __init__(self) -> None:
++        self.events: list[Event] = []
++        self._serial = itertools.count(1)
++        self._ids: dict[int, str] = {}           # id(governor) -> "name#n"
++        self._ticket_gov: dict[str, str] = {}    # ticket id -> the governor that minted it
++        self._log_owner: dict[int, Any] = {}     # id(Log) -> governor
++        self._holds: dict[str, str] = {}         # hold_id -> request hash
++        self._cleared: set[str] = set()          # governors whose last clear has not yet been followed by RUN
++        self._orig: list[tuple[Any, str, Any]] = []
++        self._booting: Any = None
++
++    # -- context manager -----------------------------------------------------------------------
++    def __enter__(self) -> "Trace":
++        self.start()
++        return self
++
++    def __exit__(self, *exc) -> None:
++        self.stop()
++
++    # -- recording -----------------------------------------------------------------------------
++    def gid(self, gov) -> str:
++        key = id(gov)
++        if key not in self._ids:
++            self._ids[key] = f"{gov.name}#{next(self._serial)}"
++        return self._ids[key]
++
++    def emit(self, kind: str, gov: str | None, **data) -> Event:
++        e = Event(kind, gov, data, len(self.events))
++        self.events.append(e)
++        return e
++
++    # -- install / remove the wrappers -----------------------------------------------------------
++    def _wrap(self, owner, name: str, make) -> None:
++        orig = getattr(owner, name)
++        self._orig.append((owner, name, orig))
++        setattr(owner, name, make(orig))
++
++    def start(self) -> None:
++        global _active
++        if _active is not None:
++            raise RuntimeError("a trace is already running")
++        _active = self
++        tr = self
++        G, E, L = _governor.Governor, _endpoints.ActionEndpoint, _log.Log
++
++        def boot(orig):
++            def _boot(gov):
++                tr._booting = gov
++                try:
++                    result = orig(gov)
++                finally:
++                    tr._booting = None
++                tr.emit("boot", tr.gid(gov), state=gov.state, cause=gov.cause)     # not reached when the boot is refused
++                tr._cleared.discard(tr.gid(gov))
++                return result
++            return _boot
++
++        def log_init(orig):
++            def __init__(lg, *a, **k):
++                orig(lg, *a, **k)
++                if tr._booting is not None:
++                    tr._log_owner[id(lg)] = tr._booting
++            return __init__
++
++        def append(orig):
++            def _append(lg, event, data=None):
++                head = orig(lg, event, data)
++                gov = tr._log_owner.get(id(lg))
++                if gov is not None:
++                    tr._on_log(gov, event, data or {})
++                return head
++            return _append
++
++        def accept(orig):
++            def _accept(gov, image, at_boot=False):
++                old = gov.epoch
++                ok, why = orig(gov, image, at_boot)
++                if ok and gov.epoch != old:
++                    via = "boot" if tr._booting is gov else ("load" if at_boot else "commit")
++                    if old == "":
++                        tr.emit("edition_set", tr.gid(gov), edition=gov.epoch)
++                    else:
++                        tr.emit("edition_change", tr.gid(gov), old=old, new=gov.epoch, via=via)
++                return ok, why
++            return _accept
++
++        def mint(orig):
++            def _mint(gov, rhash, action, params, fp, rule, reservation, now):
++                ticket = orig(gov, rhash, action, params, fp, rule, reservation, now)
++                tr._ticket_gov[ticket["payload"]["ticket_id"]] = tr.gid(gov)
++                tr.emit("ticket_issued", tr.gid(gov), action=rhash, ticket_id=ticket["payload"]["ticket_id"], edition=gov.epoch,
++                        state=gov.state, hb=gov.hb_expiry > gov.clock.now(), rule=rule["id"])
++                return ticket
++            return _mint
++
++        def rung(orig):
++            def _apply_rung(gov, rung_, opens_loop=False):
++                orig(gov, rung_, opens_loop)
++                if rung_ == _governor.RUN:
++                    g = tr.gid(gov)
++                    tr.emit("run_entered", g, via="clear" if g in tr._cleared else "arm")
++                    tr._cleared.discard(g)
++            return _apply_rung
++
++        def execute(orig):
++            def _execute(ep, ticket, action, params):
++                now = ep.clock.now()
++                hb = now <= ep.hb_expiry
++                t = (ticket or {}).get("payload") or {}
++                edition, ep_edition = t.get("policy_epoch"), ep.epoch
++                ok, why = orig(ep, ticket, action, params)
++                gov = tr._ticket_gov.get(t.get("ticket_id"))       # None: no governor of ours minted this ticket
++                data = dict(action=t.get("request_hash"), ticket_id=t.get("ticket_id"), edition=edition, endpoint_edition=ep_edition,
++                            hb=hb, endpoint=ep.name)
++                if ok:
++                    tr.emit("execute_ok", gov, **data)
++                else:
++                    tr.emit("execute_refused", gov, reason=why, **data)
++                return ok, why
++            return _execute
++
++        self._wrap(G, "_boot", boot)
++        self._wrap(L, "__init__", log_init)
++        self._wrap(L, "append", append)
++        self._wrap(G, "_accept_policy", accept)
++        self._wrap(G, "_mint", mint)
++        self._wrap(G, "_apply_rung", rung)
++        self._wrap(E, "execute", execute)
++
++    def stop(self) -> None:
++        global _active
++        for owner, name, orig in reversed(self._orig):
++            setattr(owner, name, orig)
++        self._orig.clear()
++        _active = None
++
++    # -- helpers ---------------------------------------------------------------------------------
++    def _on_log(self, gov, event: str, data: dict) -> None:
++        g = self.gid(gov)
++        if event == "gate.hold":
++            self._holds[data["hold_id"]] = data["request_hash"]
++            self.emit("hold_parked", g, action=data["request_hash"], hold_id=data["hold_id"])
++        elif event == "approve.released":
++            # the ticket was minted (and logged) a line earlier; the release is the cause, so it goes before it
++            action = self._holds.get(data["hold_id"])
++            ev = Event("hold_released", g, {"action": action, "hold_id": data["hold_id"]})
++            for i in range(len(self.events) - 1, -1, -1):
++                e = self.events[i]
++                if e.kind == "ticket_issued" and e.gov == g and e.data["action"] == action:
++                    self.events.insert(i, ev)
++                    break
++            else:
++                self.events.append(ev)
++            for i, e in enumerate(self.events):
++                e.seq = i
++        elif event == "halt.cause":
++            self._cleared.discard(g)
++            self.emit("halt", g, cause=data["cause"], rung=data["rung"])
++        elif event == "halt.cleared":
++            self._cleared.add(g)
++            self.emit("clear", g, cause=data["cause"], by=data["by"])
++        elif event == "policy.committed":
++            pass          # the edition change itself is recorded by the _accept_policy wrapper
+diff --git a/proofs/replay.py b/proofs/replay.py
+new file mode 100644
+index 0000000..6f273c1
+--- /dev/null
++++ b/proofs/replay.py
+@@ -0,0 +1,271 @@
++#!/usr/bin/env python3
++"""Replay a govsim trace through the abstract machines of the proofs, and raise on the first event they refuse.
++
++    from govsim.trace import Trace
++    from proofs.replay import replay
++    replay(trace.events)          # returns a Report, or raises NoTransition naming the event
++
++The machines are those of ``core_invariants.py`` (tickets, editions, halt, heartbeat) and ``commit_point.py``
++(holds and their clearances), executed on concrete values instead of being handed to Z3. The guards are copied
++from the Z3 steps one for one, and ``step_names()`` reads the step names out of the proof files so a test can
++fail if the two drift apart. After every step the invariants P1 to P4 are checked on the concrete state.
++
++What each event is allowed to do:
++
++  ticket_issued    core ``issue``: not halted, heartbeat live, no ticket yet for this action. The rule and the
++                   witnesses are inputs of the model (``allows``, ``witness``) and are taken as given. A ticket
++                   that follows a hold must also be the commit of the commit-point machine, which needs the
++                   reviewer clearance that ``hold_released`` records.
++  execute_ok       core ``execute``: heartbeat live, the ticket carries the current edition, not yet spent.
++  execute_refused  core ``forged execute``: nothing changes. A refusal is always allowed (the system may be
++                   stricter than the machine), but a refusal for a reason that makes a claim about the machine
++                   (replay, stale edition, heartbeat) must be backed by that state.
++  edition_change   core ``new edition``: a quorum (an accepted policy image carries the governance signatures).
++  halt             core ``halt``.
++  clear            core ``clear``: halted, quorum (the authority's signature), neighbour (the governor checked it).
++  run_entered      after a ``clear``: nothing (the machine left the halt at the clear). Via ``arm``, the first
++                   RUN after a boot: this is NOT a step of the machine. The theorem's initial state leaves
++                   ``halted`` free, and a power cycle is not a step in it. The replayer accepts it only when
++                   the halt being left came from a boot, never from a cause, and counts it in ``Report.arms``.
++"""
++from __future__ import annotations
++
++import re
++from dataclasses import dataclass, field
++from pathlib import Path
++
++HERE = Path(__file__).parent
++
++# refusal reasons that claim something about the machine's state, and what they claim
++CLAIM_REPLAY = ("ticket.replay",)
++CLAIM_STALE = ("ticket.stale_epoch",)
++CLAIM_HB = ("endpoint.heartbeat_expired",)
++
++
++ADMIT_REFUSALS = ("ticket.bad_signature", "ticket.params_mismatch", "ticket.action_mismatch", "ticket.expired", "ticket.not_yet_valid",
++                  "ticket.replay", "ticket.stale_epoch", "ticket.wrong_endpoint", "ticket.missing", "endpoint.heartbeat_expired")
++
++
++class NoTransition(AssertionError):
++    """The abstract machine has no enabled transition for this event."""
++
++    def __init__(self, event, step: str, why: str):
++        self.event, self.step, self.why = event, step, why
++        super().__init__(f"no enabled transition for event {event} (machine step '{step}'): {why}")
++
++
++def step_names() -> dict[str, list[str]]:
++    """The step names of the two proof files, read from their source (z3 is not needed to read them)."""
++    core = (HERE / "core_invariants.py").read_text()
++    cp = (HERE / "commit_point.py").read_text()
++    core_names = re.findall(r'\("([^"]+)", (?:issue|execute|forged_execute|new_epoch|halt|clear|beat_lost|beat_back|environment)\)', core.split("def step_list")[1])
++    cp_names = re.findall(r'\("([^"]+)", (?:hold|reviewer_clears|regulator_allclear|reparameterise|budget_runs_out|commit|refused_commit)\)', cp)
++    return {"core": core_names, "commit_point": cp_names}
++
++
++class Core:
++    """proofs/core_invariants.py, one governor. Actions are request hashes; the edition is a counter."""
++
++    def __init__(self) -> None:
++        self.epoch = 0
++        self.halted = True            # a governor that has booted and not yet been armed
++        self.halt_from = "boot"       # what put it there: boot | cause
++        self.heartbeat = False
++        self.ticket: dict[str, int] = {}
++        self.used: set[str] = set()
++        self.executed: set[str] = set()
++        self.burned: set[str] = set()            # ticket burned at the endpoint and then refused: not a step of the machine
++        self.okay_at_issue: set[str] = set()
++        self.names: dict[int, str] = {}          # edition counter -> the edition's name in govsim
++        self.steps: list[str] = []
++
++    def tk(self, a: str) -> int:
++        return self.ticket.get(a, -1)
++
++    def check_invariants(self, event) -> None:
++        if self.epoch < 0:
++            raise NoTransition(event, "invariant", "P0 the edition went negative")
++        for a in set(self.ticket) | self.executed | self.used:
++            if a in self.executed and a not in self.okay_at_issue:
++                raise NoTransition(event, "invariant", f"P1 {a[:12]} executed without an allowed issue")
++            if self.tk(a) != -1 and a not in self.okay_at_issue:
++                raise NoTransition(event, "invariant", f"P2 {a[:12]} has a ticket without an allowed issue")
++            if a in self.executed and a not in self.used:
++                raise NoTransition(event, "invariant", f"P3 {a[:12]} executed but not spent")
++            if self.tk(a) != -1 and not 0 <= self.tk(a) <= self.epoch:
++                raise NoTransition(event, "invariant", f"P4 {a[:12]} carries edition {self.tk(a)} with the edition at {self.epoch}")
++
++
++class CommitPoint:
++    """proofs/commit_point.py for the actions the gate parks: a hold, a reviewer clearance, then the commit.
++    A parked action is high severity and irreversible by construction (the rule asked for a human)."""
++
++    def __init__(self) -> None:
++        self.held: set[str] = set()
++        self.cleared_for: dict[str, int] = {}
++        self.version: dict[str, int] = {}
++        self.committed: set[str] = set()
++
++    def hold(self, event, a: str) -> None:
++        if a in self.committed:
++            raise NoTransition(event, "hold", "the action already committed")
++        self.held.add(a)
++        self.version.setdefault(a, 0)
++
++    def reviewer_clears(self, event, a: str) -> None:
++        if a not in self.held:
++            raise NoTransition(event, "reviewer clears", "the action is not held")
++        self.cleared_for[a] = self.version[a]
++
++    def commit(self, event, a: str) -> None:
++        if a in self.committed:
++            raise NoTransition(event, "commit", "the action already committed")
++        if self.cleared_for.get(a, -1) != self.version.get(a, 0):
++            raise NoTransition(event, "commit", "a high-severity action with no reviewer clearance for its version")
++        self.committed.add(a)
++        self.held.discard(a)
++
++
++@dataclass
++class Report:
++    events: int = 0
++    steps: dict[str, int] = field(default_factory=dict)
++    arms: int = 0
++    stutters: dict[str, int] = field(default_factory=dict)
++
++    def count(self, step: str) -> None:
++        self.steps[step] = self.steps.get(step, 0) + 1
++
++
++class Replayer:
++    def __init__(self) -> None:
++        self.core: dict[str, Core] = {}
++        self.cp: dict[str, CommitPoint] = {}
++        self.hb: dict[tuple[str, str], bool] = {}
++        self.report = Report()
++
++    def machine(self, gov: str) -> Core:
++        if gov not in self.core:
++            self.core[gov] = Core()
++            self.cp[gov] = CommitPoint()
++        return self.core[gov]
++
++    def _observe_hb(self, m: Core, gov: str, observer: str, live: bool) -> None:
++        """The heartbeat flag of the machine is what the observer sees. A change is a lost / back step."""
++        m.heartbeat = live
++        last = self.hb.get((gov, observer))
++        if last is not None and last != live:
++            self.report.count("heartbeat back" if live else "heartbeat lost")
++        self.hb[(gov, observer)] = live
++
++    def feed(self, e) -> None:
++        self.report.events += 1
++        d = e.data
++        if e.kind == "execute_refused" and e.gov is None:
++            return self._refuse_unknown(e)
++        if e.gov is None:
++            raise NoTransition(e, "execute", "carried out on a ticket that no governor of the trace minted")
++        m = self.machine(e.gov)
++        k = e.kind
++        if k == "boot":
++            m.halted, m.halt_from = True, ("cause" if d.get("cause") else "boot")
++            self.hb = {key: v for key, v in self.hb.items() if key[0] != e.gov or key[1] != e.gov}
++        elif k == "edition_set":
++            if m.names and m.names[m.epoch] != d["edition"]:
++                raise NoTransition(e, "new edition", f"boot found edition {d['edition'][:8]} where the machine is at {m.names[m.epoch][:8]} and there was no edition change")
++            m.names[m.epoch] = d["edition"]
++        elif k == "edition_change":
++            if m.names.get(m.epoch) != d["old"]:
++                raise NoTransition(e, "new edition", f"changes from {d['old'][:8]}, the machine is at {str(m.names.get(m.epoch))[:8]}")
++            # quorum: an accepted image carries the governance signatures (verify_policy ran in _accept_policy)
++            m.epoch += 1
++            m.names[m.epoch] = d["new"]
++            self.report.count("new edition")
++        elif k == "halt":
++            m.halted, m.halt_from = True, "cause"
++            self.report.count("halt")
++        elif k == "clear":
++            if not m.halted:
++                raise NoTransition(e, "clear", "the machine is not halted")
++            m.halted = False       # quorum: the authority's signature; neighbour: _cmd_clear checked it before logging
++            self.report.count("clear")
++        elif k == "run_entered":
++            if d["via"] == "arm":
++                if m.halt_from != "boot" or not m.halted:
++                    raise NoTransition(e, "arm", "RUN entered with no clear, from a halt that a cause put there")
++                m.halted = False
++                self.report.arms += 1
++            elif m.halted:
++                raise NoTransition(e, "clear", "RUN entered after a clear the machine does not have")
++        elif k == "hold_parked":
++            self.cp[e.gov].hold(e, d["action"])
++            self.report.count("hold")
++        elif k == "hold_released":
++            self.cp[e.gov].reviewer_clears(e, d["action"])
++            self.cp[e.gov].commit(e, d["action"])
++            self.report.count("reviewer clears + commit")
++        elif k == "ticket_issued":
++            self._issue(e, m)
++        elif k == "execute_ok":
++            self._execute(e, m)
++        elif k == "execute_refused":
++            self._refuse(e, m)
++        else:
++            raise NoTransition(e, "?", "an event kind the replayer does not know")
++        m.check_invariants(e)
++
++    def _issue(self, e, m: Core) -> None:
++        a, d = e.data["action"], e.data
++        self._observe_hb(m, e.gov, e.gov, d["hb"])
++        if a in self.cp[e.gov].held:
++            raise NoTransition(e, "commit", "a ticket for an action that is still held (no hold_released before it)")
++        if m.halted:
++            raise NoTransition(e, "issue", f"the machine is halted ({m.halt_from}); the governor was in {d['state']}")
++        if not m.heartbeat:
++            raise NoTransition(e, "issue", "the governor's heartbeat is not live")
++        if m.tk(a) != -1:
++            raise NoTransition(e, "issue", "a second ticket for the same action")
++        if m.names.get(m.epoch) != d["edition"]:
++            raise NoTransition(e, "issue", f"edition {d['edition'][:8]} is not the machine's current {str(m.names.get(m.epoch))[:8]}")
++        m.ticket[a] = m.epoch
++        m.okay_at_issue.add(a)
++        self.report.count("issue")
++
++    def _execute(self, e, m: Core) -> None:
++        a, d = e.data["action"], e.data
++        self._observe_hb(m, e.gov, d["endpoint"], d["hb"])
++        if not m.heartbeat:
++            raise NoTransition(e, "execute", "the endpoint carried the action out with its heartbeat expired")
++        if m.tk(a) != m.epoch:
++            raise NoTransition(e, "execute", f"the ticket carries edition {m.tk(a)} (none = -1), the machine is at {m.epoch}")
++        if a in m.used:
++            raise NoTransition(e, "execute", "the ticket was already spent")
++        if d["endpoint_edition"] != d["edition"]:
++            raise NoTransition(e, "execute", "the endpoint holds a different edition than the ticket's")
++        m.executed.add(a)
++        m.used.add(a)
++        self.report.count("execute")
++
++    def _refuse(self, e, m: Core) -> None:
++        a, d, why = e.data["action"], e.data, e.data["reason"]
++        self._observe_hb(m, e.gov, d["endpoint"], d["hb"])
++        if why in CLAIM_REPLAY and a not in m.used and a not in m.burned:
++            raise NoTransition(e, "forged execute (refused)", "refused as a replay, but the machine has no spent ticket for the action")
++        if why in CLAIM_STALE and m.tk(a) == m.epoch and d["edition"] == d["endpoint_edition"]:
++            raise NoTransition(e, "forged execute (refused)", "refused as a stale edition, but the ticket carries the current one")
++        if why not in ADMIT_REFUSALS:
++            m.burned.add(a)          # the endpoint burns the ticket before the commit and the device checks
++        if why in CLAIM_HB and m.heartbeat:
++            raise NoTransition(e, "forged execute (refused)", "refused for an expired heartbeat, but the machine's heartbeat is live")
++        self.report.count("forged execute (refused)")
++
++    def _refuse_unknown(self, e) -> None:
++        self.report.count("forged execute (refused)")
++
++
++def replay(events) -> Report:
++    """Drive the machines with the events in order; raise NoTransition on the first one they refuse."""
++    r = Replayer()
++    for e in events:
++        r.feed(e)
++    return r.report
+diff --git a/tests/h19_plugin.py b/tests/h19_plugin.py
+new file mode 100644
+index 0000000..deec73e
+--- /dev/null
++++ b/tests/h19_plugin.py
+@@ -0,0 +1,47 @@
++"""pytest plugin for H19: run every test with the trace sink on and replay its trace at teardown.
++
++    python3 -m pytest -p h19_plugin tests/test_h00_contract.py        (with tests/ on PYTHONPATH)
++
++A trace the machines refuse turns the test's teardown into an error that names the event. When
++H19_REPORT is set, the per-test counts are written there as JSON.
++"""
++import json
++import os
++import sys
++from pathlib import Path
++
++import pytest
++
++sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
++
++from govsim.trace import Trace  # noqa: E402
++from proofs.replay import NoTransition, replay  # noqa: E402
++
++RESULTS: dict[str, dict] = {}
++
++# Tests that inject a fault into the governor on purpose (firmware that forgets its cause). The fault is a step the
++# machine does not have, so the replay MUST refuse it; the test passes replay only if the machines name that event.
++FAULT_INJECTION = {
++    "test_governor_cannot_clear_itself": ("run_entered", "RUN entered with no clear"),
++}
++
++
++@pytest.fixture(autouse=True)
++def h19_trace(request):
++    with Trace() as tr:
++        yield tr
++    fault = FAULT_INJECTION.get(request.node.name)
++    if fault is not None:
++        with pytest.raises(NoTransition) as exc:
++            replay(tr.events)
++        assert fault[0] in str(exc.value) and fault[1] in str(exc.value), str(exc.value)
++        RESULTS[request.node.nodeid] = {"events": len(tr.events), "steps": {}, "arms": 0, "fault_detected": str(exc.value)}
++        return
++    rep = replay(tr.events)         # raises NoTransition, naming the first event the machines refuse
++    RESULTS[request.node.nodeid] = {"events": rep.events, "steps": rep.steps, "arms": rep.arms}
++
++
++def pytest_sessionfinish(session):
++    path = os.environ.get("H19_REPORT")
++    if path:
++        Path(path).write_text(json.dumps(RESULTS))
+diff --git a/tests/test_h19_conformance.py b/tests/test_h19_conformance.py
+new file mode 100644
+index 0000000..1a65dee
+--- /dev/null
++++ b/tests/test_h19_conformance.py
+@@ -0,0 +1,100 @@
++"""H19: trace conformance. Every govsim trace is replayed through the abstract machines of the proofs.
++Falsified if the simulation takes a step the theorem's machine does not have (a model bug or a gap in the theorem).
++
++The detailed tests of H0 to H18 are run again with the trace sink on (tests/h19_plugin.py) and each
++test's trace is replayed at teardown: the first event the machines have no transition for fails that test.
++"""
++import json
++import os
++import subprocess
++import sys
++from pathlib import Path
++
++import pytest
++
++from govsim.cluster import build_rack
++from govsim.governor import Governor
++from govsim.trace import Trace
++from proofs.replay import NoTransition, replay, step_names
++
++TESTS = Path(__file__).resolve().parent
++ROOT = TESTS.parent
++PAY = {"amount": 100, "currency": "USD", "destination": "acct-1"}
++
++
++def test_every_hypothesis_test_trace_replays(tmp_path):
++    files = sorted(str(p) for p in TESTS.glob("test_h*.py") if p.name != "test_h19_conformance.py")
++    report = tmp_path / "report.json"
++    env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(TESTS), str(ROOT)]), H19_REPORT=str(report))
++    proc = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "h19_plugin", "-p", "no:cacheprovider", *files],
++                          cwd=ROOT, env=env, capture_output=True, text=True)
++    assert proc.returncode == 0, proc.stdout[-6000:] + proc.stderr[-2000:]
++    results = json.loads(report.read_text())
++    assert len(results) >= 200, f"only {len(results)} tests were traced"
++    steps = {}
++    for r in results.values():
++        for k, v in r["steps"].items():
++            steps[k] = steps.get(k, 0) + v
++    for needed in ("issue", "execute", "forged execute (refused)", "new edition", "halt", "clear"):
++        assert steps.get(needed), f"no trace exercised the machine step '{needed}': {steps}"
++
++
++def test_step_names_match_the_proof_files():
++    names = step_names()
++    assert {"issue", "execute", "forged execute (refused)", "new edition", "halt", "clear", "heartbeat lost", "heartbeat back"} <= set(names["core"])
++    assert {"hold", "reviewer clears", "commit"} <= set(names["commit_point"])
++
++
++def _pay(rack):
++    return rack.request(rack.nodes[0], "payments.transfer", PAY)
++
++
++def test_a_sound_governor_replays():
++    with Trace() as tr:
++        rack = build_rack(4, "rack")
++        rack.bring_up()
++        t = _pay(rack)["ticket"]
++        ok, _ = rack.endpoints["payment-switch"].execute(t, "payments.transfer", PAY)
++        assert ok
++    rep = replay(tr.events)
++    assert rep.steps["issue"] == 1 and rep.steps["execute"] == 1
++
++
++def test_a_governor_that_issues_while_halted_fails_replay_naming_the_event(monkeypatch):
++    """The broken governor: the mailbox's 'must be RUN' check is commented out, so a halted governor still signs tickets."""
++    orig = Governor.command
++
++    def broken_command(self, cmd, body=None, env=None):
++        saved, self.state = self.state, "RUN"       # the check `self.state != RUN` can no longer refuse
++        try:
++            return orig(self, cmd, body, env)
++        finally:
++            self.state = saved
++    with Trace() as tr:
++        rack = build_rack(4, "rack")
++        rack.bring_up()
++        rack.halt(rack.nodes[0].governor)
++        monkeypatch.setattr(Governor, "command", broken_command)
++        r = _pay(rack)
++        assert r.get("ok"), "the broken governor should have signed a ticket"
++    with pytest.raises(NoTransition) as exc:
++        replay(tr.events)
++    assert "ticket_issued" in str(exc.value) and "halted" in str(exc.value)
++
++
++def test_an_endpoint_that_ignores_the_edition_fails_replay_naming_the_event(monkeypatch):
++    """The broken endpoint and governor: the stale-edition checks are removed, so a ticket from the old edition executes."""
++    with Trace() as tr:
++        rack = build_rack(4, "rack")
++        rack.bring_up()
++        t = _pay(rack)["ticket"]
++        rack.change_epoch(rack.new_policy())
++        ep = rack.endpoints["payment-switch"]
++        ep.epoch = t["payload"]["policy_epoch"]                       # the endpoint check `policy_epoch != self.epoch` is gone
++        monkeypatch.setattr(Governor, "commit_from_endpoint", lambda self, ticket: True)   # and so is the governor's
++        ep.heartbeat(rack.clock.now())
++        ok, _ = ep.execute(t, "payments.transfer", PAY)
++        assert ok, "the broken endpoint should have carried the stale ticket out"
++    with pytest.raises(NoTransition) as exc:
++        replay(tr.events)
++    assert "execute_ok" in str(exc.value)

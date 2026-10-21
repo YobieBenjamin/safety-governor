@@ -1,0 +1,207 @@
+{
+ "id": "L4",
+ "verdict": "revise",
+ "trusted": true,
+ "verifier_ok": false,
+ "verifier_blocks": 1,
+ "review_blocks": 1,
+ "unsupported_claims": 3,
+ "unsupported_soft": 2,
+ "bad_citations": [],
+ "review_cost_usd": 0.7581195,
+ "review_turns": 11,
+ "review_exit": 0,
+ "review": {
+  "verdict": "revise",
+  "summary": "The acceptance command passes and tests what the brief says: 200 traced tests plus two broken-governor fixtures that fail replay with the event named.\nBlock: tests/h19_plugin.py is outside the owned paths (verify.json); the brief owns only trace.py, replay.py and the test file. Either get it approved or move the plugin into the test file.\nThe brief asks for heartbeat lost/back events. No such events are recorded; heartbeat is read off flags on issue and execute, so heartbeat lost/back are not driven and the Z3 steps beat_lost/beat_back are not exercised.\nThe commit_point replay is almost a stub: hold_released does reviewer_clears and commit in one step with version never changing, so only a double commit or a missing hold can fail it. The ordering hack in trace.py (hold_released inserted before the ticket) is what lets it pass.\nDocuments say refusals are \"stutter steps ... sound\" and that the guards are copied \"one for one\" from the Z3 steps. Replay allows any refusal, which is looser than forged_execute's guard. I found no test that checks the guard copy, and z3 is not run.\nQuestions: should \"no model bug found\" stand when the replayer was widened (arm, burned) to accept what the simulation does? Is a name-keyed fault-injection allowlist acceptable?",
+  "findings": [
+   {
+    "kind": "scope",
+    "severity": "block",
+    "file": "tests/h19_plugin.py",
+    "line": 1,
+    "detail": "New file outside the paths the brief assigns (govsim/trace.py, proofs/replay.py, tests/test_h19_conformance.py); verify.json flags it. It is the mechanism that reruns all 200 tests, so the acceptance depends on a file the brief did not own. Needs explicit approval or a move into the test file."
+   },
+   {
+    "kind": "test_integrity",
+    "severity": "warn",
+    "file": "tests/h19_plugin.py",
+    "line": 24,
+    "detail": "FAULT_INJECTION exempts test_governor_cannot_clear_itself by test name, and for that test replay is expected to fail. The test is not skipped, but its pass now depends on a name-keyed allowlist. A reviewer should confirm that this is the only test whose trace the machine must refuse."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "proofs/replay.py",
+    "line": 153,
+    "detail": "Brief requires 'heartbeat lost and back' events. None are emitted by govsim/trace.py. _observe_hb sets m.heartbeat from the flag carried on the issue or execute event itself, so there is no stateful heartbeat in the machine and the beat_lost/beat_back steps are only counted when the flag differs between observations. Observers are also mixed (governor at issue, endpoint at execute) into one machine variable."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "proofs/replay.py",
+    "line": 99,
+    "detail": "CommitPoint replay cannot fail meaningfully: hold_released performs reviewer_clears and commit back to back (line ~265 of the feed), version[a] is never changed, so the 'cleared for this version' guard always holds. 'commit_point.py where holds occur' is covered in name only; the reparameterise/regulator steps are absent and not reported as unmodelled in EXPERIMENTS.md."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "govsim/trace.py",
+    "line": 206,
+    "detail": "hold_released is inserted into the event list before the already recorded ticket_issued and the events are renumbered. The trace is then not in the order the transitions happened, contradicting the module docstring ('in the order the transitions happened'), and the fallback appends it at the end if no ticket is found. The reordering is what lets the commit-point guard pass."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "proofs/replay.py",
+    "line": 249,
+    "detail": "_refuse accepts any refusal whatever the state (core forged_execute is only enabled when ticket != epoch, used, or no heartbeat; core_invariants.py:126). Only replay, stale and heartbeat reasons are cross-checked. EXPERIMENTS.md calls this 'sound' without a test. Report.stutters (line 134) is declared and never used. _refuse_unknown (line 262) accepts every ownerless refusal with no check."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "proofs/replay.py",
+    "line": 85,
+    "detail": "check_invariants checks P1 to P4 on state the replayer builds itself (okay_at_issue is set only in _issue, which already requires the guards), so P1 to P3 cannot fail independently. P6 and P7 of core_invariants.py are not checked. The summary and the docstring say the invariants are 'checked after every step' without saying this."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "warn",
+    "file": "EXPERIMENTS.md",
+    "line": 16,
+    "detail": "'No model bug found' (summary) and the two 'gap in the theorem' findings rest on a replayer that was widened to accept what govsim does (arm step, burned set). That is a defensible finding, but the claim 'counted in Report.arms' has no test asserting it: no test asserts arms > 0 or inspects h19_plugin RESULTS."
+   },
+   {
+    "kind": "style",
+    "severity": "warn",
+    "file": "govsim/trace.py",
+    "line": 219,
+    "detail": "Dead branch: 'policy.committed: pass' is flagged by verify.json as a placeholder marker. Remove it or record the event."
+   },
+   {
+    "kind": "test_integrity",
+    "severity": "warn",
+    "file": "tests/test_h19_conformance.py",
+    "line": 24,
+    "detail": "The 200-test check runs the tests in a subprocess and requires only len(results) >= 200 and that six step names occur at least once across all traces. It does not require hold, heartbeat or arm to occur, and does not check that the 200 tests produce non-empty traces. The brief's acceptance 'against all 200 tests' traces' is met in count only."
+   },
+   {
+    "kind": "test_integrity",
+    "severity": "warn",
+    "file": "tests/test_h19_conformance.py",
+    "line": 55,
+    "detail": "The brief says a broken governor with one check commented out, in a fixture. The fixtures monkeypatch instead: test 1 forces self.state to RUN around Governor.command, test 2 removes two checks at once (endpoint epoch and commit_from_endpoint). They show replay catches those faults, not the removal of a single named check from governor.py."
+   }
+  ],
+  "claims": [
+   {
+    "claim": "The acceptance command passes (5 tests) and traces all 200 hypothesis tests",
+    "where": "summary",
+    "evidence": "verify.json acceptance exit 0; test_every_hypothesis_test_trace_replays asserts len(results) >= 200; suite 205 passed",
+    "supported": true
+   },
+   {
+    "claim": "The sink does not change the governor; it wraps methods at class level and restores them on stop",
+    "where": "code",
+    "evidence": "govsim/trace.py start()/stop() wrap and restore; diff touches no governor file. Note: it wraps behaviour at runtime, which is the 'beside the log' approach the brief allows",
+    "supported": true
+   },
+   {
+    "claim": "The trace records heartbeat lost and back (brief) / heartbeat is observed rather than driven by events",
+    "where": "summary",
+    "evidence": "Summary admits it is observed. No heartbeat event kind exists in trace.py's event list",
+    "supported": true
+   },
+   {
+    "claim": "Z3 guards are copied one for one into the concrete machines, and a test checks the step names against the proof files",
+    "where": "document",
+    "evidence": "Names are checked by test_step_names_match_the_proof_files (names only). The guard copy was not shown by a test; z3 not run. _refuse is looser than forged_execute",
+    "supported": false
+   },
+   {
+    "claim": "P1 to P4 are checked after every step",
+    "where": "summary",
+    "evidence": "check_invariants runs after each feed (replay.py:85), but on replayer-built state; P1-P3 cannot fail independently",
+    "supported": false
+   },
+   {
+    "claim": "Two broken-governor fixtures fail replay with the event named",
+    "where": "document",
+    "evidence": "tests in test_h19_conformance.py assert 'ticket_issued'/'halted' and 'execute_ok' in the NoTransition message",
+    "supported": true
+   },
+   {
+    "claim": "Theorem gap: a power cycle is not a step; govsim reaches RUN with no clear, accepted as an explicit arm step",
+    "where": "document",
+    "evidence": "replay.py arm branch in feed(); core_invariants leaves halted free at init. Arm count is not asserted by a test",
+    "supported": true
+   },
+   {
+    "claim": "Theorem gap: an endpoint burns a ticket and may then refuse; machine has no burn-without-execute step",
+    "where": "document",
+    "evidence": "Core.burned and _refuse in replay.py; the machine has no such step in core_invariants.py. No test shows a trace that needs it",
+    "supported": false
+   },
+   {
+    "claim": "Refusals for expiry, wrong endpoint, parameter mismatch and bad signature are stutter steps of forged execute; the machine is looser than the system, which is sound",
+    "where": "document",
+    "evidence": "_refuse allows these without checking; 'sound' is asserted, with no test or proof",
+    "supported": false
+   },
+   {
+    "claim": "test_governor_cannot_clear_itself injects a firmware fault; replay refuses it as it must",
+    "where": "document",
+    "evidence": "FAULT_INJECTION in tests/h19_plugin.py asserts NoTransition naming run_entered and 'RUN entered with no clear'",
+    "supported": true
+   },
+   {
+    "claim": "No model bug found",
+    "where": "summary",
+    "evidence": "All 200 traces replay after the replayer was extended with arm and burned handling; that absence is only as strong as the replayer's guards (see findings)",
+    "supported": false
+   },
+   {
+    "claim": "Not modelled: allows/witness, heartbeat events, quorum",
+    "where": "document",
+    "evidence": "Stated in EXPERIMENTS.md and consistent with the code; commit_point's version/reparameterise steps are not listed",
+    "supported": true
+   }
+  ]
+ },
+ "verify": {
+  "id": "L4",
+  "branch": "exp/l4",
+  "base": "main",
+  "head": "75cde4a",
+  "commits": 2,
+  "agent_trailers": 2,
+  "files": 5,
+  "added": 650,
+  "removed": 0,
+  "ok": false,
+  "findings": [
+   {
+    "severity": "block",
+    "finding": "a file outside the issue's owned paths changed",
+    "where": "tests/h19_plugin.py"
+   },
+   {
+    "severity": "warn",
+    "finding": "a placeholder marker in added code",
+    "where": "govsim/trace.py:219: pass          # the edition change itself is recorded by the _accept_policy wrap"
+   }
+  ],
+  "runs": {
+   "suite": {
+    "command": "python3 -m pytest -x tests",
+    "exit": 0,
+    "tail": "........................................................................ [ 35%]\n........................................................................ [ 70%]\n.............................................................            [100%]\n205 passed in 6.05s\n"
+   },
+   "acceptance": {
+    "command": "python3 -m pytest -q tests/test_h19_conformance.py",
+    "exit": 0,
+    "tail": ".....                                                                    [100%]\n"
+   }
+  }
+ }
+}

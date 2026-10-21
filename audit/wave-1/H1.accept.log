@@ -1,0 +1,32 @@
+python3 -m lanes.check
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/yb/safety-governor/.worktrees/H1/lanes/check.py", line 195, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/Users/yb/safety-governor/.worktrees/H1/lanes/check.py", line 185, in main
+    messages()
+  File "/Users/yb/safety-governor/.worktrees/H1/lanes/check.py", line 55, in messages
+    keys, rq = load("keys.json"), load("request.json")
+               ^^^^^^^^^^^^^^^^^
+  File "/Users/yb/safety-governor/.worktrees/H1/lanes/check.py", line 30, in load
+    return json.loads((FIX / name).read_text())
+                      ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.15/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py", line 1027, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.12/3.12.15/Frameworks/Python.framework/Versions/3.12/lib/python3.12/pathlib.py", line 1013, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/yb/safety-governor/.worktrees/H1/lanes/fixtures/keys.json'
+FAIL  fixture keys.json is what generate.py produces  run: python3 -m lanes.generate (only if the change is intended)
+FAIL  fixture request.json is what generate.py produces  run: python3 -m lanes.generate (only if the change is intended)
+FAIL  fixture observer-assertion.json is what generate.py produces  run: python3 -m lanes.generate (only if the change is intended)
+FAIL  fixture provenance-assertion.json is what generate.py produces  run: python3 -m lanes.generate (only if the change is intended)
+FAIL  fixture content.json is what generate.py produces  run: python3 -m lanes.generate (only if the change is intended)
+FAIL  fixture attestation-token.json is what generate.py produces  run: python3 -m lanes.generate (only if the change is intended)
+FAIL  fixture action-ticket.json is what generate.py produces  run: python3 -m lanes.generate (only if the change is intended)
+FAIL  fixture policy-image.json is what generate.py produces  run: python3 -m lanes.generate (only if the change is intended)
+FAIL  fixture audit-record.json is what generate.py produces  run: python3 -m lanes.generate (only if the change is intended)
+make: *** [lanes] Error 1

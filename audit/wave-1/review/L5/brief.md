@@ -1,0 +1,23 @@
+# L5 · Differential test: the reference stack's gate against govsim on the 66 attacks, the 10 baselines and random requests
+
+**Goal.** Two independent implementations of one policy must agree. Add `tests/test_h21_differential.py` that installs `hardware-and-silicon` as a dependency (`pip install -e ../hardware-and-silicon` or a pinned git URL), builds the same rulebook in both formats, feeds identical requests, witnesses and tickets to `hardware_ref.gate` and to `govsim`'s gate, and asserts the same allow or deny with equivalent reason codes. Cover the catalogue (`hardware-and-silicon/hardware_ref/attacks.py`, 66 attacks and 10 baselines) and a property-based sweep (`hypothesis` library) over random typed requests.
+
+**Read first.** `hardware-and-silicon/hardware_ref/gate.py`, `attacks.py`, `policy.py`, `docs/LANES.md`; `govsim/policy.py`, `govsim/governor.py`, `govsim/reasons.py`. Write a small reason-code mapping table in the test and keep it visible.
+
+**Acceptance.** The test passes on the whole catalogue; every disagreement found on the way is filed as its own issue with the input that produced it.
+
+**Disproof.** An input on which the two gates disagree and the policy text does not settle which is right: that means the policy itself is ambiguous, which is a finding about the design.
+
+**Budget.** One cloud agent, about 150k tokens.
+
+**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_h21_differential.py`
+
+## Rules for this run
+- You are in a git worktree on branch `exp/l5`; it is the only place you write. Run commands from this directory with relative paths; do not cd elsewhere.
+- The other repositories of the program are readable at: /Users/yb/safety /Users/yb/hardware-and-silicon. Never edit them: a change they need goes into `patches/<repo>/<file>.patch` here, with a note in your final summary.
+- Acceptance: `python3 -m pytest -q tests/test_h21_differential.py`. Run it at most three times. Stop when it passes, or after the third failure; then record exactly what fails in EXPERIMENTS.md (safety-governor) or in the hypothesis's section (safety), with the failing output.
+- Read only the files the brief names under Read first and the files you create. Do not read whole directories, do not run the full test suite (the acceptance command is enough), do not search the web, do not start sub-agents.
+- Never weaken, skip or delete an existing test. Do not refactor beyond the brief. No em dashes in anything you write.
+- Commit as you go with messages that name the issue (#5) and end with the line: Agent: wave 1, issue #5. Do not push, do not open a pull request; the launcher does both.
+- This run is capped at 40 turns and an estimated spend of $10. Keep the tree in a working, committed state at all times, so a cap mid-way still leaves usable work.
+- Finish with a summary of at most fifteen lines: what was built, what passes, what does not and why, open questions. It is posted on the issue as is.

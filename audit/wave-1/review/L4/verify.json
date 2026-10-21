@@ -1,0 +1,36 @@
+{
+ "id": "L4",
+ "branch": "exp/l4",
+ "base": "main",
+ "head": "75cde4a",
+ "commits": 2,
+ "agent_trailers": 2,
+ "files": 5,
+ "added": 650,
+ "removed": 0,
+ "ok": false,
+ "findings": [
+  {
+   "severity": "block",
+   "finding": "a file outside the issue's owned paths changed",
+   "where": "tests/h19_plugin.py"
+  },
+  {
+   "severity": "warn",
+   "finding": "a placeholder marker in added code",
+   "where": "govsim/trace.py:219: pass          # the edition change itself is recorded by the _accept_policy wrap"
+  }
+ ],
+ "runs": {
+  "suite": {
+   "command": "python3 -m pytest -x tests",
+   "exit": 0,
+   "tail": "........................................................................ [ 35%]\n........................................................................ [ 70%]\n.............................................................            [100%]\n205 passed in 6.05s\n"
+  },
+  "acceptance": {
+   "command": "python3 -m pytest -q tests/test_h19_conformance.py",
+   "exit": 0,
+   "tail": ".....                                                                    [100%]\n"
+  }
+ }
+}
