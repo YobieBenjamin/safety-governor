@@ -163,6 +163,8 @@ class Replayer:
         d = e.data
         if e.kind == "execute_refused" and e.gov is None:
             return self._refuse_unknown(e)
+        if e.gov is None:
+            raise NoTransition(e, "execute", "carried out on a ticket that no governor of the trace minted")
         m = self.machine(e.gov)
         k = e.kind
         if k == "boot":

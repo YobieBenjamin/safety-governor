@@ -58,7 +58,7 @@ class Trace:
         self.events: list[Event] = []
         self._serial = itertools.count(1)
         self._ids: dict[int, str] = {}           # id(governor) -> "name#n"
-        self._chips: dict[str, str] = {}         # chip id -> governor id
+        self._ticket_gov: dict[str, str] = {}    # ticket id -> the governor that minted it
         self._log_owner: dict[int, Any] = {}     # id(Log) -> governor
         self._holds: dict[str, str] = {}         # hold_id -> request hash
         self._cleared: set[str] = set()          # governors whose last clear has not yet been followed by RUN
@@ -78,7 +78,6 @@ class Trace:
         key = id(gov)
         if key not in self._ids:
             self._ids[key] = f"{gov.name}#{next(self._serial)}"
-            self._chips[gov.chip_id] = self._ids[key]
         return self._ids[key]
 
     def emit(self, kind: str, gov: str | None, **data) -> Event:
@@ -104,11 +103,12 @@ class Trace:
             def _boot(gov):
                 tr._booting = gov
                 try:
-                    return orig(gov)
+                    result = orig(gov)
                 finally:
                     tr._booting = None
-                    tr.emit("boot", tr.gid(gov), state=gov.state, cause=gov.cause)
-                    tr._cleared.discard(tr.gid(gov))
+                tr.emit("boot", tr.gid(gov), state=gov.state, cause=gov.cause)     # not reached when the boot is refused
+                tr._cleared.discard(tr.gid(gov))
+                return result
             return _boot
 
         def log_init(orig):
@@ -143,6 +143,7 @@ class Trace:
         def mint(orig):
             def _mint(gov, rhash, action, params, fp, rule, reservation, now):
                 ticket = orig(gov, rhash, action, params, fp, rule, reservation, now)
+                tr._ticket_gov[ticket["payload"]["ticket_id"]] = tr.gid(gov)
                 tr.emit("ticket_issued", tr.gid(gov), action=rhash, ticket_id=ticket["payload"]["ticket_id"], edition=gov.epoch,
                         state=gov.state, hb=gov.hb_expiry > gov.clock.now(), rule=rule["id"])
                 return ticket
@@ -164,7 +165,7 @@ class Trace:
                 t = (ticket or {}).get("payload") or {}
                 edition, ep_edition = t.get("policy_epoch"), ep.epoch
                 ok, why = orig(ep, ticket, action, params)
-                gov = tr._by_chip(t.get("governor"))
+                gov = tr._ticket_gov.get(t.get("ticket_id"))       # None: no governor of ours minted this ticket
                 data = dict(action=t.get("request_hash"), ticket_id=t.get("ticket_id"), edition=edition, endpoint_edition=ep_edition,
                             hb=hb, endpoint=ep.name)
                 if ok:
@@ -190,10 +191,6 @@ class Trace:
         _active = None
 
     # -- helpers ---------------------------------------------------------------------------------
-    def _by_chip(self, chip_id: str | None) -> str | None:
-        """The governor id for a ticket's ``governor`` field (the chip id), or None when we never saw that chip."""
-        return self._chips.get(chip_id) if chip_id else None
-
     def _on_log(self, gov, event: str, data: dict) -> None:
         g = self.gid(gov)
         if event == "gate.hold":
