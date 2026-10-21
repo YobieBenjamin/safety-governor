@@ -189,7 +189,38 @@ def build(n_instances: int, n_effectors: int, core: int, k: int, n_users: int, n
     return adj
 
 
+def percolation(g: dict[str, set[str]], trials: int = 40, seed: int = 1) -> list[tuple[float, float, float]]:
+    """Remove a random fraction of the core and measure what survives: the share of (network) source-to-target
+    pairs still connected, and the share of user-to-service pairs still connected. Returns (fraction removed,
+    AI pairs connected, bystander pairs connected), averaged over trials. This is the curve behind the
+    question "how much of the network do you have to destroy before AI is cut off?", and the answer is
+    "the same amount that cuts everyone else off", because both ride the same roads."""
+    rnd = random.Random(seed)
+    cores = sorted(v for v in g if v.startswith("c"))
+    S = sorted(v for v in g if v.startswith("m") and v != "m_local")
+    T = sorted(v for v in g if v.startswith("a") and v != "a_local")
+    U = sorted(v for v in g if v.startswith("u"))
+    V = sorted(v for v in g if v.startswith("v"))
+    out = []
+    for tenths in range(0, 10):
+        frac = tenths / 10
+        ai = by = 0.0
+        for _ in range(trials):
+            removed = set(rnd.sample(cores, int(round(frac * len(cores)))))
+            ai += sum(0 if separated(g, {s}, {t}, removed) else 1 for s in S for t in T) / (len(S) * len(T))
+            by += sum(0 if separated(g, {u}, {v}, removed) else 1 for u in U for v in V) / (len(U) * len(V))
+        out.append((frac, ai / trials, by / trials))
+    return out
+
+
 def main() -> int:
+    if "--percolation" in sys.argv:
+        g = build(n_instances=12, n_effectors=10, core=60, k=6, n_users=20, n_services=20)
+        print("fraction_of_core_removed,ai_pairs_connected,bystander_pairs_connected")
+        for frac, ai, by in percolation(g):
+            print(f"{frac:.1f},{ai:.3f},{by:.3f}")
+        return 0
+
     ok = True
 
     def report(tag: str, passed: bool, text: str) -> None:
