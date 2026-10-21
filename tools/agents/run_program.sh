@@ -101,31 +101,66 @@ ci_green() {   # number repo -> 0 when every check passed, or the repository has
 }
 push_main() { git -C "$HOME/$1" push -q origin HEAD:main 2>>"$PROG/program.err" || say "$1: push of main failed (see program.err)"; }
 
+mirror_job() {   # $1 repo. A first mirror that survives a dropped connection: history first (no blobs), then the blobs
+  # in batches of 200, each batch kept once it lands, every step retried with a growing pause. A plain
+  # `git clone --mirror` of the safety repository ran eight hours and died a few kilobytes short when the
+  # connection blinked, twice; this never loses more than one batch.
+  local repo="$1" m="$BACKUP_DIR/mirrors/$1.git" url="https://github.com/$OWNER/$1.git" log="$BACKUP_DIR/mirrors/$1.git.log" try=0 batch head
+  if [ ! -d "$m/objects" ]; then
+    rm -rf "$m"; git init -q --bare "$m" || return 1
+    git -C "$m" remote add --mirror=fetch origin "$url"
+  fi
+  until git -C "$m" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=300 fetch -q --prune --filter=blob:none origin >>"$log" 2>&1; do
+    try=$((try + 1)); [ "$try" -ge 20 ] && return 1; sleep $((try * 60))
+  done
+  head=$(git -C "$m" ls-remote --symref origin HEAD 2>/dev/null | awk '/^ref:/ {print $2}')
+  [ -n "$head" ] && git -C "$m" symbolic-ref HEAD "$head" 2>/dev/null   # a bare init points HEAD at master; the remote says main
+  try=0
+  while :; do
+    batch=$(git -C "$m" rev-list --objects --all --missing=print 2>/dev/null | awk '/^\?/ {print substr($1, 2)}' | head -200)
+    [ -z "$batch" ] && break
+    if printf '%s\n' $batch | git -C "$m" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=300 fetch -q --no-tags --no-write-fetch-head --recurse-submodules=no --stdin origin >>"$log" 2>&1; then
+      try=0
+    else
+      try=$((try + 1)); [ "$try" -ge 20 ] && return 1; sleep $((try * 60))
+    fi
+  done
+  git -C "$m" config --unset remote.origin.promisor 2>/dev/null || true
+  git -C "$m" config --unset remote.origin.partialclonefilter 2>/dev/null || true
+  return 0
+}
+
 backup() {   # mirrors of all four repositories, a browsable clone of each, the agents' logs, the bundles
   local root="$BACKUP_DIR" repo m
   if [ ! -d "$(dirname "$root")" ]; then say "backup: $(dirname "$root") is not mounted; skipped"; return 0; fi
   mkdir -p "$root/mirrors" "$root/clones" "$root/runs" "$root/bundles"
   for repo in $ALL_REPOS; do
     m="$root/mirrors/$repo.git"
-    # A first mirror can be large (safety carries its recordings): it is cloned in the background and
-    # never holds up a wave. A marker file holds the clone's pid; its exit status lands beside it.
+    # A first mirror can be large (safety carries its recordings): it is fetched in the background, in
+    # resumable steps, and never holds up a wave. A marker file holds the job's pid; its exit status lands beside it.
     if [ -f "$m.cloning" ]; then
       if kill -0 "$(cat "$m.cloning" 2>/dev/null || echo 0)" 2>/dev/null; then
         say "backup: first mirror of $repo still copying in the background ($(du -sh "$m" 2>/dev/null | cut -f1) so far)"; continue
       elif [ "$(cat "$m.rc" 2>/dev/null || echo 1)" = 0 ]; then
         rm -f "$m.cloning" "$m.rc"; say "backup: first mirror of $repo complete"
       else
-        say "backup: the first mirror of $repo did not complete (see $m.log); starting it again"; rm -rf "$m" "$m.cloning" "$m.rc"
+        say "backup: the first mirror of $repo stopped (see $m.log); resuming where it left off"; rm -f "$m.cloning" "$m.rc"
+        ( trap - ERR; mirror_job "$repo"; echo $? > "$m.rc" ) &
+        echo $! > "$m.cloning"
+        continue
       fi
     fi
     if [ -d "$m" ] && [ ! -f "$m.cloning" ] && ! git -C "$m" rev-parse -q --verify main >/dev/null 2>&1; then
-      say "backup: $m is an incomplete mirror (an interrupted copy); removing it"; rm -rf "$m"
+      say "backup: $m has no main yet (an interrupted copy); resuming it in the background"
+      ( trap - ERR; mirror_job "$repo"; echo $? > "$m.rc" ) &
+      echo $! > "$m.cloning"
+      continue
     fi
     if [ -d "$m" ] && [ ! -f "$m.cloning" ]; then
       git -C "$m" remote update --prune >/dev/null 2>&1 || say "backup: mirror update of $repo failed"
     elif [ ! -d "$m" ]; then
-      say "backup: first mirror of $repo starts in the background (the safety one carries 8 GB of recordings)"
-      ( rm -f "$m.rc"; git clone -q --mirror "https://github.com/$OWNER/$repo.git" "$m" > "$m.log" 2>&1; echo $? > "$m.rc" ) &
+      say "backup: first mirror of $repo starts in the background, in resumable steps (the safety one carries 8 GB of recordings)"
+      ( trap - ERR; rm -f "$m.rc"; mirror_job "$repo"; echo $? > "$m.rc" ) &
       echo $! > "$m.cloning"
       continue
     fi
@@ -139,7 +174,7 @@ backup() {   # mirrors of all four repositories, a browsable clone of each, the 
     [ -d "$HOME/$repo/.agents" ] && { mkdir -p "$root/runs/$repo"; cp -R "$HOME/$repo/.agents/." "$root/runs/$repo/" 2>/dev/null || true; }
   done
   ls "$HOME"/Downloads/*.bundle >/dev/null 2>&1 && cp "$HOME"/Downloads/*.bundle "$root/bundles/" 2>/dev/null || true
-  { date '+%Y-%m-%d %H:%M'; for repo in $ALL_REPOS; do printf '  %-28s %s\n' "$repo" "$(git -C "$root/mirrors/$repo.git" rev-parse --short main 2>/dev/null || echo 'copying')"; done; } >> "$root/BACKUP.log"
+  { date '+%Y-%m-%d %H:%M'; for repo in $ALL_REPOS; do printf '  %-28s %s%s\n' "$repo" "$(git -C "$root/mirrors/$repo.git" rev-parse --short main 2>/dev/null || echo 'copying')" "$( [ -f "$root/mirrors/$repo.git.cloning" ] && echo ' (blobs still arriving)' )"; done; } >> "$root/BACKUP.log"
   say "backup refreshed at $root"
 }
 

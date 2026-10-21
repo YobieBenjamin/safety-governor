@@ -7,15 +7,18 @@
 #
 #   tools/agents/revise_pr.sh <wave> <id> <round>       # inside the clone that holds exp/<id>
 #   REVISE_TURNS=30  BUDGET_USD=10  (the agent's model and effort as in run_wave.sh)
-#   REVISE_BACKEND=auto|local|cloud   auto (default): the local model when one answers, else the cloud.
-#     The local model gets a fresh session with the brief and the review (its context is 64k; the
-#     cloud build session is often larger); the cloud resumes the agent's own session.
+#   REVISE_BACKEND=auto|local|cloud   auto (default): the local model for the first round when one answers,
+#     the cloud for the second. The local model gets a fresh session with the brief and the review (its
+#     context is 64k; the cloud build session is often larger); the cloud resumes the agent's own session.
+#     Wave 1 taught the split: two local rounds on L4 took three and four hours, the second hit the clock
+#     with no summary, and the gate still said revise; a cloud round is minutes and about a dollar.
+#   REVISE_LOCAL_TURNS=40  REVISE_LOCAL_TIMEOUT_MIN=90   the local round's own caps (not the build's 80 / 240)
 set -euo pipefail
 set -E; trap 'echo "error: line $LINENO: $BASH_COMMAND (exit status $?)" >&2' ERR
 WAVE="${1:?wave}"; ID="${2:?issue id}"; ROUND="${3:-1}"
 OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 MODEL="${AGENT_MODEL:-sonnet}"; EFFORT="${EFFORT:-medium}"; TURNS="${REVISE_TURNS:-30}"; BUDGET="${BUDGET_USD:-10}"; TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-120}"
-REVISE_BACKEND="${REVISE_BACKEND:-auto}"; LOCAL_TURNS="${LOCAL_TURNS:-80}"; LOCAL_TIMEOUT_MIN="${LOCAL_TIMEOUT_MIN:-240}"; LOCAL_LOCK="$HOME/.agents-local.lock"
+REVISE_BACKEND="${REVISE_BACKEND:-auto}"; LOCAL_TURNS="${REVISE_LOCAL_TURNS:-40}"; LOCAL_TIMEOUT_MIN="${REVISE_LOCAL_TIMEOUT_MIN:-90}"; LOCAL_LOCK="$HOME/.agents-local.lock"
 HERE="$(cd "$(dirname "$0")" && pwd)"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"
 ROOT="$(git rev-parse --show-toplevel)"; REPO="$(basename "$ROOT")"
 [ -d "$ROOT/.venv/bin" ] && export PATH="$ROOT/.venv/bin:$PATH"
@@ -31,8 +34,11 @@ claude_local() { if [ "$LOCAL_URL" = cloud ]; then claude "$@"; else ANTHROPIC_A
 local_lock_wait() { until mkdir "$LOCAL_LOCK" 2>/dev/null; do sleep 30; done; echo $$ > "$LOCAL_LOCK/pid"; }
 local_lock_release() { rm -rf "$LOCAL_LOCK" 2>/dev/null || true; }
 backend=cloud
-if [ "$REVISE_BACKEND" != cloud ]; then find_local_model; [ "$LOCAL_OK" = 1 ] && backend=local; fi
-[ "$REVISE_BACKEND" = local ] && [ "$backend" != local ] && echo "REVISE_BACKEND=local but no local model answers; using the cloud" >&2
+case "$REVISE_BACKEND" in
+  cloud) ;;
+  local) find_local_model; [ "$LOCAL_OK" = 1 ] && backend=local || echo "REVISE_BACKEND=local but no local model answers; using the cloud" >&2 ;;
+  *) if [ "$ROUND" -le 1 ]; then find_local_model; [ "$LOCAL_OK" = 1 ] && backend=local; fi ;;
+esac
 CLAUDE_VERSION=$(claude -v 2>/dev/null | head -1); PROMPTS_FLAG=""; python3 "$HERE/wave_lib.py" version_ok "$CLAUDE_VERSION" 2.1.259 && PROMPTS_FLAG="--permission-prompts none"
 ADD_DIRS="$LOG"; for other in safety-governor safety hardware-and-silicon; do [ "$other" != "$REPO" ] && [ -d "$HOME/$other/.git" ] && ADD_DIRS="$ADD_DIRS $HOME/$other"; done
 
@@ -104,7 +110,8 @@ if [ -n "$accept" ]; then
 fi
 git -C "$WT" push -q origin "$BRANCH" 2>>"$LOG/launcher.err" || say "$ID: push failed"
 { echo "**Revision $ROUND** ($(date '+%Y-%m-%d %H:%M')) on $( [ "$backend" = local ] && echo "the local model $LOCAL_MODEL" || echo "$MODEL"): $(jget "$summary" turns) turns, estimated \$$(jget "$summary" cost_usd), acceptance \`${accept:-n/a}\`: **$acc**. The gate reviews the branch again."
-  echo; echo "Agent summary:"; echo; jget "$summary" result; } > "$LOG/$ID.revise-$ROUND.comment.md"
+  echo; echo "Agent summary:"; echo
+  if [ -n "$(jget "$summary" result)" ]; then jget "$summary" result; else echo "(none: the run ended at the ${TIMEOUT_MIN}-minute limit or without a final message; exit $rc)"; fi; } > "$LOG/$ID.revise-$ROUND.comment.md"
 cp "$LOG/$ID.revise-$ROUND.comment.md" "$LOG/$ID.comment.md"
 pr=$(gh pr list --repo "$OWNER/$REPO" --head "$BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || true)
 [ -n "$pr" ] && gh pr comment "$pr" --repo "$OWNER/$REPO" --body-file "$LOG/$ID.revise-$ROUND.comment.md" >/dev/null 2>&1 || true
