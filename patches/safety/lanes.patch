@@ -2,7 +2,7 @@ diff --git a/.github/workflows/lanes.yml b/.github/workflows/lanes.yml
 new file mode 100644
 --- /dev/null
 +++ b/.github/workflows/lanes.yml
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,8 @@
 +name: lanes
 +on: [push, pull_request]
 +jobs:
