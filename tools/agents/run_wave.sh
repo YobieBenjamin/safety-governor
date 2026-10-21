@@ -144,16 +144,8 @@ import json, sys
 m = [i for i in json.load(open(sys.argv[1])) if i['title'] == sys.argv[2]]
 print(m[0]['number'] if m else '')" "$LOG/open-issues.json" "$1"; }
 
-# What an agent may run without asking, and what it may never run. Everything else is denied and
-# the agent is told not to retry it (no prompt can be answered in an unattended run).
-ALLOW=( "Read" "Edit" "Write" "Glob" "Grep"
-  "Bash(python3 *)" "Bash(python *)" "Bash(pytest *)" "Bash(make *)" "Bash(pip *)" "Bash(pip3 *)"
-  "Bash(git add *)" "Bash(git commit *)" "Bash(git status *)" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git rev-parse *)" "Bash(git ls-files *)"
-  "Bash(ls *)" "Bash(cat *)" "Bash(head *)" "Bash(tail *)" "Bash(wc *)" "Bash(grep *)" "Bash(find *)" "Bash(diff *)"
-  "Bash(mkdir *)" "Bash(cp *)" "Bash(mv *)" "Bash(touch *)" "Bash(echo *)" "Bash(shasum *)" "Bash(sha256sum *)" )
-DENY=( "WebFetch" "WebSearch" "Agent"
-  "Bash(git push *)" "Bash(git checkout *)" "Bash(git switch *)" "Bash(git reset *)" "Bash(git rebase *)" "Bash(git stash *)" "Bash(git worktree *)"
-  "Bash(rm -rf *)" "Bash(sudo *)" )
+# shellcheck source=tools/agents/agent_rules.sh
+. "$HERE/agent_rules.sh"
 
 # 3. One agent.
 run_agent() {
@@ -270,6 +262,13 @@ run_agent() {
     rc=0; wait "$cpid" || rc=$?; stop_bg "$wpid"; local_lock_release; cd "$ROOT"; set -e
     repaired=" after a local repair pass ($(jget "$(py summarize "$rlog")" turns) turns on $LOCAL_MODEL, exit $rc)"
     run_acceptance
+  fi
+  if [ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then
+    git -C "$wt" add -A >/dev/null 2>&1 && git -C "$wt" commit -q -m "Work left uncommitted by the agent, committed by the launcher (#$number)
+
+The agent ended (cap, timeout or its own stop) with these files unstaged. They are committed as found so the gate can judge them and a revision can continue from them; nothing here is claimed to pass.
+
+Agent: wave $WAVE, issue #$number (launcher commit)" 2>>"$LOG/launcher.err" && say "$id: the agent left uncommitted work; committed as found"
   fi
   local commits; commits=$(git -C "$wt" rev-list --count "main..$branch" 2>/dev/null || echo 0)
   if [ "$commits" -gt 0 ]; then

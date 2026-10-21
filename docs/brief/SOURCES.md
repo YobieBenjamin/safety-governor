@@ -16,7 +16,7 @@ the last section records what was removed.
 | 8, 14, 15 | P-384 signature 1,697,985 OTBN cycles, 17 ms at 100 MHz, one signature per 50 ms batch | `govsim/bench.py` constants; `tests/test_h09_overhead.py` | `OTBN_P384_SIGN_CYCLES = 1_697_985`, `SIGN_S ≈ 0.017`, `BATCH_WINDOW_S = 0.05` |
 | 15 | engine 34 percent busy batched, 272 percent unbatched; firmware share under 0.1 percent | `govsim.bench.run("rack", gpus=2, requests=100, tokens_per_request=100)` | 33.96 percent, 271.7 percent, 0.044 percent; the test bound is 0.1 percent |
 | 8 | mailbox of 21 signed commands, checked in order: sequence, edition, signature | `govsim/governor.py` `MAILBOX_CODES`, `_check_signed` | 21 codes; docstring and code order |
-| 2, 13 | 66 attacks blocked, 10 baselines pass, 37 tests, in the reference stack | `hardware-and-silicon` blog post 01 and `results/report.md` | the post's own figures |
+| 2, 13 | 75 attacks blocked, 12 baselines pass, 37 tests, in the reference stack | `hardware-and-silicon` `results/report.md` (the blog post 01 said 66 and 10; the catalogue grew with posts 3 and 4) | the report's own figures |
 | 8 | HGX reset grouped: three PERST inputs for eight GPUs | `docs/research/board-lever-register.md` | register row, verified level |
 | 8 | per-slot SMBus (SMBPBI), power brake, PERST#, PWR_EN, present and fault at the connector | `docs/figures/fig-rack.png`; `docs/03-interfaces.md`; the lever register | figure labels and register rows |
 | 8, 17 | NSM port disable out of band; seven firmware asks | `docs/research/nvswitch-management.md` | `NSM_SET_PORT_DISABLE_FUTURE`; the asks section |
@@ -54,7 +54,7 @@ the last section records what was removed.
 | 9 | biology separates the alarm from the muscle: the spinal reflex | blog post 01, layer 3 |
 | 11 | change the amount and the hash breaks; present it twice and the second is refused | blog post 01 |
 | 14 | the perimeter firewall decides whether the packet leaves, not what the far server does | `docs/18` §5 |
-| 2, 16 | the same 66 attacks are the acceptance test for every phase; 1000 percent sure in the pre-hardware phase | blog post 01 roadmap; your own rule for the program |
+| 2, 16 | the same catalogue of attacks is the acceptance test for every phase; 1000 percent sure in the pre-hardware phase | blog post 01 roadmap; your own rule for the program |
 
 ## Removed from earlier drafts of the deck
 

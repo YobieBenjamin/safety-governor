@@ -54,17 +54,19 @@ fi
 
 # 3. The cloud review, read-only, in a clean checkout, with a fixed answer shape.
 SCHEMA='{"type":"object","required":["verdict","summary","findings","claims"],"properties":{"verdict":{"type":"string","enum":["merge","revise","reject"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","required":["kind","severity","file","line","detail"],"properties":{"kind":{"type":"string","enum":["hallucination","unsupported_claim","test_integrity","scope","correctness","protocol","style"]},"severity":{"type":"string","enum":["block","warn"]},"file":{"type":"string"},"line":{"type":"integer"},"detail":{"type":"string"}}}},"claims":{"type":"array","items":{"type":"object","required":["claim","where","evidence","supported"],"properties":{"claim":{"type":"string"},"where":{"type":"string","enum":["document","code","commit","summary"]},"evidence":{"type":"string"},"supported":{"type":"boolean"}}}}}}'
+SIBLINGS=""; for other in safety-governor safety hardware-and-silicon; do [ "$other" != "$REPO" ] && [ -d "$HOME/$other/.git" ] && SIBLINGS="$SIBLINGS $HOME/$other"; done
 WT="$ROOT/.worktrees/review-$ID"; git -C "$ROOT" worktree remove -f "$WT" 2>/dev/null || true
 git -C "$ROOT" worktree add -q --detach "$WT" "$BRANCH"
 say "$ID: cloud review on $RMODEL (effort $REFFORT, $RTURNS turns, \$$RBUDGET cap)"
 set +e
+# shellcheck disable=SC2086
 (cd "$WT" && claude -p "$(cat "$HERE/review_prompt.md")
 
-The packet directory is $P. Begin with brief.md, verify.json and summary.md, then diff.patch; open files of the checkout only where the diff needs context." \
+The packet directory is $P. Begin with brief.md, verify.json and summary.md, then diff.patch; open files of the checkout only where the diff needs context.${SIBLINGS:+ The other repositories of the program are readable at:$SIBLINGS (for LANES.md, the catalogue, the observer).}" \
   --model "$RMODEL" --effort "$REFFORT" --max-turns "$RTURNS" --max-budget-usd "$RBUDGET" \
   --permission-mode default --permission-prompts none --tools "Read,Glob,Grep,Bash" \
   --allowedTools "Read" "Glob" "Grep" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git blame *)" \
-  --disallowedTools "Edit" "Write" "WebFetch" "WebSearch" "Agent" --add-dir "$P" \
+  --disallowedTools "Edit" "Write" "WebFetch" "WebSearch" "Agent" --add-dir "$P" $SIBLINGS \
   --output-format json --json-schema "$SCHEMA" < /dev/null > "$P/review.raw.json" 2> "$P/review.err")
 rrc=$?
 set -e

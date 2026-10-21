@@ -186,7 +186,7 @@ async function main() {
       text(s, b, { x: x - 0.05, y: sy + 0.68, w: sw + 0.1, h: 0.8, fontSize: 9.5, color: C.accent3, align: "center" });
       if (i < 3) arrow(s, x + sw + 0.03, sy + 0.3, x + sw + gap - 0.03, sy + 0.3, H.accent1, 2);
     });
-    analogy(s, "The same 66 attacks are the acceptance test for every phase, from the software reference to the FPGA. The catalogue is the constant; the artifact changes.", "the multi-layer post, roadmap");
+    analogy(s, "The same catalogue of attacks (75 today, with 12 legitimate baselines) is the acceptance test for every phase, from the software reference to the FPGA. The catalogue is the constant; the artifact changes.", "the multi-layer post, roadmap");
     s.addNotes("Set the frame: a design program, not a product. The four phases are the roadmap from the multi-layer post. Phase 1 is done, phase 3 is written, phase 2 is partly done, phase 4 waits. Silicon waits for proof.");
   }
 
@@ -465,7 +465,7 @@ async function main() {
       ["20", "simulation tests pass on the hard-core RTL blocks, with a LibreLane flow to the open 130 nm process"],
       ["317 µs", "worst case for the halt loop to reach the last of 72 governors, against a 1 ms bound, across 39 simulated configurations"],
       ["~2 mm²", "of core logic for the governor as configured, 1.4 by 1.4 mm, inside a 10 mm² shuttle harness"],
-      ["66", "attacks blocked with the predicted reason code in the software reference stack, with all 10 legitimate baselines passing"],
+      ["75", "attacks blocked with the predicted reason code in the software reference stack, with all 12 legitimate baselines passing (results/report.md)"],
       ["0", "changes needed in the GPU, in CUDA or on the baseboard at the rack tier"],
     ];
     const W = (CW - 2 * 0.3) / 3, Hh = 1.95;
@@ -476,7 +476,7 @@ async function main() {
       text(s, l, { x: x + 0.3, y: y + 1.1, w: W - 0.6, h: 0.8, fontSize: 12.5, color: C.text1 });
     });
     analogy(s, "Everything here is model, RTL simulation and circuit simulation. The two numbers that decide adoption, the real overhead and the false-halt rate, are not measured on hardware yet.", "docs 18, section 3", 6.0, 0.7);
-    s.addNotes("Honest status. The counts are what pytest prints today: 200 and 20. The loop figure is hw/loop/results.md. The area is docs/04 section 11. The 66 attacks are the reference stack's sweep.");
+    s.addNotes("Honest status. The counts are what pytest prints today: 200 and 20. The loop figure is hw/loop/results.md. The area is docs/04 section 11. The 75 attacks and 12 baselines are the reference stack's sweep (results/report.md).");
   }
 
   // ───────────────────────── 14. Challenges (plain): the hops

@@ -19,12 +19,13 @@
 # Knobs: everything run_wave.sh and review_pr.sh read (AGENT_MODEL, EFFORT, MAX_TURNS, BUDGET_USD,
 # PARALLEL, LOCAL_URL, LOCAL_MODEL, REVIEW_MODEL, ...), plus
 #   WAVES="1 2 3"   BACKUP_DIR="/Volumes/External_4TB/Safety Experiments"   MERGE=1 (0: never merge, only review)
+#   REVISE_ROUNDS=2 (a "revise" verdict goes back to the agent that many times before a person is needed)
 #   START_AT=23:00 (wait before the first wave)
 set -euo pipefail
 set -E; trap 'echo "error: line $LINENO: $BASH_COMMAND (exit status $?)" >&2' ERR
 OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 HERE="$(cd "$(dirname "$0")" && pwd)"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"
-WAVES="${WAVES:-1 2 3}"; MERGE="${MERGE:-1}"
+WAVES="${WAVES:-1 2 3}"; MERGE="${MERGE:-1}"; REVISE_ROUNDS="${REVISE_ROUNDS:-2}"
 BACKUP_DIR="${BACKUP_DIR:-/Volumes/External_4TB/Safety Experiments}"
 REPOS="${PROGRAM_REPOS:-safety-governor safety}"; ALL_REPOS="${BACKUP_REPOS:-safety-governor safety hardware-and-silicon autonomic-graph-regulation}"
 PROG="$HOME/safety-governor/.agents/program"; mkdir -p "$PROG"
@@ -152,9 +153,19 @@ gate() {   # wave repo: review every branch the wave produced here; merge what p
       none) say "$repo $id: no pull request (the agent produced no commit, or was skipped)"; continue ;;
     esac
     num="${st#open:}"
-    say "$repo $id: gate on PR #$num"
-    rc=0; bash "$HERE/review_pr.sh" "$wave" "$id" >> "$PROG/program.log" 2>&1 || rc=$?
-    verdict=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('verdict','?'))" "$HOME/$repo/.agents/wave-$wave/review/$id/review.json" 2>/dev/null || echo "?")
+    round=0
+    while :; do
+      say "$repo $id: gate on PR #$num$( [ "$round" -gt 0 ] && echo " (after revision $round)")"
+      rc=0; bash "$HERE/review_pr.sh" "$wave" "$id" >> "$PROG/program.log" 2>&1 || rc=$?
+      verdict=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('verdict','?'))" "$HOME/$repo/.agents/wave-$wave/review/$id/review.json" 2>/dev/null || echo "?")
+      if [ "$rc" = 1 ] && [ "$round" -lt "$REVISE_ROUNDS" ]; then
+        round=$((round + 1))
+        say "$repo $id: verdict revise; the findings go back to the agent (revision $round of $REVISE_ROUNDS)"
+        bash "$HERE/revise_pr.sh" "$wave" "$id" "$round" >> "$PROG/program.log" 2>&1 || say "$repo $id: revision $round ended without a passing acceptance; reviewing it anyway"
+        continue
+      fi
+      break
+    done
     if [ "$rc" = 0 ] && [ "$MERGE" = 1 ]; then
       if ! deps_merged "$id"; then say "$repo $id: verdict merge, but a dependency is not merged; left open"; continue; fi
       if ci_green "$num" "$repo"; then
@@ -169,7 +180,7 @@ gate() {   # wave repo: review every branch the wave produced here; merge what p
         gh pr comment "$num" --repo "$OWNER/$repo" --body "The gate did not merge: CI is not green. The review above stands." >/dev/null 2>&1 || true
       fi
     else
-      say "$repo $id: verdict $verdict (exit $rc); left open for a person"
+      say "$repo $id: verdict $verdict after $round revision(s); left open for a person"
     fi
   done
 }
@@ -184,7 +195,10 @@ packet() {   # wave repo: the audit packet, committed to main
   [ -d "$src/review" ] && cp -R "$src/review" "$dst/" 2>/dev/null || true
   rm -f "$dst"/review/*/review.raw.json "$dst"/review/*/review.err 2>/dev/null || true
   (cd "$dst" && find . -type f ! -name MANIFEST.sha256 -print0 | sort -z | xargs -0 shasum -a 256 > MANIFEST.sha256)
-  cd "$HOME/$repo" && git add audit && if ! git diff --cached --quiet; then
+  cd "$HOME/$repo" || return 0
+  [ "$(git config --get core.sparseCheckout 2>/dev/null)" = true ] && git sparse-checkout add audit >/dev/null 2>&1
+  git add audit 2>>"$PROG/program.err" || { say "$repo: could not stage audit/wave-$wave (see program.err)"; return 0; }
+  if ! git diff --cached --quiet; then
     git -c user.name="Yobie Benjamin" -c user.email="yobie@icloud.com" commit -q -m "audit/wave-$wave: the wave's briefs, agent summaries, acceptance logs, reviews and report, with a manifest
 
 Written by the program's gate for the external audit (Codex, Gemini) described in audit/PROMPT.md." && push_main "$repo" && say "$repo: audit/wave-$wave committed and pushed"
@@ -246,11 +260,11 @@ for wave in $WAVES; do
       rc=0; UNDER_CAFFEINATE=1 bash "$HERE/run_wave.sh" "$wave" >> "$PROG/program.log" 2>&1 || rc=$?
       say "$repo: wave $wave agents finished (exit $rc); $(grep -l '"phase": "done' "$HOME/$repo/.agents/wave-$wave"/*.state.json 2>/dev/null | wc -l | tr -d ' ') done"
     fi
-    backup
+    backup || say "backup had an error; continuing"
     say "$repo: gate for wave $wave"
-    gate "$wave" "$repo"
-    packet "$wave" "$repo"
-    backup
+    gate "$wave" "$repo" || say "$repo: the gate had an error; continuing"
+    packet "$wave" "$repo" || say "$repo: the audit packet had an error; continuing"
+    backup || say "backup had an error; continuing"
   done
   notify "Program: wave $wave finished" "see program.log and the pull requests"
 done

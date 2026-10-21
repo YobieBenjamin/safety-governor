@@ -148,8 +148,8 @@
         "L4"
       ],
       "owns": [
-        "proofs/*.py",
-        "tests/test_h*_proof*.py",
+        "proofs/**",
+        "tests/**",
         "Makefile"
       ]
     },
@@ -172,15 +172,14 @@
       "owns": [
         "govsim/trace.py",
         "proofs/replay.py",
-        "tests/test_h19_conformance.py",
-        "tests/fixtures/**"
+        "tests/**"
       ]
     },
     {
       "id": "L5",
       "repo": "safety-governor",
       "wave": "1",
-      "title": "L5 · Differential test: the reference stack's gate against govsim on the 66 attacks, the 10 baselines and random requests",
+      "title": "L5 · Differential test: the reference stack's gate against govsim on the 75 attacks, the 12 baselines and random requests",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -189,13 +188,13 @@
         "agent:cloud",
         "wave:1"
       ],
-      "body": "**Goal.** Two independent implementations of one policy must agree. Add `tests/test_h21_differential.py` that installs `hardware-and-silicon` as a dependency (`pip install -e ../hardware-and-silicon` or a pinned git URL), builds the same rulebook in both formats, feeds identical requests, witnesses and tickets to `hardware_ref.gate` and to `govsim`'s gate, and asserts the same allow or deny with equivalent reason codes. Cover the catalogue (`hardware-and-silicon/hardware_ref/attacks.py`, 66 attacks and 10 baselines) and a property-based sweep (`hypothesis` library) over random typed requests.\n\n**Read first.** `hardware-and-silicon/hardware_ref/gate.py`, `attacks.py`, `policy.py`, `docs/LANES.md`; `govsim/policy.py`, `govsim/governor.py`, `govsim/reasons.py`. Write a small reason-code mapping table in the test and keep it visible.\n\n**Acceptance.** The test passes on the whole catalogue; every disagreement found on the way is filed as its own issue with the input that produced it.\n\n**Disproof.** An input on which the two gates disagree and the policy text does not settle which is right: that means the policy itself is ambiguous, which is a finding about the design.\n\n**Budget.** One cloud agent, about 150k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_h21_differential.py`",
+      "body": "**Goal.** Two independent implementations of one policy must agree. Add `tests/test_h21_differential.py` that installs `hardware-and-silicon` as a dependency (`pip install -e ../hardware-and-silicon` or a pinned git URL), builds the same rulebook in both formats, feeds identical requests, witnesses and tickets to `hardware_ref.gate` and to `govsim`'s gate, and asserts the same allow or deny with equivalent reason codes. Cover the catalogue (`hardware-and-silicon/hardware_ref/attacks.py`, 75 attacks and 12 baselines (87 entries; the blog post counted 66 and 10 before the catalogue grew)) and a property-based sweep (`hypothesis` library) over random typed requests.\n\n**Read first.** `hardware-and-silicon/hardware_ref/gate.py`, `attacks.py`, `policy.py`, `docs/LANES.md`; `govsim/policy.py`, `govsim/governor.py`, `govsim/reasons.py`. Write a small reason-code mapping table in the test and keep it visible.\n\n**Acceptance.** The test passes on the whole catalogue; every disagreement found on the way is filed as its own issue with the input that produced it.\n\n**Disproof.** An input on which the two gates disagree and the policy text does not settle which is right: that means the policy itself is ambiguous, which is a finding about the design.\n\n**Budget.** One cloud agent, about 150k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_h21_differential.py`",
       "accept": "python3 -m pytest -q tests/test_h21_differential.py",
       "backend": "cloud+local",
       "owns": [
-        "tests/test_h21_differential.py",
+        "tests/**",
         "pyproject.toml",
-        "tests/fixtures/**"
+        "results/l5-*.md"
       ]
     },
     {
@@ -219,8 +218,8 @@
       ],
       "owns": [
         "tools/mutants/**",
-        "results/mutants.md",
-        "tests/test_mutants.py",
+        "results/**",
+        "tests/**",
         "Makefile",
         ".github/workflows/*.yml"
       ]
@@ -269,7 +268,7 @@
       "backend": "cloud",
       "owns": [
         "docs/research/exit-register.md",
-        "tests/test_exit_register.py",
+        "tests/**",
         "docs/05-threat-model.md"
       ]
     },
@@ -290,7 +289,7 @@
       "accept": "python3 -m pytest -q tests/test_covert_budget.py",
       "backend": "cloud+local",
       "owns": [
-        "tests/test_covert_budget.py",
+        "tests/**",
         "govsim/leakage.py",
         "docs/05-threat-model.md"
       ]
@@ -313,7 +312,7 @@
       "backend": "cloud+local",
       "owns": [
         "govsim/bench.py",
-        "tests/test_hybrid_signature.py",
+        "tests/**",
         "docs/04-specification.md"
       ]
     },
@@ -335,7 +334,7 @@
       "backend": "cloud+local",
       "owns": [
         "govsim/deploy.py",
-        "tests/test_deploy_overhead.py",
+        "tests/**",
         "docs/12-deployment-overhead.md"
       ]
     },
@@ -357,7 +356,7 @@
       "backend": "cloud",
       "owns": [
         "govsim/faults.py",
-        "tests/test_false_halt_model.py",
+        "tests/**",
         "docs/07-verification-plan.md"
       ]
     },
@@ -374,7 +373,7 @@
         "agent:cloud",
         "wave:1"
       ],
-      "body": "**Goal.** The three repositories agree on the messages between them or the experiments mean nothing. Under `lanes/`: signed fixtures (observer assertion, provenance assertion, attestation token, action ticket, audit record, policy image) with the keys used to sign them, and a checker that the governor model runs; a copy of the 66 attacks and 10 baselines as data (`catalogue/attacks.json`) that `hardware_ref`, `govsim` and later the RTL harness all read. Make `safety/observer/tests/test_contract.py`'s subject-hash pin a shared fixture.\n\n**Read first.** `hardware-and-silicon/docs/LANES.md`, `hardware_ref/attacks.py`, `safety/observer/safety_observer/canon.py`, `envelope.py`, `govsim/crypto.py`.\n\n**Acceptance.** `make lanes` passes here; a one-line CI step for `safety` runs the same checker against its observer; a format change in one repository fails the other's build.\n\n**Budget.** About 100k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `make lanes`",
+      "body": "**Goal.** The three repositories agree on the messages between them or the experiments mean nothing. Under `lanes/`: signed fixtures (observer assertion, provenance assertion, attestation token, action ticket, audit record, policy image) with the keys used to sign them, and a checker that the governor model runs; a copy of the 75 attacks and 12 baselines (87 entries; the blog post counted 66 and 10 before the catalogue grew) as data (`catalogue/attacks.json`) that `hardware_ref`, `govsim` and later the RTL harness all read. Make `safety/observer/tests/test_contract.py`'s subject-hash pin a shared fixture.\n\n**Read first.** `hardware-and-silicon/docs/LANES.md`, `hardware_ref/attacks.py`, `safety/observer/safety_observer/canon.py`, `envelope.py`, `govsim/crypto.py`.\n\n**Acceptance.** `make lanes` passes here; a one-line CI step for `safety` runs the same checker against its observer; a format change in one repository fails the other's build.\n\n**Budget.** About 100k tokens.\n\n**Acceptance command (the launcher runs it after the agent).** `make lanes`",
       "accept": "make lanes",
       "backend": "cloud+local",
       "owns": [
@@ -382,7 +381,7 @@
         "catalogue/**",
         "Makefile",
         ".github/workflows/*.yml",
-        "tests/test_lanes.py"
+        "tests/**"
       ]
     },
     {
