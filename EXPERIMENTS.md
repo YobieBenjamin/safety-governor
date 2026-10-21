@@ -27,3 +27,9 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
 | N1 | N | Whole-deployment overhead simulation | `govsim/deploy.py` | open | the per-chip model gives 34 percent engine utilisation batched and under 0.1 percent firmware share |
 | N2 | N | False-halt rate model | `docs/07` FMEA, fault injection | open | |
 | N3 | N | FPGA beside a real GPU | pre-hardware plan, phase 4 | later | needs a lab with a rack |
+
+## L5 / H21: differential test of the reference gate against govsim (issue #5)
+`tests/test_h21_differential.py`. Install: `pip install -r tests/requirements-differential.txt`.
+The two gates agree on 17 of 20 replayed catalogue entries (the other 67 of 87 are listed in `NOT_COMPARED` with reasons) and on the random sweep except for five pinned disagreements, G1 to G5, described with inputs in `results/l5-disagreements.md`. G3, G4 and G5 look ambiguous on my reading of the policy docstrings only; no test shows it, so treat that as a hypothesis for the design owner, not a settled finding.
+Process note: the acceptance command was run twice with a failure each (a catalogue-size assertion from the brief's stale count, then three catalogue pins and a bad prior in the generator), plus one filtered run; after that the test functions were called directly once (30 passed then; the file now has 31 tests), not through pytest, so the final pytest result is left to the launcher.
+2026-10-20 (issue #16, wave 1): the acceptance command was run once more through pytest and passes (31 tests). Nothing else changed. The disagreements G1 to G5 are written up in `results/l5-disagreements.md`; they were not filed as separate GitHub issues from this run (no `gh` access in the sandbox), so that step remains for the launcher or YB.
