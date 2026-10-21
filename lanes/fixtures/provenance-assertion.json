@@ -1,0 +1,13 @@
+{
+  "payload": {
+    "content_digest": "09ca7e4eaa6e8ae9c7d261167129184883644d07dfba7cbfbc4c8a2e08360d5b",
+    "expires_at": 1800000300.0,
+    "issued_at": 1800000000.0,
+    "registry": "wm-registry",
+    "status": "exact",
+    "type": "provenance-assertion"
+  },
+  "pub": "0e94718be8817544deb68519b7d2054b12315e49e5f43a708fc1b8f7417c6632",
+  "sig": "76AdlPIVhJmgVfV7awFI+6SCjLsuKHLASwM99iX4GOHZtQ210ApOhygF7lg4YvcRlYLt346G/Suh+6IInOGVDQ==",
+  "signer": "15819035db6bc230"
+}

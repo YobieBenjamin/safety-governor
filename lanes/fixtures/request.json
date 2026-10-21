@@ -1,0 +1,15 @@
+{
+  "canonical_core": "{\"action\":\"payments.transfer\",\"measurement\":\"abababababababababababababababab\",\"params\":{\"amount\":12.5,\"note\":\"rent\",\"to\":\"acct-7\"},\"request_id\":\"r-1\"}",
+  "now": 1800000000.0,
+  "request": {
+    "action": "payments.transfer",
+    "measurement": "abababababababababababababababab",
+    "params": {
+      "amount": 12.5,
+      "note": "rent",
+      "to": "acct-7"
+    },
+    "request_id": "r-1"
+  },
+  "subject": "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae"
+}

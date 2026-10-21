@@ -1,0 +1,16 @@
+{
+  "payload": {
+    "action": "payments.transfer",
+    "expires_at": 1800000060.0,
+    "issued_at": 1800000000.0,
+    "measurement": "abababababababababababababababab",
+    "params_digest": "5090fb94d70de11be571c9ad74f9fe747bf99bc3be5b2457869b5d90d1262d3c",
+    "request_hash": "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae",
+    "rule": "pay-small",
+    "ticket_id": "00112233445566778899aabbccddeeff",
+    "type": "action-ticket"
+  },
+  "pub": "69670d5260ca49776703c7a133d2a7c4db848ce8f176ae129c497264bbc543c0",
+  "sig": "RUKeIoOpvZkdttaaVoIjNrG5VCXMMLVczOQ2mMETkM0zxnoWcVYbPZ2bxxjuZo5VCuuZ10oyA0mPlVmFfFBqBA==",
+  "signer": "6bc61058f6dd43a4"
+}

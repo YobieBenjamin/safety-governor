@@ -1,0 +1,30 @@
+{
+  "payload": {
+    "policy": {
+      "default": "deny",
+      "hold_ttl_s": 3600,
+      "observer_freshness_s": 60,
+      "rules": [
+        {
+          "action": "payments.transfer",
+          "constraints": {
+            "amount": {
+              "max": 1000
+            }
+          },
+          "id": "pay-small",
+          "requirement": {
+            "max_risk": 0.5,
+            "mode": "observer",
+            "observer": "obs-main"
+          },
+          "workload": "*"
+        }
+      ]
+    },
+    "type": "gate-policy"
+  },
+  "pub": "50e5d10998c3c056a251205d93b21bda5182ec26b1f3f0cf8a091abac0c03cfc",
+  "sig": "54qHFoeXwsjquGkBUfEf1plKngP8p0YovUzl2v52Opmyg51ltcJzd5aTX/vrGh7TgmGwBQmdvGeBSliM2zx/DA==",
+  "signer": "0117838d8b06a514"
+}

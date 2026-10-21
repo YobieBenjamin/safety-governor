@@ -1,0 +1,32 @@
+{
+  "entries": [
+    {
+      "hash": "32e307a68a57ecfeb69c3056e75357f65333bc15c4f587225848e1be262ab8fa",
+      "prev": "",
+      "record": {
+        "event": "gate.policy_loaded",
+        "policy_id": "439ea3efad0bcee3",
+        "rules": 1
+      },
+      "seq": 0,
+      "sig": "NemO0+lt+QmKqjdL4eeMwluhs/1+xaZIEDIhncarngpRFFuUW5t6f198zz4xrOKEal7xi3hwfTcBD01s+H8xBg==",
+      "ts": 1800000000.0
+    },
+    {
+      "hash": "d54906f716659bbb7f9a9988841c4ff4868530bb69f58e7b472124380065b42a",
+      "prev": "32e307a68a57ecfeb69c3056e75357f65333bc15c4f587225848e1be262ab8fa",
+      "record": {
+        "decision": "allow",
+        "event": "gate.decision",
+        "request_hash": "c2daf12eb9a1654349e8c5715220d89e4b87c3ce0f6d854251b035aba1dc58ae",
+        "rule": "pay-small",
+        "ticket_id": "00112233445566778899aabbccddeeff"
+      },
+      "seq": 1,
+      "sig": "gSfMI/LFlgbowo+vKwS3xWxHdbNqkd3Vn3krbr/xFWX6TQ0HMBNqvGqgcbekFCxWnRoeMj/ie5HI/mP4XghaDQ==",
+      "ts": 1800000001.0
+    }
+  ],
+  "log": "gate-audit",
+  "pub": "69670d5260ca49776703c7a133d2a7c4db848ce8f176ae129c497264bbc543c0"
+}
