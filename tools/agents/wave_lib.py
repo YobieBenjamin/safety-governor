@@ -190,6 +190,8 @@ def sleep_until(resets_at: str) -> None:
 def local(url: str, preferred: str = "") -> None:
     import json as _json
     import urllib.request
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # never through a proxy: it is this machine
+    urllib.request.install_opener(opener)
     try:
         with urllib.request.urlopen(url.rstrip("/") + "/api/tags", timeout=5) as r:
             names = [m["name"] for m in _json.load(r).get("models", [])]
