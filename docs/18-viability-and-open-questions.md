@@ -172,6 +172,22 @@ So, from the chip's point of view: yes, it strengthens the promise, in the speci
 
 Questions 1, 3, 5 and 12 are the ones a small program can move. Questions 6, 11 and 14 are the ones a chip cannot move at all, and the design should keep saying so.
 
+## 8b. Prior art: where this sits next to the hardware-governance literature
+
+Anyone from a lab or from NVIDIA will ask this in the first five minutes, so here is the answer. There is a body of work on hardware-enabled governance of AI compute, and this design is a cousin of it, not a stranger to it.
+
+The closest is *Flexible Hardware-Enabled Guarantees* (Petrie, Aarne, Ammann, Dalrymple, commissioned by ARIA, April 2025; arXiv 2506.15093). A flexHEG puts each AI chip inside a tamper-proof enclosure with a separate, open-source *guarantee processor* that sits between the chip and the rest of the world, produces signed claims about how the chip is used (training compute under a threshold, workload type, location, where results went), and can optionally enforce a ruleset signed by a quorum, from the chip's owner up to a group of states. It needs a periodic signed update or it blocks operation; tamper detection wipes the keys. If that sounds like this governor, it should: a separate open processor beside the GPU, rules signed k of n by people the model cannot reach, a heartbeat that fails closed, keys that die on tamper. Those are the same mechanisms, because they are the right mechanisms. Before it there were *Secure, Governable Chips* (CNAS, January 2024) and RAND's work on hardware-enabled governance mechanisms, both aimed at export control and compute accounting, and there is a 2026 feasibility taxonomy of hardware-level governance (arXiv 2604.04712).
+
+Where this design differs, and the difference is the point:
+
+- **What it governs.** The literature governs *compute*: how much training, by whom, where. This governs *actions*: the payment, the message, the weapon release, the weight export, at the moment they leave the rack. A training-threshold rule cannot stop a deployed model from wiring money. A ticket at the exit can.
+- **Where it sits.** flexHEG wraps the chip in an enclosure, which is a new chip and a new package. This adds a module to the board the server already has, reaches the GPU through the connector it already uses, and governs through levers that already exist. That is why it can go into installed racks, and why it asks NVIDIA for firmware and software rather than silicon.
+- **Who checks the stamp.** The ticket is verified again at the far end, by the device that acts, so the governor's authority does not depend on the host that sits between them.
+- **Witnesses and humans.** Classifiers and observers are witnesses with a measured miss rate, never the lock, and a person with a key clears the holds. The governance literature mostly stops at the signed rule; this design is explicit that the rule is as good as its inputs and names every one in a register.
+- **It is built and being tested.** Two hundred model tests, twenty RTL tests, two machine-checked proofs, an attack catalogue, and a public program with disproof conditions. The reports above are proposals; this is a repository.
+
+What this design should borrow from them, and has not yet: the treatment of the supply chain and the enclosure as a condition of trust (flexHEG §on tamper-proofing), and the multilateral governance root, where the k of n keys are held by parties who do not share a jurisdiction. Both are on the open-questions list now.
+
 ## 9. What I would do next
 
 Three bounded moves, in this order.

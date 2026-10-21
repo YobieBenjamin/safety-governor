@@ -26,7 +26,8 @@ Read in this order. Each one stands alone.
 2. The layer model and why only silicon can be the lock: [A Multi-Layer Approach to AI Safety](https://github.com/YobieBenjamin/hardware-and-silicon/blob/main/blog/01-a-multi-layer-approach-to-ai-safety.md).
 3. The whole chip as one story: [docs/10-plain-english-walkthrough.md](docs/10-plain-english-walkthrough.md). Under every section a box names the technical document, the model code, the test and the hardware block behind it. [docs/09-analogies.md](docs/09-analogies.md) is the same vocabulary as a table.
 4. What the design is for and what it refuses to claim: [docs/00-objectives.md](docs/00-objectives.md), goals G1 to G8, requirements R1 to R32 with where each is tested, non-goals N1 to N7.
-5. How solid any of it is: [docs/19-how-solid-is-the-theory.md](docs/19-how-solid-is-the-theory.md). It takes the story apart into claims (L the logic, P the physical paths, C the cryptography, S the semantics, N the numbers) and says for each whether it is a theorem, engineering, trust, or not yet measured.
+5. How solid any of it is: [docs/19-how-solid-is-the-theory.md](docs/19-how-solid-is-the-theory.md).
+6. Where it sits next to the hardware-governance literature (flexHEGs and the rest), and what it borrows from them: [docs/18 §8b](docs/18-viability-and-open-questions.md). It takes the story apart into claims (L the logic, P the physical paths, C the cryptography, S the semantics, N the numbers) and says for each whether it is a theorem, engineering, trust, or not yet measured.
 
 ## 2. Follow the logic
 
