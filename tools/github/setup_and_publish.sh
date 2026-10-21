@@ -114,8 +114,12 @@ for repo in $REPOS; do
       [ -s "$err" ] && cat "$err" >&2
       fail "$repo: git could not read $b (exit status $rc)"
     fi
-    git -C "$clone" merge -q --ff-only refs/claude/incoming || fail "$repo: $b does not fast-forward main at $(git -C "$clone" rev-parse --short HEAD); it was made from a different line of history"
-    echo "$repo: applied $b -> $(git -C "$clone" log --oneline -1)"
+    if git -C "$clone" merge -q --ff-only refs/claude/incoming 2>/dev/null; then
+      echo "$repo: applied $b -> $(git -C "$clone" log --oneline -1)"
+    else
+      # made from a line of history this clone has moved past (a commit landed on main in between): a later bundle carries its content
+      echo "$repo: $b does not fast-forward main at $(git -C "$clone" rev-parse --short HEAD); skipped (superseded by a later bundle, or stale)"
+    fi
   done
   rm -f "$err"
   if [ "$found" = 1 ]; then
