@@ -100,7 +100,7 @@ bash ~/safety-governor/tools/agents/run_program.sh --status     # where it is
 bash ~/safety-governor/tools/agents/run_program.sh --from 2     # resume; it also skips whatever is already merged
 ```
 
-`run_program.sh` runs `launch.sh prepare`, then for each wave: the agents (`run_wave.sh`, in `safety-governor` and then in `safety`); then the gate on every branch the wave produced; then the audit packet; then the backup. An issue whose dependency has no merged pull request is not started, and the issue says so. An issue that already has an open pull request gets the gate, not a new agent. Nothing merges that the gate did not pass, and nothing that the gate did not pass is lost: it stays open with its review on it, for a person.
+`run_program.sh --stop` stops every instance of the program and its agents, and leaves the backup's mirror jobs and the Ollama server running; the start refuses while any instance is alive, counting every process that names the script and not only the one in the pid file (on 21 October two instances ran side by side for five hours and reviewed and revised the same pull requests twice). `run_program.sh` runs `launch.sh prepare`, then for each wave: the agents (`run_wave.sh`, in `safety-governor` and then in `safety`); then the gate on every branch the wave produced; then the audit packet; then the backup. An issue whose dependency has no merged pull request is not started, and the issue says so. An issue that already has an open pull request gets the gate, not a new agent. Nothing merges that the gate did not pass, and nothing that the gate did not pass is lost: it stays open with its review on it, for a person.
 
 The gate is three readers that cannot agree by accident, in order of cost:
 

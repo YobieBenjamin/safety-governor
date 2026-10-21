@@ -88,7 +88,7 @@ $(cat "$LOG/$ID.revise-$ROUND.md")" --model "$MODEL" --effort "$EFFORT" --max-tu
     --output-format stream-json --verbose < /dev/null > "$rlog" 2> "$rlog.err" &
 fi
 cpid=$!
-( trap - ERR; sleep "$((TIMEOUT_MIN * 60))"; kill -INT "$cpid" 2>/dev/null || true; sleep 90; kill -TERM "$cpid" 2>/dev/null || true ) & wpid=$!; disown $wpid 2>/dev/null || true
+( trap - ERR; sleep "$((TIMEOUT_MIN * 60))"; kill -INT "$cpid" 2>/dev/null || true; sleep 90; kill -TERM "$cpid" 2>/dev/null || true; sleep 30; pkill -P "$cpid" 2>/dev/null || true; kill -KILL "$cpid" 2>/dev/null || true ) & wpid=$!; disown $wpid 2>/dev/null || true
 rc=0; wait "$cpid" || rc=$?
 pkill -P "$wpid" 2>/dev/null || true; kill "$wpid" 2>/dev/null || true
 [ "$backend" = local ] && local_lock_release

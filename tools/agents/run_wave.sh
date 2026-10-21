@@ -64,7 +64,7 @@ claude_local() { if [ "$LOCAL_URL" = cloud ]; then claude "$@"; else ANTHROPIC_A
 local_lock_wait() { until mkdir "$LOCAL_LOCK" 2>/dev/null; do sleep 30; done; echo $$ > "$LOCAL_LOCK/pid"; }   # one local run on the Mac at a time, across repositories
 local_lock_release() { rm -rf "$LOCAL_LOCK" 2>/dev/null || true; }
 stop_bg() { pkill -P "$1" 2>/dev/null || true; kill "$1" 2>/dev/null || true; wait "$1" 2>/dev/null || true; }
-watchdog() { ( trap - ERR; sleep "$1"; kill -INT "$2" 2>/dev/null || true; sleep 90; kill -TERM "$2" 2>/dev/null || true ) & disown $! 2>/dev/null || true; }
+watchdog() { ( trap - ERR; sleep "$1"; kill -INT "$2" 2>/dev/null || true; sleep 90; kill -TERM "$2" 2>/dev/null || true; sleep 30; pkill -P "$2" 2>/dev/null || true; kill -KILL "$2" 2>/dev/null || true ) & disown $! 2>/dev/null || true; }
 jget() { python3 -c "import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print('' if v is None else v)" "$1" "$2"; }
 
 # Detach when asked (the background process is the one kept awake), else keep this one awake (macOS).

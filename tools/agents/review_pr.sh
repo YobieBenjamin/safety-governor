@@ -28,7 +28,7 @@ claude_local() { if [ "$LOCAL_URL" = cloud ]; then claude "$@"; else ANTHROPIC_A
 with_cap() {
   local mins="$1"; shift
   ( trap - ERR; "$@" ) & local pid=$!
-  ( trap - ERR; sleep "$((mins * 60))"; kill -INT "$pid" 2>/dev/null || true; sleep 60; kill -TERM "$pid" 2>/dev/null || true ) & local wd=$!; disown $wd 2>/dev/null || true
+  ( trap - ERR; sleep "$((mins * 60))"; kill -INT "$pid" 2>/dev/null || true; sleep 60; kill -TERM "$pid" 2>/dev/null || true; sleep 30; pkill -P "$pid" 2>/dev/null || true; kill -KILL "$pid" 2>/dev/null || true ) & local wd=$!; disown $wd 2>/dev/null || true
   local rc=0; wait "$pid" || rc=$?
   if kill -0 "$wd" 2>/dev/null; then pkill -P "$wd" 2>/dev/null || true; kill "$wd" 2>/dev/null || true; else rc=124; fi
   return $rc

@@ -4,6 +4,7 @@
 # everything on the external drive after every step.
 #
 #   bash ~/safety-governor/tools/agents/run_program.sh --detach      # start it and close the terminal
+#   bash ~/safety-governor/tools/agents/run_program.sh --stop        # stop every instance and its agents (mirrors and Ollama keep running)
 #   bash ~/safety-governor/tools/agents/run_program.sh --status      # where it is
 #   bash ~/safety-governor/tools/agents/run_program.sh --from 2      # resume at wave 2 (it also skips what is already merged)
 #   bash ~/safety-governor/tools/agents/run_program.sh --dry-run     # print the plan, start nothing
@@ -32,14 +33,41 @@ PROG="$HOME/safety-governor/.agents/program"; mkdir -p "$PROG"
 MODE=run; FROM=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --detach) MODE=detach ;; --dry-run) MODE=dry ;; --status) MODE=status ;;
+    --detach) MODE=detach ;; --dry-run) MODE=dry ;; --status) MODE=status ;; --stop) MODE=stop ;;
     --from) FROM="$2"; shift ;;
+    --mirror-job) MODE=mirror-job; MIRROR_REPO="$2"; shift ;;   # internal: one background mirror job, its own process
     *) echo "unknown argument $1" >&2; exit 2 ;;
   esac
   shift
 done
 say() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$PROG/program.log"; }
-# one program at a time: a second start while one runs would race it on the same branches and pull requests
+# one program at a time: a second start while one runs would race it on the same branches and pull requests.
+# Every process whose command line names this script counts, not only the one in the pid file: on 21 October
+# two instances ran side by side for five hours (the pid file named one; the other had been started a minute
+# earlier and had not written it yet) and reviewed and revised the same pull requests twice.
+is_mirror() { ps -o command= -p "$1" 2>/dev/null | grep -q -- "--mirror-job"; }
+instances() { local p; for p in $(pgrep -f "tools/agents/run_program.sh" 2>/dev/null); do [ "$p" = "$$" ] || [ "$p" = "$PPID" ] || is_mirror "$p" || echo "$p"; done; }
+kill_tree() { local c; is_mirror "$1" && return 0; for c in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$c"; done; kill -TERM "$1" 2>/dev/null || true; }
+if [ "$MODE" = stop ]; then
+  n=0
+  for p in $(instances); do kill_tree "$p"; n=$((n + 1)); done
+  for pat in "tools/agents/run_wave.sh" "tools/agents/review_pr.sh" "tools/agents/revise_pr.sh"; do
+    for p in $(pgrep -f "$pat" 2>/dev/null || true); do kill_tree "$p"; done
+  done
+  sleep 5
+  for pat in "tools/agents/run_program.sh" "tools/agents/run_wave.sh" "tools/agents/review_pr.sh" "tools/agents/revise_pr.sh"; do
+    for p in $(pgrep -f "$pat" 2>/dev/null | grep -vx "$$" || true); do is_mirror "$p" || kill -KILL "$p" 2>/dev/null || true; done
+  done
+  rm -f "$PROG/pid" "$HOME/.agents-local.lock/pid" 2>/dev/null; rmdir "$HOME/.agents-local.lock" 2>/dev/null || true
+  echo "stopped $n program instance(s) and their agents; the backups' background mirror jobs were left running; the Ollama server was left running"
+  exit 0
+fi
+if { [ "$MODE" = run ] && [ -z "${PREPARED:-}" ]; } || [ "$MODE" = detach ]; then
+  others=$(instances)
+  if [ -n "$others" ]; then
+    echo "the program is already running (pid(s): $(echo $others | tr '\n' ' ')); follow it with: tail -f $PROG/program.log, or stop it with: $0 --stop" >&2; exit 0
+  fi
+fi
 if [ "$MODE" = run ] || [ "$MODE" = detach ]; then
   if [ -f "$PROG/pid" ] && kill -0 "$(cat "$PROG/pid" 2>/dev/null || echo 0)" 2>/dev/null; then
     echo "the program is already running (pid $(cat "$PROG/pid")); follow it with: tail -f $PROG/program.log" >&2; exit 0
@@ -121,7 +149,10 @@ mirror_job() {   # $1 repo. A first mirror that survives a dropped connection: h
   while :; do
     batch=$(git -C "$m" rev-list --objects --all --missing=print 2>/dev/null | awk '/^\?/ {print substr($1, 2)}' | head -200)
     [ -z "$batch" ] && break
-    if printf '%s\n' $batch | git -C "$m" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=300 fetch -q --no-tags --no-write-fetch-head --recurse-submodules=no --stdin origin >>"$log" 2>&1; then
+    # exactly what git's own lazy fetch runs: no negotiation (with "have" lines the server assumes we hold every blob
+    # under our commits and leaves them out, which ended as "did not send all necessary objects"), and the filter so
+    # the wanted blobs come alone; auto-gc off so a 200-blob batch does not stop to repack
+    if printf '%s\n' $batch | git -C "$m" -c fetch.negotiationAlgorithm=noop -c gc.auto=0 -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=300 fetch -q --no-tags --no-write-fetch-head --recurse-submodules=no --filter=blob:none --stdin origin >>"$log" 2>&1; then
       try=0
     else
       try=$((try + 1)); [ "$try" -ge 20 ] && return 1; sleep $((try * 60))
@@ -147,14 +178,14 @@ backup() {   # mirrors of all four repositories, a browsable clone of each, the 
         rm -f "$m.cloning" "$m.rc"; say "backup: first mirror of $repo complete"
       else
         say "backup: the first mirror of $repo stopped (see $m.log); resuming where it left off"; rm -f "$m.cloning" "$m.rc"
-        ( trap - ERR; mirror_job "$repo"; echo $? > "$m.rc" ) &
+        rm -f "$m.rc"; nohup "$0" --mirror-job "$repo" >/dev/null 2>&1 < /dev/null &
         echo $! > "$m.cloning"
         continue
       fi
     fi
-    if [ -d "$m" ] && [ ! -f "$m.cloning" ] && { ! git -C "$m" rev-parse -q --verify main >/dev/null 2>&1 || [ "$(git -C "$m" config --get remote.origin.promisor 2>/dev/null)" = true ]; }; then
+    if [ -d "$m" ] && [ ! -f "$m.cloning" ] && { ! git -C "$m" rev-parse -q --verify main >/dev/null 2>&1 || [ "$(git -C "$m" config --get remote.origin.promisor 2>/dev/null || true)" = true ]; }; then
       say "backup: $m is a partial copy (history without all its blobs, or no main yet); resuming it in the background"
-      ( trap - ERR; mirror_job "$repo"; echo $? > "$m.rc" ) &
+      rm -f "$m.rc"; nohup "$0" --mirror-job "$repo" >/dev/null 2>&1 < /dev/null &
       echo $! > "$m.cloning"
       continue
     fi
@@ -162,7 +193,7 @@ backup() {   # mirrors of all four repositories, a browsable clone of each, the 
       git -C "$m" remote update --prune >/dev/null 2>&1 || say "backup: mirror update of $repo failed"
     elif [ ! -d "$m" ]; then
       say "backup: first mirror of $repo starts in the background, in resumable steps (the safety one carries 8 GB of recordings)"
-      ( trap - ERR; rm -f "$m.rc"; mirror_job "$repo"; echo $? > "$m.rc" ) &
+      rm -f "$m.rc"; nohup "$0" --mirror-job "$repo" >/dev/null 2>&1 < /dev/null &
       echo $! > "$m.cloning"
       continue
     fi
@@ -198,7 +229,7 @@ gate() {   # wave repo: review every branch the wave produced here; merge what p
       say "$repo $id: PR #$num is waiting for a person (the gate said revise after $REVISE_ROUNDS revisions and the branch has not moved); skipped"; continue
     fi
     rm -f "$waiting"
-    round=$(ls "$HOME/$repo/.agents/wave-$wave/$id".revise-*.md 2>/dev/null | wc -l | tr -d ' ')   # rounds already run survive a restart
+    round=$(find "$HOME/$repo/.agents/wave-$wave" -maxdepth 1 -name "$id.revise-*.md" 2>/dev/null | wc -l | tr -d ' ')   # rounds already run survive a restart
     while :; do
       say "$repo $id: gate on PR #$num$( [ "$round" -gt 0 ] && echo " (after revision $round)")"
       rc=0; bash "$HERE/review_pr.sh" "$wave" "$id" >> "$PROG/program.log" 2>&1 || rc=$?
@@ -252,6 +283,11 @@ Written by the program's gate for the external audit (Codex, Gemini) described i
 }
 
 # ---- the program ---------------------------------------------------------------------------------
+if [ "$MODE" = mirror-job ]; then
+  m="$BACKUP_DIR/mirrors/$MIRROR_REPO.git"; rc=0
+  { trap - ERR; mirror_job "$MIRROR_REPO"; } || rc=$?
+  echo "$rc" > "$m.rc"; exit 0
+fi
 [ "$MODE" = run ] && echo $$ > "$PROG/pid"
 say "== program start (waves: $WAVES; merge: $MERGE; backup: $BACKUP_DIR)"
 if [ "$MODE" = dry ]; then
