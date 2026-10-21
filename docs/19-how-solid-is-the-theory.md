@@ -107,6 +107,7 @@ Answer per claim, L, P, C, S, N, and say for each whether you consider it a theo
 ## 10. What exists to back this document
 
 - `proofs/core_invariants.py`: the Z3 proofs of P0 to P9 and the non-vacuity check; `python3 proofs/core_invariants.py`.
+- `proofs/no_global_kill_switch.py` and `docs/23-there-is-no-kill-switch.md`: why the gates belong at the ends of the model-to-world graph (Menger's theorem; minimum cuts checked by max-flow), and the part of the popular kill-switch argument that is wrong.
 - `govsim/` and `tests/`: the functional model and 200 hypothesis tests, H0 to H18.
 - `rtl/governor_rtl/` and `rtl/tests/`: the hard-core blocks and 20 simulation tests; formal proofs on the Verilog are the next step in `docs/07-verification-plan.md`.
 - `hw/loop/results.md`: the ngspice loop simulation, 39 configurations.

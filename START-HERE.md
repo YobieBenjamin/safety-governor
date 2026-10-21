@@ -27,7 +27,8 @@ Read in this order. Each one stands alone.
 3. The whole chip as one story: [docs/10-plain-english-walkthrough.md](docs/10-plain-english-walkthrough.md). Under every section a box names the technical document, the model code, the test and the hardware block behind it. [docs/09-analogies.md](docs/09-analogies.md) is the same vocabulary as a table.
 4. What the design is for and what it refuses to claim: [docs/00-objectives.md](docs/00-objectives.md), goals G1 to G8, requirements R1 to R32 with where each is tested, non-goals N1 to N7.
 5. How solid any of it is: [docs/19-how-solid-is-the-theory.md](docs/19-how-solid-is-the-theory.md).
-6. Where it sits next to the hardware-governance literature (flexHEGs and the rest), and what it borrows from them: [docs/18 §8b](docs/18-viability-and-open-questions.md). It takes the story apart into claims (L the logic, P the physical paths, C the cryptography, S the semantics, N the numbers) and says for each whether it is a theorem, engineering, trust, or not yet measured.
+6. Why there is no kill switch for AI and why there is one at the exits, with the theorem and the check: [docs/23-there-is-no-kill-switch.md](docs/23-there-is-no-kill-switch.md).
+7. Where it sits next to the hardware-governance literature (flexHEGs and the rest), and what it borrows from them: [docs/18 §8b](docs/18-viability-and-open-questions.md). It takes the story apart into claims (L the logic, P the physical paths, C the cryptography, S the semantics, N the numbers) and says for each whether it is a theorem, engineering, trust, or not yet measured.
 
 ## 2. Follow the logic
 
@@ -53,7 +54,7 @@ git clone https://github.com/YobieBenjamin/safety-governor && cd safety-governor
 
 ## 3. Follow the math
 
-Two machine-checked proofs, in [proofs/](proofs/), run by `make proof` in under three seconds. Both write the governor down as a small state machine and ask Z3 to prove by induction that certain states are unreachable, for any number of actions and any sequence of steps. Each file says in its docstring what it is about and what it is not about; read that first.
+Two machine-checked proofs and one checked graph argument, in [proofs/](proofs/), run by `make proof` in under five seconds. Both write the governor down as a small state machine and ask Z3 to prove by induction that certain states are unreachable, for any number of actions and any sequence of steps. Each file says in its docstring what it is about and what it is not about; read that first.
 
 [proofs/core_invariants.py](proofs/core_invariants.py) proves, in the words of the file:
 
@@ -73,6 +74,8 @@ Plus a non-vacuity check: an allowed action can in fact execute, so the proofs a
 [proofs/commit_point.py](proofs/commit_point.py) proves three safety properties of the hold, clearance and alarm protocol: (1) no irreversible high-severity action commits without a reviewer clearance, or a regulator all-clear inside its budget; (2) a clearance is bound to the action version it judged, and a re-parameterised action needs a new one; (3) a monitor that misses its budget always raises an alarm, and the action cannot commit on that verdict. Two liveness checks show the machine is not vacuous.
 
 What the proofs found: the first draft of the core invariant let the edition counter go negative, and a state with edition minus one let an action with no ticket (also marked minus one) execute. The first draft of the commit-point protocol left the old deadline in place after a re-parameterisation, so a version bumped after the budget ran out sat with no verdict and no alarm. Both are described in the files and in docs/19 §2.
+
+[proofs/no_global_kill_switch.py](proofs/no_global_kill_switch.py) is the third file: the model-to-world graph, minimum separators computed by max-flow and cross-checked by brute force, backing [docs/23](docs/23-there-is-no-kill-switch.md): no separator exists in the deep network, the cheapest network-side one sits next to every machine and takes bystanders with it, the ends give a separator of one node per instance or per effector, and reversibility shrinks it to the irreversible exits. The theorem is Menger's; the script checks the instance.
 
 What the proofs are not about, in the files' own words: the physics (whether the wire really carries no bytes without a ticket), the cryptography (signatures are modelled as unforgeable), the lists and observers (an allowed action is whatever the signed rule says), and the link from the model to the RTL. That link is the formal work on the Verilog itself, experiment L7 in the program, not yet done. Whether the simulation takes only the steps the proven machine allows is experiment L4, which found that the model takes two steps the machine does not have (an "arm" step and burned tickets); that is open.
 
