@@ -16,5 +16,7 @@ archive:  ; python3 tools/archive/build_archive.py --out build/archive --repo . 
 HW ?= $(firstword $(wildcard ../hardware-and-silicon ../../../hardware-and-silicon $(HOME)/hardware-and-silicon))
 SAFETY ?= $(firstword $(wildcard ../safety ../../../safety $(HOME)/safety))
 lanes:
-	python3 -m lanes.check $(if $(SAFETY),--observer $(SAFETY)/observer)
-	$(if $(HW),python3 catalogue/export.py $(HW) --check,@echo "catalogue: hardware-and-silicon not found, live comparison skipped")
+	@test -n "$(SAFETY)" || { echo "lanes: the safety repository was not found; set SAFETY=<path>"; exit 1; }
+	@test -n "$(HW)" || { echo "lanes: hardware-and-silicon was not found; set HW=<path>"; exit 1; }
+	python3 -m lanes.check --observer $(SAFETY)/observer --hardware $(HW)
+	python3 catalogue/export.py $(HW) --check
