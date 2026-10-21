@@ -109,7 +109,11 @@ Every wave leaves a packet: [audit/wave-1/](audit/wave-1/) holds the briefs, the
 
 If you are a model, or a person with time: [audit/PROMPT.md](audit/PROMPT.md) is the brief for an outside audit. Run the tests, reproduce every number, find a change that would make each test fail, and name what the program's own disproof conditions required and nobody tested.
 
-## 7. Corrections, on the record
+## 7. Where this is going
+
+[docs/22-roadmap-to-tapeout.md](docs/22-roadmap-to-tapeout.md) is the whole program in five stages: prove or disprove the theory in software (where we are), design the chip to fit NVIDIA's boards through documented interfaces, run the tests and the proofs on the chip itself, finish the design to the point where a foundry could take it, then stop and run it anyway, in RTL, in gates and on an FPGA, against the same catalogue. It says what done means at each stage and names the two walls: the rows of the physical-path register that only NVIDIA's NDA design guide can settle, and the fab.
+
+## 8. Corrections, on the record
 
 [docs/AUDIT-2026-10.md](docs/AUDIT-2026-10.md) lists what an audit found wrong in the first drafts, with sources: signature sizes, what DC-SCM actually carries, how DICE derives keys, and more. The catalogue count the first posts gave (66 attacks and 10 baselines) was stale; it is 75 and 12, corrected with a dated note. The two proof holes above are corrections too. The program publishes what it finds, whichever way it goes.
 
