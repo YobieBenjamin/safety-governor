@@ -27,3 +27,10 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
 | N1 | N | Whole-deployment overhead simulation | `govsim/deploy.py` | open | the per-chip model gives 34 percent engine utilisation batched and under 0.1 percent firmware share |
 | N2 | N | False-halt rate model | `docs/07` FMEA, fault injection | open | |
 | N3 | N | FPGA beside a real GPU | pre-hardware plan, phase 4 | later | needs a lab with a rack |
+
+## H1 (#13): lanes conformance suite and the catalogue as data
+
+- `lanes/` holds signed fixtures (`lanes/fixtures`), the generator (`python3 -m lanes.generate`) and the checker (`python3 -m lanes.check [--observer DIR]`). `make lanes` passes here, including a run of the `safety` observer and a live comparison of `catalogue/attacks.json` (75 attacks, 12 baselines) with `hardware_ref.attacks`.
+- Known gap: govsim's envelope differs from the contract (16-hex signer, hex signature, no embedded pub). The checker pins only what must agree today: canonical bytes, digest, and the deterministic signature.
+- CI steps for the other repositories are in `patches/`, not applied (those repositories are read-only for this run). The `safety` `test_contract.py` pin should read `lanes/fixtures/request.json`; see `patches/safety/ci-lanes.patch`.
+- govsim does not read the catalogue yet; `catalogue.load()` is ready for it.
