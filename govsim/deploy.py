@@ -29,6 +29,7 @@ The model is not a measurement. Phase 2 on real hardware replaces it.
 from __future__ import annotations
 
 import random
+from functools import lru_cache
 from dataclasses import dataclass, replace
 
 import simpy                                          # brief: installed in the container
@@ -165,13 +166,12 @@ class Chip:
                 t_next += gap
                 if t_next > env.now:
                     yield env.timeout(t_next - env.now)
-            arrived = env.now if mode == "open" else None
+            # open mode: latency runs from the arrival, so a request that finds the slot busy
+            # (the previous one ran long, or the governor stalled it) carries its queueing delay
+            arrived = t_next if mode == "open" else env.now
             req = slot.request()
             yield req
-            started = env.now
             service = tokens * GPU_SECONDS_PER_TOKEN
-            if arrived is None:
-                arrived = started
             if self.governed and n_act:
                 part = service / (n_act + 1)
                 for _ in range(n_act):                         # a mailbox call and a ticket mint block the issuing slot
@@ -255,6 +255,7 @@ def pct(xs: list[float], q: float) -> float:
     return xs[min(len(xs) - 1, int(q * len(xs)))]
 
 
+@lru_cache(maxsize=None)
 def measure(pol: Policy, horizon: float = 30.0, open_horizon: float = 30.0, seed: int = 1) -> dict:
     """Throughput lost and tail latency added for one policy.
 
@@ -298,17 +299,20 @@ ACTION_AXIS = (0.05, 5, 20, 40, 80, 160)           # mailbox calls per response
 WINDOW_AXIS = (0.020, 0.030, 0.050, 0.100, 0.200)  # seconds, serviceable above the 17 ms signature
 
 
+@lru_cache(maxsize=None)
 def sweep_actions(base: Policy = PLAN_OF_RECORD, horizon: float = 10.0) -> list[tuple[float, float]]:
     return [(a, run_one(replace(base, actions_per_response=a), "saturated", True, horizon)["stall_pct"])
             for a in ACTION_AXIS]
 
 
+@lru_cache(maxsize=None)
 def sweep_window_held(horizon: float = 10.0) -> list[tuple[float, float]]:
     """The worst case: the slot is held until the receipt. Overhead against the window."""
     return [(w, run_one(Policy(window_s=w, hold_slot=True), "saturated", True, horizon)["stall_pct"])
             for w in WINDOW_AXIS]
 
 
+@lru_cache(maxsize=None)
 def sensitivity(base: Policy = PLAN_OF_RECORD, horizon: float = 10.0) -> list[tuple[str, float]]:
     """The three assumptions named in docs/12, each ten times its nominal value. None moves the
     plan of record off the sub-one-percent figure."""
@@ -333,13 +337,16 @@ def main() -> None:
     print(f"  p99 receipt wait                {r['p99_receipt_wait_s']*1e3:.1f} ms "
           f"(idle-core bound {(p.window_s+SIGN_S)*1e3:.0f} ms; max seen {r['max_receipt_wait_s']*1e3:.1f} ms)")
     print(f"  busiest engine / firmware core  {r['engine_util_pct']:.1f} % / {r['fw_util_pct']:.3f} %")
+    r0 = measure(replace(p, edition_change=False))
+    print(f"  without the edition change      max receipt wait {r0['max_receipt_wait_s']*1e3:.1f} ms, "
+          f"p99 added {r0['p99_added_s']*1e3:.1f} ms, throughput lost {r0['overhead_pct']:.4f} %")
     ed = edition_firmware_s()
     print(f"  one edition change              {ed*1e3:.0f} ms of firmware per chip; "
           f"one a second is {ed*100:.1f} % of the core")
     pts = sweep_actions()
-    print("policy sweep 1, mailbox calls per response (plan of record otherwise, 10 s):")
+    print("policy sweep 1, mailbox calls per response (plan of record otherwise, 10 s; stall share of slot time):")
     for a, o in pts:
-        print(f"  actions/response={a:>6g}  overhead={o:.4f} %")
+        print(f"  actions/response={a:>6g}  stall share={o:.4f} %")
     c = crossing(pts)
     if c is not None:
         mult = round(c / p.actions_per_response / 100) * 100
@@ -349,14 +356,14 @@ def main() -> None:
     held = sweep_window_held()
     print("policy sweep 2, the slot held until the receipt, by batch window (10 s):")
     for w, o in held:
-        print(f"  window={w*1e3:>4.0f} ms  serviceable={replace(p, window_s=w).serviceable!s:5}  overhead={o:.2f} %")
+        print(f"  window={w*1e3:>4.0f} ms  serviceable={replace(p, window_s=w).serviceable!s:5}  stall share={o:.2f} %")
     ok = [w for w, o in held if o < ONE_PERCENT and replace(p, window_s=w).serviceable]
     print("  slot-held release stays under 1 percent at: " + (", ".join(f"{w*1e3:g} ms" for w in ok) if ok
           else "no serviceable window (above 1 percent at every serviceable policy)"))
     sens = sensitivity()
     print("sensitivity, each named assumption 10x (plan of record otherwise, 10 s):")
     for name, o in sens:
-        print(f"  {name:16s}  overhead={o:.4f} %")
+        print(f"  {name:16s}  stall share={o:.4f} %")
     moved = [n for n, o in sens if o >= ONE_PERCENT]
     print("  none moves the plan of record off the sub-one-percent figure"
           if not moved else f"  {', '.join(moved)} move it off the figure")
