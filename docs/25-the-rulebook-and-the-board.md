@@ -36,7 +36,7 @@ has been surgically removed and it will answer anything. In scenario 2 the model
 lab's, behind that lab's whole safety stack; take OpenAI as the example. The path is the same
 until the model answers, and the chip's answer is the same at the end.
 
-![One request, from the keyboard to the chip's no](figures/fig-prompt-flow.png)
+![One request, from the keyboard to the chip's no: the nine steps below, the rulebook triggers in order, and what is rack-wide](figures/fig-prompt-flow.png)
 
 ### 0.1 The path, step by step
 
@@ -181,8 +181,6 @@ write is the doorbell (`04-specification.md` §2). That is the whole design in o
 fact is either fused, signed or measured, and a request is granted only when facts of those
 three kinds line up.
 
-![What is in the rulebook](figures/fig-rulebook.png)
-
 ## 2. What is in the rulebook
 
 > **In plain words:** a building's security binder. Who has keys, which contractors are
@@ -192,6 +190,8 @@ three kinds line up.
 
 The rulebook is the policy image, one signed blob, at most a megabyte, held in the chip's own
 authenticated NVM and nowhere else (`04-specification.md` §10). What is in it, in four groups.
+
+![What is in the rulebook: the image section by section, one rule field by field, and how a rule is picked](figures/fig-rulebook.png)
 
 **The keys: who is allowed to say what.**
 
@@ -364,12 +364,12 @@ it with k keys, publish. The chip's job is to make the form the only thing that 
 > left. The questions come in one order, the first failure ends it, and the agent reads a code
 > off the screen rather than deciding whether you look trustworthy.
 
-![The ten questions and their reason codes](figures/fig-no-order.png)
-
 A request is a mailbox frame. The chip asks its questions in one fixed order, the first no
 wins, and the no carries a code and a log line nobody rewrites. The same order is in the model
 (`_check_signed` then `_cmd_request`) and in the RTL mailbox, and a test in each suite pins
 it.
+
+![The questions in the order the chip asks them, with the code each no carries](figures/fig-no-order.png)
 
 | # | Question | Evidence it checks | No | Code |
 |---|---|---|---|---|
@@ -438,12 +438,12 @@ built so that none of them can be solved by talking to it.
 > the mailroom, plus one clerk with a notary stamp. The BMC is the janitor, who still has keys
 > to the other rooms but now asks the security office before touching this one.
 
-![The board: the governor, the GPU, the CPU, the switches, the DPU and the BMC](figures/fig-board.png)
-
 The governor module sits in the system board's management-module slot (DC-SCM class) or as a
 mezzanine on the module that is there (`03-interfaces.md` §1, `hw/pcb/rack-integration.md`).
 From there it reaches six things. The two that this document specifies in full are the GPU and
 the CPU; the other four get the paragraph they need and a pointer.
+
+![The board: the governor, the GPU, the CPU, the switches, the DPU and the BMC, and what runs on each wire](figures/fig-board.png)
 
 ### 7.1 The NVIDIA GPU: one bus, three wires, one report
 

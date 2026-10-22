@@ -47,7 +47,10 @@ summary and a "backed by" box.
 
 `safety-governor-design.docx` is all of the above plus the hardware references, the audit and
 the sweep report in one file with the figures, built by `tools/build_master_docx.py` (`make
-docx`; pandoc and python-docx). The Markdown files are the originals.
+docx`; pandoc and python-docx). One document on its own, figures in place, tables across the
+page, as a .docx and a .pdf: `python3 docs/tools/build_doc_docx.py docs/25-the-rulebook-and-the-board.md`
+(into `build/`). Both builders check their own output: every heading, every figure, every table,
+no em dash. The Markdown files are the originals.
 
 ## Figures
 

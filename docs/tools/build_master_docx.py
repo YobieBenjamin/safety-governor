@@ -40,6 +40,10 @@ CHAPTERS = [
     ("docs/19-how-solid-is-the-theory.md", None, 0),
     ("docs/20-experiment-program.md", None, 0),
     ("docs/21-agent-run-plan.md", None, 0),
+    ("docs/22-roadmap-to-tapeout.md", None, 0),
+    ("docs/23-there-is-no-kill-switch.md", None, 0),
+    ("docs/24-the-ladder.md", None, 0),
+    ("docs/25-the-rulebook-and-the-board.md", None, 0),
     ("hw/README.md", "hw · From Verilog to GDS, and into the rack", 0),
     ("hw/pcb/rack-integration.md", "hw · Rack integration reference", 0),
     ("docs/AUDIT-2026-10.md", None, 0),
@@ -59,7 +63,7 @@ def proportional_tables(text: str) -> str:
             rows = [[c.strip() for c in r.strip().strip("|").split("|")] for r in table]
             ncol = max(len(r) for r in rows)
             widths = [max((len(r[i]) if i < len(r) else 0) for j, r in enumerate(rows) if j != 1) for i in range(ncol)]
-            widths = [min(max(w, 6), 90) for w in widths]
+            widths = [min(max(w, 9), 90) for w in widths]   # a floor of nine so a short header such as Rung does not wrap
             total = sum(widths)
             dashes = [max(3, round(100 * w / total)) for w in widths]
             table[1] = "|" + "|".join("-" * d for d in dashes) + "|"
@@ -102,7 +106,7 @@ def header_ids(md: str) -> list[tuple[int, str, str]]:
     with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as fh:
         fh.write(md)
         src = fh.name
-    out = subprocess.run(["pandoc", src, "--from", "gfm+raw_attribute+yaml_metadata_block", "--to", "json"],
+    out = subprocess.run(["pandoc", src, "--from", "markdown+pipe_tables+raw_attribute+yaml_metadata_block+autolink_bare_uris+gfm_auto_identifiers-smart", "--to", "json"],
                          check=True, capture_output=True, text=True).stdout
     os.unlink(src)
     doc = json.loads(out)
@@ -148,6 +152,9 @@ def reference_docx() -> str:
     return path
 
 
+# pandoc's markdown reader rather than gfm: only it turns a pipe table's separator row into column
+# widths and lets a table span the text width; the gfm reader gave every column the same width and
+# left the tables narrow and tall. The same reader computes the heading identifiers for the contents.
 def build() -> str:
     today = dt.date.today().isoformat()
     parts = [
@@ -176,7 +183,7 @@ def build() -> str:
     with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as fh:
         fh.write(md)
         src = fh.name
-    cmd = ["pandoc", src, "--from", "gfm+raw_attribute+yaml_metadata_block", "--to", "docx",
+    cmd = ["pandoc", src, "--from", "markdown+pipe_tables+raw_attribute+yaml_metadata_block+autolink_bare_uris+gfm_auto_identifiers-smart", "--to", "docx",
            "--reference-doc", reference_docx(), "--resource-path", os.path.join(ROOT, "docs"), "-o", OUT]
     subprocess.run(cmd, check=True)
     os.unlink(src)
