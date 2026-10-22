@@ -16,7 +16,7 @@ OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 RMODEL="${REVIEW_MODEL:-sonnet}"; REFFORT="${REVIEW_EFFORT:-high}"; RTURNS="${REVIEW_TURNS:-12}"; RBUDGET="${REVIEW_BUDGET_USD:-3}"
 READER_MIN="${SECOND_READER_MIN:-25}"; REVIEW_MIN="${REVIEW_MIN:-45}"   # wall-clock caps: a stuck local model or review must not stall the gate
 LOCAL_URL="${LOCAL_URL:-http://localhost:11434}"; LOCAL_MODEL="${LOCAL_MODEL:-}"
-HERE="$(cd "$(dirname "$0")" && pwd)"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"
+HERE="$(cd "$(dirname "$0")" && pwd)"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"; . "$HERE/paths.sh"
 ROOT="$(git rev-parse --show-toplevel)"; REPO="$(basename "$ROOT")"
 [ -d "$ROOT/.venv/bin" ] && export PATH="$ROOT/.venv/bin:$PATH"
 LOG="$ROOT/.agents/wave-$WAVE"; P="$LOG/review/$ID"; mkdir -p "$P"
@@ -69,7 +69,7 @@ fi
 
 # 3. The cloud review, read-only, in a clean checkout, with a fixed answer shape.
 SCHEMA='{"type":"object","required":["verdict","summary","findings","claims"],"properties":{"verdict":{"type":"string","enum":["merge","revise","reject"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","required":["kind","severity","file","line","detail"],"properties":{"kind":{"type":"string","enum":["hallucination","unsupported_claim","test_integrity","scope","correctness","protocol","style"]},"severity":{"type":"string","enum":["block","warn"]},"file":{"type":"string"},"line":{"type":"integer"},"detail":{"type":"string"}}}},"claims":{"type":"array","items":{"type":"object","required":["claim","where","evidence","supported"],"properties":{"claim":{"type":"string"},"where":{"type":"string","enum":["document","code","commit","summary"]},"evidence":{"type":"string"},"supported":{"type":"boolean"}}}}}}'
-SIBLINGS=""; for other in safety-governor safety hardware-and-silicon; do [ "$other" != "$REPO" ] && [ -d "$HOME/$other/.git" ] && SIBLINGS="$SIBLINGS $HOME/$other"; done
+SIBLINGS=""; for other in safety-governor safety hardware-and-silicon; do [ "$other" != "$REPO" ] && [ -d "$WORK/$other/.git" ] && SIBLINGS="$SIBLINGS $WORK/$other"; done
 WT="$ROOT/.worktrees/review-$ID"; git -C "$ROOT" worktree remove -f "$WT" 2>/dev/null || true
 git -C "$ROOT" worktree add -q --detach "$WT" "$BRANCH"
 say "$ID: cloud review on $RMODEL (effort $REFFORT, $RTURNS turns, \$$RBUDGET cap)"

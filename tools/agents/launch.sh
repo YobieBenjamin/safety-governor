@@ -14,6 +14,7 @@ set -E; trap 'echo "error: line $LINENO: $BASH_COMMAND (exit status $?)" >&2' ER
 WAVE="${1:?usage: launch.sh <wave> | launch.sh prepare}"   # "prepare": steps 1 to 3 only (the CLI, the environments, the local model)
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 export PATH="$HOME/.local/bin:$PATH"
+. "$(cd "$(dirname "$0")" && pwd)/paths.sh"   # WORK: where the clones live
 
 # 1. The Claude CLI, at a version the launcher needs (2.1.259 or later: --permission-prompts, --max-budget-usd,
 #    --json-schema, claude auth). An older or missing one is replaced by the native installer (into
@@ -21,13 +22,13 @@ export PATH="$HOME/.local/bin:$PATH"
 step "Claude CLI"
 MIN=2.1.259
 have=$(claude -v 2>/dev/null | head -1 || true)
-if [ -z "$have" ] || ! python3 "$HOME/safety-governor/tools/agents/wave_lib.py" version_ok "$have" "$MIN"; then
+if [ -z "$have" ] || ! python3 "$WORK/safety-governor/tools/agents/wave_lib.py" version_ok "$have" "$MIN"; then
   echo "claude ${have:-is missing}; installing the current one"
   curl -fsSL https://claude.ai/install.sh | bash
   hash -r 2>/dev/null || true
   grep -q '.local/bin' "$HOME/.zshrc" 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
   have=$(claude -v 2>/dev/null | head -1 || true)
-  python3 "$HOME/safety-governor/tools/agents/wave_lib.py" version_ok "$have" "$MIN" || { echo "claude is still $have at $(command -v claude); remove the old one and run again" >&2; exit 1; }
+  python3 "$WORK/safety-governor/tools/agents/wave_lib.py" version_ok "$have" "$MIN" || { echo "claude is still $have at $(command -v claude); remove the old one and run again" >&2; exit 1; }
 fi
 echo "claude $have at $(command -v claude)"
 if ! claude auth status >/dev/null 2>&1; then
@@ -53,8 +54,8 @@ if [ -z "$PY" ]; then
 fi
 echo "python: $PY ($("$PY" --version 2>&1))"
 for repo in safety-governor safety; do
-  [ -d "$HOME/$repo/.git" ] || { echo "$repo: no clone at ~/$repo (run setup_and_publish.sh first)"; continue; }
-  cd "$HOME/$repo"
+  [ -d "$WORK/$repo/.git" ] || { echo "$repo: no clone at $WORK/$repo (run setup_and_publish.sh first)"; continue; }
+  cd "$WORK/$repo"
   if [ -x .venv/bin/python3 ] && ! .venv/bin/python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
     echo "$repo: the existing .venv is $(.venv/bin/python3 --version 2>&1); remaking it"; rm -rf .venv
   fi
@@ -63,7 +64,7 @@ for repo in safety-governor safety; do
   case "$repo" in
     safety-governor)
       .venv/bin/python3 -m pip install -q -e ".[dev]"
-      [ -d "$HOME/hardware-and-silicon" ] && .venv/bin/python3 -m pip install -q -e "$HOME/hardware-and-silicon"
+      [ -d "$WORK/hardware-and-silicon" ] && .venv/bin/python3 -m pip install -q -e "$WORK/hardware-and-silicon"
       ;;
     safety)
       .venv/bin/python3 -m pip install -q -e "observer[dev]"
@@ -78,7 +79,7 @@ done
 #    LOCAL_URL=cloud.
 step "Local model"
 # shellcheck source=tools/agents/local_model.sh
-. "$HOME/safety-governor/tools/agents/local_model.sh"
+. "$WORK/safety-governor/tools/agents/local_model.sh"
 find_local_model
 if [ "$LOCAL_URL" = cloud ]; then echo "LOCAL_URL=cloud: the cheap cloud model ($LOCAL_MODEL) takes the local tier's jobs"
 elif [ "$LOCAL_OK" = 1 ]; then echo "local model: $LOCAL_MODEL at $LOCAL_URL; it takes the local-only issues, the repair passes and the second reading of every review"
@@ -87,11 +88,11 @@ else echo "no Ollama server answers at $LOCAL_URL and none could be started (htt
 [ "$WAVE" = prepare ] && { step "Prepared"; exit 0; }
 
 # 4. Preflight, then the wave, in each repository that has issues in this wave.
-RUN="$HOME/safety-governor/tools/agents/run_wave.sh"
+RUN="$WORK/safety-governor/tools/agents/run_wave.sh"
 for repo in safety-governor safety; do
-  [ -d "$HOME/$repo/.git" ] || continue
-  cd "$HOME/$repo"
-  if ! python3 "$HOME/safety-governor/tools/agents/wave_lib.py" issues "$HOME/safety-governor/tools/github/experiments.json" "$WAVE" "$repo" | grep -q .; then
+  [ -d "$WORK/$repo/.git" ] || continue
+  cd "$WORK/$repo"
+  if ! python3 "$WORK/safety-governor/tools/agents/wave_lib.py" issues "$WORK/safety-governor/tools/github/experiments.json" "$WAVE" "$repo" | grep -q .; then
     echo "$repo: no issues in wave $WAVE"; continue
   fi
   step "$repo: preflight"

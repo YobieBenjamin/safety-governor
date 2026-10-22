@@ -49,7 +49,7 @@ PAR="${PARALLEL:-2}"; TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-120}"; RETRIES="${RETRIE
 FH_CEIL="${FIVE_HOUR_CEILING:-0.70}"; SD_CEIL="${SEVEN_DAY_CEILING:-0.85}"; BASELINE="${BASELINE:-1}"
 LOCAL_URL="${LOCAL_URL:-http://localhost:11434}"; LOCAL_MODEL="${LOCAL_MODEL:-}"; LOCAL_TURNS="${LOCAL_TURNS:-80}"; LOCAL_TIMEOUT_MIN="${LOCAL_TIMEOUT_MIN:-240}"
 BACKEND_OVERRIDE="${BACKEND:-}"; LOCAL_LOCK="$HOME/.agents-local.lock"
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")" && pwd)"; . "$HERE/paths.sh"   # WORK: where the sibling clones live
 LIB="$HERE/wave_lib.py"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"
 ROOT="$(git rev-parse --show-toplevel)"; REPO="$(basename "$ROOT")"
 [ -d "$ROOT/.venv/bin" ] && export PATH="$ROOT/.venv/bin:$PATH"   # the repository's own environment, for the launcher and the agents
@@ -109,7 +109,7 @@ git -C "$ROOT" fetch -q origin main
 free_gb=$(df -g "$ROOT" 2>/dev/null | awk 'NR==2 {print $4}' || echo 99); [ "${free_gb:-99}" -ge 5 ] || fail "under 5 GB free on this disk"
 ADD_DIRS=""
 for other in safety-governor safety hardware-and-silicon; do
-  if [ "$other" != "$REPO" ] && [ -d "$HOME/$other/.git" ]; then ADD_DIRS="$ADD_DIRS $HOME/$other"; fi
+  if [ "$other" != "$REPO" ] && [ -d "$WORK/$other/.git" ]; then ADD_DIRS="$ADD_DIRS $WORK/$other"; fi
 done
 say "gh: $OWNER; claude $CLAUDE_VERSION ($MODEL, effort $EFFORT, $TURNS turns, \$$BUDGET cap); parallel $PAR; readable clones:${ADD_DIRS:- none}"
 # The local model: the Ollama server at LOCAL_URL (started if it is installed but not running) and a

@@ -10,7 +10,7 @@
 #
 # Needs: gh (logged in as YobieBenjamin), python3, git. Run from any directory.
 set -euo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")" && pwd)"; . "$HERE/../agents/paths.sh"   # WORK: where the clones live
 SPEC="$HERE/experiments.json"
 OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 DRY=0; BUNDLES=""
@@ -30,7 +30,7 @@ gh auth status >/dev/null 2>&1 || { echo "gh is not logged in; run: gh auth logi
 #    (the container cannot push), then push each repository.
 if [ -n "$BUNDLES" ]; then
   for repo in safety-governor safety hardware-and-silicon; do
-    clone="$HOME/$repo"
+    clone="$WORK/$repo"
     [ -d "$clone/.git" ] || { echo "no clone at $clone, skipping" >&2; continue; }
     for b in "$BUNDLES"/"$repo"-*.bundle; do
       [ -f "$b" ] || continue

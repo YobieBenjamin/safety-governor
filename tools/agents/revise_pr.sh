@@ -19,7 +19,7 @@ WAVE="${1:?wave}"; ID="${2:?issue id}"; ROUND="${3:-1}"
 OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 MODEL="${AGENT_MODEL:-sonnet}"; EFFORT="${EFFORT:-medium}"; TURNS="${REVISE_TURNS:-30}"; BUDGET="${BUDGET_USD:-10}"; TIMEOUT_MIN="${AGENT_TIMEOUT_MIN:-120}"
 REVISE_BACKEND="${REVISE_BACKEND:-auto}"; LOCAL_TURNS="${REVISE_LOCAL_TURNS:-40}"; LOCAL_TIMEOUT_MIN="${REVISE_LOCAL_TIMEOUT_MIN:-90}"; LOCAL_LOCK="$HOME/.agents-local.lock"
-HERE="$(cd "$(dirname "$0")" && pwd)"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"
+HERE="$(cd "$(dirname "$0")" && pwd)"; SPEC="${EXPERIMENTS_SPEC:-$HERE/../github/experiments.json}"; . "$HERE/paths.sh"
 ROOT="$(git rev-parse --show-toplevel)"; REPO="$(basename "$ROOT")"
 [ -d "$ROOT/.venv/bin" ] && export PATH="$ROOT/.venv/bin:$PATH"
 LOG="$ROOT/.agents/wave-$WAVE"; P="$LOG/review/$ID"
@@ -40,7 +40,7 @@ case "$REVISE_BACKEND" in
   *) if [ "$ROUND" -le 1 ]; then find_local_model; [ "$LOCAL_OK" = 1 ] && backend=local; fi ;;
 esac
 CLAUDE_VERSION=$(claude -v 2>/dev/null | head -1); PROMPTS_FLAG=""; python3 "$HERE/wave_lib.py" version_ok "$CLAUDE_VERSION" 2.1.259 && PROMPTS_FLAG="--permission-prompts none"
-ADD_DIRS="$LOG"; for other in safety-governor safety hardware-and-silicon; do [ "$other" != "$REPO" ] && [ -d "$HOME/$other/.git" ] && ADD_DIRS="$ADD_DIRS $HOME/$other"; done
+ADD_DIRS="$LOG"; for other in safety-governor safety hardware-and-silicon; do [ "$other" != "$REPO" ] && [ -d "$WORK/$other/.git" ] && ADD_DIRS="$ADD_DIRS $WORK/$other"; done
 
 [ -f "$P/review.md" ] || { echo "no review at $P/review.md; run review_pr.sh first" >&2; exit 2; }
 [ -d "$WT" ] || { git -C "$ROOT" worktree add -q "$WT" "$BRANCH"; }
