@@ -97,6 +97,22 @@ def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_requ
             "per_token_ops": (ops.get("mailbox", 0) + ops.get("ticket", 0) + ops.get("sign", 0)) / max(1, total_tokens)}
 
 
+def hybrid_report(h: dict) -> str:
+    """The hybrid line of ``make bench``. Every verdict word is computed from the run, none is fixed text."""
+    base, win = h["hybrid_engine_utilization_at_base_window_pct"], h["hybrid_engine_utilization_pct"]
+    keeps_up = lambda u: "keeps up" if u < 100.0 else "cannot keep up"
+    holds = HYBRID_BATCH_WINDOW_S < 1.0 and win < 100.0
+    src = "sourced" if MLDSA65_COST_SOURCED else "UNVERIFIED placeholder, no checked source; re-check pqm4 and the M4->OTBN scaling"
+    return (f"hybrid (P-384 + ML-DSA-65, both per batch): {HYBRID_SIGN_S*1e3:.0f} ms per batch (ML-DSA-65 {MLDSA65_SIGN_CYCLES:,} cycles, "
+            f"Cortex-M4 pqm4 figure, {src}; OTBN 1.0x assumed); engine {base:.0f}% at the {BATCH_WINDOW_S*1e3:.0f} ms window "
+            f"({keeps_up(base)}) -> {win:.0f}% at a {HYBRID_BATCH_WINDOW_S*1e3:.0f} ms window ({keeps_up(win)}); "
+            f"record latency <= {h['hybrid_record_latency_s']*1e3:.0f} ms. "
+            f"Disproof {'did not hold' if holds else 'HOLDS: a second engine is needed'}: "
+            f"{'a window under 1 s keeps the one engine under 100 percent' if holds else 'no modelled window under 1 s keeps the engine under 100 percent'}"
+            f"{'' if MLDSA65_COST_SOURCED else ', conditional on the unverified ML-DSA figure'}. "
+            f"Only signing is counted; other uses of the engine are not modelled.")
+
+
 def main() -> None:
     print(f"signature: ECDSA P-384 on OTBN at 100 MHz = {OTBN_P384_SIGN_CYCLES:,} cycles = {SIGN_S*1e3:.1f} ms "
           f"(OpenTitan's published figure); batch window {BATCH_WINDOW_S*1e3:.0f} ms; {SLOTS_PER_CHIP} slots per governor chip")
@@ -105,15 +121,7 @@ def main() -> None:
         print(f"{tier:11s} tokens={r['tokens']:>9,}  firmware={r['firmware_seconds']*1e3:7.1f} ms of gpu={r['gpu_seconds']:6.1f} s "
               f"({r['firmware_overhead_pct']:.3f}%)  engine: {r['engine_utilization_unbatched_pct']:.0f}% unbatched -> "
               f"{r['engine_utilization_pct']:.0f}% batched  record latency <= {r['record_latency_s']*1e3:.0f} ms  ops={r['ops']}")
-    h = run("rack")
-    print(f"hybrid (P-384 + ML-DSA-65, both per batch): {HYBRID_SIGN_S*1e3:.0f} ms per batch (ML-DSA-65 {MLDSA65_SIGN_CYCLES:,} cycles, "
-          f"Cortex-M4 pqm4 figure, {'UNVERIFIED placeholder -- no checked source at revision 1' if not MLDSA65_COST_SOURCED else 'sourced'} -- re-check before relying; "
-          f"OTBN 1.0x assumed); engine {h['hybrid_engine_utilization_at_base_window_pct']:.0f}% at the "
-          f"{BATCH_WINDOW_S*1e3:.0f} ms window (cannot keep up) -> {h['hybrid_engine_utilization_pct']:.0f}% at a {HYBRID_BATCH_WINDOW_S*1e3:.0f} ms window (under 1 s); "
-          f"record latency <= {h['hybrid_record_latency_s']*1e3:.0f} ms. "
-          f"Counted is signing only (tickets are a 20 us firmware path; verification and session setup are not on the engine), "
-          f"so 'no second engine' holds for the signing workload, not the chip as a whole. "
-          f"Disproof did not hold -- a window under 1 s keeps the one engine under 100 percent -- but ONLY conditional on the unverified ML-DSA figure.")
+    print(hybrid_report(run("rack")))
     short = run("rack", requests=1000, tokens_per_request=100)
     print(f"short responses (100 tokens): engine {short['engine_utilization_unbatched_pct']:.0f}% unbatched, which cannot keep up, "
           f"-> {short['engine_utilization_pct']:.0f}% batched (why the spec batches, docs/04 §9)")
