@@ -46,14 +46,22 @@ def test_nda_rows_are_reported_not_failed():
 
 
 def test_every_lever_row_answers_the_retrofit_question():
+    """For each lever row the retrofit columns must be filled and consistent: from_module is one of
+    the values the brief allows, and class and undo_paths must agree. A `witness` must name what
+    undoes the lever (a non-empty undo path the governor does not sit in front of); a `lock` must
+    have no such undo path and a module that can actually drive it. No row is a lock today, so the
+    witness branch is the one exercised; the lock branch guards a future row that claims to be a lock."""
     for r in rows():
         if r["status"] != "governed":
             continue
         assert r["from_module"] in {"yes", "no", "NDA"}, r["id"]
-        assert r["undo_paths"] and r["undo_paths"] != "n/a", r["id"]
         assert r["class"] in {"lock", "witness"}, r["id"]
+        has_undo = bool(r["undo_paths"].strip()) and r["undo_paths"] != "n/a"
         if r["class"] == "lock":
             assert r["from_module"] == "yes", f"{r['id']}: a lock needs a module that can drive it"
+            assert not has_undo, f"{r['id']}: a lock must have no undo path the governor does not own"
+        else:
+            assert has_undo, f"{r['id']}: a witness must name what undoes the lever"
 
 
 def test_nda_and_gap_rows_carry_the_retrofit_columns_too():
@@ -70,20 +78,35 @@ def test_bricked_rows_say_how():
 
 
 def test_register_matches_the_models_enumeration():
-    """Every exit the model enumerates has a row, and the status agrees with how the model treats it
-    (governed at the rack tier, a recorded gap, or bricked); a model exit that the register cannot
-    settle publicly may only be an NDA row, never a silent `governed`."""
+    """Every model exit has a register row, and the register's status is consistent with how the
+    model treats the exit. A True exit must have a governed row backed by external evidence
+    (VERIFIED or PARTIAL, not the governor's own design intent); the False exits are the recorded
+    gaps (every row recorded-gap); the model bricks the None exits by policy, and where the register
+    cannot show the brick (an NDA row) the test reports the unestablished assumption instead of
+    passing it silently."""
     by_exit = {}
     for r in rows():
-        by_exit.setdefault(r["model_exit"], []).append(r["status"])
+        by_exit.setdefault(r["model_exit"], []).append(r)
+    missing = [n for n in EXITS if n not in by_exit]
+    assert not missing, f"model exits with no register row: {missing}"
+    unshown = []
     for name, governed in EXITS.items():
-        assert name in by_exit, f"model exit {name} has no register row"
+        rows_for = by_exit[name]
+        statuses = [r["status"] for r in rows_for]
         if governed is True:
-            assert "governed" in by_exit[name], name
+            gov = [r for r in rows_for if r["status"] == "governed"]
+            assert gov, f"{name} is governed in the model but the register has no governed row"
+            supported = [r for r in gov if "VERIFIED" in r["evidence"].upper() or "PARTIAL" in r["evidence"].upper()]
+            assert supported, f"{name} is only governed by design intent: {[r['id'] for r in gov]}"
         elif governed is False:
-            assert set(by_exit[name]) == {"recorded-gap"}, name
-        else:
-            assert set(by_exit[name]) <= {"bricked", "unaccounted (NDA)"}, name
+            assert set(statuses) == {"recorded-gap"}, f"{name} rows: {statuses}"
+        else:  # None: the model bricks this exit by policy
+            bad = [s for s in statuses if s not in {"bricked", "unaccounted (NDA)"}]
+            assert not bad, f"{name} (bricked in the model) has a forbidden status: {bad}"
+            if any(s == "unaccounted (NDA)" for s in statuses):
+                unshown.append(name)
+    if unshown:
+        warnings.warn(f"the model bricks these exits by policy but the register cannot show it: {unshown}")
 
 
 def test_stated_counts_match_the_table():
@@ -98,4 +121,5 @@ def test_stated_counts_match_the_table():
 
 
 def test_no_em_dashes():
-    assert "—" not in REGISTER.read_text()
+    em_dash = chr(0x2014)
+    assert em_dash not in REGISTER.read_text()
