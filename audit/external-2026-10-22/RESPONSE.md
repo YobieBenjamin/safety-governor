@@ -6,11 +6,13 @@ Oct 22, 2026 · @Yobie Benjamin
 
 ## You were right, and here is the proof that we listened
 
-Brother, thank you. You found five real failures and a hole in the proofs, and every one of them reproduced on the exact snapshots you audited. I didn't take a single line of your memo on faith, because you wouldn't want me to and because this project dies the day we start believing things without running them. So for each finding I did three things, in this order:
+Thank you. You found five real failures in the code and a hole in the proofs, and every one of those six reproduced on the exact snapshots you audited. I didn't take a single line of your memo on faith, because you wouldn't want me to and because this project dies the day we start believing things without running them. For each of the five implementation findings, and the code side of the proof finding, I did three things, in this order:
 
 1. **Reproduced it on your snapshot** (`dccc1e0` for the governor, `11eb119` for the reference stack) with a script that prints REPRODUCED or NOT. All six reproduced.
 2. **Fixed the cause, not the symptom**, and wrote a regression test for it.
-3. **Put the old code back** and ran the test again, to make sure the test actually catches the bug. One of my tests didn't on the first try (more on that below, it's the most useful embarrassment in this memo), so I rewrote it until it did.
+3. **Put the old code back** and ran the test again, to make sure the test actually catches the bug, and catches it *for the security reason*: the failure has to be an assertion that the unauthorized operation was accepted, never an import or interface error, and the legitimate operation has to keep working. [EVIDENCE.md](EVIDENCE.md) is the record, one row per finding. Doing this caught three of my own tests passing or failing for the wrong reason; they're described below and fixed.
+
+Your other findings are a different kind, and I've given them different dispositions instead of pretending a patch closes them. The research objections get recomputed numbers and corrected claims (drafted, not yet applied in that repository); the missing comparison and the nested rerun still have to be run; the physical-enforcement questions stay open until there's a board on a bench. [STATUS.md](STATUS.md) keeps five statuses apart for every finding: implemented, locally tested, propagated to GitHub, rechecked against what was propagated, and what is still open.
 
 While fixing your finding 5 I found two more holes of the same family that you didn't report. They're fixed too.
 
@@ -39,7 +41,7 @@ The paperwork:
 - **The new tests**: [tests/test\_h19\_authorization.py](https://github.com/YobieBenjamin/safety-governor/blob/6743c9f8ac951becc1e5fad8c47cf685120ea297/tests/test_h19_authorization.py) (16 tests), [tests/test\_h20\_closed\_gaps.py](https://github.com/YobieBenjamin/safety-governor/blob/6743c9f8ac951becc1e5fad8c47cf685120ea297/tests/test_h20_closed_gaps.py) (8 tests), and [hardware-and-silicon tests/test\_audit\_2026\_10\_22.py](https://github.com/YobieBenjamin/hardware-and-silicon/blob/b36ed52fb7b2db6b682ff942b3c2af020642a551/tests/test_audit_2026_10_22.py) (11 tests)
 - **The proof**: [proofs/core\_invariants.py](https://github.com/YobieBenjamin/safety-governor/blob/6743c9f8ac951becc1e5fad8c47cf685120ea297/proofs/core_invariants.py), now P0 to P13
 
-The counts after all of it: 245 governor tests (224 model, 21 RTL), 67 reference-stack tests, every proof holds, and the attack catalogue gives the same verdicts as before, 75 attacks blocked and 12 baselines allowed. You ran 200, 20 and 56.
+The counts after all of it: 248 governor tests (227 model, 21 RTL), 67 reference-stack tests, every proof holds, and the attack catalogue gives the same verdicts as before, 75 attacks blocked and 12 baselines allowed. You ran 200, 20 and 56.
 
 ## Your six findings, one at a time
 
@@ -88,7 +90,7 @@ if min_threshold is not None:
 
 Against your snapshot, the reproduction script prints `propose=True/ok commit=True/ok installed threshold=0 REPRODUCED`. Against the fix, `propose=False/policy.quorum_not_met ... installed threshold=3 NOT reproduced`.
 
-**What this doesn't solve yet.** Changing the *governance key set itself* (adding or retiring a governance key) still means new fuse hashes, which in silicon means a new chip or a pre-fused spare bank. Your "require the current quorum to approve changes to that configuration" is right for the key set too. It isn't modelled yet and it's on the list.
+**The restored rule, in full (added in [`28927e3`](https://github.com/YobieBenjamin/safety-governor/commit/28927e386d564160dc018a17a2745ebc2b9a7298) after your follow-up).** Rejecting zero, and even fusing a floor, wasn't your whole criterion: the governance configuration currently trusted has to authorize its own replacement, keys included. Now it does. The chip keeps a protected record of the configuration in force: the keys whose signatures count, the k they must reach, and the edition that set them. A new rulebook needs k distinct signatures from *those* keys, whatever keys and threshold it names itself. So the same quorum can rotate the keys or change k, never below the floor fused at manufacture, and only the very first rulebook on a new chip is admitted by the fused key hashes. This replaces the ratchet I first built (k could only rise), which was stricter than it needed to be and still let the image's own keys do the signing. New tests: k raised to 4 binds the next change, and four in force can lower it to 3; the current quorum rotates to five new keys, after which the old keys authorize nothing, before and after a restart; attacker keys that name and sign themselves are refused; k below the floor is refused. The proof follows: the threshold in force (`kfuse`) is set by each edition and never falls below a fixed floor (`kfloor`).
 
 ### Finding 2: a signature authorized whatever command it was stapled to
 
@@ -130,6 +132,12 @@ if cls == "authority":
 - the one I'm proudest of, **`test_no_signed_message_is_accepted_by_a_command_it_was_not_signed_for`**. It records every signed frame a normal run delivers: heartbeats, model loads, requests, approvals, commits, output signing, alarm clears, halts, clears and roster joins. Then it wipes the replay counters, so the sequence check can't hide a missing type check, and fires each frame into every *other* signed command. Zero accepted. That one test would have caught your finding on day one.
 
 The RTL side is pinned by [`test_mailbox_refuses_a_good_signature_over_another_command`](https://github.com/YobieBenjamin/safety-governor/blob/c7df7cb60bca338da4f023ca15f2d4ce5d03b398/rtl/tests/test_blocks.py#L437-L469).
+
+**Three of my tests failed your "for the right reason" test, and I fixed them.** When I reverted each fix and checked *why* each test failed:
+
+- **The CLEAR-for-another-chip test passed for the wrong reason.** On a two-governor rack, a CLEAR also needs a neighbour to have acknowledged the logged cause. My test never gave it one, so it passed even with the chip binding removed. Every CLEAR test now sets up a halt that a legitimate CLEAR would clear, asserts the refusal code `clear.unauthorized`, and then shows the right CLEAR succeeding under the identical setup. That control is what proves the refusal was the authorization.
+- **Two finding-1 tests aren't regressions for your finding.** The old code also refused "threshold above the number of keys" and "attacker keys that sign themselves". They're hardening of the new rotation rule, and EVIDENCE.md now lists them as tests that must pass on the fixed tree, not as tests that catch your bug.
+- **Your heartbeat attack is stopped by three independent locks:** the command binding, the chip and expiry binding (a heartbeat names no chip), and the separate authority key. Reverting one or two of them didn't reopen it, so the evidence for finding 2 reverts all three, which is what `dccc1e0` actually was.
 
 ### Finding 3: the gate's "secret" key was computed from public bytes
 
@@ -329,7 +337,7 @@ A program that only publishes the reviews it survived isn't doing science. Objec
 
 ```
 git clone https://github.com/YobieBenjamin/safety-governor && cd safety-governor
-python3 -m pytest -q tests rtl/tests                               # 245 tests
+python3 -m pytest -q tests rtl/tests                               # 248 tests
 make proof                                                         # P0 to P13, the regression checks, K0 to K5
 PYTHONPATH=. python3 audit/external-2026-10-22/repro_sg.py         # your findings 1 and 2: NOT reproduced
 

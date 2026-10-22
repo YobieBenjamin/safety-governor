@@ -4,15 +4,24 @@ What follows is the audit as the reviewer sent it, unedited: every word, every l
 objection, including the ones about the research and the ones we have not answered yet. It is
 kept here because a program that only publishes the reviews it survived is not doing science.
 
-- **Who:** an independent reviewer, a friend of the author, who had not seen the work being written.
+- **Who:** an independent reviewer who had not seen the work being written.
 - **What he audited:** safety-governor at `dccc1e0`, hardware-and-silicon at `11eb119`,
   autonomic-graph-regulation at `4c1374d` (public snapshots, 22 October 2026).
 - **Our answer:** [RESPONSE.md](RESPONSE.md) in this folder, finding by finding, with the
   reproductions, the fixes and the tests. The account in the design record is section 9 of
   [docs/REVIEW-2026-10-22-fact-check.md](../../docs/REVIEW-2026-10-22-fact-check.md).
-- **How every claim was treated:** reproduced on his snapshot before anything was changed
-  (the scripts are in this folder), then fixed, then the old code put back to confirm the new
-  test catches it. Nothing in this memo was accepted on faith, and nothing in it was waved away.
+- **How the findings were handled depends on their kind** (the reviewer's distinction, adopted):
+  - *Implementation findings* (an unauthorized operation accepted): reproduced on his snapshot
+    before anything was changed (the scripts are in this folder), corrected, and each regression
+    shown to fail for the intended security reason when the fix is reverted, while the legitimate
+    operation still works ([EVIDENCE.md](EVIDENCE.md)).
+  - *The formal-model finding:* the model and properties revised; their link to the implementation
+    is still open.
+  - *Research findings:* the numbers recomputed (all matched); the corrected claims drafted but not
+    yet applied in autonomic-graph-regulation; the missing comparison and the nested rerun not run.
+  - *Physical and deployment findings:* open; no software change addresses them.
+- **Status, finding by finding:** [STATUS.md](STATUS.md) keeps implemented, locally tested,
+  propagated, rechecked and still open apart for every finding.
 
 ---
 
