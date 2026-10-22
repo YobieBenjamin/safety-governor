@@ -80,7 +80,21 @@ echo "account: $OWNER"
 # 3. The move: a clone still in $HOME goes to WORK. The program, if it is running from the old
 #    place with agents in flight, is left to finish them first (its ten-minute tick says how many
 #    are running); then it is stopped, the clones move, and it is started again from WORK.
-program_pids() { pgrep -f "tools/agents/run_program.sh" 2>/dev/null | while read -r p; do ps -o command= -p "$p" 2>/dev/null | grep -q -- "--mirror-job" || echo "$p"; done; }
+program_pids() { pgrep -f "tools/agents/run_program.sh" 2>/dev/null | while read -r p; do [ "$p" = "$$" ] || ps -o command= -p "$p" 2>/dev/null | grep -q -- "--mirror-job" || echo "$p"; done; }
+kill_tree() { local c; for c in $(pgrep -P "$1" 2>/dev/null || true); do kill_tree "$c"; done; kill -TERM "$1" 2>/dev/null || true; }
+stop_program() {   # the program and its agents, whichever version of run_program.sh is installed: the one before 21 October did not know --stop
+  local pats="tools/agents/run_program.sh tools/agents/run_wave.sh tools/agents/review_pr.sh tools/agents/revise_pr.sh" pat p
+  bash "$HOME/safety-governor/tools/agents/run_program.sh" --stop >/dev/null 2>&1 || true
+  for pat in $pats; do for p in $(pgrep -f "$pat" 2>/dev/null || true); do
+    [ "$p" = "$$" ] && continue; ps -o command= -p "$p" 2>/dev/null | grep -q -- "--mirror-job" && continue; kill_tree "$p"
+  done; done
+  sleep 5
+  for pat in $pats; do for p in $(pgrep -f "$pat" 2>/dev/null || true); do
+    [ "$p" = "$$" ] && continue; ps -o command= -p "$p" 2>/dev/null | grep -q -- "--mirror-job" && continue; kill -KILL "$p" 2>/dev/null || true
+  done; done
+  rm -f "$HOME/safety-governor/.agents/program/pid" "$HOME/.agents-local.lock/pid" 2>/dev/null; rmdir "$HOME/.agents-local.lock" 2>/dev/null || true
+  echo "program stopped ($(program_pids | wc -l | tr -d ' ') instance(s) left); the backup's mirror jobs and the Ollama server were left running"
+}
 agents_running() {   # the last tick of the old program's log: "tick: N running"
   local log="$HOME/safety-governor/.agents/program/program.log" n
   [ -f "$log" ] || { echo 0; return; }
@@ -124,7 +138,7 @@ if [ "$WORK" != "$HOME" ] && needs_move; then
       done
     fi
     echo "stopping the program at $HOME/safety-governor (it restarts from $WORK at the end)"
-    bash "$HOME/safety-governor/tools/agents/run_program.sh" --stop || true
+    stop_program
     sleep 3
   fi
   for repo in $REPOS; do
