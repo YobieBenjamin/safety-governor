@@ -324,6 +324,164 @@ def fig_request():
     save(fig, "fig-request.png")
 
 
+
+
+# ---------------------------------------------------------------------------------------------
+# 7 to 10. The ladder (docs/24): the staircase, the three questions, witnesses versus locks,
+# and the person on the only path
+# ---------------------------------------------------------------------------------------------
+import textwrap
+
+LADDER = [
+    ("0", "The prompt", "a text field", "one more sentence, or text in a page the agent reads", "plain"),
+    ("1", "Training", "the weight file", "a jailbreak, a fine-tune, an afternoon of abliteration on a consumer GPU", "plain"),
+    ("2", "Watchers", "a process beside the model", "the same injections and edits as training; root on the box", "plain"),
+    ("3", "Runtime and network", "the operator's infrastructure", "a config edit; root on the fleet; a path that never touches the network", "plain"),
+    ("4", "The chip", "silicon, fused keys", "nothing the model or the operator can write; a lab with a soldering iron, maybe", "gov"),
+    ("5", "A person with a key", "a human", "a conversation; fatigue; a stolen key", "warn"),
+]
+
+
+def wrapped(ax, x, y, text, width, size, color=QUIET, weight="normal", step=0.145, ha="left"):
+    """Write text wrapped at `width` characters, top at y; returns the y below the last line."""
+    for i, line in enumerate(textwrap.wrap(text, width)):
+        ax.text(x, y - i * step, line, ha=ha, va="top", fontsize=size, color=color, fontweight=weight)
+    return y - len(textwrap.wrap(text, width)) * step
+
+
+def fig_ladder():
+    fig, ax = new_fig(10.4, 5.5)
+    ax.text(0.3, 5.22, "The ladder: six rungs, where each one lives, and what removes it.", fontsize=10.5, color=INK, fontweight="bold", va="center")
+    sw, gap, base = 1.58, 0.1, 0.95
+    ax.plot([0.3, 6.95], [4.75, 4.75], color=CORAL, lw=1.2)
+    ax.text(0.3, 4.9, "SOFTWARE: REMOVED BY WHOEVER CAN WRITE TO WHERE IT LIVES", fontsize=6.8, color=CORAL, fontweight="bold", va="center")
+    ax.plot([7.02, 10.28], [4.75, 4.75], color=BLUE, lw=1.2)
+    ax.text(7.02, 4.9, "NOT WRITABLE BY THE MODEL OR THE OPERATOR", fontsize=6.8, color=BLUE, fontweight="bold", va="center")
+    for i, (n, name, lives, removed, kind) in enumerate(LADDER):
+        x = 0.3 + i * (sw + gap)
+        h = 1.3 + 0.45 * i
+        fill, edge = {"plain": (GRAY_FILL, EDGE), "gov": (BLUE_FILL, BLUE), "warn": (AMBER_FILL, AMBER)}[kind]
+        ax.add_patch(FancyBboxPatch((x, base), sw, h, boxstyle="round,pad=0.02,rounding_size=0.06", fc=fill, ec=edge, lw=1.2))
+        top = base + h
+        ax.text(x + 0.12, top - 0.14, n, ha="left", va="top", fontsize=15, color={"plain": CORAL, "gov": BLUE, "warn": AMBER}[kind], fontweight="bold")
+        name_lines = textwrap.wrap(name, 15)
+        for k, ln in enumerate(name_lines):
+            ax.text(x + 0.42, top - 0.17 - 0.16 * k, ln, ha="left", va="top", fontsize=8.0, color=INK, fontweight="bold")
+        y = top - 0.5 - 0.16 * (len(name_lines) - 1)
+        ax.text(x + 0.12, y, "lives in", ha="left", va="top", fontsize=6.4, color=INK, fontweight="bold")
+        y = wrapped(ax, x + 0.12, y - 0.15, lives, 30, 6.4)
+        ax.text(x + 0.12, y - 0.04, "removed by", ha="left", va="top", fontsize=6.4, color=INK, fontweight="bold")
+        wrapped(ax, x + 0.12, y - 0.19, removed, 30, 6.4)
+    ax.plot([0.3, 10.28], [base, base], color=EDGE, lw=1.2)
+    label(ax, 0.3, 0.62, "The rule: a measure is never stronger than the thing it lives in. Read the \"removed by\" lines left to right: text, weights, a process, a fleet, and then nothing a model or an operator can write.", size=6.6)
+    label(ax, 0.3, 0.4, "docs/24-the-ladder.md, sections 2 and 3", size=6.6)
+    save(fig, "fig-ladder.png")
+
+
+def fig_ladder_questions():
+    fig, ax = new_fig(10.4, 4.6)
+    ax.text(0.3, 4.32, "Three questions to ask of any safety measure, and a fourth, answered for every rung.", fontsize=10.5, color=INK, fontweight="bold", va="center")
+    heads = ["0  Prompt", "1  Training", "2  Watchers", "3  Runtime, network", "4  The chip", "5  A person"]
+    rows = [
+        ("Where does it live?", ["a text field", "the weight file", "a process beside the model", "the operator's infrastructure", "silicon, with fused keys", "a human with a key"]),
+        ("Who can remove it, and what does it cost?", ["anyone; one sentence", "anyone with the file; an afternoon on a consumer GPU", "root on the box", "root on the fleet, or a path that never touches the network", "nobody who can only write; a lab with a soldering iron, maybe", "anyone who can talk; a conversation"]),
+        ("What does it see?", ["words", "words, in context", "words and reasoning", "hosts, identities, policies, telemetry", "typed forms, hashes, signatures, counts", "the form and the log"]),
+        ("What can it say?", ["advice", "a refusal", "STOP, as a verdict; never GO", "no, to a connection; quarantine", "no, to the action; hold", "yes or no, once, signed"]),
+    ]
+    x0, lw_, cw, hh, rh = 0.3, 1.95, 1.3, 0.36, 0.64
+    kinds = ["plain", "plain", "plain", "plain", "gov", "warn"]
+    ytop = 3.95
+    for j, hd in enumerate(heads):
+        x = x0 + lw_ + j * cw
+        fill, edge = {"plain": (GRAY_FILL, EDGE), "gov": (BLUE_FILL, BLUE), "warn": (AMBER_FILL, AMBER)}[kinds[j]]
+        ax.add_patch(FancyBboxPatch((x + 0.03, ytop - hh), cw - 0.06, hh - 0.04, boxstyle="round,pad=0.01,rounding_size=0.04", fc=fill, ec=edge, lw=1.1))
+        ax.text(x + cw / 2, ytop - hh / 2 - 0.02, hd, ha="center", va="center", fontsize=7.2, color=INK, fontweight="bold")
+    y = ytop - hh - 0.06
+    for q, cells in rows:
+        wrapped(ax, x0, y - 0.1, q, 26, 7.0, color=INK, weight="bold", step=0.15)
+        for j, c in enumerate(cells):
+            x = x0 + lw_ + j * cw
+            fill = {"plain": "white", "gov": BLUE_FILL, "warn": AMBER_FILL}[kinds[j]]
+            ax.add_patch(FancyBboxPatch((x + 0.03, y - rh + 0.03), cw - 0.06, rh - 0.06, boxstyle="round,pad=0.01,rounding_size=0.04", fc=fill, ec=RULE, lw=0.8))
+            wrapped(ax, x + 0.1, y - 0.1, c, 24, 6.2, step=0.135)
+        y -= rh
+    label(ax, 0.3, 0.58, "Rungs 0 to 3 are removed by writing to something the model or the operator can write to. Rung 4 is not. Rung 5 is removed by talking, which no silicon addresses.", size=6.6)
+    label(ax, 0.3, 0.36, "docs/24-the-ladder.md, sections 1 and 3", size=6.6)
+    save(fig, "fig-ladder-questions.png")
+
+
+def fig_ladder_witnesses():
+    fig, ax = new_fig(10.4, 4.6)
+    ax.text(0.3, 4.32, "Rungs compose as witnesses, not as locks: three software rungs are three correlated miss rates. A gate is a gate.", fontsize=10.5, color=INK, fontweight="bold", va="center")
+    # left: three sieves with the holes lined up
+    ax.text(0.3, 3.85, "Three software rungs in a row", fontsize=8.4, color=INK, fontweight="bold", va="center")
+    ymid = 2.35
+    box(ax, 0.3, ymid - 0.3, 1.25, 0.6, "a disguised", ["request"], kind="nv", align="center", title_size=7.4, line_size=6.6)
+    names = ["rung 1\ntraining", "rung 2\nwatcher A", "rung 2\nwatcher B"]
+    for k, x in enumerate([2.15, 3.35, 4.55]):
+        for (y0, y1) in [(1.25, ymid - 0.17), (ymid + 0.17, 3.45)]:
+            ax.add_patch(FancyBboxPatch((x, y0), 0.34, y1 - y0, boxstyle="round,pad=0.01,rounding_size=0.03", fc=GRAY_FILL, ec=EDGE, lw=1.0))
+        ax.text(x + 0.17, 1.08, names[k], ha="center", va="top", fontsize=6.4, color=QUIET)
+    ax.plot([1.55, 5.3], [ymid, ymid], color=CORAL, lw=1.0, ls="--")
+    arrow(ax, 1.55, ymid, 5.35, ymid, color=CORAL, lw=1.3)
+    box(ax, 5.4, ymid - 0.3, 1.0, 0.6, "an action", ["through"], kind="nv", align="center", title_size=7.4, line_size=6.6)
+    ax.text(3.45, 3.62, "the holes line up: the same substrate (a transformer), the same injection, the same edit, the same root", ha="center", va="center", fontsize=6.4, color=CORAL)
+    label(ax, 0.3, 0.8, "Three rates, and not independent ones. Measured first in YB-0052:", size=6.5, color=CORAL)
+    label(ax, 0.3, 0.64, "the keyword baseline overlapped the observer's own vocabulary.", size=6.5, color=CORAL)
+    # right: the gate
+    ax.plot([6.75, 6.75], [0.95, 3.95], color=RULE, lw=1.0)
+    ax.text(6.95, 3.85, "One rung that lives in silicon", fontsize=8.4, color=INK, fontweight="bold", va="center")
+    box(ax, 6.95, ymid - 0.3, 1.0, 0.6, "the same", ["request"], kind="nv", align="center", title_size=7.4, line_size=6.6)
+    box(ax, 8.2, ymid - 0.75, 1.15, 1.5, "The gate", ["a rule?", "a stamp?", "a witness?", "budget?", "first no wins"], kind="gov", align="center", title_size=7.6, line_size=6.3)
+    arrow(ax, 7.95, ymid, 8.2, ymid, color=BLUE, lw=1.3)
+    arrow(ax, 9.35, ymid + 0.35, 9.65, ymid + 0.35, color=GREEN, lw=1.3)
+    box(ax, 9.65, ymid + 0.1, 0.55, 0.5, "device", ["checks"], kind="safe", align="center", title_size=6.4, line_size=5.8)
+    ax.text(9.92, ymid - 0.02, "a ticket", ha="center", va="top", fontsize=6.0, color=GREEN)
+    arrow(ax, 8.77, ymid - 0.75, 8.77, 1.45, color=AMBER, lw=1.2)
+    box(ax, 8.2, 0.95, 1.15, 0.5, "hold", ["a person with a key"], kind="warn", align="center", title_size=6.6, line_size=5.8)
+    ax.text(9.5, 1.6, "no ticket:", ha="left", va="center", fontsize=6.4, color=BLUE, fontweight="bold")
+    ax.text(9.5, 1.42, "nothing moves", ha="left", va="center", fontsize=6.4, color=BLUE, fontweight="bold")
+    label(ax, 6.95, 0.8, "One structural check. Its failures are halts and holds,", size=6.5, color=BLUE)
+    label(ax, 6.95, 0.64, "which are measurable, not misses.", size=6.5, color=BLUE)
+    label(ax, 0.3, 0.4, "docs/24-the-ladder.md section 4; the witness guarantees are tests/test_h18_oversight.py; the hold is docs/04 section 5", size=6.6)
+    save(fig, "fig-ladder-witnesses.png")
+
+
+def fig_ladder_person():
+    fig, ax = new_fig(10.4, 4.2)
+    ax.text(0.3, 3.92, "Human oversight is a rung only when the person is on the only path out.", fontsize=10.5, color=INK, fontweight="bold", va="center")
+    # left: the dashboard
+    ax.text(0.3, 3.45, "Oversight as a dashboard", fontsize=8.4, color=INK, fontweight="bold", va="center")
+    y = 2.1
+    box(ax, 0.3, y - 0.3, 1.0, 0.6, "the model", [], kind="plain", align="center", title_size=7.4)
+    box(ax, 1.65, y - 0.3, 1.1, 0.6, "the runtime", [], kind="plain", align="center", title_size=7.4)
+    box(ax, 3.1, y - 0.3, 1.1, 0.6, "the device", ["acts"], kind="nv", align="center", title_size=7.4, line_size=6.4)
+    arrow(ax, 1.3, y, 1.65, y, color=CORAL, lw=1.3)
+    arrow(ax, 2.75, y, 3.1, y, color=CORAL, lw=1.3)
+    box(ax, 1.5, 2.75, 1.4, 0.55, "a dashboard", ["a person reads it, later"], kind="warn", align="center", title_size=7.0, line_size=6.0)
+    ax.plot([2.2, 2.2], [2.4, 2.75], color=AMBER, lw=1.0, ls=":")
+    label(ax, 0.3, 1.35, "The action happened before anyone looked. An oversight the", size=6.5, color=CORAL)
+    label(ax, 0.3, 1.17, "system can route around is a checkbox, not a rung.", size=6.5, color=CORAL)
+    # right: the hold at the gate
+    ax.plot([4.75, 4.75], [0.95, 3.6], color=RULE, lw=1.0)
+    ax.text(4.95, 3.45, "Oversight as a hold at the gate", fontsize=8.4, color=INK, fontweight="bold", va="center")
+    box(ax, 4.95, y - 0.3, 1.0, 0.6, "the model", [], kind="plain", align="center", title_size=7.4)
+    box(ax, 6.2, y - 0.3, 1.0, 0.6, "the runtime", [], kind="plain", align="center", title_size=7.4)
+    box(ax, 7.45, y - 0.45, 1.0, 0.9, "the chip", ["the gate", "parks a hold"], kind="gov", align="center", title_size=7.4, line_size=6.2)
+    box(ax, 8.95, y - 0.3, 1.25, 0.6, "the device", ["checks the ticket, acts"], kind="nv", align="center", title_size=7.4, line_size=6.0)
+    arrow(ax, 5.95, y, 6.2, y, color=BLUE, lw=1.3)
+    arrow(ax, 7.2, y, 7.45, y, color=BLUE, lw=1.3)
+    arrow(ax, 8.45, y, 8.95, y, color=GREEN, lw=1.3, text="ticket", tsize=6.2)
+    box(ax, 7.2, 2.8, 1.5, 0.6, "a person with a key", ["reads the typed form, signs"], kind="warn", align="center", title_size=7.0, line_size=6.0)
+    arrow(ax, 7.7, y + 0.45, 7.7, 2.8, color=AMBER, lw=1.1, text="hold", tsize=6.2, toff=(-0.22, -0.05))
+    arrow(ax, 8.2, 2.8, 8.2, y + 0.45, color=AMBER, lw=1.1, text="approval", tsize=6.2, toff=(0.32, -0.05))
+    label(ax, 4.95, 1.35, "No signature, no ticket, nothing moves. The chip does not make the person wiser;", size=6.5, color=BLUE)
+    label(ax, 4.95, 1.17, "it makes the person unavoidable, and hands them a form instead of a transcript.", size=6.5, color=BLUE)
+    label(ax, 0.3, 0.6, "Persuasion is the residual: a person is an effector no chip gates (docs/18 question 14). Fatigue is the other: the false-halt rate decides whether the hundred-and-first hold gets read.", size=6.5)
+    label(ax, 0.3, 0.38, "docs/24-the-ladder.md rung 5; the human lane is docs/04 section 5; holds and approvals are tested in tests/test_h18_oversight.py", size=6.6)
+    save(fig, "fig-ladder-person.png")
+
+
 if __name__ == "__main__":
     fig_rack()
     fig_die()
@@ -331,3 +489,7 @@ if __name__ == "__main__":
     fig_boot()
     fig_loop()
     fig_request()
+    fig_ladder()
+    fig_ladder_questions()
+    fig_ladder_witnesses()
+    fig_ladder_person()

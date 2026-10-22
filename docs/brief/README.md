@@ -1,6 +1,6 @@
 # The brief
 
-`chip-that-says-no-brief.pptx` is a thirty-two-slide talk built in pairs: every topic gets a
+`chip-that-says-no-brief.pptx` is a thirty-four-slide talk built in pairs: every topic gets a
 plain slide with an analogy and a picture, then a technical slide. The topics, in order: what
 the project is and the five stages to a chip we cannot fab; the thesis; the ladder every safety
 measure sits on, from a prompt that says "don't" to the chip to a person with a key; why there

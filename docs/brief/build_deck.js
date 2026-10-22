@@ -47,12 +47,12 @@ async function icon(name, hex) {
 
 // A blog figure with its title band (the top 176 px of a 200 dpi render: title and subtitle)
 // cut off and the white margins trimmed, so the slide's own title is the only title.
-async function figureData(file, cropTop) {
-  const src = path.join(FIG, file);
+async function figureData(file, cropTop, cropBottom) {
+  const src = file.includes("/") ? path.join(__dirname, file) : path.join(FIG, file);
   const meta = await sharp(src).metadata();
-  const top = cropTop ?? 176;
+  const top = cropTop ?? 176, bottom = cropBottom ?? 0;
   // two passes: sharp runs trim before extract inside one pipeline, so the crop goes first on its own
-  const cropped = await sharp(src).extract({ left: 0, top, width: meta.width, height: meta.height - top }).png().toBuffer();
+  const cropped = await sharp(src).extract({ left: 0, top, width: meta.width, height: meta.height - top - bottom }).png().toBuffer();
   const buf = await sharp(cropped).trim({ threshold: 12 }).png().toBuffer();
   const m2 = await sharp(buf).metadata();
   return { data: "image/png;base64," + buf.toString("base64"), w: m2.width, h: m2.height };
@@ -111,7 +111,7 @@ async function main() {
   const bullets = (items, size) => items.map((b, i) => ({ text: b, options: { bullet: { indent: 14 }, breakLine: i < items.length - 1, paraSpaceAfter: Math.round(size * 0.55) } }));
   // a blog figure fitted inside a box, centred
   const figure = async (s, file, x, y, w, h, opts) => {
-    const f = await figureData(file, opts && opts.cropTop);
+    const f = await figureData(file, opts && opts.cropTop, opts && opts.cropBottom);
     const ar = f.w / f.h;
     let pw = w, ph = w / ar;
     if (ph > h) { ph = h; pw = h * ar; }
@@ -320,6 +320,22 @@ async function main() {
       ["5  A person with a key: holds, approvals, the quorum, revocation", "The cases no rule can settle; the alarm; the oversight the law now asks for", "Persuasion: a person is an effector no chip gates. Fatigue: a hundred holds a day. A stolen key. The chip makes the person unavoidable and legible, not wiser", "EU AI Act, Article 14; docs/04 §5; H18; docs/18 questions 14 and 16"],
     ], { colW: [2.45, 2.9, 4.2, 2.583], fontSize: 10.5, availH: 5.05, icons: ["FiMessageSquare", "FiSliders", "FiEye", "FiServer", "FiCpu", "FiUser"] });
     s.addNotes("Same ladder with the receipts; every paper is in docs/24 section 7 with its arXiv address. Read down the third column and it explains itself: rungs 0 to 3 are removed by writing to something the model or the operator can write to, rung 4 is not, and rung 5 is removed by talking, which is the one attack no silicon addresses and the reason the chip hands the person a typed form and not a transcript. Rungs compose as witnesses, not as locks: three software rungs are three miss rates, and they are correlated because they share the substrate.");
+  }
+
+  // ───────────────────────── 6b. The ladder: witnesses, not locks
+  {
+    const s = light("The ladder", "Rungs compose as witnesses, not as locks");
+    await figure(s, "../figures/fig-ladder-witnesses.png", L, 1.42, CW, 4.45, { cropTop: 100, cropBottom: 95 });
+    analogy(s, "Three software rungs are three miss rates, and the holes line up: the same substrate, the same injection, the same edit, the same root. The gate is one structural check, and its failures are halts and holds, which can be measured.", "docs 24, section 4", 5.98, 0.85);
+    s.addNotes("Why stacking software rungs does not make a lock, from docs/24 section 4. The miss rates multiply only if the failures are independent, and they are not: a transformer judging a transformer shares the substrate, the injections and the edit. YB-0052 measured one piece of that when the keyword baseline overlapped the observer's own vocabulary. The gate on the right asks structural questions, a rule, a stamp, a witness, a budget, and the first no wins; a disguised request that fools every watcher still has no ticket, and nothing moves without one. Drawn by docs/figures/make_figures.py.");
+  }
+
+  // ───────────────────────── 6c. The ladder: the person on the only path
+  {
+    const s = light("The ladder", "Human oversight is a rung only on the only path");
+    await figure(s, "../figures/fig-ladder-person.png", L, 1.42, CW, 4.45, { cropTop: 100, cropBottom: 130 });
+    analogy(s, "An oversight the system can route around is a checkbox. A hold at the gate puts the person on the only path out: no signature, no ticket, nothing moves. The chip does not make the human wiser. It makes the human unavoidable, and legible.", "docs 24, rung 5", 5.98, 0.85);
+    s.addNotes("The top rung, from docs/24. Regulators now ask for human oversight (the EU AI Act, Article 14), and without the rungs under it the obligation cannot be met: a dashboard is read after the action happened. The hold at the gate is the human lane in docs/04 section 5, tested in H18. Two residuals no silicon removes: persuasion, because a person is an effector no chip gates, and fatigue, which is why the false-halt rate is on the list of things that decide adoption.");
   }
 
   // ───────────────────────── 7. No kill switch (plain)
