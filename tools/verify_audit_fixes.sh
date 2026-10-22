@@ -51,6 +51,7 @@ echo "== 1. The fixed code"
 cd "$SG"
 out=$("$SGPY" -m pytest -p no:cacheprovider tests rtl/tests 2>&1); [ $? -eq 0 ] && ok "safety-governor tests: $(count "$out")" || { bad "safety-governor tests"; echo "$out" | tail -20; }
 check "proofs: P0 to P13, the regression checks, the commit point, K0 to K5" bash -c "\"$SGPY\" proofs/core_invariants.py && \"$SGPY\" proofs/commit_point.py && \"$SGPY\" proofs/no_global_kill_switch.py"
+check "checked-in Verilog matches the Amaranth source (CI's rtl.gen --check)" "$SGPY" -m rtl.gen --check
 check "governor harness" "$SGPY" -m govsim.harness
 cp results/report.md "$TMP/report.before"; "$SGPY" -m govsim.cli sweep >/dev/null 2>&1
 if diff <(grep -v Generated "$TMP/report.before") <(grep -v Generated results/report.md) >/dev/null; then ok "governor sweep: same verdicts as before"; else bad "governor sweep verdicts changed"; fi
