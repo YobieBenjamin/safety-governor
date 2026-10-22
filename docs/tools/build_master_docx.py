@@ -146,6 +146,7 @@ def reference_docx() -> str:
         except KeyError:
             pass
     for sec in d.sections:          # pandoc keeps the reference document's page setup
+        sec.page_width, sec.page_height = Inches(8.5), Inches(11)   # US Letter; pandoc's reference leaves the size unset
         sec.left_margin = sec.right_margin = Inches(0.75)
         sec.top_margin = sec.bottom_margin = Inches(0.8)
     d.save(path)
@@ -190,6 +191,22 @@ def build() -> str:
     return OUT
 
 
+def fit_pictures(path: str) -> None:
+    """pandoc scales a picture to the text width but not to the page height, so a tall figure
+    runs off the page; this scales any such picture down to fit, keeping its proportions."""
+    import docx
+    d = docx.Document(path)
+    sec = d.sections[0]
+    max_w = sec.page_width - sec.left_margin - sec.right_margin
+    max_h = sec.page_height - sec.top_margin - sec.bottom_margin - int(0.6 * 914400)   # room for the caption
+    for shape in d.inline_shapes:
+        w, h = shape.width, shape.height
+        scale = min(max_w / w, max_h / h, 1.0)
+        if scale < 1.0:
+            shape.width, shape.height = int(w * scale), int(h * scale)
+    d.save(path)
+
+
 def validate(path: str) -> None:
     import docx  # python-docx
     d = docx.Document(path)
@@ -214,4 +231,6 @@ def validate(path: str) -> None:
 
 
 if __name__ == "__main__":
-    validate(build())
+    out = build()
+    fit_pictures(out)
+    validate(out)

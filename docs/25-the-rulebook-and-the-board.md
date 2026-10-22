@@ -36,7 +36,9 @@ has been surgically removed and it will answer anything. In scenario 2 the model
 lab's, behind that lab's whole safety stack; take OpenAI as the example. The path is the same
 until the model answers, and the chip's answer is the same at the end.
 
-![One request, from the keyboard to the chip's no: the nine steps below, the rulebook triggers in order, and what is rack-wide](figures/fig-prompt-flow.png)
+![One request, from the keyboard to the chip, 1 of 2: words, bytes, tokens, the GPU, the witnesses, and the rack beside them](figures/fig-prompt-flow-a.png)
+
+![One request, from the keyboard to the chip, 2 of 2: the governor's rulebook triggers in the order it asks, the no each one can say, the ticket, the egress and the people](figures/fig-prompt-flow-b.png)
 
 ### 0.1 The path, step by step
 

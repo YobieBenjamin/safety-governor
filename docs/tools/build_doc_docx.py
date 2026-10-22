@@ -76,6 +76,22 @@ def build(src_rel: str, out: str) -> str:
     return out
 
 
+def fit_pictures(out: str) -> None:
+    """pandoc scales a picture to the text width but not to the page height, so a tall figure
+    runs off the page; this scales any such picture down to fit, keeping its proportions."""
+    import docx
+    d = docx.Document(out)
+    sec = d.sections[0]
+    max_w = sec.page_width - sec.left_margin - sec.right_margin
+    max_h = sec.page_height - sec.top_margin - sec.bottom_margin - int(0.6 * 914400)   # room for the caption
+    for shape in d.inline_shapes:
+        w, h = shape.width, shape.height
+        scale = min(max_w / w, max_h / h, 1.0)
+        if scale < 1.0:
+            shape.width, shape.height = int(w * scale), int(h * scale)
+    d.save(out)
+
+
 def validate(src_rel: str, out: str) -> None:
     import docx
     text = open(os.path.join(ROOT, src_rel), encoding="utf-8").read()
@@ -117,5 +133,7 @@ if __name__ == "__main__":
     src = os.path.relpath(os.path.abspath(sys.argv[1]), ROOT)
     name = os.path.splitext(os.path.basename(src))[0]
     out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "build", name + ".docx")
-    validate(src, build(src, out))
+    build(src, out)
+    fit_pictures(out)
+    validate(src, out)
     to_pdf(out)
