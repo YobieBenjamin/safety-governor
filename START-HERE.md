@@ -87,7 +87,7 @@ Three suites and an attack catalogue, all runnable in minutes without hardware.
 
 | What | Where | Count | Command |
 |---|---|---|---|
-| Governor model: hypotheses H0 to H18 | `safety-governor/tests/` | 200 tests | `./run.sh` or `make test` |
+| Governor model: hypotheses H0 to H19 | `safety-governor/tests/` | 215 tests | `./run.sh` or `make test` |
 | RTL blocks | `safety-governor/rtl/tests/` | 20 tests | `make rtl-test` |
 | Halt-loop circuit | `safety-governor/hw/loop/` | 39 ngspice configurations | `make loop` |
 | Reference stack: gate, ledger, endpoints, OASP path, transactional contract | `hardware-and-silicon/tests/` | 56 tests | `./run.sh` |
@@ -100,8 +100,8 @@ A baseline is a legitimate operation that must go through; the catalogue carries
 
 | Grade | What | Where to check |
 |---|---|---|
-| Proven (Z3, by induction) | The core invariants P0 to P9 and the commit-point properties (1) to (3), on the abstract machine | `make proof`; docs/19 §2 |
-| Tested (every run) | The functional model follows the rules (200 tests); the RTL blocks follow the model (20); the protocol holds against 75 attacks and lets 12 baselines through; OpenShell's shipped middleware contract (5 tests) | `./run.sh` in both repositories |
+| Proven (Z3, by induction) | The core invariants P0 to P12 (P10 to P12, added 22 October 2026, are the quorum the chip fuses and the clear only a signed CLEAR gives) and the commit-point properties (1) to (3), on the abstract machine | `make proof`; docs/19 §2 |
+| Tested (every run) | The functional model follows the rules (215 tests); the RTL blocks follow the model (21); the protocol holds against 75 attacks and lets 12 baselines through; OpenShell's shipped middleware contract (5 tests) | `./run.sh` in both repositories |
 | Simulated | The halt loop opens and every governor detects it inside 1 ms, worst case 317 µs | docs/11; `make loop` |
 | Assumed, and written down | Every input the gate trusts: who signs it, how fresh, what failure means | docs/06 |
 | Open, with an experiment | Simulation conforms to the proven machine (L4); two gates read one policy the same way (L5); the physical path enumeration with a source per row and the retrofit columns (P2); the overhead numbers (N); the observer's miss rate (YB-0052 to 0054); the proofs on the Verilog (L7) | docs/20, the pull requests, `audit/wave-N/` |

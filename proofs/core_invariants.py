@@ -16,9 +16,17 @@ What the proof is about, and what it is not about, is the point of the file:
     and its witnesses, no ticket honoured across an edition change, no replay, no ticket while
     halted or while the heartbeat is lost, no leaving the halt without a quorum, the edition
     only moves forward.
+  * Since 22 October 2026 it is also about what a signature authorizes. Two defects were found
+    by testing the code that the first version of this file could not see, because it took
+    "a quorum signed the new edition" and "the authority cleared the halt" as given yes-or-no
+    inputs: an image that set its own threshold to zero passed, and a heartbeat cleared a halt.
+    The machine now counts the valid governance signatures against a fused threshold that only
+    rises (whatever threshold the image claims), and a clear needs a signature over a CLEAR,
+    for this chip, inside its expiry. P10 to P12 are those properties, and the file also checks
+    that the old rules break them, so the proof would have caught both.
   * It is not about the physics (whether the wire really carries no bytes without a ticket),
     the cryptography (signatures are modelled as unforgeable: nobody but the governor can
-    write the ticket table), the lists and observers (an allowed action is whatever the
+    write the ticket table, and nobody but a key's holder can produce a signature that counts), the lists and observers (an allowed action is whatever the
     signed rule says), or the link from this model to the RTL (that is the formal work in
     the pre-hardware plan, on the Verilog itself).
 
@@ -32,12 +40,22 @@ The state. For every action a (an uninterpreted sort, so the proof is for any nu
   epoch              the current rules edition
   halted             the governor is in HALT
   heartbeat          the authority's heartbeat is live at the endpoint
+  kfuse              the fused governance threshold: the least number of distinct governance
+                     signatures any edition needs; at least one, and it only rises
+
+The inputs the environment picks at each step, the adversary included:
+  sigs               distinct valid governance signatures on the proposed edition (unforgeable, so
+                     at most what the key holders signed, but any number they did sign)
+  claimed_k          the threshold the proposed image claims for itself (anything at all)
+  signed_cmd         the command named inside a verified authority signature (0 = none)
+  for_me, fresh      that signature names this chip, and its expiry has not passed
+  neighbour          a neighbour holds the logged cause (the clear's other precondition)
 """
 from __future__ import annotations
 
 import sys
 
-from z3 import (And, ArraySort, BoolSort, BoolVal, Const, Consts, DeclareSort, ForAll, Implies, IntSort, Not, Or, Select, Solver, Store,
+from z3 import (And, ArraySort, BoolSort, BoolVal, Const, Consts, DeclareSort, ForAll, If, Implies, IntSort, Not, Or, Select, Solver, Store,
                 Exists, sat, unsat)
 
 Action = DeclareSort("Action")
@@ -57,81 +75,76 @@ class State:
         self.epoch = Const(f"epoch_{tag}", IntSort())
         self.halted = Const(f"halted_{tag}", BoolSort())
         self.heartbeat = Const(f"heartbeat_{tag}", BoolSort())
+        self.kfuse = Const(f"kfuse_{tag}", IntSort())
 
     def vars(self):
-        return [self.allows, self.witness, self.ticket, self.used, self.executed, self.okay_at_issue, self.epoch, self.halted, self.heartbeat]
+        return [self.allows, self.witness, self.ticket, self.used, self.executed, self.okay_at_issue, self.epoch, self.halted, self.heartbeat, self.kfuse]
 
 
 def unchanged(s: State, t: State, *except_names: str):
-    names = ["allows", "witness", "ticket", "used", "executed", "okay_at_issue", "epoch", "halted", "heartbeat"]
+    names = ["allows", "witness", "ticket", "used", "executed", "okay_at_issue", "epoch", "halted", "heartbeat", "kfuse"]
     return And(*[getattr(s, n) == getattr(t, n) for n in names if n not in except_names])
 
 
 def init(s: State):
     a = Const("a0", Action)
     return And(
-        s.epoch >= 0,
+        s.epoch >= 0, s.kfuse >= 1,
         ForAll([a], And(s.ticket[a] == -1, Not(s.used[a]), Not(s.executed[a]), Not(s.okay_at_issue[a]))),
     )
 
 
 # ---- the steps the machine can take --------------------------------------------------------
 # Inputs the environment chooses at each step (the policy and the witnesses may change freely,
-# which models new editions and observers coming and going; quorum and neighbour are the
-# external signatures a clear needs).
-def steps(s: State, t: State):
-    a = Const("a_step", Action)
-    quorum = Const("quorum", BoolSort())
-    neighbour = Const("neighbour", BoolSort())
-
-    issue = And(                       # the gate signs a ticket
-        Not(s.halted), s.heartbeat,
-        s.allows[s.epoch][a], s.witness[a], s.ticket[a] == -1,
-        t.ticket == Store(s.ticket, a, s.epoch),
-        t.okay_at_issue == Store(s.okay_at_issue, a, True),
-        unchanged(s, t, "ticket", "okay_at_issue"),
-    )
-    execute = And(                     # the endpoint's comparator admits a ticket
-        s.heartbeat,
-        s.ticket[a] == s.epoch, Not(s.used[a]),
-        t.executed == Store(s.executed, a, True),
-        t.used == Store(s.used, a, True),
-        unchanged(s, t, "executed", "used"),
-    )
-    forged_execute = And(              # the adversary presents a without a ticket, or a spent one, or one from another edition
-        Or(s.ticket[a] != s.epoch, s.used[a], Not(s.heartbeat)),
-        unchanged(s, t),               # refused: nothing changes
-    )
-    new_epoch = And(                   # a new rules edition, committed under quorum
-        quorum, t.epoch == s.epoch + 1,
-        unchanged(s, t, "epoch", "allows", "witness"),
-    )
-    halt = And(t.halted == True, unchanged(s, t, "halted"))
-    clear = And(s.halted, quorum, neighbour, t.halted == False, unchanged(s, t, "halted"))
-    beat_lost = And(t.heartbeat == False, unchanged(s, t, "heartbeat"))
-    beat_back = And(t.heartbeat == True, unchanged(s, t, "heartbeat"))
-    environment = unchanged(s, t, "allows", "witness")   # lists and observers change under the machine
-    named = [("issue", issue), ("execute", execute), ("forged execute (refused)", forged_execute), ("new edition", new_epoch),
-             ("halt", halt), ("clear", clear), ("heartbeat lost", beat_lost), ("heartbeat back", beat_back), ("lists and observers change", environment)]
-    return Or(*[tr for _, tr in named]), (a, quorum, neighbour)
+# which models new editions and observers coming and going). The two authorizations are not
+# inputs any more: they are computed from what was signed, the way the chip computes them.
+CLEAR_CMD, HEARTBEAT_CMD = 0x10, 0x0E          # the opcodes in docs/04 §3; any other value is some other command
 
 
-def step_list(s: State, t: State, inputs):
-    """The same transitions as steps(), named, sharing the given input constants."""
-    a, quorum, neighbour = inputs
+def make_inputs(tag: str = "step"):
+    a = Const(f"a_{tag}", Action)
+    sigs, claimed_k, signed_cmd = Consts(f"sigs_{tag} claimed_k_{tag} signed_cmd_{tag}", IntSort())
+    for_me, fresh, neighbour = Consts(f"for_me_{tag} fresh_{tag} neighbour_{tag}", BoolSort())
+    return dict(a=a, sigs=sigs, claimed_k=claimed_k, signed_cmd=signed_cmd, for_me=for_me, fresh=fresh, neighbour=neighbour)
+
+
+def quorum_of(s: State, i: dict):
+    """What verify_policy does now: the image's threshold must be at least one and at least the fused
+    one, and the distinct valid signatures must reach the larger of the two."""
+    k = If(i["claimed_k"] > s.kfuse, i["claimed_k"], s.kfuse)
+    return And(i["claimed_k"] >= 1, i["claimed_k"] >= s.kfuse, i["sigs"] >= k)
+
+
+def clear_auth_of(s: State, i: dict):
+    """What _check_signed does now for a CLEAR: an authority signature over a CLEAR, for this chip, in date."""
+    return And(i["signed_cmd"] == CLEAR_CMD, i["for_me"], i["fresh"])
+
+
+def step_list(s: State, t: State, i: dict, quorum=None, clear_auth=None):
+    """The transitions, named. ``quorum`` and ``clear_auth`` default to the chip's rules; passing the
+    old ones shows what the proof says about them."""
+    a = i["a"]
+    quorum = quorum_of(s, i) if quorum is None else quorum
+    clear_auth = clear_auth_of(s, i) if clear_auth is None else clear_auth
     issue = And(Not(s.halted), s.heartbeat, s.allows[s.epoch][a], s.witness[a], s.ticket[a] == -1,
                 t.ticket == Store(s.ticket, a, s.epoch), t.okay_at_issue == Store(s.okay_at_issue, a, True), unchanged(s, t, "ticket", "okay_at_issue"))
     execute = And(s.heartbeat, s.ticket[a] == s.epoch, Not(s.used[a]),
                   t.executed == Store(s.executed, a, True), t.used == Store(s.used, a, True), unchanged(s, t, "executed", "used"))
     forged_execute = And(Or(s.ticket[a] != s.epoch, s.used[a], Not(s.heartbeat)), unchanged(s, t))
-    new_epoch = And(quorum, t.epoch == s.epoch + 1, unchanged(s, t, "epoch", "allows", "witness"))
+    new_epoch = And(quorum, t.epoch == s.epoch + 1,                          # an edition that asks for more signatures raises the floor
+                    t.kfuse == If(i["claimed_k"] > s.kfuse, i["claimed_k"], s.kfuse),
+                    unchanged(s, t, "epoch", "allows", "witness", "kfuse"))
     halt = And(t.halted == True, unchanged(s, t, "halted"))
-    clear = And(s.halted, quorum, neighbour, t.halted == False, unchanged(s, t, "halted"))
+    clear = And(s.halted, clear_auth, i["neighbour"], t.halted == False, unchanged(s, t, "halted"))
     beat_lost = And(t.heartbeat == False, unchanged(s, t, "heartbeat"))
     beat_back = And(t.heartbeat == True, unchanged(s, t, "heartbeat"))
-    environment = unchanged(s, t, "allows", "witness")
+    environment = unchanged(s, t, "allows", "witness")                      # lists and observers change under the machine
     return [("issue", issue), ("execute", execute), ("forged execute (refused)", forged_execute), ("new edition", new_epoch),
             ("halt", halt), ("clear", clear), ("heartbeat lost", beat_lost), ("heartbeat back", beat_back), ("lists and observers change", environment)]
+
+
+def steps(s: State, t: State, i: dict, **kw):
+    return Or(*[tr for _, tr in step_list(s, t, i, **kw)])
 
 
 # ---- the invariants -------------------------------------------------------------------------
@@ -149,6 +162,8 @@ def invariant_at(s: State, a):
         Implies(s.executed[a], s.used[a]),
         # P4  tickets carry an edition no newer than the current one
         Implies(s.ticket[a] != -1, And(s.ticket[a] >= 0, s.ticket[a] <= s.epoch)),
+        # the fused threshold is at least one in every reachable state
+        s.kfuse >= 1,
     )
 
 
@@ -157,11 +172,10 @@ def invariant(s: State):
     return ForAll([a], invariant_at(s, a))
 
 
-def one_step_properties(s: State, t: State, inputs):
-    a, quorum, neighbour = inputs
+def one_step_properties(s: State, t: State, i: dict):
     return {
-        "P5  halt is absorbing without a quorum: halted and no quorum means still halted after any step":
-            Implies(And(s.halted, Not(quorum)), t.halted),
+        "P5  halt is absorbing without an authorized clear: halted, and no signed CLEAR for this chip in date, means still halted":
+            Implies(And(s.halted, Not(clear_auth_of(s, i))), t.halted),
         "P6  fail closed: with the heartbeat lost, no step executes anything":
             Implies(Not(s.heartbeat), t.executed == s.executed),
         "P7  no ticket is issued while halted or while the heartbeat is lost":
@@ -169,7 +183,13 @@ def one_step_properties(s: State, t: State, inputs):
         "P8  the edition only moves forward":
             t.epoch >= s.epoch,
         "P9  an edition change needs a quorum":
-            Implies(t.epoch != s.epoch, quorum),
+            Implies(t.epoch != s.epoch, quorum_of(s, i)),
+        "P10 an edition change needs at least the fused number of distinct governance signatures, whatever the image claims":
+            Implies(t.epoch != s.epoch, i["sigs"] >= s.kfuse),
+        "P11 the fused threshold never falls":
+            t.kfuse >= s.kfuse,
+        "P12 nothing but a signature over a CLEAR leaves the halt: a heartbeat, a halt or any other signed command does not":
+            Implies(And(s.halted, Not(t.halted)), i["signed_cmd"] == CLEAR_CMD),
     }
 
 
@@ -186,10 +206,18 @@ def prove(name: str, claim, assumptions) -> bool:
     return ok
 
 
+def old_rules(s: State, i: dict):
+    """The rules as they were before 22 October: k read from the image, and a clear that checked who
+    signed but not what was signed (any authority signature at all, a heartbeat included)."""
+    any_authority_sig = i["signed_cmd"] != 0
+    return dict(quorum=i["sigs"] >= i["claimed_k"], clear_auth=any_authority_sig)
+
+
 def main() -> int:
     s, t = State("s"), State("t")
-    step, inputs = steps(s, t)
-    a_step, quorum, neighbour = inputs
+    inputs = make_inputs()
+    step = steps(s, t, inputs)
+    a_step = inputs["a"]
     a_k = Const("a_k", Action)                       # an arbitrary action, for the conclusion
     results = []
     results.append(prove("P1-P4 hold in every initial state", invariant_at(s, a_k), [init(s)]))
@@ -202,6 +230,18 @@ def main() -> int:
         results.append(prove(f"P1-P4 preserved by step: {name}", invariant_at(t, a_k), hyp + [tr]))
     for name, claim in one_step_properties(s, t, inputs).items():
         results.append(prove(name, claim, hyp + [step]))
+    # the regression check: under the old rules P10 and P12 must fail, or this file could not have caught the defects
+    old = old_rules(s, inputs)
+    old_step = steps(s, t, inputs, **old)
+    props = one_step_properties(s, t, inputs)
+    for key in ("P10", "P12"):
+        name = next(n for n in props if n.startswith(key))
+        sol = Solver()
+        sol.set("timeout", 60_000)
+        sol.add(*hyp, old_step, Not(props[name]))
+        caught = sol.check() == sat
+        print(("OK      " if caught else "FAILED  ") + f"{key} fails under the rules as they were before 22 October (the proof catches that defect)")
+        results.append(caught)
     # a sanity check that the machine is not vacuous: an allowed action can be executed in two steps
     u = State("u")
     issue1 = dict(step_list(s, t, inputs))["issue"]
@@ -212,6 +252,14 @@ def main() -> int:
     live = sol.check() == sat
     print(("OK      " if live else "FAILED  ") + "the machine can execute an allowed action (not vacuous)")
     results.append(live)
+    # and a halted governor can be cleared, and an edition can change, under the new rules
+    for label, name in (("a halted governor can be cleared by a signed CLEAR", "clear"), ("an edition can change under a quorum", "new edition")):
+        sol = Solver()
+        sol.set("timeout", 60_000)
+        sol.add(init(s), dict(step_list(s, t, inputs))[name], *( [s.halted] if name == "clear" else [] ))
+        ok = sol.check() == sat
+        print(("OK      " if ok else "FAILED  ") + label + " (not vacuous)")
+        results.append(ok)
     print()
     print("All proofs hold." if all(results) else "Some proof failed.")
     return 0 if all(results) else 1

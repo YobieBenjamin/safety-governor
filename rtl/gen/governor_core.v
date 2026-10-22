@@ -3,11 +3,11 @@
 (* top =  1  *)
 module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mono_load_hwm, mono_dec_req, meas0_extend, meas0_data, meas0_hash_done, meas0_hash_out, meas1_extend, meas1_data, meas1_hash_done, meas1_hash_out, epoch_commit, epoch_quorum_ok, epoch_new_epoch, epoch_host_wr, epoch_host_data
 , life_fuse_state, life_load, life_advance, life_advance_to, life_debug_req, tickets_query, tickets_burn, tickets_id_in, hb_hb_valid, hb_window, halt_tamper, halt_cmd_halt, halt_cmd_throttle, halt_local_trip, halt_clear, meter_slot, meter_add_tokens, meter_add_cycles, meter_add_in, meter_add_out, meter_strobe
-, mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_epoch_match, mbox_epoch_exempt, mbox_needs_run, mbox_sig_done, mbox_sig_ok, alarms_set_mask, alarms_clear_mask, alarms_clear_authorized, cap_nvswitch_ins, cap_nvswitch_ins_point, cap_nvswitch_ins_peer, cap_nvswitch_ins_dir, cap_nvswitch_ins_budget, cap_nvswitch_ins_expiry, cap_nvswitch_ins_epoch_tag, cap_nvswitch_mac_ok, cap_nvswitch_lk, cap_nvswitch_lk_point
-, cap_nvswitch_lk_peer, cap_nvswitch_lk_dir, cap_nvswitch_lk_bytes, cap_pcie_ins, cap_pcie_ins_point, cap_pcie_ins_peer, cap_pcie_ins_dir, cap_pcie_ins_budget, cap_pcie_ins_expiry, cap_pcie_ins_epoch_tag, cap_pcie_mac_ok, cap_pcie_lk, cap_pcie_lk_point, cap_pcie_lk_peer, cap_pcie_lk_dir, cap_pcie_lk_bytes, cap_dpu_ins, cap_dpu_ins_point, cap_dpu_ins_peer, cap_dpu_ins_dir, cap_dpu_ins_budget
-, cap_dpu_ins_expiry, cap_dpu_ins_epoch_tag, cap_dpu_mac_ok, cap_dpu_lk, cap_dpu_lk_point, cap_dpu_lk_peer, cap_dpu_lk_dir, cap_dpu_lk_bytes, cap_storage_ins, cap_storage_ins_point, cap_storage_ins_peer, cap_storage_ins_dir, cap_storage_ins_budget, cap_storage_ins_expiry, cap_storage_ins_epoch_tag, cap_storage_mac_ok, cap_storage_lk, cap_storage_lk_point, cap_storage_lk_peer, cap_storage_lk_dir, cap_storage_lk_bytes
-, clk, rst, csr_rdata, pwrbrk_n, perst_n, pwr_en, loop_out_open, tick_ms, mono_refused, meas0_hash_req, meas0_hash_in, meas1_hash_req, meas1_hash_in, life_debug_grant, tickets_seen, tickets_burned, tickets_full, mbox_verify_req, mbox_dispatch, mbox_cmd_out, cap_nvswitch_ins_ok
-, cap_nvswitch_allow, cap_nvswitch_reason, cap_pcie_ins_ok, cap_pcie_allow, cap_pcie_reason, cap_dpu_ins_ok, cap_dpu_allow, cap_dpu_reason, cap_storage_ins_ok, cap_storage_allow, cap_storage_reason, csr_addr);
+, mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_signed_cmd, mbox_epoch_match, mbox_epoch_exempt, mbox_needs_run, mbox_sig_done, mbox_sig_ok, alarms_set_mask, alarms_clear_mask, alarms_clear_authorized, cap_nvswitch_ins, cap_nvswitch_ins_point, cap_nvswitch_ins_peer, cap_nvswitch_ins_dir, cap_nvswitch_ins_budget, cap_nvswitch_ins_expiry, cap_nvswitch_ins_epoch_tag, cap_nvswitch_mac_ok, cap_nvswitch_lk
+, cap_nvswitch_lk_point, cap_nvswitch_lk_peer, cap_nvswitch_lk_dir, cap_nvswitch_lk_bytes, cap_pcie_ins, cap_pcie_ins_point, cap_pcie_ins_peer, cap_pcie_ins_dir, cap_pcie_ins_budget, cap_pcie_ins_expiry, cap_pcie_ins_epoch_tag, cap_pcie_mac_ok, cap_pcie_lk, cap_pcie_lk_point, cap_pcie_lk_peer, cap_pcie_lk_dir, cap_pcie_lk_bytes, cap_dpu_ins, cap_dpu_ins_point, cap_dpu_ins_peer, cap_dpu_ins_dir
+, cap_dpu_ins_budget, cap_dpu_ins_expiry, cap_dpu_ins_epoch_tag, cap_dpu_mac_ok, cap_dpu_lk, cap_dpu_lk_point, cap_dpu_lk_peer, cap_dpu_lk_dir, cap_dpu_lk_bytes, cap_storage_ins, cap_storage_ins_point, cap_storage_ins_peer, cap_storage_ins_dir, cap_storage_ins_budget, cap_storage_ins_expiry, cap_storage_ins_epoch_tag, cap_storage_mac_ok, cap_storage_lk, cap_storage_lk_point, cap_storage_lk_peer, cap_storage_lk_dir
+, cap_storage_lk_bytes, clk, rst, csr_rdata, pwrbrk_n, perst_n, pwr_en, loop_out_open, tick_ms, mono_refused, meas0_hash_req, meas0_hash_in, meas1_hash_req, meas1_hash_in, life_debug_grant, tickets_seen, tickets_burned, tickets_full, mbox_verify_req, mbox_dispatch, mbox_cmd_out
+, cap_nvswitch_ins_ok, cap_nvswitch_allow, cap_nvswitch_reason, cap_pcie_ins_ok, cap_pcie_allow, cap_pcie_reason, cap_dpu_ins_ok, cap_dpu_allow, cap_dpu_reason, cap_storage_ins_ok, cap_storage_allow, cap_storage_reason, csr_addr);
   reg \$auto$verilog_backend.cc:2355:dump_module$1  = 0;
   wire \$1 ;
   wire \$10 ;
@@ -254,10 +254,10 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   wire loop_lost;
   output loop_out_open;
   wire loop_out_open;
-  wire \loop_out_open$146 ;
+  wire \loop_out_open$147 ;
   input loop_sense;
   wire loop_sense;
-  wire \loop_sense$143 ;
+  wire \loop_sense$144 ;
   input [7:0] mbox_cmd;
   wire [7:0] mbox_cmd;
   output [7:0] mbox_cmd_out;
@@ -280,6 +280,8 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   wire mbox_sig_done;
   input mbox_sig_ok;
   wire mbox_sig_ok;
+  input [7:0] mbox_signed_cmd;
+  wire [7:0] mbox_signed_cmd;
   wire [2:0] mbox_status;
   output mbox_verify_req;
   wire mbox_verify_req;
@@ -348,7 +350,7 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   wire rst;
   input sample;
   wire sample;
-  wire \sample$142 ;
+  wire \sample$143 ;
   wire [31:0] seq0;
   wire switch_open;
   input tick;
@@ -575,6 +577,7 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
     .mbox_running(mbox_running),
     .mbox_sig_done(mbox_sig_done),
     .mbox_sig_ok(mbox_sig_ok),
+    .mbox_signed_cmd(mbox_signed_cmd),
     .mbox_status(mbox_status),
     .mbox_verify_req(mbox_verify_req),
     .rst(rst),
@@ -757,11 +760,11 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   assign mono_inc = tick;
   assign hb_tick = tick_ms;
   assign halt_tick = tick_ms;
-  assign \sample$142  = sample;
-  assign \loop_sense$143  = loop_sense;
+  assign \sample$143  = sample;
+  assign \loop_sense$144  = loop_sense;
   assign switch_open = loop_out_open;
   assign halt_switch_open = loop_out_open;
-  assign \loop_out_open$146  = loop_out_open;
+  assign \loop_out_open$147  = loop_out_open;
   assign loop_lost = halt_loop_lost;
   assign hb_expired = halt_hb_expired;
   assign halt_loop_sense = loop_sense;
@@ -9957,27 +9960,31 @@ module \governor_core.loop (sample, clk, rst, loop_lost, loop_out_open, loop_sen
   assign switch_open = loop_out_open;
 endmodule
 
-module \governor_core.mbox (mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_epoch_match, mbox_epoch_exempt, mbox_needs_run, mbox_sig_done, mbox_sig_ok, clk, rst, mbox_running, mbox_verify_req, mbox_dispatch, mbox_status, seq0, mbox_cmd_out, mbox_doorbell);
+module \governor_core.mbox (mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_signed_cmd, mbox_epoch_match, mbox_epoch_exempt, mbox_needs_run, mbox_sig_done, mbox_sig_ok, clk, rst, mbox_running, mbox_verify_req, mbox_dispatch, mbox_status, seq0, mbox_cmd_out, mbox_doorbell);
   reg \$auto$verilog_backend.cc:2355:dump_module$12  = 0;
   reg [31:0] \$1 ;
-  reg \$10 ;
-  reg [31:0] \$11 ;
-  reg [31:0] \$12 ;
-  reg [31:0] \$13 ;
-  reg [31:0] \$14 ;
+  wire \$10 ;
+  wire \$11 ;
+  wire \$12 ;
+  reg [2:0] \$13 ;
+  reg \$14 ;
   reg [31:0] \$15 ;
   reg [31:0] \$16 ;
   reg [31:0] \$17 ;
   reg [31:0] \$18 ;
-  reg [7:0] \$19 ;
+  reg [31:0] \$19 ;
   wire \$2 ;
+  reg [31:0] \$20 ;
+  reg [31:0] \$21 ;
+  reg [31:0] \$22 ;
+  reg [7:0] \$23 ;
   wire \$3 ;
   wire \$4 ;
   wire \$5 ;
   wire \$6 ;
   wire \$7 ;
   wire \$8 ;
-  reg [2:0] \$9 ;
+  wire \$9 ;
   input clk;
   wire clk;
   reg fsm_state = 1'h0;
@@ -10005,6 +10012,8 @@ module \governor_core.mbox (mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_epoch_
   wire mbox_sig_done;
   input mbox_sig_ok;
   wire mbox_sig_ok;
+  input [7:0] mbox_signed_cmd;
+  wire [7:0] mbox_signed_cmd;
   output [2:0] mbox_status;
   reg [2:0] mbox_status = 3'h0;
   output mbox_verify_req;
@@ -10022,34 +10031,38 @@ module \governor_core.mbox (mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_epoch_
   reg [31:0] seq7 = 32'd0;
   wire seq_ok;
   assign seq_ok = \$1  < mbox_frame_seq;
-  assign \$2  = ! fsm_state;
-  assign \$4  = ~ seq_ok;
-  assign \$5  = mbox_epoch_match | mbox_epoch_exempt;
-  assign \$6  = ~ \$5 ;
-  assign \$7  = ~ mbox_running;
-  assign \$8  = mbox_needs_run & \$7 ;
+  assign \$2  = mbox_signed_cmd == mbox_cmd;
+  assign \$3  = mbox_sig_ok & \$2 ;
+  assign \$4  = ! fsm_state;
+  assign \$6  = ~ seq_ok;
+  assign \$7  = mbox_epoch_match | mbox_epoch_exempt;
+  assign \$8  = ~ \$7 ;
+  assign \$9  = ~ mbox_running;
+  assign \$10  = mbox_needs_run & \$9 ;
+  assign \$11  = mbox_signed_cmd == mbox_cmd;
+  assign \$12  = mbox_sig_ok & \$11 ;
   always @(posedge clk)
-    mbox_status <= \$9 ;
+    mbox_status <= \$13 ;
   always @(posedge clk)
-    fsm_state <= \$10 ;
+    fsm_state <= \$14 ;
   always @(posedge clk)
-    seq0 <= \$11 ;
+    seq0 <= \$15 ;
   always @(posedge clk)
-    seq1 <= \$12 ;
+    seq1 <= \$16 ;
   always @(posedge clk)
-    seq2 <= \$13 ;
+    seq2 <= \$17 ;
   always @(posedge clk)
-    seq3 <= \$14 ;
+    seq3 <= \$18 ;
   always @(posedge clk)
-    seq4 <= \$15 ;
+    seq4 <= \$19 ;
   always @(posedge clk)
-    seq5 <= \$16 ;
+    seq5 <= \$20 ;
   always @(posedge clk)
-    seq6 <= \$17 ;
+    seq6 <= \$21 ;
   always @(posedge clk)
-    seq7 <= \$18 ;
+    seq7 <= \$22 ;
   always @(posedge clk)
-    mbox_cmd_out <= \$19 ;
+    mbox_cmd_out <= \$23 ;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
     (* full_case = 32'd1 *)
@@ -10092,7 +10105,7 @@ module \governor_core.mbox (mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_epoch_
           /* empty */;
       1'h1:
           if (mbox_sig_done) begin
-            if (mbox_sig_ok) begin
+            if (\$3 ) begin
               mbox_dispatch = 1'h1;
             end
           end
@@ -10100,176 +10113,74 @@ module \governor_core.mbox (mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_epoch_
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$9  = mbox_status;
+    \$13  = mbox_status;
     (* full_case = 32'd1 *)
     casez (fsm_state)
       1'h0:
           if (mbox_doorbell) begin
             (* full_case = 32'd1 *)
-            if (\$4 ) begin
-              \$9  = 3'h4;
-            end else if (\$6 ) begin
-              \$9  = 3'h5;
+            if (\$6 ) begin
+              \$13  = 3'h4;
             end else if (\$8 ) begin
-              \$9  = 3'h6;
+              \$13  = 3'h5;
+            end else if (\$10 ) begin
+              \$13  = 3'h6;
             end else begin
-              \$9  = 3'h1;
+              \$13  = 3'h1;
             end
           end
       1'h1:
           if (mbox_sig_done) begin
             (* full_case = 32'd1 *)
-            if (mbox_sig_ok) begin
-              \$9  = 3'h2;
+            if (\$12 ) begin
+              \$13  = 3'h2;
+            end else if (mbox_sig_ok) begin
+              \$13  = 3'h7;
             end else begin
-              \$9  = 3'h3;
+              \$13  = 3'h3;
             end
           end
     endcase
     if (rst) begin
-      \$9  = 3'h0;
+      \$13  = 3'h0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$10  = fsm_state;
+    \$14  = fsm_state;
     (* full_case = 32'd1 *)
     casez (fsm_state)
       1'h0:
           if (mbox_doorbell) begin
             (* full_case = 32'd1 *)
-            if (\$4 ) begin
-            end else if (\$6 ) begin
+            if (\$6 ) begin
             end else if (\$8 ) begin
+            end else if (\$10 ) begin
             end else begin
-              \$10  = 1'h1;
+              \$14  = 1'h1;
             end
           end
       1'h1:
           if (mbox_sig_done) begin
-            \$10  = 1'h0;
+            \$14  = 1'h0;
           end
     endcase
     if (rst) begin
-      \$10  = 1'h0;
+      \$14  = 1'h0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$11  = seq0;
+    \$15  = seq0;
     (* full_case = 32'd1 *)
     casez (fsm_state)
       1'h0:
           /* empty */;
       1'h1:
           if (mbox_sig_done) begin
-            if (mbox_sig_ok) begin
+            if (\$12 ) begin
               casez (mbox_key_slot)
                 3'h0:
-                    \$11  = mbox_frame_seq;
-              endcase
-            end
-          end
-    endcase
-    if (rst) begin
-      \$11  = 32'd0;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$12  = seq1;
-    (* full_case = 32'd1 *)
-    casez (fsm_state)
-      1'h0:
-          /* empty */;
-      1'h1:
-          if (mbox_sig_done) begin
-            if (mbox_sig_ok) begin
-              casez (mbox_key_slot)
-                3'h0:
-                    /* empty */;
-                3'h1:
-                    \$12  = mbox_frame_seq;
-              endcase
-            end
-          end
-    endcase
-    if (rst) begin
-      \$12  = 32'd0;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$13  = seq2;
-    (* full_case = 32'd1 *)
-    casez (fsm_state)
-      1'h0:
-          /* empty */;
-      1'h1:
-          if (mbox_sig_done) begin
-            if (mbox_sig_ok) begin
-              casez (mbox_key_slot)
-                3'h0:
-                    /* empty */;
-                3'h1:
-                    /* empty */;
-                3'h2:
-                    \$13  = mbox_frame_seq;
-              endcase
-            end
-          end
-    endcase
-    if (rst) begin
-      \$13  = 32'd0;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$14  = seq3;
-    (* full_case = 32'd1 *)
-    casez (fsm_state)
-      1'h0:
-          /* empty */;
-      1'h1:
-          if (mbox_sig_done) begin
-            if (mbox_sig_ok) begin
-              casez (mbox_key_slot)
-                3'h0:
-                    /* empty */;
-                3'h1:
-                    /* empty */;
-                3'h2:
-                    /* empty */;
-                3'h3:
-                    \$14  = mbox_frame_seq;
-              endcase
-            end
-          end
-    endcase
-    if (rst) begin
-      \$14  = 32'd0;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$15  = seq4;
-    (* full_case = 32'd1 *)
-    casez (fsm_state)
-      1'h0:
-          /* empty */;
-      1'h1:
-          if (mbox_sig_done) begin
-            if (mbox_sig_ok) begin
-              casez (mbox_key_slot)
-                3'h0:
-                    /* empty */;
-                3'h1:
-                    /* empty */;
-                3'h2:
-                    /* empty */;
-                3'h3:
-                    /* empty */;
-                3'h4:
                     \$15  = mbox_frame_seq;
               endcase
             end
@@ -10281,14 +10192,118 @@ module \governor_core.mbox (mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_epoch_
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$16  = seq5;
+    \$16  = seq1;
     (* full_case = 32'd1 *)
     casez (fsm_state)
       1'h0:
           /* empty */;
       1'h1:
           if (mbox_sig_done) begin
-            if (mbox_sig_ok) begin
+            if (\$12 ) begin
+              casez (mbox_key_slot)
+                3'h0:
+                    /* empty */;
+                3'h1:
+                    \$16  = mbox_frame_seq;
+              endcase
+            end
+          end
+    endcase
+    if (rst) begin
+      \$16  = 32'd0;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
+    \$17  = seq2;
+    (* full_case = 32'd1 *)
+    casez (fsm_state)
+      1'h0:
+          /* empty */;
+      1'h1:
+          if (mbox_sig_done) begin
+            if (\$12 ) begin
+              casez (mbox_key_slot)
+                3'h0:
+                    /* empty */;
+                3'h1:
+                    /* empty */;
+                3'h2:
+                    \$17  = mbox_frame_seq;
+              endcase
+            end
+          end
+    endcase
+    if (rst) begin
+      \$17  = 32'd0;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
+    \$18  = seq3;
+    (* full_case = 32'd1 *)
+    casez (fsm_state)
+      1'h0:
+          /* empty */;
+      1'h1:
+          if (mbox_sig_done) begin
+            if (\$12 ) begin
+              casez (mbox_key_slot)
+                3'h0:
+                    /* empty */;
+                3'h1:
+                    /* empty */;
+                3'h2:
+                    /* empty */;
+                3'h3:
+                    \$18  = mbox_frame_seq;
+              endcase
+            end
+          end
+    endcase
+    if (rst) begin
+      \$18  = 32'd0;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
+    \$19  = seq4;
+    (* full_case = 32'd1 *)
+    casez (fsm_state)
+      1'h0:
+          /* empty */;
+      1'h1:
+          if (mbox_sig_done) begin
+            if (\$12 ) begin
+              casez (mbox_key_slot)
+                3'h0:
+                    /* empty */;
+                3'h1:
+                    /* empty */;
+                3'h2:
+                    /* empty */;
+                3'h3:
+                    /* empty */;
+                3'h4:
+                    \$19  = mbox_frame_seq;
+              endcase
+            end
+          end
+    endcase
+    if (rst) begin
+      \$19  = 32'd0;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
+    \$20  = seq5;
+    (* full_case = 32'd1 *)
+    casez (fsm_state)
+      1'h0:
+          /* empty */;
+      1'h1:
+          if (mbox_sig_done) begin
+            if (\$12 ) begin
               casez (mbox_key_slot)
                 3'h0:
                     /* empty */;
@@ -10301,25 +10316,25 @@ module \governor_core.mbox (mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_epoch_
                 3'h4:
                     /* empty */;
                 3'h5:
-                    \$16  = mbox_frame_seq;
+                    \$20  = mbox_frame_seq;
               endcase
             end
           end
     endcase
     if (rst) begin
-      \$16  = 32'd0;
+      \$20  = 32'd0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$17  = seq6;
+    \$21  = seq6;
     (* full_case = 32'd1 *)
     casez (fsm_state)
       1'h0:
           /* empty */;
       1'h1:
           if (mbox_sig_done) begin
-            if (mbox_sig_ok) begin
+            if (\$12 ) begin
               casez (mbox_key_slot)
                 3'h0:
                     /* empty */;
@@ -10334,25 +10349,25 @@ module \governor_core.mbox (mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_epoch_
                 3'h5:
                     /* empty */;
                 3'h6:
-                    \$17  = mbox_frame_seq;
+                    \$21  = mbox_frame_seq;
               endcase
             end
           end
     endcase
     if (rst) begin
-      \$17  = 32'd0;
+      \$21  = 32'd0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$18  = seq7;
+    \$22  = seq7;
     (* full_case = 32'd1 *)
     casez (fsm_state)
       1'h0:
           /* empty */;
       1'h1:
           if (mbox_sig_done) begin
-            if (mbox_sig_ok) begin
+            if (\$12 ) begin
               (* full_case = 32'd1 *)
               casez (mbox_key_slot)
                 3'h0:
@@ -10370,34 +10385,34 @@ module \governor_core.mbox (mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_epoch_
                 3'h6:
                     /* empty */;
                 3'h7:
-                    \$18  = mbox_frame_seq;
+                    \$22  = mbox_frame_seq;
               endcase
             end
           end
     endcase
     if (rst) begin
-      \$18  = 32'd0;
+      \$22  = 32'd0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$12 ) begin end
-    \$19  = mbox_cmd_out;
+    \$23  = mbox_cmd_out;
     (* full_case = 32'd1 *)
     casez (fsm_state)
       1'h0:
           /* empty */;
       1'h1:
           if (mbox_sig_done) begin
-            if (mbox_sig_ok) begin
-              \$19  = mbox_cmd;
+            if (\$12 ) begin
+              \$23  = mbox_cmd;
             end
           end
     endcase
     if (rst) begin
-      \$19  = 8'h00;
+      \$23  = 8'h00;
     end
   end
-  assign \$3  = fsm_state;
+  assign \$5  = fsm_state;
 endmodule
 
 module \governor_core.meas0 (meas0_data, meas0_hash_done, meas0_hash_out, clk, rst, meas0_hash_req, meas0_value, meas0_extend);

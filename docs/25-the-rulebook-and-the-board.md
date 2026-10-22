@@ -25,7 +25,7 @@ through them.
 > `test_h00_contract.py`, `test_h01_attestation.py`, `test_h02_enforcement_points.py`,
 > `test_h03_quorum.py` (the mailbox order), `test_h04_lane.py`,
 > `test_h05_alarms.py`, `test_h07_register.py`, `test_h08_override.py`; spec
-> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (P0 to P9).
+> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (P0 to P12).
 
 ## 0. Two scenarios first: a request for a weapon that destroys a city
 
@@ -205,7 +205,8 @@ authenticated NVM and nowhere else (`04-specification.md` §10). What is in it, 
 |---|---|---|
 | `governance_keys`, `threshold` | The n keys and the k that must sign the rulebook itself. The image carries the keys; the fuses say which keys are real | k of n over the whole image, checked before anything else (`policy.quorum_not_met`) |
 | `approver_keys` | Per rule, the people who may release a hold, and the quorum | An approval signed by anyone else is `approve.bad_signature`; fewer than the quorum is `approve.quorum_pending` |
-| `heartbeat_key` | The one key whose heartbeat keeps the chip in RUN | A heartbeat signed by anything else is `heartbeat.bad_signature`; none in time is `halt.heartbeat_lost` |
+| `authority_keys` | Who may send HALT and CLEAR, separate from the heartbeat key | A HALT or CLEAR that does not name this chip, is past its expiry, or was signed for another command is refused (`mailbox.wrong_command`, `mailbox.expired`) |
+| `heartbeat_key` | The one key whose heartbeat keeps the chip in RUN, and which signs nothing else | A heartbeat signed by anything else is `heartbeat.bad_signature`; none in time is `halt.heartbeat_lost` |
 | `publisher_keys` | Who may sign a model manifest | `BEGIN_MODEL` with a manifest from anyone else is refused; no key is released |
 | `observer_keys` | The witnesses whose verdicts the observer lane accepts | A verdict from any other key is ignored; no accepted verdict is `gate.witness_missing` |
 | `eval_keys`, `deployment_gate` | Who may attest that a model was evaluated, and whether `BEGIN_MODEL` needs that | With the gate on, no evaluation attestation means no model key (`model.not_evaluated`) |
@@ -252,7 +253,7 @@ The chip refuses it when, in this order:
 
 | Check | Reason code | When |
 |---|---|---|
-| Fewer than k valid signatures from keys whose hashes are in the fuses | `policy.quorum_not_met` | at stage and at commit (`verify_policy`) |
+| Fewer than k valid signatures from distinct keys whose hashes are in the fuses, where k is the larger of the image's threshold and the fused one; or a threshold under one, above the number of keys, or below the fused threshold | `policy.quorum_not_met` | at stage and at commit (`verify_policy`); an image cannot set its own k, which one could until 22 October 2026 (threshold 0 and no signatures passed) |
 | Version not above the running edition (at stage), or below the fused counter (at commit and at boot) | `policy.rollback` | `_cmd_policy_propose`, `_accept_policy` |
 | Already expired | `policy.expired` | at commit and at boot (`_accept_policy`); an expired image can be staged, and `tests/test_h03_quorum.py` pins that it is refused at the commit |
 | A rule or endpoint input with no assumptions-register row | `policy.register_incomplete` | at stage and at commit (`check_register`) |
@@ -385,7 +386,7 @@ checks are in the same order in the RTL, and `tests/test_h03_quorum.py`
 | # | Question | Evidence it checks | No | Code |
 |---|---|---|---|---|
 | 0 | Is the chip running? | Its own state register: the heartbeat timer and the loop have already moved it if they had to | Not in RUN (throttled, halted, safe): a lost heartbeat, an open loop, a commanded halt | `mailbox.governor_not_running` (the cause behind it: `halt.heartbeat_lost`, `loop.open`, `halt.commanded`) |
-| 0 | Is the letter in order? | Sequence number per signer, then the edition stamp, then the signature | Replayed or out-of-order frame; wrong edition; a key the rulebook does not name for this command | `mailbox.bad_sequence`, `policy.stale_epoch`, `mailbox.bad_signature` |
+| 0 | Is the letter in order? | Sequence number per signer, then the edition stamp, then the signature, then what was signed | Replayed or out-of-order frame; wrong edition; a key the rulebook does not name for this command; a good signature over another command | `mailbox.bad_sequence`, `policy.stale_epoch`, `mailbox.bad_signature`, `mailbox.wrong_command` |
 | 1 | Is the asker who it says? | A GPU report and a host report verified within the hour; the workload token signed by this chip, unexpired, bound to this fingerprint; the frame signed by the verified host enclave | Any of those stale or absent | `gate.not_attested` |
 | 2 | Seen this before? | The request hash (id, fingerprint, action, fields) against the replay store | A hash already in the store | `gate.replay` |
 | 3 | Anything on fire? | The sticky alarm bits | An alarm that is not session-scoped | `gate.alarm_active` |
@@ -546,11 +547,16 @@ a signature. The mailbox checks them in this order and reports the first failure
 | The sequence number is above the last one accepted for that signer key | `mailbox.bad_sequence` |
 | The edition stamp equals the chip's epoch register (except for the six commands that move, repair or inspect the edition) | `policy.stale_epoch` |
 | The signature verifies under a key the rulebook names for that command class | `mailbox.bad_signature` |
+| What was signed names this command, and a HALT or CLEAR names this chip and is inside its expiry | `mailbox.wrong_command`, `mailbox.expired` |
 
-Only then is the command dispatched. The model and the RTL check in the same order and
+Only then is the command dispatched. The fourth check came out of testing on 22 October 2026:
+without it, any message a key had ever signed counted for every command that key may give, and
+a plain heartbeat cleared a halt. HALT and CLEAR are now signed by an authority key the rulebook
+lists separately from the heartbeat key, so the key that says "alive" every second can never
+say "stop" or "go". The model and the RTL check in the same order and
 `tests/test_h03_quorum.py` and `rtl/tests/test_blocks.py` each pin it. `MBOX_STATUS` tells the
 host which check failed: 3 signature, 4 sequence, 5 epoch, 6 the governor is not running for a
-command that needs it (a handler's refusal travels in the response ring with its code).
+command that needs it, 7 a good signature over a different command (a handler's refusal travels in the response ring with its code).
 
 **Who may send what.** The signer class per command is in `04-specification.md` §3. The ones
 the host side needs:
@@ -702,7 +708,7 @@ for labels (H4), alarms that anyone may raise and only the alarm key clears (H5)
 and the register completeness refusal (H7), the override floor and the quorum (H8), output
 that left without being presented (H10), the use cases end to end including the
 hazardous-knowledge release and a stale witness (H17), witness impersonation, the deployment
-gate and the audit sample (H18), and the core invariants P0 to P9 in Z3
+gate and the audit sample (H18), and the core invariants P0 to P12 in Z3
 (`proofs/core_invariants.py`): nothing executes unless a rule allowed it with its witnesses
 present when the ticket was issued (P1, P2); no replay (P3); no ticket from an edition newer
 than the current one (P4); halt is absorbing without a quorum (P5); with the heartbeat lost

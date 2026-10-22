@@ -53,7 +53,7 @@ def test_swapped_model_changes_fingerprint_and_old_token_dies(rack1):
     assert r["ok"] and r["fingerprint"] != old_fp
     body = {"request_id": "r1", "measurement_token": old_token, "action": "payments.transfer",
             "params": {"amount": 5, "currency": "USD", "destination": "a"}, "witnesses": []}
-    assert g.command("REQUEST", {}, node.host_sign(body, g.epoch))["why"] == reasons.GATE_NOT_ATTESTED
+    assert g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))["why"] == reasons.GATE_NOT_ATTESTED
 
 
 def test_unsigned_manifest_refused_and_no_key_released(rack1):

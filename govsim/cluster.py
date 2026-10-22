@@ -44,9 +44,10 @@ class Node:
         self.model_digest: str | None = None
         self.egress = None                     # the DPU's egress endpoint for this node (set by the rack)
 
-    def host_sign(self, payload: dict, epoch: str) -> dict:
+    def host_sign(self, payload: dict, epoch: str, cmd: str) -> dict:
+        """The host's signature over one command: the payload names the command it is for."""
         self.host_seq += 1
-        return self.host_key.sign({"seq": self.host_seq, "epoch": epoch, **payload})
+        return self.host_key.sign({"seq": self.host_seq, "epoch": epoch, **payload, "type": cmd.lower()})
 
 
 class Rack:
@@ -60,6 +61,7 @@ class Rack:
         self.governance = [SigningKey.generate() for _ in range(5)]
         self.threshold = 3
         self.heartbeat_key = SigningKey.generate()
+        self.authority_key = SigningKey.generate()      # HALT and CLEAR; never the heartbeat key
         self.approvers = {"strike": [SigningKey.generate() for _ in range(3)], "payments.transfer.large": [SigningKey.generate() for _ in range(3)],
                           "alarms": [SigningKey.generate()], "sandbox": [SigningKey.generate() for _ in range(2)],
                           "response.release": [SigningKey.generate() for _ in range(2)], "weights.write.any": [SigningKey.generate() for _ in range(2)],
@@ -91,7 +93,7 @@ class Rack:
         gov_hashes = [digest(k.public.hex) for k in self.governance]
         for i in range(n):
             gpu = GPU(f"gpu{i}", self.clock, self.gpu_vendor, GPU_FW, levers=levers, direct_nvlink=direct_nvlink)
-            fuses = Fuses(chip_id=f"gov{i:02d}", governance_key_hashes=gov_hashes)
+            fuses = Fuses(chip_id=f"gov{i:02d}", governance_key_hashes=gov_hashes, governance_threshold=self.threshold)
             store = Store(f"{store_dir}/gov{i:02d}.json" if store_dir else None)
             g = Governor(f"governor{i}", self.clock, tier=tier, fuses=fuses, store=store,
                          loader_digest=GOV_LOADER, firmware_digest=GOV_FW, firmware_version=GOV_FW_VERSION,
@@ -188,7 +190,7 @@ class Rack:
             version=version, issued_at=now, expires_at=now + expires_in_s,
             governance_keys=[k.public for k in self.governance], threshold=self.threshold,
             approver_keys=approver_keys,
-            heartbeat_key=self.heartbeat_key.public, publisher_keys=[self.publisher.public], observer_keys=[self.observer.public],
+            heartbeat_key=self.heartbeat_key.public, authority_keys=[self.authority_key.public], publisher_keys=[self.publisher.public], observer_keys=[self.observer.public],
             reference_values=refs, endpoints=endpoints,
             budget_owners={"pay-usd-hourly": "gov00"},
             rules=rules, assumptions=rows, override_floor_s=override_floor_s,
@@ -229,9 +231,11 @@ class Rack:
         return g.commit_from_endpoint(ticket) if g is not None else False
 
     # ------------------------------------------------------------------ the authority
-    def _authority_env(self, payload: dict) -> dict:
+    def _authority_env(self, payload: dict, governor: Governor, ttl_s: float = 30.0) -> dict:
+        """A HALT or CLEAR names its command, the one chip it is for and when it stops being good."""
         self.authority_seq += 1
-        return self.heartbeat_key.sign({"seq": self.authority_seq, "epoch": self.epoch, **payload})
+        return self.authority_key.sign({"seq": self.authority_seq, "epoch": self.epoch, "chip_id": governor.chip_id,
+                                        "expires_at": self.clock.now() + ttl_s, **payload})
 
     def loop_beacon(self) -> dict:
         """The LOOP_BEACON body: the loop the authority wired and who it expects on it. It rides inside the
@@ -299,7 +303,7 @@ class Rack:
         if eval_attestation is None and g.policy.get("deployment_gate"):
             eval_attestation = self.eval_attestation(manifest["payload"]["model_digest"])
         body = {k: v for k, v in {"eval_attestation": eval_attestation, "license": license}.items() if v}   # False: send none
-        env = node.host_sign({"manifest": manifest}, g.epoch)
+        env = node.host_sign({"manifest": manifest}, g.epoch, "BEGIN_MODEL")
         r = g.command("BEGIN_MODEL", body, env)
         if r["ok"]:
             node.token = r["token"]
@@ -324,7 +328,7 @@ class Rack:
         """Each host asks its governor to join through the mailbox; the lowest chip id leads."""
         members = members or self.nodes
         for node in members:
-            node.governor.command("ROSTER_JOIN", {}, node.host_sign({"job_id": job_id}, node.governor.epoch))
+            node.governor.command("ROSTER_JOIN", {}, node.host_sign({"job_id": job_id}, node.governor.epoch, "ROSTER_JOIN"))
         leader = min(members, key=lambda n: n.governor.chip_id).governor
         return leader.build_roster(job_id, [n.governor.chip_id for n in members])
 
@@ -348,21 +352,21 @@ class Rack:
         body = {"request_id": random_id(8), "measurement_token": node.token, "action": action, "params": params, "witnesses": witnesses or []}
         if labels:
             body.update(labels)      # requester-supplied labels; the gate must ignore them (H4)
-        return g.command("REQUEST", {}, node.host_sign(body, g.epoch))
+        return g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))
 
     def cap_request(self, node: Node, **fields) -> dict:
         g = node.governor
-        return g.command("CAP_REQUEST", {}, node.host_sign(fields, g.epoch))
+        return g.command("CAP_REQUEST", {}, node.host_sign(fields, g.epoch, "CAP_REQUEST"))
 
     def end_model(self, node: Node) -> dict:
         g = node.governor
-        return g.command("END_MODEL", {}, node.host_sign({"model_digest": node.model_digest}, g.epoch))
+        return g.command("END_MODEL", {}, node.host_sign({"model_digest": node.model_digest}, g.epoch, "END_MODEL"))
 
     def commit_via_mailbox(self, governor: Governor, endpoint_name: str, ticket: dict) -> dict:
         key = self.endpoint_keys[endpoint_name]
         n = self.endpoint_seq.get(endpoint_name, 0) + 1
         self.endpoint_seq[endpoint_name] = n
-        return governor.command("COMMIT", {}, key.sign({"seq": n, "epoch": governor.epoch, "ticket": ticket}))
+        return governor.command("COMMIT", {}, key.sign({"seq": n, "epoch": governor.epoch, "ticket": ticket, "type": "commit"}))
 
     def witness(self, request_hash: str, risk: float = 0.1, ttl_s: float = 30.0) -> dict:
         return self.observer.sign({"type": "observer-verdict", "request_hash": request_hash, "risk": risk, "expires_at": self.clock.now() + ttl_s})
@@ -375,18 +379,18 @@ class Rack:
         rid = random_id(8)
         rhash = digest([rid, node.token["payload"]["fingerprint"], action, params])
         body = {"request_id": rid, "measurement_token": node.token, "action": action, "params": params, "witnesses": [self.witness(rhash, risk)]}
-        return g.command("REQUEST", {}, node.host_sign(body, g.epoch))
+        return g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))
 
     def approve(self, governor: Governor, hold_id: str, request_hash: str, approver: SigningKey, reason: str = "reviewed") -> dict:
         n = self.approver_seq.get(approver.key_id, 0) + 1
         self.approver_seq[approver.key_id] = n
-        env = approver.sign({"seq": n, "epoch": governor.epoch, "hold_id": hold_id, "request_hash": request_hash, "reason": reason})
+        env = approver.sign({"seq": n, "epoch": governor.epoch, "hold_id": hold_id, "request_hash": request_hash, "reason": reason, "type": "approve"})
         return governor.command("APPROVE", {}, env)
 
     def sign_output(self, node: Node, stream: str, data: bytes, response_id: str | None = None, session: str | None = None) -> dict:
         g = node.governor
         env = node.host_sign({"stream": stream, "claimed_prompt_hash": digest("prompt"), "nonce": random_id(8), "data_hex": data.hex(),
-                              "response_id": response_id or stream, "session": session}, g.epoch)
+                              "response_id": response_id or stream, "session": session}, g.epoch, "SIGN_OUTPUT")
         return g.command("SIGN_OUTPUT", {}, env)
 
     # ------------------------------------------------------------------ the response path (the verified runtime)
@@ -434,10 +438,10 @@ class Rack:
         return {"response_id": response_id, "response_hash": pres["response_hash"], "presented": pres, "request": req, "released": released}
 
     def clear(self, governor: Governor) -> dict:
-        return governor.command("CLEAR", {}, self._authority_env({"type": "clear"}))
+        return governor.command("CLEAR", {}, self._authority_env({"type": "clear"}, governor))
 
     def halt(self, governor: Governor, rung: str = "HALT") -> dict:
-        return governor.command("HALT", {}, self._authority_env({"type": "halt", "rung": rung}))
+        return governor.command("HALT", {}, self._authority_env({"type": "halt", "rung": rung}, governor))
 
     # ------------------------------------------------------------------ epoch change
     def new_policy(self, **kw) -> dict:
@@ -476,7 +480,7 @@ class Rack:
     # ------------------------------------------------------------------ red team helpers
     def rogue_governor(self) -> Governor:
         """A device on the wire with no vendor certificate: it can send bytes and nothing else."""
-        fuses = Fuses(chip_id="rogue", governance_key_hashes=[digest(k.public.hex) for k in self.governance])
+        fuses = Fuses(chip_id="rogue", governance_key_hashes=[digest(k.public.hex) for k in self.governance], governance_threshold=self.threshold)
         g = Governor("rogue", self.clock, tier=self.tier, fuses=fuses)
         g.device_cert = SigningKey.generate().sign({"type": "governor-device-cert", "chip_id": "rogue", "pub": g.device_key.public.hex})
         g.load_policy(self.policy)
@@ -486,7 +490,7 @@ class Rack:
 
     def rogue_governor_with_bad_firmware(self) -> Governor:
         """A genuine chip (valid vendor certificate) running firmware that is not in the reference values."""
-        fuses = Fuses(chip_id="gov-badfw", governance_key_hashes=[digest(k.public.hex) for k in self.governance])
+        fuses = Fuses(chip_id="gov-badfw", governance_key_hashes=[digest(k.public.hex) for k in self.governance], governance_threshold=self.threshold)
         g = Governor("badfw", self.clock, tier=self.tier, fuses=fuses, loader_digest=GOV_LOADER,
                      firmware_digest=digest("governor-fw-patched"), firmware_version=GOV_FW_VERSION)
         g.provision(self.gov_vendor, PRODUCTION)

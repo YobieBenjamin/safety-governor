@@ -30,7 +30,7 @@ def test_approver_key_clears_and_it_is_logged(rack1):
     node = rack1.nodes[0]
     g = node.governor
     g.raise_alarm("classifier.stop", "model")
-    env = rack1.approvers["alarms"][0].sign({"seq": 1, "code": "classifier.stop"})
+    env = rack1.approvers["alarms"][0].sign({"seq": 1, "code": "classifier.stop", "type": "alarm_clear"})
     assert g.command("ALARM_CLEAR", {}, env)["ok"]
     assert "classifier.stop" not in g.alarms
     assert g.log.has("alarm.cleared", code="classifier.stop")

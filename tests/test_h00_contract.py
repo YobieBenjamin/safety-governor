@@ -79,11 +79,11 @@ def test_request_replay_refused_after_governor_restart(rack1):
     node = rack1.nodes[0]
     g = node.governor
     body = {"request_id": "req-fixed", "measurement_token": node.token, "action": "payments.transfer", "params": params(), "witnesses": []}
-    assert g.command("REQUEST", {}, node.host_sign(body, g.epoch))["ok"]
+    assert g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))["ok"]
     g.restart()
     rack1.recover(node)
     body["measurement_token"] = node.token
-    r = g.command("REQUEST", {}, node.host_sign(body, g.epoch))
+    r = g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))
     assert not r["ok"] and r["why"] == reasons.GATE_REPLAY
 
 

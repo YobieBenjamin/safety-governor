@@ -129,12 +129,12 @@ def test_valid_license_raises_the_budget_and_a_forged_one_does_not_count():
     g = node.governor
     body = {"request_id": "l1", "measurement_token": node.token, "action": "compute.extend", "params": {}, "witnesses": [],
             "license": r.license(MODEL_70B, 5_000_000, key=SigningKey.generate())}
-    assert g.command("REQUEST", {}, node.host_sign(body, g.epoch))["why"] == reasons.LICENSE_INVALID
+    assert g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))["why"] == reasons.LICENSE_INVALID
     body = {**body, "request_id": "l2", "license": r.license(digest("another model"), 5_000_000)}
-    assert g.command("REQUEST", {}, node.host_sign(body, g.epoch))["why"] == reasons.LICENSE_INVALID
+    assert g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))["why"] == reasons.LICENSE_INVALID
     assert not g.licenses
     body = {**body, "request_id": "l3", "license": r.license(MODEL_70B, 5_000_000)}
-    res = g.command("REQUEST", {}, node.host_sign(body, g.epoch))
+    res = g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))
     assert res["ok"] and g.licenses[MODEL_70B] == 5_000_000 and g.log.has("compute.licensed", model=MODEL_70B, cycles_allowed=5_000_000)
     node.gpu.run_tokens(3000)
     r.tick()

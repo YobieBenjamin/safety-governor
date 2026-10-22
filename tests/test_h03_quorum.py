@@ -68,7 +68,7 @@ def test_host_root_cannot_write_the_epoch(rack1):
             "code": "x", "job_id": "j", "model_digest": node.model_digest, "point": "pcie", "peer": "host", "direction": "both",
             "hold_id": "h", "request_hash": "r", "reason": "because", "rung": "THROTTLE", "ticket": {}, "stream": "s", "data_hex": ""}
     for code, name in sorted(MAILBOX_CODES.items()):
-        g.command(name, junk, node.host_sign(junk, g.epoch))
+        g.command(name, junk, node.host_sign(junk, g.epoch, name))
         assert g.epoch == before, name
     assert g.command("EPOCH_SET", {"epoch": "00" * 32})["why"] == reasons.MBOX_UNKNOWN_COMMAND
     assert g.epoch == before
@@ -93,10 +93,10 @@ def test_signed_frame_from_the_previous_epoch_is_refused(rack1):
     old = g.epoch
     assert rack1.change_epoch(rack1.new_policy())["committed"]
     rack1.load_model(node)
-    env = node.host_sign({"stream": "s", "claimed_prompt_hash": "p", "nonce": "n", "data_hex": b"x".hex()}, old)
+    env = node.host_sign({"stream": "s", "claimed_prompt_hash": "p", "nonce": "n", "data_hex": b"x".hex()}, old, "SIGN_OUTPUT")
     r = g.command("SIGN_OUTPUT", {}, env)
     assert not r["ok"] and r["why"] == reasons.POLICY_STALE_EPOCH
-    env = node.host_sign({"stream": "s", "claimed_prompt_hash": "p", "nonce": "n", "data_hex": b"x".hex()}, g.epoch)
+    env = node.host_sign({"stream": "s", "claimed_prompt_hash": "p", "nonce": "n", "data_hex": b"x".hex()}, g.epoch, "SIGN_OUTPUT")
     assert g.command("SIGN_OUTPUT", {}, env)["ok"]
 
 
@@ -105,7 +105,7 @@ def test_mailbox_reports_the_first_failing_check(rack1):
     node = rack1.nodes[0]
     g = node.governor
     fields = {"stream": "s", "claimed_prompt_hash": "p", "nonce": "n", "data_hex": ""}
-    assert g.command("SIGN_OUTPUT", {}, node.host_sign(fields, g.epoch))["ok"]
+    assert g.command("SIGN_OUTPUT", {}, node.host_sign(fields, g.epoch, "SIGN_OUTPUT"))["ok"]
     last = node.host_seq
     replayed_and_forged = SigningKey.generate().sign({"seq": last, "epoch": g.epoch, **fields})
     replayed_and_forged["signer"] = node.host_key.key_id                     # claims the host's identity

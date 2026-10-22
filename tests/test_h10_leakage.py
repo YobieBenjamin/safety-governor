@@ -93,7 +93,7 @@ def test_meter_counts_tokens_and_the_host_cannot_write_it(rack1):
     for code, name in sorted(MAILBOX_CODES.items()):
         if name == "END_MODEL":
             continue                                                         # finalizes the slot; tested below
-        g.command(name, junk, node.host_sign(junk, g.epoch))
+        g.command(name, junk, node.host_sign(junk, g.epoch, name))
         assert g.command("COUNTERS", {})["meter"][node.model_digest]["tokens"] == 1234, name
     node.gpu.run_tokens(1)
     assert rack1.end_model(node)["meter"]["tokens"] == 1235

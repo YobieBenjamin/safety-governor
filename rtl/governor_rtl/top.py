@@ -172,7 +172,7 @@ class GovernorCore(Elaboratable):
              self.hb.hb_valid, self.hb.window,
              self.halt.tamper, self.halt.cmd_halt, self.halt.cmd_throttle, self.halt.local_trip, self.halt.clear,
              self.meter.slot, self.meter.add_tokens, self.meter.add_cycles, self.meter.add_in, self.meter.add_out, self.meter.strobe,
-             self.mbox.frame_seq, self.mbox.key_slot, self.mbox.cmd, self.mbox.epoch_match, self.mbox.epoch_exempt,
+             self.mbox.frame_seq, self.mbox.key_slot, self.mbox.cmd, self.mbox.signed_cmd, self.mbox.epoch_match, self.mbox.epoch_exempt,
              self.mbox.needs_run, self.mbox.sig_done, self.mbox.sig_ok, self.mbox.verify_req, self.mbox.dispatch, self.mbox.cmd_out,
              self.alarms.set_mask, self.alarms.clear_mask, self.alarms.clear_authorized]
         for c in self.caps.values():

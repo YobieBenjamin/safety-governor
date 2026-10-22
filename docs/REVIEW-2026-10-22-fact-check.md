@@ -220,12 +220,40 @@ over again.
 | G11 | Roster formation during a partition is in the design's table and in no test | docs/02 §3; Part 7 | A case in `test_h14_partition.py` that forms a roster in the surviving half before `heal()` |
 | G12 | The wall time and cost of a wave are not in the packet in a form anyone can check (`0 min` per row) | `audit/wave-1/REPORT.md` | `run_wave.sh` records wall time per attempt and the CLI's own cost line into the report |
 
-## 8. How to check this record
+## 8. Found the same evening, by testing the code: two authorization defects
+
+The readers above checked the documents against the code. That evening I tested the code itself,
+and it failed in a place none of the documents had claimed anything wrong about, because the
+documents and the proofs both took it on trust.
+
+| # | Defect | How it was shown | Fix | Test | Proof |
+|---|---|---|---|---|---|
+| A1 | `verify_policy` read k from the image it was checking: an image with `threshold: 0` and no signatures passed, and `POLICY_PROPOSE` staged it (the commit runs the same check) | A one-GPU rack, an unsigned image with threshold 0: `{'ok': True}` | k is fused at provisioning (`Fuses.governance_threshold`); an image's threshold must be at least one, at most the number of distinct keys and at least the fused one; each key counts once; an edition that asks for more raises the fused floor, never lowers it | `tests/test_h19_authorization.py`, six tests | P10, P11 |
+| A2 | `_check_signed` checked who signed a frame but not what it was signed for: a legitimate heartbeat, presented as `CLEAR`, cleared a halt; any authority signature authorized every authority command | Halt a governor, send a heartbeat as `CLEAR`: `{'ok': True}`, cause gone | Every signed payload names its command (`type`); a HALT or CLEAR also names the chip and carries an expiry no more than 60 s ahead; HALT and CLEAR are signed by authority keys the rulebook lists apart from the heartbeat key; the heartbeat handler checks its own type too; the RTL mailbox compares the command byte inside the verified payload with the frame's (status 7) | Eight tests, and a sweep that records every signed frame a normal run delivers and replays each into every other signed command | P5 restated, P12 |
+
+**Neither was a hardware fault.** Both reproduce in a single-threaded run of the Python model on a
+simulated clock; real silicon built from that logic would have had both. Each fix was checked by
+putting the old code back: the new tests fail on the old rules (A2's heartbeat case is now stopped
+twice, by the type check and by the separate key, and each alone is enough), and the proof file
+checks that P10 and P12 fail under the old rules, so it would have caught both.
+
+**Why the proofs missed them.** The abstract machine took "a quorum signed the new edition" and
+"the authority cleared the halt" as yes-or-no inputs. That assumed exactly the two checks that
+were broken. The machine now computes both from what was signed. The lesson for the method: every
+yes-or-no input a proof takes on trust is a place to test the code directly.
+
+Added to the gaps the program owes: **G13**, the same sweep for the fabric's message types
+(roster, alarm, checkpoint, beacon) and for the signed objects inside bodies (verdicts, lists,
+tickets, tokens, receipts), each replayed into every place that accepts a signature; **G14**, a
+seeded concurrency harness that interleaves commands, timers and crashes across governors, which
+is the honest way to tell a race from a logic error before anyone blames the hardware.
+
+## 9. How to check this record
 
 ```
 cd safety-governor
-python3 -m pytest -q tests rtl/tests          # 220 tests
-make proof                                    # P0 to P9, the commit point, K0 to K5 with K4c
+python3 -m pytest -q tests rtl/tests          # 236 tests
+make proof                                    # P0 to P12, the commit point, K0 to K5 with K4c
 python3 proofs/no_global_kill_switch.py       # the K rows, with the thin-check note on K1a
 python3 -m govsim.bench                       # the engine and firmware numbers
 make loop                                     # the 39 ngspice runs behind 317 us

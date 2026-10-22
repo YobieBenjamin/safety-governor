@@ -96,7 +96,7 @@ def probe_h5(rack):
     g = rack.nodes[0].governor
     g.raise_alarm("x", "model")
     a = g.command("ALARM_CLEAR", {}, SigningKey.generate().sign({"seq": 1, "code": "x"}))["why"] == reasons.ALARM_CLEAR_UNAUTHORIZED and "x" in g.alarms
-    b = g.command("ALARM_CLEAR", {}, rack.approvers["alarms"][0].sign({"seq": 1, "code": "x"}))["ok"] and "x" not in g.alarms
+    b = g.command("ALARM_CLEAR", {}, rack.approvers["alarms"][0].sign({"seq": 1, "code": "x", "type": "alarm_clear"}))["ok"] and "x" not in g.alarms
     return "pass" if a and b else "FAIL"
 
 

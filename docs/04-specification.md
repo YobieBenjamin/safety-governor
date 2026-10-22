@@ -72,7 +72,12 @@ Ed25519 model)}`. The signature is by a key the policy names for that command cl
 mailbox checks, in order: sequence number greater than the last accepted one for that signer
 key, epoch equal to `EPOCH` (except the epoch-exempt commands `POLICY_PROPOSE`,
 `POLICY_COMMIT`, `ATTEST`, `HALT`, `CLEAR` and `ALARM_CLEAR`, which move, repair or inspect the
-epoch itself and must work when it is stale), then the signature. The first failing check is
+epoch itself and must work when it is stale), then the signature, then what was signed: the
+signed payload names the command it is for (`type` equal to the command in lower case, so a
+heartbeat or an approval cannot be presented as a `CLEAR` or an `ALARM_CLEAR`), and a `HALT`
+or `CLEAR` also names the chip it is for and carries an expiry no more than 60 s ahead that has
+not passed (`mailbox.wrong_command`, `mailbox.expired`; RTL status 7). That last check was added
+on 22 October 2026 after a heartbeat cleared a halt in testing. The first failing check is
 the reason reported; the model (`_check_signed`) and the RTL (`mailbox.py`) check in the same
 order and a test in each suite pins it. Only then is the command dispatched. Commands that
 carry their own authentication in the body (an attestation report, a k-of-n signed policy
@@ -93,9 +98,9 @@ image) are accepted without a frame signature and say so below.
 | 0x0B | `ROSTER_JOIN` | verified host enclave | job id | The governor broadcasts its quote on the fabric; roster formation follows (`02-safety-fabric.md`) |
 | 0x0C | `POLICY_PROPOSE` | policy authority (frame unsigned; the image carries its k-of-n signatures, which the governor verifies itself) | image, version, expiry, signatures | Stage the image; the governor records when it staged it |
 | 0x0D | `POLICY_COMMIT` | policy authority (as above) | image digest | Switch the epoch (the rack-wide rule in `02`) |
-| 0x0E | `HEARTBEAT` | policy authority | validity window, epoch | Reloads the heartbeat timer |
-| 0x0F | `HALT` / `THROTTLE` | policy authority | rung, cause | Assert the lever |
-| 0x10 | `CLEAR` | policy authority | none in the model (the governor checks its own record of which log head a neighbor acknowledged) | Clear the cause if it is in the log and a fabric neighbor has acknowledged the checkpoint that contains it; close the loop switch if no cause remains |
+| 0x0E | `HEARTBEAT` | the heartbeat key | validity window, epoch | Reloads the heartbeat timer |
+| 0x0F | `HALT` / `THROTTLE` | an authority key (never the heartbeat key) | rung, cause, this chip's id, expiry | Assert the lever |
+| 0x10 | `CLEAR` | an authority key (never the heartbeat key); this chip's id and an expiry in the payload | none in the model (the governor checks its own record of which log head a neighbor acknowledged) | Clear the cause if it is in the log and a fabric neighbor has acknowledged the checkpoint that contains it; close the loop switch if no cause remains |
 | 0x11 | `LOG_CHECKPOINT` | anyone | none | Signed Merkle root, size, head, neighbor heads |
 | 0x12 | `COUNTERS` | anyone | model digest | Meter readout |
 | 0x13 | `EXCEPTION_DRAIN` | firmware | none | Refusals at every governed switch since the last drain, handed to the log |
@@ -108,10 +113,13 @@ image) are accepted without a frame signature and say so below.
 PolicyImage {
   version: u32,                  // strictly increasing; the anti-rollback counter tracks it
   issued_at, expires_at: u64,
-  governance_keys: [key],         // n keys; threshold k
-  threshold: u8,
+  governance_keys: [key],         // n keys, each counted once however often it is listed
+  threshold: u8,                  // k; at least 1, at most n, and never below the fused threshold
+                                  // (GOV_THRESHOLD in the fuses, set at provisioning, raised by an
+                                  // edition that asks for more, never lowered by one that asks for less)
   approver_keys: {rule_id: [key], quorum: u8},
-  heartbeat_key: key,
+  heartbeat_key: key,             // signs heartbeats and nothing else
+  authority_keys: [key],          // sign HALT and CLEAR; a different key from the heartbeat's
   publisher_keys: [key],          // may sign model manifests
   reference_values: [{device_class, firmware_digest, valid_until}],
   revocations: [chip_id | key_id],

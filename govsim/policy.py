@@ -73,12 +73,13 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
                 buffer_classes: list[str] | None = None, buffer_policy: dict[str, str] | None = None,
                 audit: dict | None = None, streams_required: list[str] | None = None,
                 eval_keys: list[VerifyKey] | None = None, deployment_gate: bool = False,
-                compute_budget: dict | None = None, sandbox: bool = False) -> dict:
+                compute_budget: dict | None = None, sandbox: bool = False, authority_keys: list[VerifyKey] | None = None) -> dict:
     return {
         "version": version, "issued_at": issued_at, "expires_at": expires_at,
         "governance_keys": [k.hex for k in governance_keys], "threshold": threshold,
         "approver_keys": {rid: [k.hex for k in ks] for rid, ks in approver_keys.items()},
         "heartbeat_key": heartbeat_key.hex,
+        "authority_keys": [k.hex for k in (authority_keys or [])],          # HALT and CLEAR; a different key from the heartbeat's, so a key that only says "alive" can never say "stop" or "go"
         "publisher_keys": [k.hex for k in publisher_keys],
         "observer_keys": [k.hex for k in (observer_keys or [])],
         "reference_values": reference_values,      # [{device_class, firmware_digest, valid_until, vendor_key}]
@@ -116,11 +117,20 @@ def sign_policy(image: dict, keys: Iterable[SigningKey]) -> dict:
     return image
 
 
-def verify_policy(image: dict, governance_hashes: list[str] | None = None) -> tuple[bool, str]:
-    """k-of-n check. Governance keys are taken from the image but must match the fused hashes."""
+def verify_policy(image: dict, governance_hashes: list[str] | None = None, min_threshold: int | None = None) -> tuple[bool, str]:
+    """k-of-n check. Governance keys are taken from the image but must match the fused hashes, and the
+    k that counts is the larger of the image's own threshold and the fused one: an image can ask for
+    more signatures than the chip requires, never fewer. A threshold under one, or above the number of
+    distinct keys, is refused outright, and each key counts once however many times it signed."""
     try:
-        keys = [VerifyKey.from_hex(h) for h in image["governance_keys"]]
+        keys = list({h: VerifyKey.from_hex(h) for h in image["governance_keys"]}.values())   # a key listed twice counts once
         threshold = int(image["threshold"])
+        if threshold < 1 or threshold > len(keys):
+            return False, reasons.POLICY_QUORUM
+        if min_threshold is not None:
+            if threshold < int(min_threshold):
+                return False, reasons.POLICY_QUORUM
+            threshold = max(threshold, int(min_threshold))
         if governance_hashes is not None:
             for k in keys:
                 if digest(k.hex) not in governance_hashes:

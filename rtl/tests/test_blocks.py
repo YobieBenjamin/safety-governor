@@ -12,7 +12,7 @@ from rtl.governor_rtl import (Alarms, CapTable, EpochReg, GovernorCore, HaltSeq,
 from rtl.governor_rtl.cap_table import R_BUDGET, R_EXPIRED, R_NO_CAP, R_OK, R_STALE_EPOCH  # noqa: E402
 from rtl.governor_rtl.halt import C_COMMAND, C_LOCAL, C_LOOP, C_TAMPER, HALT, HALTED_INITIAL, RUN, SAFE, THROTTLE  # noqa: E402
 from rtl.governor_rtl.lifecycle import PRODUCTION, TEST  # noqa: E402
-from rtl.governor_rtl.mailbox import S_BAD_EPOCH, S_BAD_SEQ, S_BAD_SIG, S_OK, S_REFUSED  # noqa: E402
+from rtl.governor_rtl.mailbox import S_BAD_EPOCH, S_BAD_SEQ, S_BAD_SIG, S_OK, S_REFUSED, S_WRONG_CMD  # noqa: E402
 
 
 def run(dut, testbench):
@@ -429,6 +429,38 @@ def test_mailbox_sequence_epoch_signature():
         assert d == 0 and s == S_REFUSED
         ctx.set(dut.key_slot, 5)                              # another key has its own sequence
         d, s = await deliver(ctx, seq=1)
+        assert d == 1 and s == S_OK
+
+    run(dut, tb)
+
+
+def test_mailbox_refuses_a_good_signature_over_another_command():
+    """A frame signed for one command (the crypto core reads the command byte out of the verified
+    payload) is not dispatched as another, and its sequence number is not consumed."""
+    dut = Mailbox()
+    HEARTBEAT, CLEAR = 0x0E, 0x10                                    # the opcodes in docs/04 §3
+
+    async def deliver(ctx, seq, cmd, signed_cmd):
+        ctx.set(dut.frame_seq, seq)
+        ctx.set(dut.cmd, cmd)
+        ctx.set(dut.signed_cmd, signed_cmd)
+        ctx.set(dut.epoch_match, 1)
+        ctx.set(dut.running, 1)
+        ctx.set(dut.doorbell, 1)
+        await ctx.tick()
+        ctx.set(dut.doorbell, 0)
+        ctx.set(dut.sig_done, 1)
+        ctx.set(dut.sig_ok, 1)                                        # the signature itself is good
+        dispatched = ctx.get(dut.dispatch)
+        await ctx.tick()
+        ctx.set(dut.sig_done, 0)
+        return dispatched, ctx.get(dut.status)
+
+    async def tb(ctx):
+        d, s = await deliver(ctx, seq=1, cmd=CLEAR, signed_cmd=HEARTBEAT)     # a heartbeat presented as CLEAR
+        assert d == 0 and s == S_WRONG_CMD
+        assert ctx.get(dut.last_seq[0]) == 0                                 # nothing consumed
+        d, s = await deliver(ctx, seq=1, cmd=CLEAR, signed_cmd=CLEAR)         # the real CLEAR still goes through
         assert d == 1 and s == S_OK
 
     run(dut, tb)

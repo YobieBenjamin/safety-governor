@@ -34,6 +34,7 @@ STATE_CODES = {HALTED_INITIAL: 0, RUN: 1, THROTTLE: 2, HALT: 3, SAFE: 4}      # 
 TIERS = ("rack", "board", "integrated")
 TOKEN_TTL_S = 3600.0
 TICKET_TTL_S = 300.0
+AUTHORITY_TTL_S = 60.0          # a HALT or CLEAR is good for a minute at most: it cannot be banked and spent later
 SEEN_HEARTBEATS_MAX = 256
 # Causes that open the loop (the whole domain stops) unless the policy's safe_mode.opens_loop says otherwise.
 LOOP_OPENING_CAUSES = (reasons.LOOP_OPEN, reasons.LOOP_BROKEN, reasons.TAMPER, reasons.HALT_COMMANDED, reasons.LOOP_JUMPERED)
@@ -204,7 +205,7 @@ class Governor:
 
     # ------------------------------------------------------------------ policy
     def _accept_policy(self, image: dict, at_boot: bool = False) -> tuple[bool, str]:
-        ok, why = verify_policy(image, self.fuses.governance_key_hashes)
+        ok, why = verify_policy(image, self.fuses.governance_key_hashes, self.fuses.governance_threshold)
         if not ok:
             return False, why
         if image["version"] < self.fuses.policy_version or (self.policy and image["version"] <= self.policy["version"] and not at_boot):
@@ -219,6 +220,8 @@ class Governor:
         self.policy = image
         self._epoch = policy_epoch(image)
         self.fuses.bump_policy(image["version"])
+        if int(image["threshold"]) > self.fuses.governance_threshold:
+            self.fuses.bump_governance_threshold(int(image["threshold"]))   # an edition that asks for more signatures raises the floor for every later one
         self.store.data["policy_image"] = image
         if not self.epoch_history or self.epoch_history[-1] != self._epoch:
             self.epoch_history.append(self._epoch)        # the compliance report lists every edition this chip ran under
@@ -251,6 +254,8 @@ class Governor:
             return {}
         p = self.policy
         if cls == "authority":
+            hexes = p.get("authority_keys", [])     # HALT and CLEAR only; an image without them cannot be commanded to stop or clear by message (the loop still stops it)
+        elif cls == "heartbeat":
             hexes = [p["heartbeat_key"]]
         elif cls == "governance":
             hexes = p["governance_keys"]
@@ -310,7 +315,11 @@ class Governor:
             self.enter_safe_mode(reasons.COMPUTE_BUDGET, rung=THROTTLE)
 
     def _check_signed(self, env: dict | None, cls: str, cmd: str, rule_id: str | None = None) -> tuple[bool, str]:
-        """The mailbox checks, in order: sequence number, epoch, signature. The first failure is reported."""
+        """The mailbox checks, in order: sequence number, epoch, signature, then what was signed. The first
+        failure is reported. A good signature is not enough: the signed payload has to name this command
+        (``"type": "<cmd in lower case>"``), and a HALT or CLEAR has to name this chip and carry an expiry
+        that has not passed. Without that, any message a key ever signed for one purpose authorized every
+        command that key may give (on 22 October a heartbeat cleared a halt)."""
         if not isinstance(env, dict) or not isinstance(env.get("payload"), dict):
             return False, reasons.MBOX_BAD_SIGNATURE
         p = env["payload"]
@@ -322,6 +331,14 @@ class Governor:
         key = verify_any(env, self._keys(cls, rule_id))
         if key is None:
             return False, reasons.MBOX_BAD_SIGNATURE
+        if p.get("type") != cmd.lower():
+            return False, reasons.MBOX_WRONG_COMMAND
+        if cls == "authority":
+            if p.get("chip_id") != self.chip_id:
+                return False, reasons.MBOX_WRONG_COMMAND
+            exp = p.get("expires_at")
+            if not isinstance(exp, (int, float)) or exp <= self.clock.now() or exp > self.clock.now() + AUTHORITY_TTL_S:
+                return False, reasons.MBOX_EXPIRED
         self.mbox_seq[key.key_id] = seq
         self.store.save()
         return True, reasons.OK
@@ -938,9 +955,11 @@ class Governor:
         return self.staged is not None and now <= self.staged_at + deadline
 
     def _heartbeat(self, env: dict | None, hops: int) -> dict:
-        if env is None or verify_any(env, self._keys("authority")) is None:
+        if env is None or verify_any(env, self._keys("heartbeat")) is None:
             return self._deny("heartbeat", reasons.HEARTBEAT_BAD_SIGNATURE)
         p = env["payload"]
+        if p.get("type") != "heartbeat":                # the heartbeat key signs heartbeats and nothing else, but check what it signed
+            return self._deny("heartbeat", reasons.HEARTBEAT_BAD_SIGNATURE)
         now = self.clock.now()
         if int(p.get("seq", -1)) <= self.hb_last_seq:
             return self._deny("heartbeat", reasons.HEARTBEAT_REPLAY)
@@ -1107,7 +1126,7 @@ class Governor:
         image = body.get("image")
         if not image:
             return self._deny("policy_propose", reasons.POLICY_QUORUM)
-        ok, why = verify_policy(image, self.fuses.governance_key_hashes)
+        ok, why = verify_policy(image, self.fuses.governance_key_hashes, self.fuses.governance_threshold)
         if not ok:
             return self._deny("policy_propose", why)
         if self.policy and image["version"] <= self.policy["version"]:

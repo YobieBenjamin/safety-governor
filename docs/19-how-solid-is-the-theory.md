@@ -24,7 +24,7 @@ The design makes L, P, C and N. It explicitly does not make S. That choice is th
 
 Claim L is the oldest result in computer security. A component that every protected access must pass through, that cannot be tampered with, and that is small enough to check, enforces whatever policy it is given. Operating-system kernels, firewalls and hardware security modules are built on it. There is nothing new in the logic; what is new is where it is placed, beside the GPU, with physical levers, and what it is asked to govern, the actions of a model.
 
-Because it is a statement about a machine, it can be proven about a machine. The repository now contains `proofs/core_invariants.py`, which writes the governor down as a small state machine and asks Z3, an automated theorem prover, to prove by induction that certain things can never happen in it, in any reachable state, after any sequence of steps, for any number of actions. The machine is deliberately abstract. It has, for every action: whether the signed policy at the current edition allows it, whether its witnesses are present, whether a ticket was issued and in which edition, whether that ticket was spent, whether the action was executed, and a history bit recording that at the moment of issue the rule allowed it and the witnesses were there. It has the current rules edition, whether the governor is halted, and whether the heartbeat is live. Its steps are: the gate issues a ticket; an endpoint executes against a ticket; an adversary presents an action with no ticket, a spent ticket or a ticket from another edition; a new edition is committed under a quorum; the governor halts; a clear with quorum and neighbour; the heartbeat is lost or returns; and the lists and observers change underneath, freely.
+Because it is a statement about a machine, it can be proven about a machine. The repository now contains `proofs/core_invariants.py`, which writes the governor down as a small state machine and asks Z3, an automated theorem prover, to prove by induction that certain things can never happen in it, in any reachable state, after any sequence of steps, for any number of actions. The machine is deliberately abstract. It has, for every action: whether the signed policy at the current edition allows it, whether its witnesses are present, whether a ticket was issued and in which edition, whether that ticket was spent, whether the action was executed, and a history bit recording that at the moment of issue the rule allowed it and the witnesses were there. It has the current rules edition, whether the governor is halted, and whether the heartbeat is live. Its steps are: the gate issues a ticket; an endpoint executes against a ticket; an adversary presents an action with no ticket, a spent ticket or a ticket from another edition; a new edition is committed when enough distinct governance signatures reach the fused threshold, whatever threshold the image claims; the governor halts; a clear with a signature over a CLEAR for this chip, in date, and a neighbour; the heartbeat is lost or returns; and the lists and observers change underneath, freely.
 
 The properties proven, in the words of the file:
 
@@ -33,15 +33,20 @@ The properties proven, in the words of the file:
 - P2. A ticket exists only for an action the rule allowed, with witnesses, at issue time.
 - P3. No replay: anything executed has its ticket marked spent, and a spent ticket is refused.
 - P4. A ticket carries an edition no newer than the current one, and only the current edition is honoured.
-- P5. Halt is absorbing: halted and no quorum means still halted after any step. No governor clears itself.
+- P5. Halt is absorbing: halted, and no signed CLEAR for this chip in date, means still halted after any step. No governor clears itself.
 - P6. Fail closed: with the heartbeat lost, no step executes anything.
 - P7. No ticket is issued while halted or while the heartbeat is lost.
 - P8. The edition only moves forward.
 - P9. An edition change needs a quorum.
+- P10. An edition change needs at least the fused number of distinct governance signatures, whatever the image claims.
+- P11. The fused threshold never falls.
+- P12. Nothing but a signature over a CLEAR leaves the halt: a heartbeat, a halt or any other signed command does not.
 
 Plus a check that the machine is not vacuous: an allowed action can in fact be executed, so the proofs are not true merely because nothing ever happens. All of it runs in well under a second.
 
-Two things about that proof are worth saying out loud. First, the prover found a hole in my first draft of the invariant: with the edition counter allowed to go negative, a state with edition minus one let an action with no ticket (marked minus one) execute, because minus one equalled minus one. That is exactly what proofs are for; a test suite can miss a collision like that forever. P0 closes it. Second, the proof is about the model, not about the silicon. What connects the model to the design is a chain of lesser arguments: the functional model (`govsim`) follows the same rules and 200 tests check that it does; the RTL blocks follow the model and 20 simulation tests check that; the silicon will follow the RTL and the pre-hardware plan says how that will be checked. Each link can be strengthened, and the next section says how far.
+P10 to P12 arrived on 22 October 2026, and the story is the opposite of a win. Testing the code found two authorization defects the proof had never been able to see: an image that set its own threshold to zero passed the quorum check, and a heartbeat cleared a halt. The proof missed both because the first version took "a quorum signed" and "the authority cleared" as yes-or-no inputs, which assumed exactly the checks that were broken. The machine now computes both from what was signed, the way the chip does, and the file also checks that P10 and P12 fail under the old rules, so it would have caught them. The lesson goes in the method, not just the model: any yes-or-no input a proof takes on trust is a place to look for a defect.
+
+Two more things about that proof are worth saying out loud. First, the prover found a hole in my first draft of the invariant: with the edition counter allowed to go negative, a state with edition minus one let an action with no ticket (marked minus one) execute, because minus one equalled minus one. That is exactly what proofs are for; a test suite can miss a collision like that forever. P0 closes it. Second, the proof is about the model, not about the silicon. What connects the model to the design is a chain of lesser arguments: the functional model (`govsim`) follows the same rules and 200 tests check that it does; the RTL blocks follow the model and 20 simulation tests check that; the silicon will follow the RTL and the pre-hardware plan says how that will be checked. Each link can be strengthened, and the next section says how far.
 
 ## 3. Can it be proven in circuitry?
 
@@ -106,7 +111,7 @@ Answer per claim, L, P, C, S, N, and say for each whether you consider it a theo
 
 ## 10. What exists to back this document
 
-- `proofs/core_invariants.py`: the Z3 proofs of P0 to P9 and the non-vacuity check; `python3 proofs/core_invariants.py`.
+- `proofs/core_invariants.py`: the Z3 proofs of P0 to P12, the non-vacuity checks, and the regression check that P10 and P12 fail under the rules as they were before 22 October; `python3 proofs/core_invariants.py`.
 - `proofs/no_global_kill_switch.py` and `docs/23-there-is-no-kill-switch.md`: why the gates belong at the ends of the model-to-world graph (Menger's theorem; minimum cuts checked by max-flow), and the part of the popular kill-switch argument that is wrong.
 - `govsim/` and `tests/`: the functional model and 200 hypothesis tests, H0 to H18.
 - `rtl/governor_rtl/` and `rtl/tests/`: the hard-core blocks and 20 simulation tests; formal proofs on the Verilog are the next step in `docs/07-verification-plan.md`.

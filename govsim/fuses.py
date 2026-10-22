@@ -24,13 +24,22 @@ def _kdf_engine(uds: bytes):
 
 
 class Fuses:
-    def __init__(self, chip_id: str | None = None, governance_key_hashes: list[str] | None = None, uds: bytes | None = None):
+    def __init__(self, chip_id: str | None = None, governance_key_hashes: list[str] | None = None, uds: bytes | None = None,
+                 governance_threshold: int | None = None):
         self.chip_id = chip_id or secrets.token_hex(8)
         self._kdf = _kdf_engine(uds or secrets.token_bytes(32))   # no attribute holds the secret
         self.rollback = 0                      # firmware version; thermometer-coded in silicon
         self.policy_version = 0                # policy image version; a second thermometer
         self.lifecycle = TEST
         self.governance_key_hashes = list(governance_key_hashes or [])
+        # the k of k-of-n, fused at provisioning beside the key hashes. A policy image may raise it and
+        # never lower it: the threshold an image carries is the image's own claim, and an image cannot
+        # be allowed to decide how many signatures it needs (that was the defect found on 22 October:
+        # threshold 0 and no signatures passed). Unset, it is a majority of the fused keys, at least one.
+        n = len(set(self.governance_key_hashes))
+        self.governance_threshold = int(governance_threshold) if governance_threshold is not None else max(1, n // 2 + 1)
+        if self.governance_threshold < 1:
+            raise ValueError(reasons.POLICY_QUORUM)
         self.zeroized = False
 
     # --- secret -------------------------------------------------------------
@@ -55,6 +64,12 @@ class Fuses:
         if to < self.policy_version:
             raise ValueError(reasons.POLICY_ROLLBACK)
         self.policy_version = to
+
+    def bump_governance_threshold(self, to: int) -> None:
+        """Thermometer-coded like the version counters: it only goes up."""
+        if to < self.governance_threshold:
+            raise ValueError(reasons.POLICY_QUORUM)
+        self.governance_threshold = to
 
     def advance_lifecycle(self, to: int) -> None:
         if to < self.lifecycle:

@@ -22,6 +22,8 @@ MBOX_BAD_SEQUENCE = "mailbox.bad_sequence"
 MBOX_BAD_SIGNATURE = "mailbox.bad_signature"
 MBOX_NOT_RUNNING = "mailbox.governor_not_running"
 MBOX_UNKNOWN_COMMAND = "mailbox.unknown_command"
+MBOX_WRONG_COMMAND = "mailbox.wrong_command"        # a valid signature over a different command, or for another chip
+MBOX_EXPIRED = "mailbox.expired"                    # an authority command past its expiry, or with none
 
 # gate
 GATE_REPLAY = "gate.replay"
