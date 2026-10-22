@@ -33,11 +33,23 @@ OTBN_CLOCK_HZ = 100e6                      # Earl Grey core clock
 SIGN_S = OTBN_P384_SIGN_CYCLES / OTBN_CLOCK_HZ    # 17 ms
 BATCH_WINDOW_S = 0.05                      # docs/04 §9: one signature per window over a Merkle root of the records
 SLOTS_PER_CHIP = 8                         # an HGX baseboard: the engine serves eight GPUs
+# Post-quantum path (C3). OTBN has no ML-DSA implementation and no published ML-DSA cycle count. The stand-in is
+# the pqm4 benchmark of ML-DSA-65 (Dilithium3) signing on a Cortex-M4, about 10 million cycles on average. The
+# figure is quoted from memory of the pqm4 tables and must be re-checked against the current pqm4 release before
+# anyone relies on it. Scaling assumption: OTBN runs the same cycle count as the M4 (1.0x). That is neutral to
+# slightly pessimistic, since OTBN's 256-bit datapath could help the NTT but has no Keccak unit and would run
+# SHAKE in software. Signing is rejection sampling, so the figure is a mean; the tail is covered by
+# HYBRID_PESSIMISM in the tests rather than by this constant.
+MLDSA65_SIGN_CYCLES = 10_000_000           # Cortex-M4, pqm4, ML-DSA-65 sign, mean; OTBN assumed equal
+MLDSA65_SIGN_S = MLDSA65_SIGN_CYCLES / OTBN_CLOCK_HZ    # 100 ms
+HYBRID_SIGN_S = SIGN_S + MLDSA65_SIGN_S    # both signatures per batch, one engine: 117 ms
+HYBRID_BATCH_WINDOW_S = 0.25               # the window that keeps the single engine under 100 percent; must exceed HYBRID_SIGN_S
 GPU_SECONDS_PER_TOKEN = 1 / 2000.0         # a modest 2,000 tokens per second per GPU
 
 
 def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_request: int = 500, actions: int = 50,
-        slots_per_chip: int = SLOTS_PER_CHIP, batch_window_s: float = BATCH_WINDOW_S) -> dict:
+        slots_per_chip: int = SLOTS_PER_CHIP, batch_window_s: float = BATCH_WINDOW_S,
+        hybrid_window_s: float = HYBRID_BATCH_WINDOW_S, hybrid_sign_s: float = HYBRID_SIGN_S) -> dict:
     """Count the governor's operations for one GPU's workload and price them."""
     rack = build_rack(gpus, tier, policy_kw={"output_queries": 10 ** 9, "output_bytes": 10 ** 12})
     rack.bring_up()
@@ -63,6 +75,8 @@ def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_requ
     sig_unbatched = responses * slots_per_chip
     windows = gpu_s / batch_window_s if batch_window_s > 0 else float("inf")
     sig_batched = min(sig_unbatched, windows)
+    hybrid_windows = gpu_s / hybrid_window_s if hybrid_window_s > 0 else float("inf")
+    hybrid_batched = min(sig_unbatched, hybrid_windows)
     util = lambda n: 100.0 * n * SIGN_S / gpu_s if gpu_s else 0.0
     return {"tier": tier, "tokens": total_tokens, "ops": ops, "responses": responses,
             "gpu_seconds": gpu_s, "firmware_seconds": firmware_s,
@@ -70,6 +84,10 @@ def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_requ
             "signatures_unbatched": sig_unbatched, "signatures_batched": sig_batched,
             "engine_utilization_unbatched_pct": util(sig_unbatched), "engine_utilization_pct": util(sig_batched),
             "record_latency_s": batch_window_s + SIGN_S,
+            "hybrid_signatures_batched": hybrid_batched,
+            "hybrid_engine_utilization_pct": 100.0 * hybrid_batched * hybrid_sign_s / gpu_s if gpu_s else 0.0,
+            "hybrid_engine_utilization_at_base_window_pct": 100.0 * sig_batched * hybrid_sign_s / gpu_s if gpu_s else 0.0,
+            "hybrid_record_latency_s": hybrid_window_s + hybrid_sign_s,
             "per_token_ops": (ops.get("mailbox", 0) + ops.get("ticket", 0) + ops.get("sign", 0)) / max(1, total_tokens)}
 
 
@@ -81,6 +99,11 @@ def main() -> None:
         print(f"{tier:11s} tokens={r['tokens']:>9,}  firmware={r['firmware_seconds']*1e3:7.1f} ms of gpu={r['gpu_seconds']:6.1f} s "
               f"({r['firmware_overhead_pct']:.3f}%)  engine: {r['engine_utilization_unbatched_pct']:.0f}% unbatched -> "
               f"{r['engine_utilization_pct']:.0f}% batched  record latency <= {r['record_latency_s']*1e3:.0f} ms  ops={r['ops']}")
+    h = run("rack")
+    print(f"hybrid (P-384 + ML-DSA-65, both per batch): {HYBRID_SIGN_S*1e3:.0f} ms per batch (ML-DSA-65 {MLDSA65_SIGN_CYCLES:,} cycles, "
+          f"Cortex-M4 pqm4 figure assumed equal on OTBN); engine {h['hybrid_engine_utilization_at_base_window_pct']:.0f}% at the "
+          f"{BATCH_WINDOW_S*1e3:.0f} ms window (cannot keep up) -> {h['hybrid_engine_utilization_pct']:.0f}% at a {HYBRID_BATCH_WINDOW_S*1e3:.0f} ms window; "
+          f"record latency <= {h['hybrid_record_latency_s']*1e3:.0f} ms")
     short = run("rack", requests=1000, tokens_per_request=100)
     print(f"short responses (100 tokens): engine {short['engine_utilization_unbatched_pct']:.0f}% unbatched, which cannot keep up, "
           f"-> {short['engine_utilization_pct']:.0f}% batched (why the spec batches, docs/04 §9)")
