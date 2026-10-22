@@ -282,7 +282,27 @@ for repo in safety-governor safety hardware-and-silicon autonomic-graph-regulati
   echo "https://github.com/$OWNER/$repo/issues"
 done
 echo "clones: $WORK   bundles inbox: $INBOX"
-# 7. The program. It is started again when this run stopped it, when an earlier run stopped it and
+# 7. Verify: the audit fixes are checked on what was just pushed, so the one command that publishes also
+#    proves the published code holds (tools/verify_audit_fixes.sh: every suite, every proof, both sweeps,
+#    each finding refused on the fixed code and reproduced on the audited snapshot, and each regression
+#    failing for the intended reason when its fix is reverted). NO_VERIFY=1 skips it. It runs from the
+#    clone on the drive, whatever folder this script was started from (on 22 October it was started as
+#    "bash tools/verify_audit_fixes.sh" from the home folder, where that path does not exist).
+step "Verify"
+VERIFY="$WORK/safety-governor/tools/verify_audit_fixes.sh"
+if [ "${NO_VERIFY:-0}" = 1 ]; then
+  echo "NO_VERIFY=1: skipped"
+elif [ -f "$VERIFY" ]; then
+  if HS="$WORK/hardware-and-silicon" bash "$VERIFY"; then
+    echo "verify: every check holds (the full run is above; rerun any time with: bash \"$VERIFY\")"
+  else
+    echo "verify: SOMETHING DOES NOT HOLD; the failing check is named above. Nothing was undone; the push stands."
+  fi
+else
+  echo "no $VERIFY yet; nothing to verify"
+fi
+
+# 8. The program. It is started again when this run stopped it, when an earlier run stopped it and
 #    failed (the marker), and also when it is simply not running: a setup that ends with the clones
 #    current and the agents idle is a setup that has to be followed by another command, and the 22
 #    October run ended exactly so. NO_PROGRAM=1 leaves it alone.
