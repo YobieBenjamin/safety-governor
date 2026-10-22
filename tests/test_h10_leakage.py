@@ -100,3 +100,10 @@ def test_meter_counts_tokens_and_the_host_cannot_write_it(rack1):
     node.gpu.run_tokens(1)
     rack1.tick()
     assert g.command("COUNTERS", {})["meter"][node.model_digest]["tokens"] == 1235   # the slot is final
+
+
+def test_the_budget_the_covert_model_reads_is_the_one_enforced_here(rack1):
+    """tests/test_covert_budget.py bounds covert leakage from the output budget in the policy image; this
+    pins that it is the same 50 queries and 200 KB per hour the tests above trip (docs/05-threat-model.md)."""
+    ob = rack1.nodes[0].governor._output_rule()["output_budget"]
+    assert (ob["queries"], ob["bytes"], ob["window_s"]) == (50, 200_000, 3600)
