@@ -1,8 +1,17 @@
-# External audit, 22 October 2026: the reproductions
+# External audit, 22 October 2026
 
-The scripts that tested each finding of the audit on the snapshot it was made against, before
-anything was fixed, and again after. The account is in `docs/REVIEW-2026-10-22-fact-check.md`,
-section 9.
+An independent reviewer audited the public snapshots and found real failures. This folder keeps
+the whole exchange on the record, criticism included, because a program that only publishes the
+reviews it survived is not doing science.
+
+| File | What it is |
+|---|---|
+| [MEMO.md](MEMO.md) | The reviewer's memo, verbatim and unedited |
+| [RESPONSE.md](RESPONSE.md) | Our answer, finding by finding: the reproduction, the cause, the fix, the tests, the links pinned to the fix commits, and what is still open |
+| [AGR-CORRECTIONS-DRAFT.md](AGR-CORRECTIONS-DRAFT.md) | The research corrections his memo calls for, drafted for autonomic-graph-regulation's `CORRECTIONS.md` |
+| the scripts below | Each finding tested on the snapshot it was made against, before anything was fixed, and again after |
+
+The account in the design record is section 9 of `docs/REVIEW-2026-10-22-fact-check.md`.
 
 | Script | Run from | What it checks |
 |---|---|---|

@@ -121,6 +121,8 @@ If you are a model, or a person with time: [audit/PROMPT.md](audit/PROMPT.md) is
 
 ## 8. Corrections, on the record
 
+[audit/external-2026-10-22/](audit/external-2026-10-22/) is the outside review, kept whole: an independent reviewer's memo, verbatim and unedited, with our response finding by finding, the scripts that reproduced every claim on the snapshot he audited, and the research corrections his memo calls for. He found real failures; they are fixed, and his objections stay on the record beside the fixes.
+
 [docs/REVIEW-2026-10-22-fact-check.md](docs/REVIEW-2026-10-22-fact-check.md) is the second round: three readers that had not seen the documents being written checked docs/23, 24 and 25, the brief and blog Parts 5 to 7 against the code, the tests, the proofs and the primary sources. 116 findings, every one applied or said out loud, and a list of twelve places where the model does something simpler than the documents described, which the program now owes.
 
 [docs/AUDIT-2026-10.md](docs/AUDIT-2026-10.md) lists what an audit found wrong in the first drafts, with sources: signature sizes, what DC-SCM actually carries, how DICE derives keys, and more. The catalogue count the first posts gave (66 attacks and 10 baselines) was stale; it is 75 and 12, corrected with a dated note. The two proof holes above are corrections too. The program publishes what it finds, whichever way it goes.

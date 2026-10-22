@@ -298,7 +298,10 @@ activation telemetry into silicon: an output-only combination that needs no inte
 within three catches of it. His three methodological points (a threshold chosen on test labels; a
 task held out of the weights but not of model selection in YB-0047; H3's "the tie-break, not more
 samples" read off an interval that spans zero) are correct as stated and belong in that
-repository's corrections ledger, which this session cannot push to.
+repository's corrections ledger; they are drafted, with two more the recomputation adds, in
+`audit/external-2026-10-22/AGR-CORRECTIONS-DRAFT.md`, to be copied across (this pipeline does not push that
+repository yet). His memo is kept verbatim in `audit/external-2026-10-22/MEMO.md`, beside our
+`RESPONSE.md`.
 
 His work order, adopted: the five reproduced failures first (done above), then the disclosed gaps
 (three of four closed), then one complete action path end to end with a real observer and a
