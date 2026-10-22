@@ -37,17 +37,23 @@ OTBN_CLOCK_HZ = 100e6                      # Earl Grey core clock
 SIGN_S = OTBN_P384_SIGN_CYCLES / OTBN_CLOCK_HZ    # 17 ms
 BATCH_WINDOW_S = 0.05                      # docs/04 §9: one signature per window over a Merkle root of the records
 SLOTS_PER_CHIP = 8                         # an HGX baseboard: the engine serves eight GPUs
-# Post-quantum path (C3). OTBN has no ML-DSA implementation and no published ML-DSA cycle count. The stand-in is
-# the pqm4 benchmark of ML-DSA-65 (Dilithium3) signing on a Cortex-M4, about 10 million cycles on average. The
-# figure is quoted from memory of the pqm4 tables and must be re-checked against the current pqm4 release before
-# anyone relies on it. Scaling assumption: OTBN runs the same cycle count as the M4 (1.0x). That is neutral to
-# slightly pessimistic, since OTBN's 256-bit datapath could help the NTT but has no Keccak unit and would run
-# SHAKE in software. Signing is rejection sampling, so the figure is a mean; the tail is covered by
-# HYBRID_PESSIMISM in the tests rather than by this constant.
-MLDSA65_SIGN_CYCLES = 10_000_000           # Cortex-M4, pqm4, ML-DSA-65 sign, mean; OTBN assumed equal
+# Post-quantum path (C3). ML-DSA is not in Earl Grey silicon and no OTBN-specific measured cycle count is in the
+# repo (docs/04 §7, docs/08, docs/18 §9: a future OpenTitan release or a software implementation, cost measured in
+# Phase 2). The stand-in is the pqm4 project's ML-DSA-65 (Dilithium3) sign on a Cortex-M4, about 10 million
+# cycles on average.
+#
+# UNVERIFIED PLACEHOLDER: the 10,000,000 figure has NO checked source at revision 1 (no web access). It is from
+# memory of the pqm4 tables and MUST be re-checked against the current pqm4 release, with the M4->OTBN scaling,
+# before the result is relied on. Every hybrid verdict below is conditional on it.
+# Scaling assumption (UNVERIFIED, 1.0x): the M4 count is assumed equal on the OTBN-class engine. This is an
+# assumption, not a measurement, and is to be measured in Phase 2; a software SHAKE on OTBN could make it
+# optimistic. Signing is rejection sampling, so the figure is a mean; its tail is covered by HYBRID_PESSIMISM in
+# the tests (a 2x factor standing in for it -- an assumption, not a measurement), not by this constant.
+MLDSA65_SIGN_CYCLES = 10_000_000           # UNVERIFIED placeholder: Cortex-M4 pqm4 ML-DSA-65 sign, mean; no checked source
+MLDSA65_COST_SOURCED = False               # no checked source at revision 1; re-check pqm4 + M4->OTBN scaling before relying
 MLDSA65_SIGN_S = MLDSA65_SIGN_CYCLES / OTBN_CLOCK_HZ    # 100 ms
 HYBRID_SIGN_S = SIGN_S + MLDSA65_SIGN_S    # both signatures per batch, one engine: 117 ms
-HYBRID_BATCH_WINDOW_S = 0.25               # the window that keeps the single engine under 100 percent; must exceed HYBRID_SIGN_S
+HYBRID_BATCH_WINDOW_S = 0.25               # window, under 1 s, that keeps the single engine under 100 percent; must exceed HYBRID_SIGN_S
 GPU_SECONDS_PER_TOKEN = 1 / 2000.0         # a modest 2,000 tokens per second per GPU
 # ASSUMPTION (stated, not measured): an HMAC-SHA256 over a short message on the hash engine takes about 2 microseconds,
 # and a P-384 verify costs about what a sign does (17 ms on OTBN). Phase 2 measurement replaces both.
@@ -193,9 +199,13 @@ def main() -> None:
               f"{r['engine_utilization_pct']:.0f}% batched  record latency <= {r['record_latency_s']*1e3:.0f} ms  ops={r['ops']}")
     h = run("rack")
     print(f"hybrid (P-384 + ML-DSA-65, both per batch): {HYBRID_SIGN_S*1e3:.0f} ms per batch (ML-DSA-65 {MLDSA65_SIGN_CYCLES:,} cycles, "
-          f"Cortex-M4 pqm4 figure assumed equal on OTBN); engine {h['hybrid_engine_utilization_at_base_window_pct']:.0f}% at the "
-          f"{BATCH_WINDOW_S*1e3:.0f} ms window (cannot keep up) -> {h['hybrid_engine_utilization_pct']:.0f}% at a {HYBRID_BATCH_WINDOW_S*1e3:.0f} ms window; "
-          f"record latency <= {h['hybrid_record_latency_s']*1e3:.0f} ms")
+          f"Cortex-M4 pqm4 figure, {'UNVERIFIED placeholder -- no checked source at revision 1' if not MLDSA65_COST_SOURCED else 'sourced'} -- re-check before relying; "
+          f"OTBN 1.0x assumed); engine {h['hybrid_engine_utilization_at_base_window_pct']:.0f}% at the "
+          f"{BATCH_WINDOW_S*1e3:.0f} ms window (cannot keep up) -> {h['hybrid_engine_utilization_pct']:.0f}% at a {HYBRID_BATCH_WINDOW_S*1e3:.0f} ms window (under 1 s); "
+          f"record latency <= {h['hybrid_record_latency_s']*1e3:.0f} ms. "
+          f"Counted is signing only (tickets are a 20 us firmware path; verification and session setup are not on the engine), "
+          f"so 'no second engine' holds for the signing workload, not the chip as a whole. "
+          f"Disproof did not hold -- a window under 1 s keeps the one engine under 100 percent -- but ONLY conditional on the unverified ML-DSA figure.")
     short = run("rack", requests=1000, tokens_per_request=100)
     print(f"short responses (100 tokens): engine {short['engine_utilization_unbatched_pct']:.0f}% unbatched, which cannot keep up, "
           f"-> {short['engine_utilization_pct']:.0f}% batched (why the spec batches, docs/04 §9)")
