@@ -659,7 +659,7 @@ def fig_prompt_flow(part: str = "all"):
     witnesses with the rack beside it, and "b" the governor's triggers and the egress, each the
     shape of a landscape page, for the printed document."""
     X0, BW, EX, EW = 0.4, 4.1, 4.7, 1.9
-    LW, EWRAP, LSTEP = 90, 40, 0.122          # wrap widths (characters) and the line step for 5.9 pt text
+    LW, EWRAP, LSTEP = 90, 46, 0.118          # wrap widths (characters) and the line step for 5.9 pt text
     steps = [
         ("1 · The prompt: words", "A person types a request for a weapon to destroy a city. The system prompt (rung 0) says don't; a reframing gets past it. Nothing at this step is hardware, and the chip will never see these words."),
         ("2 · Words to bytes: the data-center edge (the DPU)", "The request travels encrypted and enters at the node's DPU. On the way back out, the egress on that DPU holds every response until a ticket admits it. Sentry watches this path."),
@@ -703,11 +703,11 @@ def fig_prompt_flow(part: str = "all"):
         title = "One request, from the keyboard to the chip's no: words, bytes, tokens, the GPU, the governor, the rack, the rulebook."
         draw_steps, draw_block, note_rows = True, True, notes
     elif part == "a":
-        H = 0.85 + steps_h + 0.45 + 0.75
+        H = 0.85 + steps_h + 0.62 + 0.75
         title = "One request, from the keyboard to the chip (1 of 2): words, bytes, tokens, the GPU, the witnesses, and the rack beside them."
         draw_steps, draw_block, note_rows = True, False, notes[:2]
     else:
-        H = 0.85 + block_h + GAP + last_h + 0.95
+        H = 0.85 + block_h + GAP + last_h + 0.6
         title = "One request, from the keyboard to the chip (2 of 2): the governor's rulebook triggers in order, the egress, and the people."
         draw_steps, draw_block, note_rows = False, True, notes[2:]
     fig, ax = new_fig(W, H)
@@ -730,9 +730,9 @@ def fig_prompt_flow(part: str = "all"):
             down(y - h, y - h - GAP)
             y -= h + GAP
         if not draw_block:
-            box(ax, X0, y - 0.45, BW, 0.45, "", kind="gov", pad=0.1)
+            box(ax, X0, y - 0.62, BW, 0.62, "", kind="gov", pad=0.1)
             ax.text(X0 + 0.1, y - 0.09, "7 · The governor chip: the rulebook triggers, in order", ha="left", va="top", fontsize=7.4, color=BLUE, fontweight="bold")
-            ax.text(X0 + 0.1, y - 0.27, "continued in figure 2 of 2: the chip's questions, the no each one can say, the ticket, the egress and the people", ha="left", va="top", fontsize=5.9, color=BLUE)
+            wrapped(ax, X0 + 0.1, y - 0.27, "continued in figure 2 of 2: the chip's questions, the no each one can say, the ticket, the egress and the people", LW, 5.9, color=BLUE, step=LSTEP)
     if draw_block:
         gtop = y
         ax.add_patch(FancyBboxPatch((X0 - 0.08, gtop - block_h), BW + 0.16 + EW + 0.28, block_h, boxstyle="round,pad=0.02,rounding_size=0.08", fc=BLUE_FILL, ec=BLUE, lw=1.4))
@@ -745,7 +745,7 @@ def fig_prompt_flow(part: str = "all"):
             wrapped(ax, X0 + 0.1, gy - 0.26, text, LW, 5.9, color=QUIET, step=LSTEP)
             ax.add_patch(FancyBboxPatch((EX, gy - h), EW, h, boxstyle="round,pad=0.015,rounding_size=0.05", fc=CORAL_FILL, ec=CORAL, lw=0.9))
             arrow(ax, X0 + BW, gy - h / 2, EX, gy - h / 2, color=CORAL, lw=1.1)
-            wrapped(ax, EX + 0.08, gy - 0.1, no, EWRAP, 5.5, color=CORAL, step=LSTEP)
+            wrapped(ax, EX + 0.08, gy - 0.1, no, EWRAP, 5.2, color=CORAL, step=LSTEP)
             down(gy - h, gy - h - GGAP, color=GREEN, text="yes")
             gy -= h + GGAP
         box(ax, X0, gy - ticket_h, BW, ticket_h, "", kind="safe", pad=0.1)
@@ -782,9 +782,11 @@ def fig_prompt_flow(part: str = "all"):
         yend = wrapped(ax, rx, yy - 0.17, text, 50, 5.7, color=QUIET, step=0.118)
         ax.text(rx, yend + 0.02, ref, ha="left", va="top", fontsize=5.3, color=EDGE)
         yy = yend - 0.2
-    if part != "a":
+    if part == "all":
         label(ax, 0.3, 0.52, "The chip never reads a word, a byte or a token. It reads signatures, hashes, counters and lists, and the two scenarios in docs/25 section 0 end at the gates above.", size=6.4, color=BLUE)
         label(ax, 0.3, 0.32, "Model: govsim/governor.py (_cmd_begin_model, _cmd_sign_output, _cmd_request, _release_gate) · narrations and tests: docs/17 §4, tests/test_h17_use_cases.py, test_h18_oversight.py, test_h10_leakage.py", size=6.4)
+    elif part == "b":
+        label(ax, 0.3, 0.35, "The chip never reads a word, a byte or a token: signatures, hashes, counters and lists. Model: govsim/governor.py (_cmd_begin_model, _cmd_request, _release_gate) · docs/17 §4 · tests H17, H18, H10", size=6.2, color=BLUE)
     else:
         label(ax, 0.3, 0.38, "Steps 1 to 6 are software and wires the chip only measures; nothing here can be argued with because nothing here is asked an opinion. The chip's own questions are in figure 2 of 2.", size=6.4, color=BLUE)
     save(fig, {"all": "fig-prompt-flow.png", "a": "fig-prompt-flow-a.png", "b": "fig-prompt-flow-b.png"}[part])

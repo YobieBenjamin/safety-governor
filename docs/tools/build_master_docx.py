@@ -63,7 +63,11 @@ def proportional_tables(text: str) -> str:
             rows = [[c.strip() for c in r.strip().strip("|").split("|")] for r in table]
             ncol = max(len(r) for r in rows)
             widths = [max((len(r[i]) if i < len(r) else 0) for j, r in enumerate(rows) if j != 1) for i in range(ncol)]
-            widths = [min(max(w, 9), 90) for w in widths]   # a floor of nine so a short header such as Rung does not wrap
+            # a wide column wraps, so its share is its character count capped at 90; a narrow column must still
+            # hold its longest word (the header, usually) on one line, and a word in a column that does not wrap
+            # takes about four of these units, so the floor is the longest word plus two, times four
+            longest = [max((max((len(w) for w in (r[i] if i < len(r) else "").split()), default=0)) for j, r in enumerate(rows) if j != 1) for i in range(ncol)]
+            widths = [min(max(w, (lw + 2) * 4), 90) for w, lw in zip(widths, longest)]
             total = sum(widths)
             dashes = [max(3, round(100 * w / total)) for w in widths]
             table[1] = "|" + "|".join("-" * d for d in dashes) + "|"

@@ -21,7 +21,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from build_master_docx import ROOT, load, reference_docx  # noqa: E402
+from build_master_docx import PAGE_BREAK, ROOT, load, reference_docx  # noqa: E402
 
 AUTHOR = "Yobie Benjamin · yobie AT ieee DOT org · linkedin.com/in/yobie"
 
@@ -55,6 +55,7 @@ def build(src_rel: str, out: str) -> str:
     title = first.lstrip("# ").strip() if first.startswith("# ") else os.path.basename(src_rel)
     md = load(src_rel, None)
     md = md.split("\n", 1)[1] if md.startswith("# ") else md          # the H1 becomes the title block
+    md = re.sub(r"\n(## )", PAGE_BREAK + r"\1", md)                   # every section starts at the top of a page
     head = [
         "---",
         f'title: "{title}"',
@@ -83,7 +84,9 @@ def fit_pictures(out: str) -> None:
     d = docx.Document(out)
     sec = d.sections[0]
     max_w = sec.page_width - sec.left_margin - sec.right_margin
-    max_h = sec.page_height - sec.top_margin - sec.bottom_margin - int(0.6 * 914400)   # room for the caption
+    # a figure follows its section's heading, its everyday picture and one paragraph on the section's first page,
+    # so it gets what is left of that page: the text height less about 1.8 inches
+    max_h = sec.page_height - sec.top_margin - sec.bottom_margin - int(1.8 * 914400)
     for shape in d.inline_shapes:
         w, h = shape.width, shape.height
         scale = min(max_w / w, max_h / h, 1.0)

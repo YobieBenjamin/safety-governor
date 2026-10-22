@@ -36,6 +36,13 @@ REPOS="${REPOS:-safety-governor safety hardware-and-silicon Watermark}"   # Wate
 SAFETY_DIRS="agr data docs miner observer orchestrator sandbox scripts"
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 fail() { echo "error: $*" >&2; exit 1; }
+# every run is logged on the drive as well as the terminal, so a run that failed can be read afterwards
+if [ "${1:-}" != "--migrate-when-idle" ] && [ -d "$WORK" ] && [ -z "${SETUP_LOGGED:-}" ]; then
+  mkdir -p "$WORK" 2>/dev/null || true
+  export SETUP_LOGGED=1
+  exec > >(tee -a "$WORK/setup.log") 2>&1
+  echo; echo "---- $(date '+%Y-%m-%d %H:%M:%S') $0 ${*:-} ----"
+fi
 
 # 1. gh: Homebrew if present, otherwise the official binary into ~/.local/bin (no sudo).
 step "GitHub CLI"
@@ -209,7 +216,7 @@ for repo in $REPOS; do
   # "+" so the remote-tracking ref follows GitHub even if it was left ahead or aside; -q hides git's refusal otherwise
   git -C "$clone" fetch -q origin "+refs/heads/main:refs/remotes/origin/main" 2>"$err" || { cat "$err" >&2; fail "$repo: could not fetch main from GitHub"; }
   git -C "$clone" merge -q --ff-only origin/main || fail "$repo has local commits that are not on GitHub; push or move them first"
-  found=0
+  found=0; newest_err=""; stale=""
   for path in $(for d in $BUNDLE_DIRS; do ls "$d"/"$repo"-[0-9]*.bundle 2>/dev/null; done | awk '{n=$0; sub(/.*-/, "", n); sub(/\.bundle$/, "", n); print n, $0}' | sort -n -u -k1,1 | cut -d' ' -f2-); do
     found=1
     b=$(basename "$path")
@@ -223,18 +230,21 @@ for repo in $REPOS; do
     # "+" lets the scratch ref move backwards or sideways between bundles; it is never the branch
     rc=0; git -C "$clone" fetch -q "$path" "+main:refs/claude/incoming" 2>"$err" || rc=$?
     if [ "$rc" != 0 ]; then
-      grep -q prerequisite "$err" && fail "$repo: $b builds on commits this clone does not have (a newer bundle may be needed, or an older one applied first)"
+      # an old bundle cut from a line of history this clone no longer has (every later bundle carries its
+      # content): skipped, not fatal. On 21 October one such bundle stopped the run before the newer ones.
+      if grep -q prerequisite "$err"; then echo "$repo: $b builds on commits this clone does not have; skipped (a later bundle carries its content)"; newest_err="$b"; stale="$stale $path"; continue; fi
       [ -s "$err" ] && cat "$err" >&2
       fail "$repo: git could not read $b (exit status $rc)"
     fi
     if git -C "$clone" merge -q --ff-only refs/claude/incoming 2>/dev/null; then
-      echo "$repo: applied $b -> $(git -C "$clone" log --oneline -1)"
+      echo "$repo: applied $b -> $(git -C "$clone" log --oneline -1)"; newest_err=""
     else
       # made from a line of history this clone has moved past (a commit landed on main in between): a later bundle carries its content
       echo "$repo: $b does not fast-forward main at $(git -C "$clone" rev-parse --short HEAD); skipped (superseded by a later bundle, or stale)"
     fi
   done
   rm -f "$err"
+  [ -n "${newest_err:-}" ] && fail "$repo: the newest bundle, $newest_err, builds on commits this clone does not have; a bundle cut from the clone's current main is needed"
   if [ "$found" = 1 ]; then
     if [ "$(git -C "$clone" rev-parse HEAD)" = "$(git -C "$clone" rev-parse origin/main)" ]; then
       echo "$repo: GitHub already has everything"
@@ -242,6 +252,15 @@ for repo in $REPOS; do
       git -C "$clone" push -q origin HEAD:main
       echo "$repo: pushed $(git -C "$clone" log --oneline -1)"
     fi
+    # bundles the clone now contains go to the inbox's applied folder, so the inbox holds only what is still to come
+    mkdir -p "$INBOX/applied"
+    for d in $BUNDLE_DIRS; do for path in "$d"/"$repo"-[0-9]*.bundle; do
+      [ -f "$path" ] || continue
+      h=$(git -C "$clone" bundle list-heads "$path" 2>/dev/null | awk '$2 == "refs/heads/main" {print $1}' || true)
+      if [ -n "$h" ] && git -C "$clone" cat-file -e "$h" 2>/dev/null && git -C "$clone" merge-base --is-ancestor "$h" HEAD 2>/dev/null; then mv "$path" "$INBOX/applied/" 2>/dev/null || true; fi
+    done; done
+    # stale bundles that were skipped go to the inbox's stale folder, so they are not reported again next run
+    if [ -n "$stale" ]; then mkdir -p "$INBOX/stale"; for path in $stale; do mv "$path" "$INBOX/stale/" 2>/dev/null || true; done; fi
   else
     echo "$repo: no $repo-N.bundle in$BUNDLE_DIRS; nothing to apply"
   fi
@@ -258,8 +277,16 @@ for repo in safety-governor safety hardware-and-silicon autonomic-graph-regulati
   echo "https://github.com/$OWNER/$repo/issues"
 done
 echo "clones: $WORK   bundles inbox: $INBOX"
-if [ -n "${was_running:-}" ] || [ -f "$WORK/.restart-program" ]; then
-  step "Program"
+# 7. The program. It is started again when this run stopped it, when an earlier run stopped it and
+#    failed (the marker), and also when it is simply not running: a setup that ends with the clones
+#    current and the agents idle is a setup that has to be followed by another command, and the 22
+#    October run ended exactly so. NO_PROGRAM=1 leaves it alone.
+step "Program"
+if [ "${NO_PROGRAM:-0}" = 1 ]; then
+  echo "NO_PROGRAM=1: the program is left as it is"
+elif [ -n "$(program_pids)" ] && [ -z "${was_running:-}" ] && [ ! -f "$WORK/.restart-program" ]; then
+  echo "the program is running (pid(s): $(program_pids | tr '\n' ' ')); left alone"
+else
   rm -f "$WORK/.restart-program"
   bash "$WORK/safety-governor/tools/agents/run_program.sh" --detach
 fi
