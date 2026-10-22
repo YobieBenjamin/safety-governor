@@ -482,6 +482,172 @@ def fig_ladder_person():
     save(fig, "fig-ladder-person.png")
 
 
+# ---------------------------------------------------------------------------------------------
+# 11 to 13. The rulebook and the board (docs/25): what is in the image, the ten questions in
+# order with their codes, and the board wiring to the GPU, the CPU, the switches and the DPU
+# ---------------------------------------------------------------------------------------------
+def fig_rulebook():
+    fig, ax = new_fig(10.4, 6.7)
+    ax.text(0.3, 6.42, "The rulebook: one signed form. Keys, numbers, digests and lists; no prose the chip acts on.", fontsize=10.5, color=INK, fontweight="bold", va="center")
+    # left: the image, section by section
+    ax.text(0.3, 6.0, "The policy image (docs/04 section 4)", fontsize=8.4, color=INK, fontweight="bold", va="center")
+    sections = [
+        ("version, issued_at, expires_at", "only up; a window", "plain"),
+        ("governance_keys, threshold", "n keys, k must sign; hashes in the fuses", "gov"),
+        ("approver, heartbeat, publisher, observer, eval keys", "who may release a hold, keep it alive, sign a model, witness, attest an eval", "gov"),
+        ("reference_values, revocations", "vendor keys and firmware digests, each with an expiry; the dead", "plain"),
+        ("endpoints, budget_owners", "the one device per rule; the one chip per budget", "plain"),
+        ("rules [ ... ]", "section 3; the gate reads nothing else", "gov"),
+        ("assumptions", "a register row per input, or the image does not load", "warn"),
+        ("override_floor_s, safe_mode, fabric", "the floor; the rungs per cause; the timers", "plain"),
+        ("buffer_policy, audit, streams, compute_budget, sandbox", "standing fields: what may leave the GPU, what is sampled, what is a sandbox", "plain"),
+        ("signatures", "k of n over everything above", "gov"),
+    ]
+    y = 5.75
+    for title, line, kind in sections:
+        h = 0.44
+        box(ax, 0.3, y - h, 3.5, h, title, [line], kind=kind, title_size=6.9, line_size=6.0, pad=0.08)
+        y -= h + 0.045
+    # middle: one rule
+    ax.text(4.15, 6.0, "One rule (payments.transfer.small, as the model runs it)", fontsize=8.4, color=INK, fontweight="bold", va="center")
+    fields = [
+        ("measurement", "H(gpu fw, host fw, model) or *", "the key; never a name"),
+        ("action", "payments.transfer", "a typed action"),
+        ("constraints", "amount 0..1000; currency in {USD}", "typed limits, or a signed list by id"),
+        ("requirement", "mode auto | observer | human", "max_risk; approvers_quorum"),
+        ("rate", "100 per 60 s", "per workload and action"),
+        ("budget", "pay-usd-hourly: amount, 2000 per 3600 s", "reserved at its owner first"),
+        ("endpoint", "payment-switch", "the one device that may commit"),
+        ("delay_s", "0", "no ticket before issue + delay"),
+        ("inputs", "beneficiary-registry", "register rows it relies on"),
+    ]
+    y = 5.75
+    for name, val, note in fields:
+        h = 0.44
+        ax.add_patch(FancyBboxPatch((4.15, y - h), 2.9, h, boxstyle="round,pad=0.02,rounding_size=0.06", fc=BLUE_FILL, ec=BLUE, lw=1.0))
+        ax.text(4.23, y - 0.1, name, ha="left", va="top", fontsize=6.9, color=INK, fontweight="bold")
+        ax.text(4.23, y - 0.26, val, ha="left", va="top", fontsize=6.3, color=BLUE)
+        ax.text(7.1, y - h / 2, note, ha="left", va="center", fontsize=5.9, color=QUIET)
+        y -= h + 0.045
+    # right: how a rule is picked
+    ax.plot([8.62, 8.62], [0.95, 6.1], color=RULE, lw=1.0)
+    ax.text(8.75, 6.0, "How a rule is picked", fontsize=8.4, color=INK, fontweight="bold", va="center")
+    steps = [("1", "the verified workload measurement and the action", "plain"),
+             ("2", "rules for that exact measurement, then rules for *", "plain"),
+             ("3", "the first whose typed limits the fields satisfy", "gov"),
+             ("4", "no rule, or no fit: no (gate.no_rule, gate.constraint.*)", "nv")]
+    y = 5.7
+    for n, text, kind in steps:
+        fill, edge = {"plain": (GRAY_FILL, EDGE), "gov": (BLUE_FILL, BLUE), "nv": (CORAL_FILL, CORAL)}[kind]
+        ax.add_patch(FancyBboxPatch((8.75, y - 0.62), 1.4, 0.62, boxstyle="round,pad=0.02,rounding_size=0.06", fc=fill, ec=edge, lw=1.0))
+        ax.text(8.83, y - 0.08, n, ha="left", va="top", fontsize=7.0, color=INK, fontweight="bold")
+        wrapped(ax, 9.0, y - 0.08, text, 21, 6.0, color=INK if kind != "nv" else CORAL, step=0.13)
+        if n != "4":
+            arrow(ax, 9.42, y - 0.62, 9.42, y - 0.74, color=INK, lw=0.9)
+        y -= 0.76
+    ax.text(8.75, 2.55, "What never reaches it:", ha="left", va="top", fontsize=6.8, color=CORAL, fontweight="bold")
+    wrapped(ax, 8.75, 2.38, "the broker's label for the job, the tenant, the user, the prompt, the words around the fields. select_rule has no parameter they could arrive through (H4).", 26, 6.0, color=CORAL, step=0.13)
+    label(ax, 0.3, 0.6, "Model: govsim/policy.py (make_policy, make_rule, select_rule, check_constraints) · the rulebook the suite runs: govsim/cluster.py make_policy_image", size=6.6)
+    label(ax, 0.3, 0.38, "Tests: tests/test_h04_lane.py (the fields pick the rule, exact beats wildcard, out of range matches nothing) · test_h07_register.py (lists and the register) · test_h03_quorum.py", size=6.6)
+    save(fig, "fig-rulebook.png")
+
+
+def fig_no_order():
+    fig, ax = new_fig(10.4, 7.2)
+    ax.text(0.3, 6.92, "What triggers a no: the questions in the order the chip asks them. The first no wins; every no has a code.", fontsize=10.5, color=INK, fontweight="bold", va="center")
+    rows = [
+        ("0", "Is the letter in order?", "sequence per signer; edition stamp; signature by a key the rulebook names", "mailbox.bad_sequence · policy.stale_epoch · mailbox.bad_signature", "warn"),
+        ("1", "Is the form well formed?", "typed fields present, of the right type", "gate.constraint.<field>.missing", "plain"),
+        ("2", "Is the asker who it says?", "GPU and host reports verified within the hour; workload token signed by this chip; frame signed by the enclave", "gate.not_attested", "plain"),
+        ("3", "Seen this before?", "the request hash against the replay store", "gate.replay", "plain"),
+        ("4", "Anything on fire?", "sticky alarms; the heartbeat timer; the edition's expiry", "gate.alarm_active · halt.heartbeat_lost · policy.expired", "plain"),
+        ("5", "Which rule?", "measurement x action, exact before wildcard; typed limits; signed lists", "gate.no_rule · gate.constraint.<field>.below_min / above_max / not_allowed / in_denied_list / list_unavailable", "gov"),
+        ("6", "Which lane?", "the rule's mode: auto, observer, human", "(a route, not a no)", "plain"),
+        ("7", "Witnesses present?", "a verdict by one of the rule's observers over this hash, fresh, risk under the ceiling; for a release: streams, hashes, class, legibility, session budget, escrow", "gate.witness_missing · gate.witness_stale · gate.witness_risk_too_high · release.*", "plain"),
+        ("8", "Inside the rate window?", "the ledger's count for this workload and action", "gate.rate_exceeded", "plain"),
+        ("9", "Budget?", "the typed amount reserved at the budget's owner, over the fabric if that is another chip", "gate.budget_exceeded · gate.budget_owner_unreachable", "plain"),
+        ("10", "Human lane?", "the rule says people: park a hold with an id and a cause", "gate.held_for_human (a hold, not a no)", "warn"),
+    ]
+    x_n, x_q, x_e, x_c = 0.3, 0.75, 3.15, 6.9
+    ax.text(x_q, 6.58, "the question", fontsize=7.0, color=QUIET, va="center", fontweight="bold")
+    ax.text(x_e, 6.58, "what it looks at", fontsize=7.0, color=QUIET, va="center", fontweight="bold")
+    ax.text(x_c, 6.58, "the no it can say", fontsize=7.0, color=QUIET, va="center", fontweight="bold")
+    y = 6.45
+    for n, q, ev, code, kind in rows:
+        h = 0.43
+        fill, edge = {"plain": (GRAY_FILL, EDGE), "gov": (BLUE_FILL, BLUE), "warn": (AMBER_FILL, AMBER)}[kind]
+        ax.add_patch(FancyBboxPatch((x_n, y - h), 9.8, h, boxstyle="round,pad=0.01,rounding_size=0.04", fc=fill, ec=edge, lw=0.9))
+        ax.text(x_n + 0.08, y - h / 2, n, ha="left", va="center", fontsize=7.4, color=INK, fontweight="bold")
+        ax.text(x_q, y - h / 2, q, ha="left", va="center", fontsize=7.0, color=INK, fontweight="bold")
+        wrapped(ax, x_e, y - 0.07, ev, 62, 5.9, color=QUIET, step=0.12)
+        wrapped(ax, x_c, y - 0.07, code, 56, 5.9, color=CORAL if "not a no" not in code and "route" not in code else QUIET, step=0.12)
+        y -= h + 0.04
+    # outcomes
+    yo = y - 0.12
+    box(ax, 0.75, yo - 0.5, 2.6, 0.5, "otherwise: a ticket", ["signed; one endpoint; one edition; five minutes"], kind="safe", title_size=7.4, line_size=6.2, pad=0.09)
+    box(ax, 3.6, yo - 0.5, 2.6, 0.5, "a hold", ["waits the floor; the quorum signs with a reason"], kind="warn", title_size=7.4, line_size=6.2, pad=0.09)
+    box(ax, 6.45, yo - 0.5, 3.65, 0.5, "a no", ["a code to the asker and a line in the log nobody rewrites"], kind="nv", title_size=7.4, line_size=6.2, pad=0.09)
+    label(ax, 0.3, 0.48, "After the ticket exists the approver, the endpoint, the switch port and the levers each have their own no (docs/25 section 5): approve.*, ticket.*, ep.*, loop.* and halt.*", size=6.5)
+    label(ax, 0.3, 0.28, "Model: govsim/governor.py (_check_signed, _cmd_request, _release_gate) · codes: govsim/reasons.py · the order is pinned in tests/test_h00_contract.py and the RTL mailbox test", size=6.5)
+    save(fig, "fig-no-order.png")
+
+
+def fig_board():
+    fig, ax = new_fig(10.4, 6.4)
+    ax.text(0.3, 6.12, "The board: what the governor talks to, over what, and what each side can and cannot do.", fontsize=10.5, color=INK, fontweight="bold", va="center")
+    # the three big boxes
+    box(ax, 0.4, 3.35, 2.1, 1.95, "GPU (NVIDIA, unchanged)",
+        ["signs its attestation report", "(SPDM, in-band to the driver)", "answers the post-box bus", "honours PWRBRK#, PERST#, power", "never sees the governor"], kind="nv", title_size=8.2, line_size=6.2)
+    box(ax, 3.85, 2.75, 2.7, 2.55, "Governor module (DC-SCM slot)",
+        ["one BAR: the doorbell is the", "only writable word", "verifier · rulebook · gate", "ledger · meter · log", "levers · loop · fabric"], kind="gov", title_size=8.2, line_size=6.2)
+    box(ax, 7.9, 3.35, 2.2, 1.95, "Host CPU",
+        ["OS, hypervisor, scheduler: couriers", "enclave (TDX, SEV-SNP, CCA):", "  the one key that opens the gate", "OpenShell supervisor + middleware", "driver: relays the GPU's report"], kind="nv", title_size=8.2, line_size=6.2)
+    # GPU <-> governor wires in the gutter x 2.5 .. 3.85
+    gx = 3.175
+    ax.plot([2.5, 3.85], [4.95, 4.95], color=BLUE, lw=1.3)
+    ax.text(gx, 5.0, "SMBus post-box", ha="center", va="bottom", fontsize=5.8, color=BLUE)
+    ax.text(gx, 4.9, "governor is master", ha="center", va="top", fontsize=5.5, color=BLUE)
+    arrow(ax, 3.85, 4.35, 2.5, 4.35, color=GREEN, lw=1.5)
+    ax.text(gx, 4.4, "PWRBRK#, PERST#, PWR_EN", ha="center", va="bottom", fontsize=5.8, color=GREEN)
+    ax.text(gx, 4.3, "three wires, safe at power-on", ha="center", va="top", fontsize=5.5, color=GREEN)
+    ax.plot([2.5, 3.85], [3.75, 3.75], color=QUIET, lw=1.0)
+    ax.text(gx, 3.8, "present, fault", ha="center", va="bottom", fontsize=5.8, color=QUIET)
+    # the report rides the driver: GPU top -> over the governor -> host top
+    ax.plot([1.45, 1.45, 9.0, 9.0], [5.3, 5.72, 5.72, 5.3], color=CORAL, lw=1.1, ls="--")
+    ax.text(5.2, 5.77, "the GPU's signed report rides the driver to the host (PCIe, in-band, as today), then the mailbox posts it: VERIFY_GPU", ha="center", va="bottom", fontsize=6.0, color=CORAL)
+    # host <-> governor in the gutter x 6.55 .. 7.9
+    hx = 7.225
+    arrow(ax, 7.9, 4.95, 6.55, 4.95, color=BLUE, lw=1.4, style="<|-|>")
+    ax.text(hx, 5.0, "PCIe x1 mailbox", ha="center", va="bottom", fontsize=5.8, color=BLUE)
+    ax.text(hx, 4.9, "seq · epoch · cmd · sig", ha="center", va="top", fontsize=5.5, color=BLUE)
+    for i, t in enumerate(["signed by the enclave:", "REQUEST, SIGN_OUTPUT,", "CAP_REQUEST, BEGIN_MODEL"]):
+        ax.text(hx, 4.58 - 0.13 * i, t, ha="center", va="top", fontsize=5.5, color=INK)
+    for i, t in enumerate(["carried, not signed,", "by the host: heartbeat,", "approvals, commits,", "the rulebook, the reports"]):
+        ax.text(hx, 4.08 - 0.13 * i, t, ha="center", va="top", fontsize=5.5, color=QUIET)
+    # bottom row
+    box(ax, 0.4, 0.95, 2.1, 1.25, "NVSwitch, PCIe switch", ["ports as capabilities: one peer,", "one direction, a budget, an expiry", "the governor is the only manager"], kind="nv", title_size=7.8, line_size=6.0)
+    box(ax, 4.4, 1.15, 1.6, 0.85, "BMC", ["reads through the governor;", "its writes are refused"], kind="plain", title_size=7.8, line_size=5.8)
+    box(ax, 7.9, 0.95, 2.2, 1.25, "DPU (BlueField)", ["flow tables; the egress hold", "Sentry: a witness with a key", "and the quarantine on the path"], kind="nv", title_size=7.8, line_size=6.0)
+    # elbows from the governor's bottom edge, in the gutter y 2.2 .. 2.75
+    ax.plot([4.2, 4.2, 1.45, 1.45], [2.75, 2.42, 2.42, 2.2], color=BLUE, lw=1.2)
+    arrow(ax, 1.45, 2.3, 1.45, 2.2, color=BLUE, lw=1.2)
+    ax.text(2.85, 2.47, "I2C / MDIO: port tables", ha="center", va="bottom", fontsize=6.0, color=BLUE)
+    ax.plot([6.2, 6.2, 9.0, 9.0], [2.75, 2.42, 2.42, 2.2], color=BLUE, lw=1.2)
+    arrow(ax, 9.0, 2.3, 9.0, 2.2, color=BLUE, lw=1.2)
+    ax.text(7.6, 2.47, "out-of-band link: flow tables", ha="center", va="bottom", fontsize=6.0, color=BLUE)
+    ax.plot([5.2, 5.2], [2.75, 2.0], color=QUIET, lw=1.0)
+    ax.text(5.28, 2.3, "pass-through", ha="left", va="center", fontsize=5.8, color=QUIET)
+    # the two cluster wires
+    ax.plot([3.85, 3.1], [3.05, 3.05], color=GREEN, lw=1.5)
+    ax.plot([3.85, 3.1], [2.88, 2.88], color=BLUE, lw=1.2, ls=(0, (2, 1.5)))
+    ax.text(3.0, 3.05, "halt loop", ha="right", va="center", fontsize=5.8, color=GREEN)
+    ax.text(3.0, 2.88, "message fabric", ha="right", va="center", fontsize=5.8, color=BLUE)
+    ax.text(3.0, 2.7, "to the other governors, on wires of their own (docs/02)", ha="right", va="center", fontsize=5.6, color=QUIET)
+    label(ax, 0.3, 0.58, "Plugs: docs/03-interfaces.md · wiring: hw/pcb/rack-integration.md · pins: hw/pinout/governor_module.csv · the host side on NVIDIA's platform: hardware-and-silicon/docs/NVIDIA.md", size=6.5)
+    label(ax, 0.3, 0.36, "Model: govsim/governor.py (_cmd_verify_gpu, _cmd_verify_host, _cmd_begin_model, _cmd_request, read_meter) · tests/test_h01_attestation.py · test_h16_levers.py · test_h02_enforcement_points.py", size=6.5)
+    save(fig, "fig-board.png")
+
+
 if __name__ == "__main__":
     fig_rack()
     fig_die()
@@ -493,3 +659,6 @@ if __name__ == "__main__":
     fig_ladder_questions()
     fig_ladder_witnesses()
     fig_ladder_person()
+    fig_rulebook()
+    fig_no_order()
+    fig_board()
