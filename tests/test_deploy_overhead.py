@@ -40,14 +40,16 @@ def test_throughput_lost_is_measured_against_the_baseline():
           f"= {r['overhead_pct']:.4f} % lost")
     assert r["tokens_baseline"] > 0 and r["tokens_governed"] > 0, r
     assert r["tokens_governed"] < r["tokens_baseline"], r       # the governor never speeds anything up
-    # the measured loss and the bookkeeping stall share agree within rounding
-    assert abs(r["overhead_pct"] - r["stall_pct"]) < 0.01, r
+    # the measured loss and the bookkeeping stall share agree to within 0.003 percentage points
+    # (0.0151 against 0.0168: the stall share also counts slot time inside requests unfinished at the horizon)
+    assert abs(r["overhead_pct"] - r["stall_pct"]) < 0.003, r
     assert r["overhead_pct"] < ONE_PERCENT, r
 
 
 def test_disproof_is_not_met_for_the_plan_of_record():
     """The brief's disproof ("above one percent at every serviceable policy") is about the plan of
-    record's family. The plan of record (slot freed on the receipt) is *under* one percent; the
+    record's family. The plan of record, read as the slot freed while the receipt is pending (docs/12's assumption,
+    not stated in docs/04), is *under* one percent; the
     slot-held variant is *above* one percent at every serviceable window. Both sides, shown."""
     plan = measure(PLAN_OF_RECORD)
     assert plan["overhead_pct"] < ONE_PERCENT, plan          # plan of record: NOT above one percent
@@ -99,8 +101,9 @@ def test_governor_adds_nothing_when_it_is_absent():
 
 
 def test_numbers_used_in_docs_12_are_computed():
-    """Every number docs/12 prints is computed here, not typed: the "no number without an artifact"
-    rule. A hand arithmetic is a test."""
+    """Every number docs/12 prints is pinned here, not typed: the "no number without an artifact"
+    rule. The runs are deterministic (fixed seeds), so the tolerances are for the Python version
+    and for the rounding in the doc."""
     assert PLAN_OF_RECORD.governors * SLOTS_PER_CHIP == 576           # 72 governors x 8 slots
     assert abs(SIGN_S * 1e3 - 17) < 0.5                               # the 17 ms signature
     assert BATCH_WINDOW_S * 1e3 == 50.0                               # the 50 ms batch window
@@ -114,8 +117,48 @@ def test_numbers_used_in_docs_12_are_computed():
     assert ed / HEARTBEAT_PERIOD_S * 100 < 2.0                        # one a second is under two percent of the core
     # the results table (30 s), the same measure() main prints
     r = measure(PLAN_OF_RECORD)
-    assert abs(r["stall_pct"] - 0.017) < 0.005                       # the cross-check stall share
-    assert abs(r["p99_latency_s"] * 1e3 - 1185) < 5                  # p99 1185 ms
-    assert abs(r["p99_latency_base_s"] * 1e3 - 1143) < 5             # 1143 ms without the governor
-    assert abs(r["p99_receipt_wait_s"] * 1e3 - 66.5) < 3            # the 66.5 ms p99 receipt wait
-    assert abs(r["max_receipt_wait_s"] * 1e3 - 68) < 3              # the 68 ms max, the edition tail
+    assert abs(r["overhead_pct"] - 0.0151) < 0.002                   # throughput lost, measured
+    assert abs(r["tokens_governed"] / 34_273_417 - 1) < 1e-3         # the token counts in the table
+    assert abs(r["tokens_baseline"] / 34_278_595 - 1) < 1e-3
+    assert abs(r["stall_pct"] - 0.0168) < 0.002                      # the cross-check stall share
+    assert abs(r["p99_latency_s"] * 1e3 - 3337) < 20                 # p99, queueing included
+    assert abs(r["p99_latency_base_s"] * 1e3 - 3291) < 20            # without the governor
+    assert abs(r["p99_added_s"] * 1e3 - 45.6) < 5                    # the p99 added latency
+    assert abs(r["p99_receipt_wait_s"] * 1e3 - 66.5) < 3             # the p99 receipt wait
+    assert abs(r["max_receipt_wait_s"] * 1e3 - 68.4) < 1             # the max, with the edition change
+    assert abs(r["engine_util_pct"] - 28.5) < 1.5                    # busiest engine
+    assert abs(r["fw_util_pct"] - 0.209) < 0.02                      # busiest firmware core
+    r0 = measure(replace(PLAN_OF_RECORD, edition_change=False))
+    assert abs(r0["max_receipt_wait_s"] * 1e3 - 67.0) < 0.5          # without it: window plus signature
+    assert 0 < r["max_receipt_wait_s"] - r0["max_receipt_wait_s"] < 0.005   # the edition change adds ~1.4 ms, one firmware op, not 18 ms
+
+
+def test_open_loop_latency_includes_queueing():
+    """A request that arrives while the slot is busy waits, and the wait counts. At 70 percent load
+    the p99 without any governor is far above the ~1.1 s of service time alone."""
+    r = measure(PLAN_OF_RECORD)
+    assert r["p99_latency_base_s"] > 2.0, r                          # queueing, not just the service-time tail
+    assert 0 <= r["p99_added_s"] < 0.1, r                            # the governor adds little on top of it
+
+
+def test_slot_held_table_in_docs_12():
+    expect = {0.020: 9.9, 0.030: 11.4, 0.050: 14.3, 0.100: 21.2, 0.200: 32.9}
+    got = dict(sweep_window_held())
+    for w, e in expect.items():
+        assert abs(got[w] - e) <= 0.3, (w, got[w], e)
+
+
+def test_sensitivity_figures_in_docs_12():
+    rows = dict(sensitivity())
+    for name, e in {"log write 10x": 0.134, "merkle root 10x": 0.025, "heartbeat 10x": 0.025}.items():
+        assert abs(rows[name] - e) <= 0.01, (name, rows[name], e)
+
+
+def test_mailbox_sweep_stall_share_matches_measured_token_loss():
+    """The sweep tables report the stall share of slot time. At 80 calls per response (past the
+    crossing) the measured token loss against the baseline is within 0.35 points of it (1.71 against 1.45), so the crossing is not an
+    artefact of the bookkeeping."""
+    r = measure(replace(PLAN_OF_RECORD, actions_per_response=80), 10.0, 2.0)
+    print(f"\n80 calls/response: token loss {r['overhead_pct']:.3f} %, stall share {r['stall_pct']:.3f} %")
+    assert abs(r["overhead_pct"] - r["stall_pct"]) < 0.35, r      # 1.71 against 1.45 at 10 s
+    assert r["overhead_pct"] > ONE_PERCENT, r
