@@ -12,7 +12,7 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
 | L6 | L | Mutation testing as a standing gate | `make mutants` | open | 2026-10 (second audit): twenty surviving mutants found and fixed by hand; not yet automated |
 | L7 | L | Formal proofs on the Verilog; gate-level equivalence | `rtl/formal/` | open | |
 | P1 | P | Every enumerated exit governed or bricked at the rack tier; the H2b gap recorded | `tests/test_h02_enforcement_points.py` | done | passes; the gap is named, closed only at the integrated tier |
-| P2 | P | The exit register with no unaccounted row | `docs/research/exit-register.md`, `tests/test_h20_exits.py` | partial | 30 rows, 0 unaccounted, 11 `unaccounted (NDA)`; no retrofit lever is a lock (all witness, from_module NDA or no); no new web survey of DC-SCM host boards yet |
+| P2 | P | The exit register with no unaccounted row | `docs/research/exit-register.md`, `tests/test_h20_exits.py` | open | public sources first; the HGX design guide is an ask |
 | P3 | P | Covert-channel budget as a number per hour | `tests/test_h10_leakage.py` | open | |
 | P4 | P | Halt loop in ngspice: 72 governors, 39 configurations | `hw/loop/results.md` | done | worst case 317.15 µs against 1 ms; measured on hardware: not yet |
 | C1 | C | Negative tests for every signed object | `tests/` | done | passes |
