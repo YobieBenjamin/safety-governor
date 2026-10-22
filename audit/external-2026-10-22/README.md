@@ -13,6 +13,14 @@ reviews it survived is not doing science.
 
 The account in the design record is section 9 of `docs/REVIEW-2026-10-22-fact-check.md`.
 
+**One command checks all of it:** `bash tools/verify_audit_fixes.sh` (from safety-governor, with
+hardware-and-silicon cloned beside it). It runs every test suite, every proof, both attack sweeps,
+the harness and the halt-loop circuit simulation on the fixed code; runs every reproduction script
+against the fixed code (each must print NOT reproduced) and against the audited snapshots `dccc1e0`
+and `11eb119` in throwaway worktrees (each must print REPRODUCED); and runs the new regression tests
+against the old snapshot, where they must fail. It exits non-zero and names the check if anything
+does not hold. On 22 October it reported 15 of 15; with finding 2 put back on purpose it went red.
+
 | Script | Run from | What it checks |
 |---|---|---|
 | `repro_sg.py` | a safety-governor checkout: `PYTHONPATH=. python3 audit/external-2026-10-22/repro_sg.py` | Findings 1 (unsigned threshold-0 policy, propose and commit) and 2 (heartbeat as CLEAR on a four-governor rack). Prints REPRODUCED on `dccc1e0`, NOT reproduced after the fix |
