@@ -60,6 +60,16 @@ it is the list the assumptions register and the human layers exist for.
 | Side channels on the crypto engines | Constant-time implementations; power and EM countermeasures in the product node | Not proven in the prototype |
 | Denial of service by flooding the mailbox | Rate limits per signer; refusals logged | A flooded governor refuses; it never allows. Availability is the cost, by design |
 
+## The covert-channel budget (P3)
+
+A reference monitor controls what may flow, not what the pattern of permitted traffic says. The bound below is for the tightest serviceable policy in `make_policy_image`: 50 output queries and 200,000 bytes per hour, payments at most 100 per 60 s, a four-node rack (three peers), timing placed to 1 ms.
+
+**The number: at most 209,266 bytes per hour (pinned at 209,300), about 204 KB/h.** 200,000 of that is the permitted responses themselves, because the adversary chooses their content. Timing of permitted requests adds about 8.0 KB/h (payments rate windows 63,743 bits, output queries 875 bits), choice among peers about 0.4 KB/h, and response length 654 bits, which lies inside the byte budget and is not added. The side channels are summed, which over-counts, so the figure is an upper bound.
+
+The one-time burst before the governor alarms on unpresented output is 1 MiB; the alarm then blocks the output path, so it is not a rate.
+
+At this rate a 70B model in fp16 (140 GB) takes about 670,000 hours (76 years) and a 1 TB frontier-scale model about 4.8 million hours. The disproof condition (weights leave in practical time under a policy that still serves) is not met. Caveats: the figure assumes weights are incompressible and that the whole budget goes to weights; a small fine-tune delta or a distilled student is a far smaller target and leaves in days, so budgets defend the full weights, not the model's capabilities. `tests/test_covert_budget.py` computes the number from the policy image and fails if a policy change raises it. Not modelled: free-form fields of permitted requests (a payment's destination string), which need their own length limit in the endpoint schemas.
+
 ## What the governor does not address
 
 | Residual | Where it lives instead |
