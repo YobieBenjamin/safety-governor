@@ -30,8 +30,11 @@ if [ -z "$WORK" ]; then
 fi
 INBOX="$WORK/inbox"
 HERE_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUNDLE_DIRS="$HERE_DIR"; [ -d "$INBOX" ] && [ "$INBOX" != "$HERE_DIR" ] && BUNDLE_DIRS="$BUNDLE_DIRS $INBOX"
-[ -n "${1:-}" ] && [ "${1:-}" != "--migrate-when-idle" ] && BUNDLE_DIRS="$BUNDLE_DIRS $1"
+# one directory per line: the drive is called "Safety Experiments", and on 22 October a space-separated list
+# split that name in two and the run found no bundles at all
+BUNDLE_DIRS="$HERE_DIR"; [ -d "$INBOX" ] && [ "$INBOX" != "$HERE_DIR" ] && BUNDLE_DIRS="$BUNDLE_DIRS"$'\n'"$INBOX"
+[ -n "${1:-}" ] && [ "${1:-}" != "--migrate-when-idle" ] && BUNDLE_DIRS="$BUNDLE_DIRS"$'\n'"$1"
+bundle_dirs() { printf '%s\n' "$BUNDLE_DIRS" | awk 'NF && !seen[$0]++'; }
 REPOS="${REPOS:-safety-governor safety hardware-and-silicon Watermark}"   # Watermark carries no experiments; it is cloned, fast-forwarded from its bundles and pushed like the others
 SAFETY_DIRS="agr data docs miner observer orchestrator sandbox scripts"
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
@@ -176,7 +179,7 @@ if [ "$WORK" != "$HOME" ] && needs_move; then
   # bundles and this script: into the inbox on the drive, out of Downloads
   for repo in $REPOS; do ls "$HOME/Downloads/$repo"-*.bundle >/dev/null 2>&1 && mv "$HOME/Downloads/$repo"-*.bundle "$INBOX/" 2>/dev/null || true; done
   [ -f "$HOME/Downloads/setup_and_publish.sh" ] && [ "$HERE_DIR" = "$HOME/Downloads" ] && cp "$HOME/Downloads/setup_and_publish.sh" "$WORK/setup_and_publish.sh" || true
-  BUNDLE_DIRS="$BUNDLE_DIRS $INBOX"
+  BUNDLE_DIRS="$BUNDLE_DIRS"$'\n'"$INBOX"
   echo "moved; the clones live in $WORK, bundles go to $INBOX, and ~/<repo> are symlinks"
 fi
 
@@ -206,7 +209,7 @@ done
 
 # 5. Each clone: up to date with GitHub, then fast-forwarded from <repo>-N.bundle (lowest N first),
 #    then pushed. A bundle the clone already contains is skipped.
-step "Bundles from:$(for d in $BUNDLE_DIRS; do printf ' %s' "$d"; done | sort -u | tr '\n' ' ')"
+step "Bundles from: $(bundle_dirs | paste -sd ';' - | sed 's/;/; /g')"
 for repo in $REPOS; do
   clone="$WORK/$repo"
   branch=$(git -C "$clone" rev-parse --abbrev-ref HEAD)
@@ -217,7 +220,8 @@ for repo in $REPOS; do
   git -C "$clone" fetch -q origin "+refs/heads/main:refs/remotes/origin/main" 2>"$err" || { cat "$err" >&2; fail "$repo: could not fetch main from GitHub"; }
   git -C "$clone" merge -q --ff-only origin/main || fail "$repo has local commits that are not on GitHub; push or move them first"
   found=0; newest_err=""; stale=""
-  for path in $(for d in $BUNDLE_DIRS; do ls "$d"/"$repo"-[0-9]*.bundle 2>/dev/null; done | awk '{n=$0; sub(/.*-/, "", n); sub(/\.bundle$/, "", n); print n, $0}' | sort -n -u -k1,1 | cut -d' ' -f2-); do
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
     found=1
     b=$(basename "$path")
     # the bundle's head, read from the file (inside the clone: some git builds want a repository
@@ -232,7 +236,7 @@ for repo in $REPOS; do
     if [ "$rc" != 0 ]; then
       # an old bundle cut from a line of history this clone no longer has (every later bundle carries its
       # content): skipped, not fatal. On 21 October one such bundle stopped the run before the newer ones.
-      if grep -q prerequisite "$err"; then echo "$repo: $b builds on commits this clone does not have; skipped (a later bundle carries its content)"; newest_err="$b"; stale="$stale $path"; continue; fi
+      if grep -q prerequisite "$err"; then echo "$repo: $b builds on commits this clone does not have; skipped (a later bundle carries its content)"; newest_err="$b"; stale="$stale$path"$'\n'; continue; fi
       [ -s "$err" ] && cat "$err" >&2
       fail "$repo: git could not read $b (exit status $rc)"
     fi
@@ -242,7 +246,8 @@ for repo in $REPOS; do
       # made from a line of history this clone has moved past (a commit landed on main in between): a later bundle carries its content
       echo "$repo: $b does not fast-forward main at $(git -C "$clone" rev-parse --short HEAD); skipped (superseded by a later bundle, or stale)"
     fi
-  done
+  done < <(bundle_dirs | while IFS= read -r d; do for f in "$d"/"$repo"-[0-9]*.bundle; do if [ -f "$f" ]; then printf '%s\n' "$f"; fi; done; done \
+           | awk '{b=$0; sub(/.*\//, "", b); n=b; sub(/.*-/, "", n); sub(/\.bundle$/, "", n); if (!seen[b]++) print n "\t" $0}' | sort -n -k1,1 | cut -f2-)
   rm -f "$err"
   [ -n "${newest_err:-}" ] && fail "$repo: the newest bundle, $newest_err, builds on commits this clone does not have; a bundle cut from the clone's current main is needed"
   if [ "$found" = 1 ]; then
@@ -254,15 +259,15 @@ for repo in $REPOS; do
     fi
     # bundles the clone now contains go to the inbox's applied folder, so the inbox holds only what is still to come
     mkdir -p "$INBOX/applied"
-    for d in $BUNDLE_DIRS; do for path in "$d"/"$repo"-[0-9]*.bundle; do
+    while IFS= read -r d; do for path in "$d"/"$repo"-[0-9]*.bundle; do
       [ -f "$path" ] || continue
       h=$(git -C "$clone" bundle list-heads "$path" 2>/dev/null | awk '$2 == "refs/heads/main" {print $1}' || true)
       if [ -n "$h" ] && git -C "$clone" cat-file -e "$h" 2>/dev/null && git -C "$clone" merge-base --is-ancestor "$h" HEAD 2>/dev/null; then mv "$path" "$INBOX/applied/" 2>/dev/null || true; fi
-    done; done
+    done; done < <(bundle_dirs)
     # stale bundles that were skipped go to the inbox's stale folder, so they are not reported again next run
-    if [ -n "$stale" ]; then mkdir -p "$INBOX/stale"; for path in $stale; do mv "$path" "$INBOX/stale/" 2>/dev/null || true; done; fi
+    if [ -n "$stale" ]; then mkdir -p "$INBOX/stale"; printf '%s' "$stale" | while IFS= read -r path; do if [ -n "$path" ]; then mv "$path" "$INBOX/stale/" 2>/dev/null || true; fi; done; fi
   else
-    echo "$repo: no $repo-N.bundle in$BUNDLE_DIRS; nothing to apply"
+    echo "$repo: no $repo-N.bundle in $(bundle_dirs | paste -sd ';' -); nothing to apply"
   fi
 done
 
