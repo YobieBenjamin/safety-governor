@@ -47,6 +47,7 @@ CHAPTERS = [
     ("hw/README.md", "hw · From Verilog to GDS, and into the rack", 0),
     ("hw/pcb/rack-integration.md", "hw · Rack integration reference", 0),
     ("docs/AUDIT-2026-10.md", None, 0),
+    ("docs/REVIEW-2026-10-22-fact-check.md", None, 0),
     ("results/report.md", "Sweep report (results/report.md)", 0),
 ]
 FIGURES = sorted(f for f in os.listdir(os.path.join(ROOT, "docs", "figures")) if f.endswith(".png"))

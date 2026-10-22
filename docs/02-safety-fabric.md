@@ -5,8 +5,10 @@ data network, the management network and the host. One is dumb and fast. One is 
 signed. Both are fail-safe.
 
 In plain words: a fire-alarm loop and an intercom. The loop rings every bell the instant any
-station is pulled, and rings them if the wire is cut. The intercom carries the details:
-who pulled it, which edition of the rulebook is in force, who is still on duty.
+station is pulled, and reports a cut wire the instant it happens; this loop goes one step
+further than a fire loop, where a cut is a trouble signal at the panel, because here a cut
+halts. The intercom carries the details: who pulled it, which edition of the rulebook is in
+force, who is still on duty.
 
 > **Plain-English version:** `10-plain-english-walkthrough.md` §6.
 > **Backed by:** model `govsim/fabric.py` (`HaltLoop`, `MessageFabric`), `govsim/governor.py`
@@ -32,9 +34,10 @@ senses loop current.
   detected tamper, or loss of loop current itself (`01-architecture.md`, safe-mode machine).
   Local causes (a lost heartbeat, a stale epoch, an exhausted output budget) throttle and
   halt that governor's own slot without opening the loop.
-- Loss of loop current at any governor drives that governor's halt output within the debounce
-  window of two sense periods (target 100 µs per period, bound 1 ms end to end for a 72-GPU
-  domain).
+- Loss of loop current at any governor is declared after a debounce window of two sense
+  periods and drives that governor's halt output within about three sense periods, the
+  sampling phase included (target 100 µs per period; 311 µs on the digital path in `11`;
+  bound 1 ms end to end for a 72-GPU domain).
 - The switch starts open at power-on and closes when the governor is armed (no open cause
   and a valid heartbeat); the governor goes to RUN when it then sees loop current, which
   means every governor in the domain has closed its switch.

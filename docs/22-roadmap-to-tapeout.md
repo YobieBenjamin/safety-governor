@@ -6,7 +6,7 @@
 
 ## Stage 1. Prove or disprove the theory, in software
 
-This is the stage we are in. The claims were taken apart in `19`: L the logic, P the physical paths, C the cryptography, S the semantics the chip refuses to claim, N the numbers. Twenty experiments test them (`20`), agents run them in waves with a gate between (`21`), and every wave leaves a packet anyone can check (`../audit/wave-N/`).
+This is the stage we are in. The claims were taken apart in `19`: L the logic, P the physical paths, C the cryptography, S the semantics the chip refuses to claim, N the numbers. Twenty-three experiments test them (`20`), agents run them in waves with a gate between (`21`), and every wave leaves a packet anyone can check (`../audit/wave-N/`).
 
 Done means, in the words of `20`: every invariant in L1 to L3 proven and L4 showing every simulation trace conforms to the proven machine; L5 showing two independent gates read one rulebook the same way on the whole catalogue and on random inputs; L6 leaving no check-removing mutant alive; P2 with no unaccounted physical path for at least one real tray, and now, for every lever, whether a module in the board's management slot can drive it and what else on the board can undo it; YB-0052 to YB-0054 giving a witness quorum under the hazard budget for each modelled use case, or the design recording that for that use case the chip buys accountability rather than prevention; N1 under one percent and N2 a rate an operator would accept; and a third, independent audit finding no claim without a source.
 

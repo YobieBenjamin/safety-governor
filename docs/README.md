@@ -28,6 +28,7 @@ summary and a "backed by" box.
 | `10-plain-english-walkthrough.md` | The whole design in plain English, cross-referenced | itself |
 | `11-loop-timing.md` | The halt loop as a circuit: ngspice simulation of propagation and detection time across 72 governors | §6 |
 | `AUDIT-2026-10.md` | The audit: hallucinations and fake conditions found and fixed, sources checked, what is still unverified | §15 |
+| `REVIEW-2026-10-22-fact-check.md` | The fact-check of the written documents (docs/23, 24, 25, the brief, blog Parts 5 to 7) against the code, the tests, the proofs and the primary sources: what was wrong, what changed, and the twelve gaps the program owes | §15 |
 | `../tools/console/` | The live program console published on claude.ai: agents, work items, event log | n/a |
 | `../tools/github/` | `setup_and_publish.sh`: one script for a fresh machine (gh, login, clones, bundles, push, publish); `publish_experiments.sh`: labels and one issue per experiment in each repository, from `experiments.json` | n/a |
 | `../tools/archive/` | The archive on claude.ai: `make archive` stages every file, full git bundles, zips and the index page, and builds the Project's consolidated documents | n/a |

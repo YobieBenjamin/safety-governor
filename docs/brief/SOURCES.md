@@ -13,12 +13,12 @@ research. Slide numbers are the deck's own (34 slides).
 | 4, 26, 28, 31 | 200 hypothesis tests pass (H0 to H18) | `tests/` | `python3 -m pytest tests`: 200 passed |
 | 4, 26, 28, 31 | 20 RTL block tests pass | `rtl/tests/test_blocks.py` | `python3 -m pytest rtl/tests`: 20 passed |
 | 4, 16, 26, 31 | three proof files hold: P0 to P9, the commit-point properties (1) to (3), the kill-switch checks K0 to K5 | `proofs/core_invariants.py`, `proofs/commit_point.py`, `proofs/no_global_kill_switch.py` | `make proof`: "All proofs hold" twice, "All checks hold" once; 3.7 s |
-| 19, 26 | 56 tests in the reference stack, five of them the OpenShell contract | `hardware-and-silicon/tests/`, `tests/test_oasp.py` | `python3 -m pytest tests` in that repository: 56 passed; the five contract tests are named in `docs/NVIDIA.md` |
+| 19, 26 | 56 tests in the reference stack, five of them the OpenShell contract | `hardware-and-silicon/tests/`, `tests/test_oasp.py` | `python3 -m pytest tests` in that repository: 56 passed; `docs/NVIDIA.md` describes the five contract tests; their names are in `tests/test_oasp.py` (five of its fourteen) |
 | 2, 19, 26 | 75 attacks blocked, 12 baselines allowed; 17 of the 87 on the OpenShell and Sentry path (13 attacks, 4 baselines) | `hardware-and-silicon/results/report.md` | the report's own header line; the "NVIDIA OASP path" section counted: 17 rows |
 | 26 | 317 µs worst case for the halt loop across 72 governors, 1 ms bound, 39 configurations | `hw/loop/results.md` | table row for N=72, last opener, 3 m hops: 317.15 µs total; 39 configuration rows; `docs/11` |
 | 4, 26 | about 2 mm² of core logic, 1.4 by 1.4 mm, in a 10 mm² harness | `docs/04-specification.md` §11; `hw/librelane/governor_core/config.json`; `docs/AUDIT-2026-10.md` S9 | 1.4 × 1.4 mm = 1.96 mm² |
 | 18, 29, 30 | P-384 signature 1,697,985 OTBN cycles, 17 ms at 100 MHz, one signature per 50 ms batch | `govsim/bench.py` constants; `tests/test_h09_overhead.py` | `OTBN_P384_SIGN_CYCLES = 1_697_985`, `SIGN_S ≈ 0.017`, `BATCH_WINDOW_S = 0.05` |
-| 30 | engine 34 percent busy batched, 272 percent unbatched; firmware share under 0.1 percent | `govsim.bench.run("rack", gpus=2, requests=100, tokens_per_request=100)` | 33.96 percent, 271.7 percent, 0.044 percent; the test bound is 0.1 percent |
+| 30 | engine 34 percent busy batched, 272 percent unbatched; firmware share under 0.1 percent | `govsim.bench.run("rack", gpus=2, requests=100, tokens_per_request=100, actions=0)` (the H9 test's call) | 33.96 percent, 271.7 percent, 0.044 percent (0.084 percent with the default actions); the test bound is 0.1 percent |
 | 18 | mailbox of 21 signed commands, checked in order: sequence, edition, signature | `govsim/governor.py` `MAILBOX_CODES`, `_check_signed` | 21 codes; docstring and code order |
 | 18 | HGX reset grouped: three PERST inputs for eight GPUs | `docs/research/board-lever-register.md` | register row, verified level |
 | 18 | per-slot SMBus (SMBPBI), power brake, PERST#, PWR_EN, present and fault at the connector | `docs/figures/fig-rack.png`; `docs/03-interfaces.md`; the lever register | figure labels and register rows |
@@ -35,7 +35,7 @@ research. Slide numbers are the deck's own (34 slides).
 | 27 | L5: 21 catalogue entries compared, 18 agree, five disagreements G1 to G5; the policy document never read; one point at a bug; 21 of 87; PR #15 | `audit/wave-1/REPORT.md` (L5), `audit/wave-1/review/L5/` | same |
 | 27 | H1: fixtures for every message type, `make lanes` passes, catalogue exported as 87 entries, the envelope mismatch (16-hex signer, hex signature, no key versus 8, base64, embedded key); PR #17 | `audit/wave-1/REPORT.md` (H1), `audit/wave-1/review/H1/` | same |
 | 27 | YB-0052: 134 requests, six hazard families, scorer with bootstrap intervals, two baselines, pre-registration note, 36 tests; the four review findings | the `safety` repository's wave-1 review, quoted in Part 5 ("The observer's evaluation set") | Part 5's text; the packet lives in that repository, not in this one |
-| 26, 27 | nothing merged from wave 1; PRs 14, 15 and 17 open and waiting for a person; YB-0052 in revision | GitHub refs on 21 October 2026 (`exp/l4` = pull 14, `exp/l5` = pull 15, `exp/h1` = pull 17, main at 96dc5cc) | `git ls-remote` of the repository |
+| 26, 27 | nothing merged from wave 1; PRs 14, 15 and 17 open and unmerged (L4 and H1 carry the waiting-for-a-person marker; L5's last comment says the gate reviews the branch again); YB-0052 in revision | GitHub refs on 21 October 2026 (`exp/l4` = pull 14, `exp/l5` = pull 15, `exp/h1` = pull 17, main at 96dc5cc) | `git ls-remote` of the repository |
 | 6 | the papers behind each rung of the ladder | `docs/24-the-ladder.md` §7, with arXiv addresses | each address opened on 21 October 2026 |
 | 31 | flexHEG Part I (Petrie, Aarne, Ammann, Dalrymple; ARIA; April 2025; arXiv 2506.15093); CNAS "Secure, Governable Chips" (January 2024); RAND; Ansari's feasibility taxonomy (University of Chester; April 2026; arXiv 2604.04712) | `docs/18-viability-and-open-questions.md` §8b | the section's own citations |
 | 2, 28 | the five stages and where each stands | `docs/22-roadmap-to-tapeout.md` | the document's stage headings and "where it stands" lines |
@@ -102,7 +102,7 @@ research. Slide numbers are the deck's own (34 slides).
 | 2, 32 | the same catalogue of attacks is the acceptance test for every stage; 1000 percent sure in the pre-hardware phase | blog post 01 roadmap; `docs/22`; your own rule for the program |
 | 34 | "there is no kill switch. There are gates, at the ends." | `docs/23` §7 |
 
-The six figure files under `figures/` are copies of the blog's, generated by
+The five figure files under `figures/` (four of them used; the percolation chart is drawn natively in the deck) are copies of the blog's, generated by
 `hardware-and-silicon/blog/tools/make_figures.py`; the deck crops their title band (the top
 176 pixels of the 200 dpi render) so the slide's own title is the only title.
 

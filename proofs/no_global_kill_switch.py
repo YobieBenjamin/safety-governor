@@ -29,7 +29,11 @@ cross-checks the smallest instance by brute force, and asserts the consequences:
   K4  The effector ends form a separator of size one per effector, and the compute ends a separator
       of size one per instance; both leave every other flow intact. Those are the comparator and the
       governor. By Menger's theorem no separator is smaller than the number of disjoint paths, and
-      an end with one controller has exactly one.
+      an end with one controller has exactly one. K4c then lets the cut fall anywhere except on the
+      bystanders and checks that the smallest separator in the whole graph is still the smaller
+      end's count: no switch anywhere beats one per machine at the smaller end. That is the claim
+      docs/23 §3a calls Claim 3, and it is checked here on the instance rather than derived from
+      assumption 2 alone, which only promises k disjoint paths per source-target pair.
   K5  Only the irreversible effectors need to be in the separator; reversible ones can be left out
       and audited afterwards, and the separator shrinks to their controllers.
 
@@ -252,7 +256,8 @@ def main() -> int:
     ends = computes | controllers
     first_hop = {c for e in ends for c in g[e] if c.startswith("c")}
     deep_flow, _ = min_vertex_cut(g, net_S, net_T, protected=ends | users | services | first_hop)
-    report("K1a", deep_flow >= INF, "no separator exists that stays out of the access nodes next to the ends: there is no switch in the deep network")
+    report("K1a", deep_flow >= INF, f"no separator exists that stays out of the access nodes next to the ends: there is no switch in the deep network "
+           f"(a thin check on this instance: only {core - len(first_hop)} of its {core} core nodes are more than one hop from an end)")
     mid_flow, mid_cut = min_vertex_cut(g, net_S, net_T, protected=ends | users | services)
     report("K1b", mid_cut <= first_hop and mid_flow >= k and mid_flow > max(n_i, n_e),
            f"the cheapest network-side separator has {mid_flow} vertices, all of them access nodes one hop from an end (k={k}; {n_i} instances, {n_e} effectors)")
@@ -274,6 +279,10 @@ def main() -> int:
            f"cutting at the effector controllers separates every instance from every actuator with {e_flow} vertices, one per effector, and users still reach services")
     report("K4b", g_flow == len(computes) and g_cut == computes and not separated(g, users, services, g_cut),
            f"cutting at the compute separates them with {g_flow} vertices, one per instance, and users still reach services")
+    any_flow, any_cut = min_vertex_cut(g, S, T, protected=users | services)
+    report("K4c", any_flow == min(len(S), len(T)) and any_flow == e_flow,
+           f"letting the cut fall anywhere but on bystanders, the smallest separator in the whole graph has {any_flow} vertices, "
+           f"the smaller end's count ({len(S)} instances, {len(T)} actuators, the local pair included): nothing anywhere beats one per machine at the smaller end")
 
     # K5: only irreversible effectors need the gate
     irreversible = {f"a{j}" for j in range(n_e) if j % 2 == 0} | {"a_local"}

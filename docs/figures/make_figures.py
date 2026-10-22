@@ -556,17 +556,17 @@ def fig_no_order():
     fig, ax = new_fig(10.4, 7.2)
     ax.text(0.3, 6.92, "What triggers a no: the questions in the order the chip asks them. The first no wins; every no has a code.", fontsize=10.5, color=INK, fontweight="bold", va="center")
     rows = [
+        ("0", "Is the chip running?", "its own state: a lost heartbeat, an open loop or a commanded halt already moved it", "mailbox.governor_not_running", "warn"),
         ("0", "Is the letter in order?", "sequence per signer; edition stamp; signature by a key the rulebook names", "mailbox.bad_sequence · policy.stale_epoch · mailbox.bad_signature", "warn"),
-        ("1", "Is the form well formed?", "typed fields present, of the right type", "gate.constraint.<field>.missing", "plain"),
-        ("2", "Is the asker who it says?", "GPU and host reports verified within the hour; workload token signed by this chip; frame signed by the enclave", "gate.not_attested", "plain"),
-        ("3", "Seen this before?", "the request hash against the replay store", "gate.replay", "plain"),
-        ("4", "Anything on fire?", "sticky alarms; the heartbeat timer; the edition's expiry", "gate.alarm_active · halt.heartbeat_lost · policy.expired", "plain"),
-        ("5", "Which rule?", "measurement x action, exact before wildcard; typed limits; signed lists", "gate.no_rule · gate.constraint.<field>.below_min / above_max / not_allowed / in_denied_list / list_unavailable", "gov"),
-        ("6", "Which lane?", "the rule's mode: auto, observer, human", "(a route, not a no)", "plain"),
-        ("7", "Witnesses present?", "a verdict by one of the rule's observers over this hash, fresh, risk under the ceiling; for a release: streams, hashes, class, legibility, session budget, escrow", "gate.witness_missing · gate.witness_stale · gate.witness_risk_too_high · release.*", "plain"),
-        ("8", "Inside the rate window?", "the ledger's count for this workload and action", "gate.rate_exceeded", "plain"),
-        ("9", "Budget?", "the typed amount reserved at the budget's owner, over the fabric if that is another chip", "gate.budget_exceeded · gate.budget_owner_unreachable", "plain"),
-        ("10", "Human lane?", "the rule says people: park a hold with an id and a cause", "gate.held_for_human (a hold, not a no)", "warn"),
+        ("1", "Is the asker who it says?", "GPU and host reports verified within the hour; workload token signed by this chip; frame signed by the enclave", "gate.not_attested", "plain"),
+        ("2", "Seen this before?", "the request hash against the replay store", "gate.replay", "plain"),
+        ("3", "Anything on fire?", "the sticky alarm bits", "gate.alarm_active", "plain"),
+        ("4", "Which rule, and does the form fit?", "measurement x action, exact before wildcard; the fields present; typed limits; signed lists", "gate.no_rule · gate.constraint.<field>.missing / below_min / above_max / not_allowed / in_denied_list / not_in_allowed_list / list_unavailable", "gov"),
+        ("5", "Which lane?", "the rule's mode: auto, observer, human", "(a route, not a no)", "plain"),
+        ("6", "Witnesses present?", "a verdict by a key in observer_keys over this hash, fresh, risk under the ceiling; for a release, in order: streams, hashes, verdict, session budget, class, legibility, escrow", "gate.witness_missing · gate.witness_stale · gate.witness_risk_too_high · release.* (the budget and class checks can be a hold)", "plain"),
+        ("7", "Inside the rate window?", "the ledger's count for this workload and action", "gate.rate_exceeded", "plain"),
+        ("8", "Budget?", "the typed amount reserved at the budget's owner, over the fabric if that is another chip", "gate.budget_exceeded · gate.budget_owner_unreachable", "plain"),
+        ("9", "Human lane?", "the rule says people, or a release the rule parks: a hold with an id and a cause", "gate.held_for_human (a hold, not a no)", "warn"),
     ]
     x_n, x_q, x_e, x_c = 0.3, 0.75, 3.15, 6.9
     ax.text(x_q, 6.58, "the question", fontsize=7.0, color=QUIET, va="center", fontweight="bold")
@@ -588,7 +588,7 @@ def fig_no_order():
     box(ax, 3.6, yo - 0.5, 2.6, 0.5, "a hold", ["waits the floor; the quorum signs with a reason"], kind="warn", title_size=7.4, line_size=6.2, pad=0.09)
     box(ax, 6.45, yo - 0.5, 3.65, 0.5, "a no", ["a code to the asker and a line in the log nobody rewrites"], kind="nv", title_size=7.4, line_size=6.2, pad=0.09)
     label(ax, 0.3, 0.48, "After the ticket exists the approver, the endpoint, the switch port and the levers each have their own no (docs/25 section 5): approve.*, ticket.*, ep.*, loop.* and halt.*", size=6.5)
-    label(ax, 0.3, 0.28, "Model: govsim/governor.py (_check_signed, _cmd_request, _release_gate) · codes: govsim/reasons.py · the order is pinned in tests/test_h00_contract.py and the RTL mailbox test", size=6.5)
+    label(ax, 0.3, 0.28, "Model: govsim/governor.py (command, _check_signed, _cmd_request, _release_gate) · codes: govsim/reasons.py · the mailbox order is pinned in tests/test_h03_quorum.py and rtl/tests/test_blocks.py", size=6.5)
     save(fig, "fig-no-order.png")
 
 
@@ -671,21 +671,21 @@ def fig_prompt_flow(part: str = "all"):
     gates = [
         ("Before the first prompt: BEGIN_MODEL", "Manifest signed by a publisher key? Evaluated, if the deployment gate is on? Licence valid? Only then the model key.",
          "no key: the weights stay ciphertext and the GPU runs nothing · mailbox.bad_signature.manifest · model.not_evaluated · compute.license_invalid"),
-        ("The letter and the asker", "Sequence, edition stamp, the enclave's signature; GPU and host attested within the hour; not a replay; no alarm burning.",
-         "mailbox.bad_sequence · policy.stale_epoch · mailbox.bad_signature · gate.not_attested · gate.replay · gate.alarm_active"),
+        ("The letter and the asker", "The chip in RUN; sequence, edition stamp, the enclave's signature; GPU and host attested within the hour; not a replay; no alarm burning.",
+         "mailbox.governor_not_running · mailbox.bad_sequence · policy.stale_epoch · mailbox.bad_signature · gate.not_attested · gate.replay · gate.alarm_active"),
         ("Rule: response.release, observer lane", "Every required stream presented? The hashes in the request equal to what was presented?",
          "release.required_stream_missing · release.response_hash_mismatch"),
-        ("The witnesses", "A verdict signed by an observer key, over this hash, unexpired, risk under the rule's ceiling?",
+        ("The witnesses", "A verdict signed by a key in the image's observer_keys, over this hash, unexpired, risk under the rule's ceiling?",
          "gate.witness_missing · gate.witness_stale · gate.witness_risk_too_high"),
-        ("The verdict against the rule", "hazard_class in allowed_hazard_classes? legibility over the floor? the session under its hazard_budget? the escrow receipt, if sampled or a hazard?",
-         "release.hazard_class_not_allowed: refused, or a hold for a person · release.below_legibility_floor · release.session_hazard_budget_exceeded: alarm, the session parked · release.escrow_receipt_required"),
+        ("The verdict against the rule, in this order", "the session under its hazard_budget? hazard_class in allowed_hazard_classes? legibility over the floor? the escrow receipt, if sampled or a hazard?",
+         "release.session_hazard_budget_exceeded: the session parked (a hold) with a session alarm · release.hazard_class_not_allowed: refused, or a hold for a person · release.below_legibility_floor · release.escrow_receipt_required"),
     ]
     ticket = ("Otherwise: a release ticket", "signed by the chip; bound to the session, the response id, the stream hashes and the edition; valid five minutes; one endpoint, the egress")
-    last = ("8 · The egress, and the people", "Bytes leave the DPU only against the ticket; the user of a refused request gets a code, not an explanation. A hold waits at least the floor (60 s) for two approvers with keys and a written reason. An alarm stops the gate until the alarm key clears it. Every line is in the log, cross-linked with the neighbours'.")
+    last = ("9 · The egress, and the people", "Bytes leave the DPU only against the ticket; the user of a refused request gets a code, not an explanation. A hold waits at least the floor (60 s) for two approvers with keys and a written reason. A rack alarm stops the gate until the alarm key clears it; a session alarm parks that session alone. Every line is in the log, cross-linked with the neighbours'.")
     notes = [
-        ("one rulebook at a time", "The edition is rack-wide: an edition change is staged on every governor and committed at once, and a straggler halts. A ticket from an old edition is dead everywhere.", "docs/02 §4", BLUE),
-        ("the session's hazard budget is shared", "A session served by several GPUs still has one hazard budget, kept by one owner governor: the others reserve against it over the fabric. Two racks cannot each spend it.", "docs/02 §6; H13", BLUE),
-        ("an alarm fans out", "A session over its budget, or output pushed without being presented, raises a sticky alarm that every governor in the rack sees on the fabric. The gate stops answering until the alarm key clears it.", "H5", CORAL),
+        ("one rulebook at a time", "The edition is rack-wide: an edition change is staged on every governor and committed at once, and a straggler halts. A ticket from an old edition is dead everywhere.", "docs/02 §2", BLUE),
+        ("a shared budget has one owner", "A typed budget (the hourly payment limit) is kept by one owner governor: the others reserve against it over the fabric, so two racks cannot each spend it. The session's hazard budget is not shared yet: it is a window on each governor's own ledger.", "docs/02 §2; H13", BLUE),
+        ("an alarm fans out", "Output pushed without being presented raises a sticky rack alarm that every governor sees on the fabric; the gate stops answering until the alarm key clears it. A session over its hazard budget raises a session alarm and is parked; the other sessions go on.", "H5; H17", CORAL),
         ("the loop halts the domain", "Any governor that opens its switch halts every GPU slot on the loop within a millisecond, with no software in the path.", "docs/11; H11", GREEN),
         ("another site", "The stamp travels, the wire does not: a ticket minted here is checked at another site under that site's own key; there is no planet-wide halt wire, by design.", "Part 7", QUIET),
     ]
@@ -713,7 +713,7 @@ def fig_prompt_flow(part: str = "all"):
     fig, ax = new_fig(W, H)
     ax.text(0.3, H - 0.28, title, fontsize=10.2, color=INK, fontweight="bold", va="center")
     ax.text(0.4, H - 0.66, "The request, step by step" if draw_steps else "The governor chip, step by step", fontsize=8.4, color=INK, fontweight="bold", va="center")
-    ax.text(6.95, H - 0.66, "Across the rack and the data center", fontsize=8.4, color=INK, fontweight="bold", va="center")
+    ax.text(6.95, H - 0.66, "8 · Across the rack and the data center", fontsize=8.4, color=INK, fontweight="bold", va="center")
     ax.plot([6.72, 6.72], [0.95, H - 0.85], color=RULE, lw=1.0)
 
     def down(y0, y1, color=INK, text=None):

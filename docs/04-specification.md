@@ -123,21 +123,37 @@ PolicyImage {
   override_floor_s: 60,           // never below 10
   safe_mode: {default_rung, T_throttle_s, T_halt_s, causes: {cause_code: first_rung}},
   fabric: {heartbeat_expiry_s, max_hops, epoch_deadline_s, loop_bound_s},
+  eval_keys: [key],               // who may attest that a model was evaluated
+  deployment_gate: bool,          // BEGIN_MODEL needs an evaluation attestation
+  buffer_classes: [name],         // integrated tier: the classes of GPU memory (weights, kv_cache, activations, outputs)
+  buffer_policy: {class: none | roster | host | any-roster-or-host},   // where each class may go; no entry means nowhere
+  audit: {sample_rate, escrow_classes: [class], store: endpoint_name},   // the chip's own sampling, escrow before release
+  streams_required: [stream],     // a response presents these before it can be released (per-rule override below)
+  compute_budget: {cycles | null, license_keys: [key]},   // a cycle budget only a signed licence extends
+  sandbox: bool,                  // a model organism: the roster opens no peer port
   signatures: [sig]              // k-of-n over everything above
 }
 
 Rule {
   id, measurement (a workload measurement, or "*" for any verified workload), action,
-  constraints: {param: {min,max} | {in_list: list_id} | {not_in_list: list_id} | {digest_of: list_id}},
-  requirement: {mode: auto|observer|human, observers: [key_id], max_risk, approvers_quorum},
+  constraints: {param: {min,max} | {in: [...]} | {in_list: list_id} | {not_in_list: list_id} | {digest_of: list_id}},
+  requirement: {mode: auto|observer|human, observers: [key_id], max_risk, approvers_quorum,
+                allowed_hazard_classes: [class], min_legibility, on_hazard: refuse|human, on_illegible: refuse|human},
+                                 // the last four: response.release only
   rate: {max, window_s},
   budget: {key, param, limit, window_s},
-  output_budget: {queries, bytes, window_s, unpresented_bytes},
+  output_budget: {queries, bytes, window_s, unpresented_bytes},   // model.output only
+  hazard_budget: {max, window_s} | null,   // response.release only: hazard verdicts per session per window
   endpoint: name | null,
   delay_s,
-  inputs: [input_name]           // register rows declared by the author, in addition to the derived ones
+  inputs: [input_name],          // register rows declared by the author, in addition to the derived ones
+  streams_required: [stream] | null   // response.release only; null means the image's default
 }
 ```
+
+The model's `make_policy` and `make_rule` in `govsim/policy.py` are the schema as it runs;
+`digest_of` and `revocations` are in the schema and derive register rows, and are not yet
+checked at the gate (the program's list).
 
 The epoch is `SHA-256(canonical(PolicyImage without signatures))`. Rules are keyed by the
 **workload measurement** `H(gpu_firmware, host_firmware, model_manifest)`; an exact rule beats

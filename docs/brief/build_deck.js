@@ -186,7 +186,7 @@ async function main() {
   // ───────────────────────── 1. Title
   pres.addSection({ title: "Opening" });
   {
-    const s = dark("Opening", "The Chip That Says No", "A multi-layer hardware approach to AI safety, after the first wave of experiments. There is no kill switch for AI, so the gate goes at the ends: the chip that runs the model and the device that does the deed. Each topic in two slides: the plain version with a picture, then the technical one.");
+    const s = dark("Opening", "The Chip That Says No", "A multi-layer hardware approach to AI safety, after two waves of experiments. There is no kill switch for AI, so the gate goes at the ends: the chip that runs the model and the device that does the deed. Each topic in two slides: the plain version with a picture, then the technical one.");
     const cx = 11.0, cy = 3.6, r = 1.45;
     s.addShape(pres.ShapeType.ellipse, { x: cx - r, y: cy - r, w: 2 * r, h: 2 * r, fill: { color: H.dk1 }, line: { color: C.accent1, width: 5 }, objectName: "halt loop" });
     for (let i = 0; i < 8; i++) {
@@ -194,7 +194,7 @@ async function main() {
       s.addShape(pres.ShapeType.roundRect, { x: cx + r * Math.cos(a) - d / 2, y: cy + r * Math.sin(a) - d / 2, w: d, h: d, rectRadius: 0.06, fill: { color: open ? C.accent4 : C.accent2 }, line: { color: C.background1, width: 1.5 }, objectName: "governor " + i });
     }
     text(s, "The halt loop: one series current loop through every governor in a rack. Any governor opens it, or a cut wire, and every GPU halts.", { x: 9.1, y: 5.35, w: 3.8, h: 0.75, fontSize: 11, color: C.accent3, align: "center" });
-    s.addNotes("A brief for a short talk, redone after the first wave of experiments and the kill-switch work. Every topic has two slides: the plain one with a picture for the room, the technical one for the people who will want to argue. Say up front that nothing here is silicon yet: it is a design with machine-checked proofs, tests, hardware blocks and a circuit simulation behind it, and a public program trying to kill it before anyone cuts a mask.");
+    s.addNotes("A brief for a short talk, redone after two waves of experiments and the kill-switch work. Every topic has two slides: the plain one with a picture for the room, the technical one for the people who will want to argue. Say up front that nothing here is silicon yet: it is a design with machine-checked proofs, tests, hardware blocks and a circuit simulation behind it, and a public program trying to kill it before anyone cuts a mask.");
   }
 
   // ───────────────────────── 2. What this project is
@@ -216,7 +216,7 @@ async function main() {
     }
     // the five stages of docs/22, with where each stands now
     text(s, "THE FIVE STAGES (DOCS 22), AND WHERE EACH STANDS", { x: L, y: 3.55, w: 6.6, h: 0.25, fontSize: 9.5, bold: true, color: C.accent1 });
-    const steps = [["1  Prove or disprove, in software", "now: proofs hold, wave 1 ran, nothing merged yet"], ["2  Design to NVIDIA's boards", "RTL blocks, pinout, rack reference exist; NDA rows marked"], ["3  Tests and proofs on the chip", "next: proofs on the Verilog, the catalogue against the RTL"], ["4  Finish for a foundry", "LibreLane flow to sky130 exists; signoff open"], ["5  Stop, and run it anyway", "RTL, gates, an FPGA beside a real GPU"]];
+    const steps = [["1  Prove or disprove, in software", "now: proofs hold, waves 1 and 2 ran, nothing merged yet"], ["2  Design to NVIDIA's boards", "RTL blocks, pinout, rack reference exist; the P2 register on a wave-2 branch"], ["3  Tests and proofs on the chip", "next: proofs on the Verilog, the catalogue against the RTL"], ["4  Finish for a foundry", "LibreLane flow to sky130 exists; signoff open"], ["5  Stop, and run it anyway", "RTL, gates, an FPGA beside a real GPU"]];
     const sw = 1.2, gap = 0.15, sy = 3.85;
     steps.forEach(([a, b], i) => {
       const x = L + i * (sw + gap);
@@ -260,7 +260,7 @@ async function main() {
       ["Property", "What it means here", "How the governor meets it"],
       ["Tamperproof", "The host, the model and the operator cannot alter the decision logic or the keys", "A separate die. Device secret in fuses with no read port. Boot from ROM, extend-only measurement registers, an anti-rollback counter. The rulebook changes only with k-of-n signatures from keys held outside the rack."],
       ["Always invoked", "There is no path around it", "A comparator at every crossing: switch ports open only for roster peers; a device acts only on a ticket; the egress holds a response until a ticket releases it; weights are written only with a ticket; power, reset and clock answer to the governor. Default deny; fail closed."],
-      ["Verifiable", "Small enough that its correctness can be checked", "About 2 mm² of core logic as configured (1.4 by 1.4 mm). Ten invariants of the gate (P0 to P9) and the commit-point protocol proven with Z3 in every reachable state; 200 model tests, 20 RTL tests, an independent audit."],
+      ["Verifiable", "Small enough that its correctness can be checked", "A 1.4 by 1.4 mm die outline (about 2 mm²) configured for the control core, not yet placed and routed. Ten invariants of the gate (P0 to P9) and the commit-point protocol proven with Z3 in every reachable state; 200 model tests, 20 RTL tests, an independent audit."],
       ["Placed where a cut is small", "A monitor only works where every path passes through it", "Menger's theorem: in a network built to have no single point of failure, the only places a separator is one node per machine are the ends. The governor is the monitor at the compute end; the ticket check in the device is the monitor at the other."],
     ], { y: 1.75, colW: [1.9, 3.2, 7.033], fontSize: 11.5, availH: 3.15 });
     const cy0 = 1.75 + gridH + 0.15;
@@ -379,7 +379,7 @@ async function main() {
     text(s, [{ text: "Three assumptions. ", options: { bold: true } }, { text: "(1) Replication: many sources, no complete list. (2) No middle: between any copy's way into the network and any device's there are k node-disjoint roads, k at least two. (3) Local loops: at least one copy joined to a device by a road that never enters the network." }], { x: L + 0.25, y: 4.9, w: 6.85, h: 0.9, fontSize: 10.5 });
     const claims = [
       ["1", "No network-only switch exists", "Any set of network nodes leaves the local pair of assumption 3 intact, so some copy still reaches some device. One laptop and one motor sink the idea."],
-      ["2", "Without local loops, a network cut costs k nodes per machine and takes bystanders with it", "Menger on assumption 2: a separator between one copy and one device has at least k network nodes, and every bystander whose road ran through them loses it. Measured: 43 nodes, 72 percent of the core, 19 percent of bystander pairs."],
+      ["2", "Without local loops, a network cut costs at least k nodes per copy-device pair, several per machine, and takes bystanders with it", "Menger on assumption 2: a separator between one copy and one device has at least k network nodes, and every bystander whose road ran through them loses it. Measured: 43 nodes, 72 percent of the core, 19 percent of bystander pairs."],
       ["3", "Every separator has at least min(copies, devices) nodes, and the smaller end achieves it", "Node-disjoint roads use distinct copies and distinct devices, so there are at most that many; with assumption 2 exactly that many; by Menger that is the smallest separator, and the compute nodes and the device controllers are separators of exactly that size."],
     ];
     const rx = 8.3, rw = R - rx;
@@ -505,8 +505,8 @@ async function main() {
       "P0 the edition counter never goes negative",
       "P1 nothing executes unless, when its ticket was issued, a rule allowed it and the witnesses were present",
       "P2 a ticket exists only for an allowed, witnessed action",
-      "P3 no replay: executed means spent, and spent is refused",
-      "P4 only the current edition is honoured",
+      "P3 no replay: anything executed has its ticket marked spent",
+      "P4 a ticket's edition is never newer than the current one (the comparator admits only the current edition by construction)",
       "P5 halt is absorbing without a quorum; no governor clears itself",
       "P6 fail closed: heartbeat lost, nothing executes",
       "P7 no ticket while halted or without a heartbeat",
@@ -528,13 +528,13 @@ async function main() {
       y += 1.475;
     }
     analogy(s, "Both holes were in things I wrote and read many times. Reading is not checking. I knew that. I still had to be shown.", "Part 5", 6.0, 0.7);
-    s.addNotes("docs/19 section 2 and the two proof files. The point to make in the room: 200 tests had passed for a week and the prover found two holes the tests were never going to find, both of the kind the design is supposed to be immune to. And the honest limit: the proof is about the abstract machine. Wave 1's L4 replays the simulation's traces through that machine and found two steps the machine lacks, a boot step and tickets burned without executing; that is the theorem being widened, which is what L4 was for.");
+    s.addNotes("docs/19 section 2 and the two proof files. The point to make in the room: 200 tests had passed for a week and the prover found two holes the tests were never going to find, both of the kind the design is supposed to be immune to. And the honest limit: the proof is about the abstract machine. Wave 1's L4 replays the simulation's traces through a hand-copied re-encoding of that machine's guards (the gate's finding: the Z3 machine itself is not driven) and found two steps the machine lacks, a boot step and tickets burned without executing; that is the theorem being widened, which is what L4 was for.");
   }
 
   // ───────────────────────── 15. Proposal (plain): the referee and the breaker
   pres.addSection({ title: "Proposal" });
   {
-    const s = light("Proposal", "The proposal: a referee chip beside every GPU");
+    const s = light("Proposal", "The proposal: a referee beside every GPU");
     const bw = 3.5, by = TOP + 0.05, bh = 1.9;
     const blocks = [
       ["The model, on NVIDIA GPUs", "Computes freely. Nothing it thinks has any effect until bytes leave or a request is made.", C.background2, C.text1],
@@ -575,23 +575,23 @@ async function main() {
     text(s, "Where it sits and what it reaches", { x: L + 0.3, y: TOP + 0.18, w: colW - 0.6, h: 0.4, fontSize: 15, bold: true });
     text(s, bullets([
       "One governor per GPU slot on the OEM's management-module card (DC-SCM class); the same module as a retrofit in an installed rack's BMC slot",
-      "Per slot through the HGX connector: SMBus (SMBPBI), power brake, PERST#, PWR_EN, present and fault. HGX reset is grouped today (three PERST inputs for eight GPUs)",
-      "NVSwitch port disable out of band through NSM; DPU steering tables through DOCA on the management port",
+      "Per slot on the module: SMBus (SMBPBI), power brake, PERST#, PWR_EN, present and fault, where the baseboard exposes them. On HGX today reset is grouped (three PERST inputs for eight GPUs) and per-slot power and brake are undocumented",
+      "NVSwitch port disable out of band through NSM (from the next reset today; apply-now is firmware ask 1); DPU steering tables through DOCA on the management port",
       "The GPU's confidential-computing attestation taken as an input; the BMC reads through the governor",
     ], 11), { x: L + 0.3, y: TOP + 0.62, w: colW - 0.6, h: 2.25, fontSize: 11 });
     const x2 = L + colW + 0.33, w2 = R - x2;
     card(s, x2, TOP, w2, 2.9, C.background2);
     text(s, "What is on the die", { x: x2 + 0.3, y: TOP + 0.18, w: w2 - 0.6, h: 0.4, fontSize: 15, bold: true });
     text(s, bullets([
-      "An OpenTitan-class root of trust: fuses, DICE key chain, OTBN for P-384 signatures (1,697,985 cycles, 17 ms at 100 MHz, so one signature per 50 ms batch), AES-256-CTR with HMAC-SHA-256 for storage",
-      "A mailbox of 21 signed commands, checked in order: sequence number, rules edition, signature; the first failure is reported",
+      "An OpenTitan-class root of trust: fuses, DICE key chain, OTBN for P-384 signatures (1,697,985 cycles, 17 ms at 100 MHz, 34 ms at the prototype's 50 MHz, so one signature per 50 ms batch), AES-256-CTR with HMAC-SHA-256 for storage",
+      "A mailbox of 21 commands; the ones that change anything are signed and checked in order: sequence number, rules edition, signature; the first failure is reported",
       "The policy image and its epoch; the gate core (lookup and comparators); the ledger (budgets, rate windows); a hash-chained log whose head lives in a register",
       "Meter, heartbeat, lever drivers, loop I/O and the signed message fabric between governors",
     ], 11), { x: x2 + 0.3, y: TOP + 0.62, w: w2 - 0.6, h: 2.25, fontSize: 11 });
     await table(s, [
       ["Tier", "Where the governor's authority comes from", "Status"],
       ["Rack", "Management-card levers, switch and DPU management paths, the halt loop", "Plan of record; needs a server OEM, nothing from NVIDIA's silicon"],
-      ["Board", "Same firmware, policy format and fabric on a board without a baseboard connector of its own", "Fallback; the gaps it leaves are recorded, not hidden"],
+      ["Board", "Same firmware, policy format and fabric where the switches' management is not reachable, or on a baseboard with direct NVLink and no NVSwitch", "Fallback; the gaps it leaves are recorded, not hidden"],
       ["Integrated", "Buffer-class checkers in the GPU's copy engines and peer MMU; per-GPU reset", "Needs NVIDIA; closes the one gap the rack tier records (H2b)"],
     ], { y: 4.6, colW: [1.4, 6.4, 4.333], fontSize: 11, availH: 1.98 });
     s.addNotes("The technical shape. Everything in the left column already exists on the boards; the governor is a new user of it. The right column is the die: a root of trust of the OpenTitan kind, plus the gate. The tiers are how the same design degrades or tightens depending on who cooperates. Sources: docs 01, 03, 04, 08, 22 and the board lever register.");
@@ -615,7 +615,7 @@ async function main() {
     const fixes = [
       "attestation.missing became attestation_missing: every dotted code rewritten to the grammar, a gate_ prefix where a code starts with a digit, and a test that holds every code we emit to it",
       "There is no hold answer. A human hold is a denial that says hold_pending; the approval arrives out of band; the same sandbox's retry of the same request gets the ticket, once. A second sandbox gets its own hold",
-      "The answer must land inside the timeout, so a hold cannot wait inside the call. The gate answers in well under a millisecond, thousands of times under the default",
+      "The answer must land inside the timeout, so a hold cannot wait inside the call. The gate answers in well under a millisecond in the model (unmeasured in a test), hundreds of times under the default",
     ];
     let fy = TOP + 0.62;
     fixes.forEach((f, i) => {
@@ -790,7 +790,7 @@ async function main() {
     inner(cy, 0.76, "Burned in at the factory (fuses, ROM)", "unique device secret; hashes of the governance keys; anti-rollback counter; lifecycle state. Nobody changes these afterwards, including us"); cy += 0.86;
     inner(cy, 0.76, "Measured boot and keys", "extend-only registers; the signing key is derived from the code that booted (change one byte, lose the key); an odometer that only counts up; true randomness"); cy += 0.86;
     inner(cy, 2.1, "The gate: ten questions in order; the first no wins", [
-      "1 is the form well formed?   2 is the asking GPU attested, token valid, edition current?   3 seen this request before? (replay store)   4 alarm raised, heartbeat dead, rulebook expired? then no   5 which rule? workload × action, exact before wildcard; typed limits; lists (a protected site is a no)   6 which lane? automatic, needs a witness, needs a human   7 witnesses present, signed, fresh, about this request?   8 inside the rate window?   9 budget: reserve the amount against the limit   10 human lane: park a hold. Otherwise mint the ticket",
+      "1 is the chip running, and is the letter in order? (a dead heartbeat or an expired rulebook already stopped it at the door)   2 is the asking GPU attested, token valid, edition current?   3 seen this request before? (replay store)   4 alarm raised? then no   5 which rule, and does the form fit it? workload × action, exact before wildcard; the fields present; typed limits; lists (a protected site is a no)   6 which lane? automatic, needs a witness, needs a human   7 a witness verdict: observer key, fresh, about this request?   8 inside the rate window?   9 budget: reserve the amount against the limit   10 human lane: park a hold. Otherwise mint the ticket",
     ].join(""), true); cy += 2.2;
     const tw = (colChip - 0.24 - 0.2) / 3, th = y0 + colH - 0.12 - cy;
     [["Ledger", "budgets and reservations, rate windows, replays; survives power loss"], ["Log", "hash chain; signed checkpoints; neighbours cross-link their heads"], ["Mailbox", "the only way in from the host: signed, numbered commands only"]].forEach(([h, b], i) => {
@@ -838,12 +838,12 @@ async function main() {
     await table(s, [
       ["Step", "What is checked", "Fails with (as the model prints it)", "Backed by"],
       ["Mailbox", "Sequence number, then rules edition, then signature; the first failure is reported", "mailbox.bad_sequence, mailbox.bad_signature; a frame from an old edition is refused before the gate sees it", "H3: test_mailbox_reports_the_first_failing_check"],
-      ["Who is asking", "The workload hash (GPU firmware, host firmware, model) and its evaluation attestation", "model.not_evaluated", "H1 attestation; H18 oversight"],
+      ["Who is asking", "The workload hash (GPU firmware, host firmware, model) and its evaluation attestation", "gate.not_attested; model.not_evaluated", "H1 attestation; H18 oversight"],
       ["Is there a rule", "Exact rule beats wildcard; typed limits; signed lists for targets and recipients", "gate.constraint.target.in_denied_list, endpoint.target_protected", "H6 comparator; the strike narration"],
       ["Do the witnesses agree", "Observer verdict from a key in the observer set, fresh, under the risk limit; human quorum on holds", "gate.witness_missing, gate.held_for_human, release.hazard_class_not_allowed", "H17 use cases; H18 oversight; H8 override"],
-      ["Is the budget intact", "Compute budget and license, session hazard budget, byte budgets, rate windows", "release.session_hazard_budget_exceeded, compute.budget_exceeded", "H13 shared budget; H18"],
+      ["Is the budget intact", "Compute budget and license, session hazard budget, byte budgets, rate windows", "gate.budget_exceeded, release.session_hazard_budget_exceeded, compute.budget_exceeded", "H13 shared budget; H17; H18"],
       ["The ticket", "Signed over the hash of the exact fields; one use; short expiry; bound to one endpoint", "ticket.missing, ticket.replay, ticket.bad_signature, ticket.wrong_endpoint", "H17: forged, replayed and wrong-hash tickets never deliver"],
-      ["The crossings", "Switch ports open only for roster peers; the egress holds responses until released; bytes cross-checked against what was presented", "ep.no_capability, gate.output_unpresented", "H2 enforcement points; the plot narration"],
+      ["The crossings", "Switch ports open only for roster peers; the egress holds responses until released; bytes cross-checked against what was presented", "ep.no_capability, gate.output_unpresented", "H2 enforcement points; H10 leakage; the plot narration"],
       ["Under OpenShell", "The same decision returned through the supervisor-middleware contract: allow with the ticket as a header change, or deny with a reason code in OpenShell's grammar", "attestation_missing, hold_pending, sandbox_quarantined", "hardware-and-silicon tests/test_oasp.py (5 contract tests)"],
     ], { colW: [2.15, 4.0, 3.5, 2.483], fontSize: 11, availH: 5.1, numbers: true });
     s.addNotes("The same flow with the actual checks and the actual reason codes, as govsim/reasons.py spells them, plus the last row for what OpenShell's sandbox sees. Every row has a test behind it; the right column names the hypothesis set. If someone wants to see one, python -m govsim.cli usecase strike, hazard, plot or oversight prints the hops.");
@@ -854,14 +854,14 @@ async function main() {
   {
     const s = light("Status", "Where it stands: no silicon yet");
     const stats = [
-      ["200", "hypothesis tests pass in the functional model of the governor and a simulated 72-GPU rack (H0 to H18)"],
+      ["200", "hypothesis tests pass in the functional model of the governor and simulated racks of up to five GPUs (H0 to H18)"],
       ["20", "simulation tests pass on the hard-core RTL blocks, with a LibreLane flow to the open 130 nm process"],
       ["3", "proof files hold: ten core invariants and the commit-point protocol under Z3, the kill-switch cuts by max-flow (make proof)"],
       ["56", "tests pass in the software reference stack, five of them pinning OpenShell's shipped middleware contract"],
       ["75 + 12", "attacks blocked with the predicted reason code, baselines allowed; 17 of the 87 run on the OpenShell and Sentry path"],
       ["317 µs", "worst case for the halt loop to reach the last of 72 governors, against a 1 ms bound, across 39 simulated configurations"],
-      ["~2 mm²", "of core logic for the governor as configured, 1.4 by 1.4 mm, inside a 10 mm² shuttle harness"],
-      ["0", "merged from the first wave: four experiments built, all four sent back by the gate with findings; every review public in audit/wave-1"],
+      ["~2 mm²", "die outline configured for the control core, 1.4 by 1.4 mm, inside a 10 mm² shuttle harness; not yet placed and routed"],
+      ["0", "merged from two waves: wave 1 built four, three sent back by the gate and one by the safety repository's review; wave 2 built five more, four passing acceptance, the gate still to run"],
     ];
     const W = (CW - 3 * 0.25) / 4, Hh = 1.95;
     stats.forEach(([n, l], i) => {
@@ -870,29 +870,29 @@ async function main() {
       text(s, n, { x: x + 0.25, y: y + 0.12, w: W - 0.5, h: 0.8, fontSize: 40, bold: true, fontFace: "Georgia", color: C.accent1, valign: "middle" });
       text(s, l, { x: x + 0.25, y: y + 0.98, w: W - 0.5, h: 0.92, fontSize: 10.5, color: C.text1 });
     });
-    analogy(s, "Everything here is model, proof, RTL simulation and circuit simulation. The two numbers that decide adoption, the real overhead and the false-halt rate, are not measured on hardware yet. Nothing has merged from the first wave; every result sits on a branch with its review attached.", "docs 18 §3; audit/wave-1", 6.0, 0.8);
-    s.addNotes("Honest status. The counts are what pytest prints today: 200, 20 and 56; make proof prints all three files holding. The loop figure is hw/loop/results.md. The area is docs/04 section 11. The 75 attacks, 12 baselines and 17 OASP entries are the reference stack's sweep (results/report.md). The zero is the one to say out loud: wave 1 built four experiments and the gate sent all four back with specific findings, which is the gate doing its job.");
+    analogy(s, "Everything here is model, proof, RTL simulation and circuit simulation. The two numbers that decide adoption, the real overhead and the false-halt rate, are not measured on hardware yet. Nothing has merged from two waves; every result sits on a branch, with its review attached for wave 1.", "docs 18 §3; audit/wave-1", 6.0, 0.8);
+    s.addNotes("Honest status. The counts are what pytest prints today: 200, 20 and 56; make proof prints all three files holding. The loop figure is hw/loop/results.md. The area is docs/04 section 11. The 75 attacks, 12 baselines and 17 OASP entries are the reference stack's sweep (results/report.md). The zero is the one to say out loud: wave 1 built four experiments and every one came back with specific findings, three from the gate and YB-0052 from the safety repository's review, which is the gate doing its job; wave 2's five branches (PRs 18 to 22) wait for it.");
   }
 
   // ───────────────────────── 25. What the first wave found
   {
     const s = light("Status", "What the first wave found");
     await table(s, [
-      ["Experiment", "Built", "What the gate found", "Where it is"],
-      ["L4  trace conformance", "A trace recorder for the governor model and a replayer that drives the proven machine with the recorded events; all 200 tests' traces replay; two broken governors fail with the event named", "The replayer passed only after it was widened to accept two steps the theorem's machine lacks, a boot step and tickets burned without executing: a gap in the theorem or a liberty in the simulation. Heartbeat events were never recorded", "Revise. PR #14, waiting for a person"],
-      ["L5  two gates, one policy", "The reference stack's gate and the governor's fed the same requests; 21 catalogue entries compared, 18 agree, five disagreements pinned as G1 to G5 with their inputs", "\"Ambiguity in the policy\" was claimed without reading the policy document; one of the five points at a bug in the governor model; 21 of 87 is not the whole catalogue", "Revise. PR #15, waiting for a person"],
-      ["H1  the lanes fixtures", "Signed fixtures for every message the three repositories exchange, and the checker the governor model runs; make lanes passes; the catalogue exported as 87 entries", "The governor's envelope (16-character signer, hex signature, no public key) does not match the lanes contract (8, base64, embedded key): two repositories that were supposed to agree on the wire format did not. Now a failing test instead of a surprise", "Revise. PR #17, waiting for a person"],
+      ["Experiment", "Built", "What was found", "Where it is"],
+      ["L4  trace conformance", "A trace recorder for the governor model and a replayer that runs a re-encoding of the proven machine's guards over the recorded events; 199 of 200 traces replay (one an expected refusal); two broken governors fail with the event named", "Passed only after it was widened to accept two steps the theorem's machine lacks (a boot step, tickets burned without executing): a gap in the theorem or a liberty in the simulation. The Z3 machine itself is not driven; the heartbeat check cannot fail (the sink emits heartbeat_lost just before it)", "Revise. PR #14, waiting for a person"],
+      ["L5  two gates, one policy", "The reference stack's gate and the governor's fed the same requests; 20 catalogue entries compared, 17 agree, five disagreements pinned as G1 to G5 with their inputs (three from the catalogue, two from the random sweep)", "\"Ambiguity in the policy\" was claimed without reading the policy document; one of the five points at a bug in the governor model; 20 of 87 is not the whole catalogue", "Revise. PR #15, waiting for a person"],
+      ["H1  the lanes fixtures", "Signed fixtures for every message the three repositories exchange, and the checker the governor model runs; make lanes passes; the catalogue exported as 87 entries", "The governor's envelope (hex signature, no embedded key) does not match the lanes contract (base64, embedded key): two repositories meant to agree on the wire format did not; a known gap, the checker pins what both agree on. The gate: two corrupt patch hunks, cross-repository acceptance not met", "Revise. PR #17, waiting for a person"],
       ["YB-0052  the observer's evaluation set", "134 labelled gate-typed requests in six hazard families, a scorer with bootstrap intervals, a length-only and a keyword baseline, a pre-registration note; 36 tests", "The ten percent miss budget was the agent's, not the rulebook's; the keyword baseline overlaps the observer's vocabulary; no weighting sweep, so the disproof condition cannot be evaluated; the overt rows named real hazards, which this program forbids", "Revise. In revision on the Mac's local model"],
     ], { colW: [2.0, 3.6, 4.3, 2.233], fontSize: 10.5, availH: 4.35, icons: ["FiActivity", "FiGitMerge", "FiLink", "FiEye"] });
     analogy(s, "The wave cost a few bucks and a quarter of an hour, and the gate, the backups and the second reader run on a Mac mini on my desk, with the local model taking the revisions. Nothing merges until a person says so.", "Part 5; docs 21; audit/wave-1/REPORT.md", 6.05, 0.8);
-    s.addNotes("Every line is from the wave's report and the reviews in audit/wave-1, and Part 5 tells the same story in prose. Two findings matter beyond the experiments themselves: the simulation takes steps the theorem does not model, which is exactly what L4 was built to flush out; and two repositories that were supposed to agree on a wire format did not, which is now a failing test. The YB-0052 last finding, real hazard names in the overt rows, is the one I should never have needed a reviewer for.");
+    s.addNotes("Every line is from the wave's report and the reviews in audit/wave-1, and Part 5 tells the same story in prose. Two findings matter beyond the experiments themselves: the simulation takes steps the theorem does not model, which is exactly what L4 was built to flush out; and two repositories that were supposed to agree on a wire format did not, which is written down as a known gap with the checker pinning only what both sides agree on. The YB-0052 last finding, real hazard names in the overt rows, is the one I should never have needed a reviewer for.");
   }
 
   // ───────────────────────── 26. The road to a chip we cannot fab
   {
     const s = light("Status", "The road to a chip we cannot fab: five stages");
     const stages = [
-      ["1", "Prove or disprove, in software", "Every invariant proven (L1 to L3); the simulation conforming to the proven machine (L4); two gates reading one rulebook the same way (L5); no check-removing mutant alive (L6); every physical path accounted for (P2); a witness quorum under the hazard budget; overhead under one percent (N1); a third independent audit", "Now. Proofs hold; wave 1 ran; nothing merged yet", C.accent1],
+      ["1", "Prove or disprove, in software", "Every invariant proven (L1 to L3); the simulation conforming to the proven machine (L4); two gates reading one rulebook the same way (L5); no check-removing mutant alive (L6); every physical path accounted for (P2); a witness quorum under the hazard budget; overhead under one percent (N1); a third independent audit", "Now. Proofs hold; waves 1 and 2 ran; nothing merged yet", C.accent1],
       ["2", "Design the chip to fit NVIDIA's boards", "Register map, mailbox, policy image, request and ticket formats frozen; every block in RTL with its invariants; the module's interface to a DC-SCM 2.x host board and to the baseboard connector, pin by pin; P2 with no unaccounted row that is not marked NDA", "Hard-core blocks in Amaranth with 20 tests and generated Verilog; pinout and rack reference exist", C.text2],
       ["3", "Run the tests and the proofs on the chip", "The invariants proven again on the RTL with a model checker; the netlist shown equivalent; the whole catalogue driven into the full-chip RTL with the same reason codes; gate-level simulation with timing; the halt loop measured on a bench loop", "After stage 2", C.accent3],
       ["4", "Finish the design for a foundry", "The tape-out checklist in docs/08 ticked: synthesis, timing at three corners, DRC, LVS, antenna, IR drop, the GDS on the shuttle template; a package with the hash of every file, reproducible by make gds", "LibreLane flow to sky130 exists for the core; signoff open", C.accent3],
@@ -910,7 +910,7 @@ async function main() {
       text(s, "WHERE IT STANDS", { x: x + 0.2, y: TOP + 3.2, w: W - 0.4, h: 0.22, fontSize: 8, bold: true, color: C.accent1 });
       text(s, stands, { x: x + 0.2, y: TOP + 3.42, w: W - 0.4, h: 0.7, fontSize: 9, bold: true, color: C.text2 });
     });
-    analogy(s, "If an experiment kills the chip as designed, that is the result, and it is the reason to do this in software first. If the design survives all twenty, the next post is about an FPGA.", "docs 22; Part 5", 5.95, 0.8);
+    analogy(s, "If an experiment kills the chip as designed, that is the result, and it is the reason to do this in software first. If the design survives all twenty-three, the next post is about an FPGA.", "docs 22; Part 5", 5.95, 0.8);
     s.addNotes("docs/22, the whole program in one place. The goal has not moved: prove or disprove; if it survives, design the chip in software to fit NVIDIA's boards through documented interfaces; run the tests and proofs on the chip; finish it to the point a foundry could take it; then stop, because nobody is handing me a mask set, and run it anyway in RTL, in gates and on an FPGA. Two walls at the end: the NDA rows in P2 and the fab. Both are someone else's decision, and the package will be sitting there, public, with its hashes, when they make it.");
   }
 
@@ -932,7 +932,7 @@ async function main() {
       ["FiEyeOff", "Meaning", "The chip guarantees an observer is always invoked. It cannot make the observer right about a disguised request. The miss rate has a set and a scorer now, and no number yet."],
       ["FiAlertTriangle", "False halts", "The first support ticket will read: the governor halted my rack. The rate is not measured yet, and a person who sees a hundred holds a day signs the hundred-and-first unread."],
       ["FiServer", "The levers, and the NDA", "Reset is grouped on today's HGX board; the per-module signals sit in a design guide under NDA. The retrofit case adds: can the BMC slot drive them, and what else can undo them."],
-      ["FiClock", "Cost", "One P-384 signature costs 17 ms on the OTBN engine. Batching keeps it under one percent in the model, not yet in silicon."],
+      ["FiClock", "Cost", "One P-384 signature costs 17 ms on the OTBN engine. The firmware share is under 0.1 percent of GPU time in the model; batching keeps one engine at 34 percent busy (272 unbatched). Not yet in silicon."],
       ["FiMapPin", "Coverage and people", "A device nobody wired through a gate is not in the cut. A person is an effector no chip gates: a model that talks someone into wiring the money has routed around everything here."],
       ["FiKey", "Governance and adoption", "Who holds the quorum keys and how far apart they must be, whose policy governs a shared rack, and the first device maker to check a stamp. The integrated tier needs NVIDIA."],
     ];
@@ -954,10 +954,10 @@ async function main() {
       ["Challenge", "What the design does", "Status"],
       ["Reach: a payment system two or three hops out", "A: the comparator in the device. B: move the credential behind a ticket-checking adapter, so the model's runtime never holds the API key. C: open the DPU flow to the provider only under a live ticket. D: always the signed record", "A and C modelled and tested (H6, H2, H17). B is a pattern the endpoint model already expresses; the three-hop payment narration is the next piece of work"],
       ["Meaning: observers can be fooled", "Observer always invoked, cannot be impersonated, separate from the model; hazard classes, legibility floor, session hazard budget, TRNG audit sampling with escrow; two witnesses required for high-authority actions", "Guarantees tested (H17, H18). The evaluation set exists (YB-0052, in revision); the miss rate is not measured, and the budget it is measured against must come from the rulebook, not from an agent"],
-      ["Theorem to simulation", "L4 replays every test's trace through the proven machine; L5 compares the reference gate and the governor on the catalogue", "The replayer was widened to accept a boot step and burned tickets the theorem lacks; the theorem gains the steps or the simulation loses them. 18 of 21 compared entries agree; five pinned, not yet called bug or ambiguity"],
-      ["False halts", "Loop beacon inside the signed heartbeat; loss of current declared after two sense periods (debounce); a jumpered governor caught within two heartbeats; FMEA", "Modelled (H11) and simulated (ngspice). Not measured on hardware (N2)"],
+      ["Theorem to simulation", "L4 replays every test's trace through a re-encoding of the proven machine's guards; L5 compares the reference gate and the governor on the catalogue", "The replayer was widened to accept a boot step and burned tickets the theorem lacks; the theorem gains the steps or the simulation loses them. 17 of 20 compared entries agree; five pinned, not yet called bug or ambiguity"],
+      ["False halts", "Loop beacon inside the signed heartbeat; loss of current declared after two sense periods (debounce); a jumpered governor caught within two heartbeats; FMEA", "Modelled (H11) and simulated (ngspice). N2 models the false-halt rate; N3 measures it on hardware, still open"],
       ["Levers on HGX, and the retrofit", "Per-slot SMBus, power brake, PERST#, PWR_EN at the connector; grouped reset accepted as coarser; the evidence register names what is verified; P2 now records, per lever, whether a module in the DC-SCM slot can drive it and what else on the board can undo it", "Evidence register done. Design guide under NDA still needed; the NDA rows stay marked, not guessed"],
-      ["Cost", "P-384 on OTBN at 1,697,985 cycles (17 ms); one signature per 50 ms window; engine 34 percent busy batched, 272 percent unbatched; firmware share under 0.1 percent of GPU time", "Modelled (H9). Silicon or FPGA measurement: open (N1, N3)"],
+      ["Cost", "P-384 on OTBN at 1,697,985 cycles (17 ms); one signature per 50 ms window; engine 34 percent busy batched, 272 percent unbatched; firmware share under 0.1 percent of GPU time", "Modelled (H9); N1 simulates the overhead at scale; silicon or FPGA measurement open (N3)"],
       ["Governance and adoption", "k-of-n quorum with keys outside vendor and operator (G8); partitions and per-rule approvers; integrated-tier asks written; borrowed from flexHEG as questions 15 and 16: the supply chain and enclosure as a condition of trust, a multilateral root", "Two tenants with two quorums on one baseboard: not designed. Integrated tier: needs NVIDIA. Supply-chain assumption and the key-holding arrangement: not written yet"],
     ], { colW: [2.4, 5.5, 4.233], fontSize: 10.5, availH: 5.15, icons: ["FiGitBranch", "FiEyeOff", "FiActivity", "FiAlertTriangle", "FiServer", "FiClock", "FiKey"] });
     s.addNotes("For each challenge, the mechanism and its status, from docs/18 sections 5 to 8b, docs/23 and the wave-1 reviews. The status column is the honest part: modelled is not measured, the theorem has gaps the simulation exposed, and three of the seven end in an ask.");
@@ -977,7 +977,7 @@ async function main() {
     text(s, "What is different here", { x: x2 + 0.25, y: TOP + 0.18, w: w2 - 0.5, h: 0.35, fontSize: 13, bold: true, fontFace: "Georgia", color: C.accent6 });
     text(s, bullets([
       "Actions, not compute: the payment, the message, the release, the weight export, at the moment they leave the rack",
-      "A module on the board the server already has, through the connector it already uses; asks NVIDIA for firmware and software, not silicon; goes into installed racks",
+      "A module on the board the server already has, through the connector it already uses; asks NVIDIA for firmware and software for the rack tier, silicon only for the integrated tier; goes into installed racks",
       "The stamp is checked again by the device that acts, so authority does not depend on the host in between",
       "Witnesses have a measured miss rate and are never the lock; a person with a key clears the holds",
       "Built and being tested: 200 model tests, 20 RTL tests, three proof files, a catalogue, a public program with disproof conditions",
@@ -1016,7 +1016,7 @@ async function main() {
     await table(s, [
       ["Who", "What I need", "What it settles"],
       ["A server OEM", "The management-module slot; the HGX design guide under NDA; the connector pinout; the retrofit question per lever", "Whether per-module levers reach the connector and the BMC slot. If not, the rack tier is coarser than the design says"],
-      ["NVIDIA", "Seven firmware asks: NSM port-disable semantics, per-GPU reset, buffer-class checkers in the copy engines and peer MMU; nothing from the silicon", "The integrated tier; whether the recorded gap (H2b) can be closed from inside the GPU"],
+      ["NVIDIA", "Seven firmware asks on the switches (apply-now port disable, isolation mode, lockable flags, a policy hash, FM signatures); per-GPU reset and brake from the board; the integrated tier's copy-engine checkers are silicon", "The integrated tier; whether the recorded gap (H2b) can be closed from inside the GPU"],
       ["An endpoint partner", "A device or tool gateway that verifies the ticket: P-384 signature, typed fields, epoch, freshness", "Whether the comparator works outside the model. If nobody will check the stamp, the thesis fails in practice"],
       ["A lab with an HGX or NVL rack", "An FPGA governor beside a real GPU for weeks", "The real overhead against the one percent goal (G6); the false-halt rate; the loop beacon in the field"],
       ["A model lab's red team", "Disguised requests against the release gate and the observers", "The size of the semantic residual; whether a quorum of observers is enough"],
@@ -1048,7 +1048,7 @@ async function main() {
     ], { x: L, y: 5.2, w: 8.4, h: 0.95, fontSize: 14, italic: true, color: C.accent1, paraSpaceAfter: 4 });
     text(s, [
       { text: "github.com/YobieBenjamin: safety-governor · hardware-and-silicon · safety · autonomic-graph-regulation · Watermark", options: { breakLine: true } },
-      { text: "The Chip That Says No, parts 1 to 6; design documents 00 to 24; START-HERE.md is the route to check the work", options: { color: C.accent3 } },
+      { text: "The Chip That Says No, parts 1 to 7; design documents 00 to 25; START-HERE.md is the route to check the work", options: { color: C.accent3 } },
     ], { x: L, y: 6.15, w: 9.5, h: 0.6, fontSize: 11, color: C.accent6 });
     s.addNotes("Close on the plain sentence: what it is, what it does, what it can stop. Then the two lines under it. The repositories hold the model, the proofs, the tests, the RTL, the circuit simulation, the experiment program and the audit packets; the blog series is the plain-English route in, and START-HERE.md is the route for anyone who wants to check the work rather than take my word for it.");
   }
