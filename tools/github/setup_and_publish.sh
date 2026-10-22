@@ -219,7 +219,7 @@ for repo in $REPOS; do
   # "+" so the remote-tracking ref follows GitHub even if it was left ahead or aside; -q hides git's refusal otherwise
   git -C "$clone" fetch -q origin "+refs/heads/main:refs/remotes/origin/main" 2>"$err" || { cat "$err" >&2; fail "$repo: could not fetch main from GitHub"; }
   git -C "$clone" merge -q --ff-only origin/main || fail "$repo has local commits that are not on GitHub; push or move them first"
-  found=0; newest_err=""; stale=""
+  found=0; newest_err=""; stale=""; nonff=""; best_n=0
   while IFS= read -r path; do
     [ -n "$path" ] || continue
     found=1
@@ -229,7 +229,7 @@ for repo in $REPOS; do
     head=$(git -C "$clone" bundle list-heads "$path" 2>"$err" | awk '$2 == "refs/heads/main" {print $1}' || true)
     [ -n "$head" ] || { [ -s "$err" ] && cat "$err" >&2; fail "$repo: $b has no main branch or cannot be read"; }
     if git -C "$clone" cat-file -e "$head" 2>/dev/null && git -C "$clone" merge-base --is-ancestor "$head" HEAD; then
-      echo "$repo: already contains $b"; continue
+      echo "$repo: already contains $b"; n=${b##*-}; n=${n%.bundle}; [ "$n" -gt "$best_n" ] && best_n=$n; continue
     fi
     # "+" lets the scratch ref move backwards or sideways between bundles; it is never the branch
     rc=0; git -C "$clone" fetch -q "$path" "+main:refs/claude/incoming" 2>"$err" || rc=$?
@@ -241,10 +241,11 @@ for repo in $REPOS; do
       fail "$repo: git could not read $b (exit status $rc)"
     fi
     if git -C "$clone" merge -q --ff-only refs/claude/incoming 2>/dev/null; then
-      echo "$repo: applied $b -> $(git -C "$clone" log --oneline -1)"; newest_err=""
+      echo "$repo: applied $b -> $(git -C "$clone" log --oneline -1)"; newest_err=""; n=${b##*-}; n=${n%.bundle}; [ "$n" -gt "$best_n" ] && best_n=$n
     else
       # made from a line of history this clone has moved past (a commit landed on main in between): a later bundle carries its content
       echo "$repo: $b does not fast-forward main at $(git -C "$clone" rev-parse --short HEAD); skipped (superseded by a later bundle, or stale)"
+      nonff="$nonff$path"$'\n'
     fi
   done < <(bundle_dirs | while IFS= read -r d; do for f in "$d"/"$repo"-[0-9]*.bundle; do if [ -f "$f" ]; then printf '%s\n' "$f"; fi; done; done \
            | awk '{b=$0; sub(/.*\//, "", b); n=b; sub(/.*-/, "", n); sub(/\.bundle$/, "", n); if (!seen[b]++) print n "\t" $0}' | sort -n -k1,1 | cut -f2-)
@@ -265,6 +266,15 @@ for repo in $REPOS; do
       if [ -n "$h" ] && git -C "$clone" cat-file -e "$h" 2>/dev/null && git -C "$clone" merge-base --is-ancestor "$h" HEAD 2>/dev/null; then mv "$path" "$INBOX/applied/" 2>/dev/null || true; fi
     done; done < <(bundle_dirs)
     # stale bundles that were skipped go to the inbox's stale folder, so they are not reported again next run
+    # a bundle that did not fast-forward and has a lower number than one this clone has applied or already
+    # contained was superseded (rebuilt on a newer main): filed with the stale ones, so later runs stop listing it.
+    # One with a HIGHER number is the newest work and was not applied: said plainly, since it needs rebuilding.
+    while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      n=$(basename "$path"); n=${n##*-}; n=${n%.bundle}
+      if [ "$n" -lt "$best_n" ]; then stale="$stale$path"$'\n'
+      else echo "$repo: $(basename "$path") is newer than anything applied and does not fast-forward (main moved on, probably the agent program pushing): it needs rebuilding on the current main"; fi
+    done <<< "$nonff"
     if [ -n "$stale" ]; then mkdir -p "$INBOX/stale"; printf '%s' "$stale" | while IFS= read -r path; do if [ -n "$path" ]; then mv "$path" "$INBOX/stale/" 2>/dev/null || true; fi; done; fi
   else
     echo "$repo: no $repo-N.bundle in $(bundle_dirs | paste -sd ';' -); nothing to apply"
