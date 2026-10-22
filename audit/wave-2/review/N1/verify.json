@@ -1,0 +1,56 @@
+{
+ "id": "N1",
+ "branch": "exp/n1",
+ "base": "main",
+ "head": "c7b9882",
+ "commits": 3,
+ "agent_trailers": 3,
+ "files": 3,
+ "added": 664,
+ "removed": 0,
+ "ok": true,
+ "findings": [
+  {
+   "severity": "warn",
+   "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+   "where": "docs/12-deployment-overhead.md:7: 46"
+  },
+  {
+   "severity": "warn",
+   "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+   "where": "docs/12-deployment-overhead.md:45: 3.3"
+  },
+  {
+   "severity": "warn",
+   "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+   "where": "docs/12-deployment-overhead.md:45: 1.15"
+  },
+  {
+   "severity": "warn",
+   "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+   "where": "docs/12-deployment-overhead.md:64: 0.017"
+  },
+  {
+   "severity": "warn",
+   "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+   "where": "docs/12-deployment-overhead.md:65: 46"
+  },
+  {
+   "severity": "warn",
+   "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+   "where": "docs/12-deployment-overhead.md:69: 0.21"
+  }
+ ],
+ "runs": {
+  "suite": {
+   "command": "python3 -m pytest -x tests",
+   "exit": 0,
+   "tail": "........................................................................ [ 33%]\n........................................................................ [ 67%]\n....................................................................     [100%]\n212 passed in 44.26s\n"
+  },
+  "acceptance": {
+   "command": "python3 -m govsim.deploy && python3 -m pytest -q tests/test_deploy_overhead.py",
+   "exit": 0,
+   "tail": " / 0.209 %\n  without the edition change      max receipt wait 67.0 ms, p99 added 45.6 ms, throughput lost 0.0127 %\n  one edition change              18 ms of firmware per chip; one a second is 1.8 % of the core\npolicy sweep 1, mailbox calls per response (plan of record otherwise, 10 s; stall share of slot time):\n  actions/response=  0.05  stall share=0.0246 %\n  actions/response=     5  stall share=0.1121 %\n  actions/response=    20  stall share=0.3797 %\n  actions/response=    40  stall share=0.7308 %\n  actions/response=    80  stall share=1.4502 %\n  actions/response=   160  stall share=3.0094 %\n  crosses 1 percent at about 55 mailbox calls per response (about 1,100x the reference)\npolicy sweep 2, the slot held until the receipt, by batch window (10 s):\n  window=  20 ms  serviceable=False  stall share=9.90 %\n  window=  30 ms  serviceable=False  stall share=11.36 %\n  window=  50 ms  serviceable=True   stall share=14.33 %\n  window= 100 ms  serviceable=True   stall share=21.19 %\n  window= 200 ms  serviceable=True   stall share=32.90 %\n  slot-held release stays under 1 percent at: no serviceable window (above 1 percent at every serviceable policy)\nsensitivity, each named assumption 10x (plan of record otherwise, 10 s):\n  log write 10x     stall share=0.1336 %\n  merkle root 10x   stall share=0.0248 %\n  heartbeat 10x     stall share=0.0246 %\n  none moves the plan of record off the sub-one-percent figure\n............                                                             [100%]\n"
+  }
+ }
+}

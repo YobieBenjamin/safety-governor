@@ -1,0 +1,11 @@
+.........                                                                [100%]
+=============================== warnings summary ===============================
+tests/test_h20_exits.py::test_nda_rows_are_reported_not_failed
+  /Volumes/External_4TB/Safety Experiments/safety-governor/.worktrees/P2/tests/test_h20_exits.py:45: UserWarning: 12 rows wait on the HGX design guide or a board document: ['X04', 'X11', 'X12', 'X17', 'X21', 'X23', 'X24', 'X25', 'X26', 'X27', 'X28', 'X30']
+    warnings.warn(f"{len(nda)} rows wait on the HGX design guide or a board document: {nda}")
+
+tests/test_h20_exits.py::test_register_matches_the_models_enumeration
+  /Volumes/External_4TB/Safety Experiments/safety-governor/.worktrees/P2/tests/test_h20_exits.py:109: UserWarning: the model bricks these exits by policy but the register cannot show it: ['jtag', 'debug']
+    warnings.warn(f"the model bricks these exits by policy but the register cannot show it: {unshown}")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html

@@ -1,0 +1,2 @@
+P3 exp/p3 (134c4f0): 3 files, +226 -0, 3 commits (3 with agent trailers)
+  verdict: nothing blocks

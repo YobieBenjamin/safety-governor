@@ -1,0 +1,6 @@
+python3 proofs/core_invariants.py && python3 proofs/commit_point.py && python3 proofs/no_global_kill_switch.py
+Traceback (most recent call last):
+  File "/Users/yb/safety-governor/.worktrees/L3/proofs/core_invariants.py", line 40, in <module>
+    from z3 import (And, ArraySort, BoolSort, BoolVal, Const, Consts, DeclareSort, ForAll, Implies, IntSort, Not, Or, Select, Solver, Store,
+ModuleNotFoundError: No module named 'z3'
+make: *** [proof] Error 1

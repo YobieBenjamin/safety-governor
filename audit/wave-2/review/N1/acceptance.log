@@ -1,0 +1,30 @@
+72 governors x 8 slots = 576 GPUs; signature 17.0 ms; edition change with revocation at mid-run
+plan of record (window=50 ms gate=on hold_slot=no actions/response=0.05), serviceable=True
+  throughput lost (measured)      0.0151 %  (governed 34,273,417 vs baseline 34,278,595 tokens)
+  cross-check: stall share        0.0168 %
+  p99 added latency               45.6 ms  (p99 3337 ms vs 3291 ms without the governor)
+  p99 receipt wait                66.5 ms (idle-core bound 67 ms; max seen 68.4 ms)
+  busiest engine / firmware core  28.5 % / 0.209 %
+  without the edition change      max receipt wait 67.0 ms, p99 added 45.6 ms, throughput lost 0.0127 %
+  one edition change              18 ms of firmware per chip; one a second is 1.8 % of the core
+policy sweep 1, mailbox calls per response (plan of record otherwise, 10 s; stall share of slot time):
+  actions/response=  0.05  stall share=0.0246 %
+  actions/response=     5  stall share=0.1121 %
+  actions/response=    20  stall share=0.3797 %
+  actions/response=    40  stall share=0.7308 %
+  actions/response=    80  stall share=1.4502 %
+  actions/response=   160  stall share=3.0094 %
+  crosses 1 percent at about 55 mailbox calls per response (about 1,100x the reference)
+policy sweep 2, the slot held until the receipt, by batch window (10 s):
+  window=  20 ms  serviceable=False  stall share=9.90 %
+  window=  30 ms  serviceable=False  stall share=11.36 %
+  window=  50 ms  serviceable=True   stall share=14.33 %
+  window= 100 ms  serviceable=True   stall share=21.19 %
+  window= 200 ms  serviceable=True   stall share=32.90 %
+  slot-held release stays under 1 percent at: no serviceable window (above 1 percent at every serviceable policy)
+sensitivity, each named assumption 10x (plan of record otherwise, 10 s):
+  log write 10x     stall share=0.1336 %
+  merkle root 10x   stall share=0.0248 %
+  heartbeat 10x     stall share=0.0246 %
+  none moves the plan of record off the sub-one-percent figure
+............                                                             [100%]

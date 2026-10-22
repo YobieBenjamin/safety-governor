@@ -1,0 +1,34 @@
+P2 exp/p2 (f5ed04a): 2 files, +214 -0, 4 commits (4 with agent trailers)
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:7: 10333
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:7: 001
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:33: 54
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:34: 54
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:35: 11
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:38: 06034
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:38: 002
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:41: 2.0
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:42: 3.3
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:46: 16
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:46: 16
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:50: 12
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:54: 18
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:54: 16
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:54: 16
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:65: 2.2
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:66: 2.2
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:66: 1.2
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:67: 101024
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:72: 12143
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:72: 001
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:74: 678
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:76: 10577
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:76: 11133
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:76: 12
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:76: 11133
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:76: 11470
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:86: 10333
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:86: 001
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:87: 06034
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:87: 002
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/research/exit-register.md:89: 2.2
+  verdict: nothing blocks

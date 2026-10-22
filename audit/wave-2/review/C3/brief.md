@@ -1,0 +1,21 @@
+# C3 · Post-quantum path: the cost of a hybrid signature (P-384 plus a lattice scheme) in the batching model, since OTBN has no ML-DSA today
+
+**Goal.** The tickets break under a large quantum computer. Add a second cost constant to `govsim/bench.py` for an ML-DSA-65 signature on an OTBN-class engine (cite the figure; if none is published for OTBN, use a documented Cortex-M4 cycle count and state the scaling assumption) and model hybrid signing (both signatures per batch).
+
+**Acceptance.** `make bench` reports the hybrid engine utilisation; a test asserts it stays under 100 percent at the modelled load or documents the batching window that makes it so.
+
+**Disproof.** No batching window under one second keeps the engine under 100 percent: the chip needs a second crypto engine, which is a design change.
+
+**Budget.** About 60k tokens.
+
+**Acceptance command (the launcher runs it after the agent).** `make bench && python3 -m pytest -q tests/test_hybrid_signature.py`
+
+## Rules for this run
+- You are in a git worktree on branch `exp/c3`; it is the only place you write. Run commands from this directory with relative paths; do not cd elsewhere.
+- The other repositories of the program are readable at: /Users/yb/safety /Users/yb/hardware-and-silicon. Never edit them: a change they need goes into `patches/<repo>/<file>.patch` here, with a note in your final summary.
+- Acceptance: `make bench && python3 -m pytest -q tests/test_hybrid_signature.py`. Run it at most three times. Stop when it passes, or after the third failure; then record exactly what fails in EXPERIMENTS.md (safety-governor) or in the hypothesis's section (safety), with the failing output.
+- Read only the files the brief names under Read first and the files you create. Do not read whole directories, do not run the full test suite (the acceptance command is enough), do not search the web, do not start sub-agents.
+- Never weaken, skip or delete an existing test. Do not refactor beyond the brief. No em dashes in anything you write.
+- Commit as you go with messages that name the issue (#10) and end with the line: Agent: wave 2, issue #10. Do not push, do not open a pull request; the launcher does both.
+- This run is capped at 40 turns and an estimated spend of $10. Keep the tree in a working, committed state at all times, so a cap mid-way still leaves usable work.
+- Finish with a summary of at most fifteen lines: what was built, what passes, what does not and why, open questions. It is posted on the issue as is.

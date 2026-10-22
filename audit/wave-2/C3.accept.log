@@ -1,0 +1,7 @@
+python3 -m govsim.cli bench
+signature: ECDSA P-384 on OTBN at 100 MHz = 1,697,985 cycles = 17.0 ms (OpenTitan's published figure); batch window 50 ms; 8 slots per governor chip
+rack        tokens=  500,000  firmware=   23.8 ms of gpu= 250.0 s (0.010%)  engine: 54% unbatched -> 34% batched  record latency <= 67 ms  ops={'mailbox': 1100, 'sign': 1000, 'heartbeat': 50, 'fabric_msg': 100, 'fabric_rx': 300, 'action': 50, 'ticket': 50}
+integrated  tokens=  500,000  firmware=   23.8 ms of gpu= 250.0 s (0.010%)  engine: 54% unbatched -> 34% batched  record latency <= 67 ms  ops={'output_bytes': 64000, 'mailbox': 1100, 'sign': 1000, 'heartbeat': 50, 'fabric_msg': 100, 'fabric_rx': 300, 'action': 50, 'ticket': 50}
+hybrid (P-384 + ML-DSA-65, both per batch): 117 ms per batch (ML-DSA-65 10,000,000 cycles, Cortex-M4 pqm4 figure, UNVERIFIED placeholder, no checked source; re-check pqm4 and the M4->OTBN scaling; OTBN 1.0x assumed); engine 234% at the 50 ms window (cannot keep up) -> 47% at a 250 ms window (keeps up); record latency <= 367 ms. Disproof did not hold: a window under 1 s keeps the one engine under 100 percent, conditional on the unverified ML-DSA figure. Only signing is counted; other uses of the engine are not modelled.
+short responses (100 tokens): engine 272% unbatched, which cannot keep up, -> 34% batched (why the spec batches, docs/04 §9)
+........                                                                 [100%]

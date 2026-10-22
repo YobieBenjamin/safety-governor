@@ -1,0 +1,682 @@
+diff --git a/docs/12-deployment-overhead.md b/docs/12-deployment-overhead.md
+new file mode 100644
+index 0000000..cb6b9f8
+--- /dev/null
++++ b/docs/12-deployment-overhead.md
+@@ -0,0 +1,127 @@
++# 12. Whole-deployment overhead (N1)
++
++> **In plain words:** the one percent claim was made for one chip. This note runs the whole
++> deployment, 72 governors with eight GPU slots each, as a simulation with queues (72 independent
++> chips: there is no cross-chip traffic, so the 72 add sample size, not interaction), and asks two
++> questions: how much throughput is lost, and how much latency is added at the tail. At the plan
++> of record the answers are about 0.015 percent and about 46 milliseconds, *measured as the tokens
++> the governed run produces below a no-governor baseline, not a bookkeeping sum*. The claim holds,
++> with one condition that matters: the runtime must not hold the GPU slot while it waits for the
++> receipt. That condition is this note's reading of the plan of record, not a sentence of the
++> spec (section 2). **Code:** `govsim/deploy.py` (`python -m govsim.deploy`). **Tests:**
++> `tests/test_deploy_overhead.py`.
++> **Inputs:** `govsim/bench.py`, `docs/04-specification.md` §9, `docs/10` §14.
++
++## 1. Method
++
++A discrete-event simulation in simpy (`python -m govsim.deploy`; the brief provides simpy). Each
++of 72 governor chips has:
++
++- one firmware core, a FIFO queue, serving mailbox commands (20 µs), ticket mints (20 µs), log
++  appends, the per-window Merkle root, heartbeat fan-out, and edition-change port programming
++  (1 ms per port change, 2 ms attestation);
++- one signing engine, 17 ms per ECDSA P-384 signature (OpenTitan OTBN, docs/04 §9), serial, one
++  signature per 50 ms batch window over the records that finished in it;
++- eight GPU slots, one request at a time each, 500 tokens mean (exponential) at 2,000 tokens per
++  second, so 250 ms mean service; 0.05 mailbox calls per response, the reference workload of
++  `bench.py`. A mailbox call blocks the issuing slot until the firmware answers.
++
++Mid-run, every chip takes an edition change with revocation: attest the staged image, close and
++reopen each slot's port with the slot out of service, reissue each slot's live ticket. Heartbeats
++run at 1 s, each costing a verify plus a tell to each slot (5 µs times nine).
++
++Two regimes per policy, each against a no-governor baseline with the same random draws:
++
++- **Saturated** (every slot always busy). Throughput lost is *measured*: the tokens the governed
++  run produces below the baseline's in the same run; the bookkeeping stall share is printed beside
++  it as a cross-check; the two agree to within 0.003 percentage points (0.0151 and 0.0168 percent;
++  the stall share also counts slot time inside requests unfinished at the horizon). For the plan of record the slot is
++  freed the instant the record is logged, so the receipt wait is off the slot's path: it adds
++  latency to the response but not throughput to the GPU. The worst case, the slot held until the
++  receipt, is swept separately.
++- **Open** (Poisson arrivals at 70 percent of capacity). Added latency is the p99 of the request
++  latency minus the baseline's p99, and the p99 wait for the provenance receipt. Latency runs
++  from the arrival, so a request that finds its slot busy carries its queueing delay, in the
++  baseline and the governed run alike (p99 about 3.3 s, against 1.15 s for the exponential service-time
++  tail alone, 250 ms times ln 100). The governor's stalls therefore reach the tail through the queue as well as
++  through the receipt wait.
++
++The log-write (30 µs), Merkle-root (20 µs) and heartbeat fan-out (5 µs times nine) costs are
++assumptions not in `bench.py` or docs/04; they are named here, swept in `sensitivity` (ten times
++any one stays under one percent), and are the figures Phase 2 replaces.
++
++## 2. Results (72 governors, 576 GPUs, 30 s of simulated time per run)
++
++Plan of record: 50 ms window, release gated on the receipt, the slot freed for the next request
++while the receipt is pending. **The last clause is this note's assumption.** `bench.py` says only
++that a runtime which insists on the record waits one window plus one signature, and docs/04 §9 says
++the record trails the response; neither says whether the GPU slot is held meanwhile. The slot-held
++reading is therefore swept in section 3 as the alternative, and it is above one percent.
++
++| Quantity | Value |
++|---|---|
++| Throughput lost (measured) | 0.015 percent (34,273,417 governed vs 34,278,595 baseline tokens) |
++| Cross-check: stall share | 0.017 percent |
++| p99 added latency | 46 ms (p99 3337 ms against 3291 ms without the governor, queueing included) |
++| p99 receipt wait | 66.5 ms against the 67 ms idle-core bound of docs/04 §9 |
++| Max receipt wait | 68.4 ms with the mid-run edition change, 67.0 ms without it |
++| Busiest signing engine | 28.5 percent (limit 50) |
++| Busiest firmware core | 0.21 percent |
++
++The 67 ms bound of docs/04 §9 is exact for an idle firmware core at the window edge, and it is
++what the run without the edition change gives (67.0 ms). With the edition change the maximum is
++68.4 ms: the Merkle root of one window waits behind a firmware operation of the change (the queue
++is FIFO, so it waits for the operations ahead of it, not the whole 18 ms). The excess is 1.4 ms;
++the test asserts it is under 5 ms, so the 18 ms is a ceiling, not the observed delay.
++
++## 3. Where it crosses one percent
++
++**Mailbox load.** Stall share of slot time by mailbox calls per response, plan of record
++otherwise, 10 s. The sweeps report the stall share; at 80 calls the measured token loss against
++the baseline is 1.71 percent against a stall share of 1.45, so the token-based crossing is a
++little lower and both are far above the reference workload:
++
++| calls per response | 0.05 | 5 | 20 | 40 | 80 | 160 |
++|---|---|---|---|---|---|---|
++| stall share (percent) | 0.02 | 0.11 | 0.38 | 0.73 | 1.45 | 3.01 |
++
++It crosses one percent at about 55 mailbox calls per response, about 1,100x the reference workload
++(0.05). A governor firmware core is not the constraint at any plausible action rate. The results
++table runs 30 s and the sweeps 10 s, so the edition-change term, one event per chip, is divided by
++a shorter simulated time and reads a little higher at 10 s; the mailbox term itself is the same.
++
++**Slot held until the receipt.** If the runtime keeps the GPU slot occupied until the receipt
++arrives (no pipelining), the slot idles for the receipt wait on every response:
++
++| window | 20 ms | 30 ms | 50 ms | 100 ms | 200 ms |
++|---|---|---|---|---|---|
++| serviceable | no | no | yes | yes | yes |
++| stall share (percent) | 9.9 | 11.4 | 14.3 | 21.2 | 32.9 |
++
++A window must exceed the 17 ms signature, so no serviceable window gets near one percent: the
++disproof condition ("above one percent at every serviceable policy") is met **for this policy**,
++and it is asserted as such in the test. It is **not** met for the plan of record as read
++here (slot freed), which costs 0.015 percent; the test asserts both sides. If the spec's plan of
++record is the slot-held reading, the disproof stands and the one percent claim fails for the whole
++deployment; which reading is the spec's is an open question for the owner of docs/04 §9. The requirement it adds is a design rule: **the
++runtime releases a response on the receipt but must not stall the next request on it.** The receipt
++is latency on the response, not throughput on the GPU.
++
++**Named assumptions.** Ten times any of the three costs named above (swept in `sensitivity`, 10
++s): log write 0.13 percent, Merkle root 0.02 percent, heartbeat fan-out 0.02 percent. None moves
++the plan of record off the sub-one-percent figure.
++
++## 4. What this does not show
++
++- It is a model. Phase 2 measures real firmware, a real engine and a real mailbox; those replace
++  the constants.
++- Arrivals are Poisson and sizes exponential, one queue per slot at 70 percent load. Bursty traffic that
++  lines many responses up inside one window changes nothing for the engine (one signature per
++  window) but would raise the tail wait for the unlucky first record.
++- One edition change, with revocation, is modelled; a storm of them is not. Each costs about
++  18 ms of firmware per chip, so even one a second would be under two percent of the core.
++- The 72 chips are independent copies. Heartbeat fan-out is the verify-once, tell-each-slot cost on
++  one chip; the authority's fan-out across chips and its latency are not modelled, so "whole
++  deployment" here means 72 chips of load, not 72 interacting chips.
++- Fabric and switch programming beyond the per-port 1 ms, and cross-chip message latency, are not
++  simulated; heartbeats are costed on the receiving chip only.
+diff --git a/govsim/deploy.py b/govsim/deploy.py
+new file mode 100644
+index 0000000..89d1233
+--- /dev/null
++++ b/govsim/deploy.py
+@@ -0,0 +1,373 @@
++"""N1: the whole-deployment overhead (docs/12). ``bench.py`` prices one chip's operations; this
++module runs 72 governors with eight GPU slots each as a discrete-event simulation and
++measures what the one-percent claim needs: throughput lost and tail latency added, with the
++queues the per-chip arithmetic leaves out.
++
++What is simulated, per governor chip: one firmware core (a FIFO queue) that serves mailbox
++commands, ticket mints, log appends, the per-window Merkle root, heartbeats and the port
++programming of an edition change; one signing engine (17 ms per ECDSA P-384 signature, one
++signature per batch window over the records that finished in it); eight GPU slots, each
++serving requests one at a time. The figures are ``bench.py``'s and docs/04 §9's; the log-write,
++Merkle-root and heartbeat fan-out costs are assumptions named in docs/12 and swept in
++``sensitivity``.
++
++Two regimes per policy, both with common random numbers against a no-governor baseline:
++
++* saturated: every slot always has a request waiting, as in bench.py's "the GPU is busy
++  throughout". Throughput lost is *measured*: the tokens the governed run produces below the
++  baseline's in the same simulation, not a bookkeeping sum. The stall share is reported beside it
++  as a cross-check. For the plan of record the slot is freed the instant the record is logged, so
++  the receipt wait is off the slot's path: it adds latency to the response, not throughput to the
++  GPU.
++* open: Poisson arrivals at 70 percent of slot capacity. Added latency is the p99 of the request
++  latency minus the baseline's p99, and the p99 wait for the provenance receipt. In this one-
++  process-per-slot model a request never queues, so the added latency is the receipt wait; the
++  throughput effect of load is the saturated comparison above.
++
++The model is not a measurement. Phase 2 on real hardware replaces it.
++"""
++from __future__ import annotations
++
++import random
++from functools import lru_cache
++from dataclasses import dataclass, replace
++
++import simpy                                          # brief: installed in the container
++
++from .bench import BATCH_WINDOW_S, COST_S, GPU_SECONDS_PER_TOKEN, SIGN_S, SLOTS_PER_CHIP
++
++GOVERNORS = 72
++MEAN_TOKENS = 500
++OPEN_LOAD = 0.7                      # open-loop arrival rate as a share of slot capacity
++LOG_WRITE_S = 30e-6                  # assumption: one authenticated NVM append per response record
++MERKLE_S = 20e-6                     # assumption: one root over the window's records, firmware
++HEARTBEAT_PERIOD_S = 1.0             # docs/04 §9
++HEARTBEAT_FANOUT_S = COST_S["heartbeat"] * (1 + SLOTS_PER_CHIP)   # verify once, tell each slot
++ACTIONS_PER_RESPONSE = 50 / 1000     # bench.py's reference workload
++ONE_PERCENT = 1.0
++
++
++@dataclass(frozen=True)
++class Policy:
++    """The knobs a deployment can turn. The plan of record is the default."""
++    window_s: float = BATCH_WINDOW_S         # signature batch window
++    gate: bool = True                        # the runtime releases a response only with its receipt
++    hold_slot: bool = False                  # ... and keeps the GPU slot busy until then (worst case)
++    actions_per_response: float = ACTIONS_PER_RESPONSE
++    edition_change: bool = True              # one edition change with revocation mid-run
++    governors: int = GOVERNORS
++    log_write_s: float = LOG_WRITE_S         # the three named assumptions, swept in sensitivity()
++    merkle_s: float = MERKLE_S
++    heartbeat_s: float = HEARTBEAT_FANOUT_S
++
++    @property
++    def serviceable(self) -> bool:
++        """docs/04 §9: the window is longer than the signature and the engine stays under 50 percent."""
++        return self.window_s > SIGN_S and SIGN_S / self.window_s < 0.5
++
++    def label(self) -> str:
++        return (f"window={self.window_s*1e3:g} ms gate={'on' if self.gate else 'off'} "
++                f"hold_slot={'yes' if self.hold_slot else 'no'} actions/response={self.actions_per_response:g}")
++
++
++PLAN_OF_RECORD = Policy()
++
++
++def edition_firmware_s() -> float:
++    """Firmware time of one edition change with revocation on one chip: attest the staged image,
++    then for each slot close and reopen its port and reissue its live ticket (docs/04 §9)."""
++    per_slot = 2 * COST_S["switch_program"] + COST_S["ticket"]
++    return COST_S["attest"] + SLOTS_PER_CHIP * per_slot
++
++
++class Chip:
++    def __init__(self, env, idx: int, pol: Policy, governed: bool, rng: random.Random):
++        self.env, self.idx, self.pol, self.governed = env, idx, pol, governed
++        self.fw = simpy.Resource(env, 1)                       # the firmware core
++        self.engine = simpy.Resource(env, 1)
++        self.engine_busy_s = 0.0
++        self.fw_busy_s = 0.0
++        self.pending: list = []                                # (event, ready_time) awaiting a window
++        self.slots = [simpy.Resource(env, 1) for _ in range(SLOTS_PER_CHIP)]
++        self.stall_s = 0.0                                     # slot time lost to the governor
++        self.receipt_waits: list[float] = []
++        self.tokens = 0
++        self.rng = rng
++
++    def fw_do(self, cost_s: float):
++        """Run ``cost_s`` of firmware; the caller's elapsed time includes the queue."""
++        req = self.fw.request()
++        yield req
++        yield self.env.timeout(cost_s)
++        self.fw_busy_s += cost_s
++        self.fw.release(req)
++
++    def window_loop(self, phase: float):
++        yield self.env.timeout(phase % self.pol.window_s)      # the first window closes within one window of start
++        while True:
++            if self.pending:
++                batch, self.pending = self.pending, []
++                self.env.process(self._seal(batch))            # the next window opens on schedule
++            yield self.env.timeout(self.pol.window_s)
++
++    def _seal(self, batch):
++        yield from self.fw_do(self.pol.merkle_s)
++        req = self.engine.request()                            # the engine is private to this chip and serial
++        yield req
++        yield self.env.timeout(SIGN_S)
++        self.engine_busy_s += SIGN_S
++        self.engine.release(req)
++        for ev, _ in batch:
++            ev.succeed()
++
++    def heartbeats(self, phase: float):
++        yield self.env.timeout(phase)
++        while True:
++            yield self.env.timeout(HEARTBEAT_PERIOD_S)
++            yield from self.fw_do(self.pol.heartbeat_s)
++
++    def edition_change(self, at: float):
++        """Staged image attested, every slot's port closed and reopened, outstanding tickets reissued."""
++        yield self.env.timeout(at)
++        yield from self.fw_do(COST_S["attest"])
++        for slot in self.slots:
++            self.env.process(self._reprogram(slot))
++
++    def _reprogram(self, slot):
++        yield from self.fw_do(COST_S["switch_program"])        # close
++        req = slot.request()
++        yield req
++        t0 = self.env.now
++        yield from self.fw_do(COST_S["switch_program"])        # reopen, with the slot held out of service
++        yield from self.fw_do(COST_S["ticket"])                # revocation: reissue the slot's live ticket
++        slot.release(req)
++        self.stall_s += self.env.now - t0
++
++    def _receipt_release(self, ev, done_gpu, arrived, lat, added):
++        """The plan-of-record release. The slot is already free, so the receipt wait is recorded
++        here, off the slot's path: latency on the response, not throughput on the GPU."""
++        yield ev
++        released = self.env.now
++        self.receipt_waits.append(released - done_gpu)
++        lat.append(released - arrived)
++        added.append(released - done_gpu)
++
++    def slot_loop(self, s: int, horizon: float, mode: str, lat: list, added: list, seed: int):
++        env, slot, pol = self.env, self.slots[s], self.pol
++        sizes = random.Random(seed)                            # tokens and arrivals: identical with and without governor
++        acts = random.Random(seed ^ 0x5EED)                    # whether a request makes mailbox calls
++        mean_service = MEAN_TOKENS * GPU_SECONDS_PER_TOKEN
++        t_next = 0.0
++        while env.now < horizon:
++            tokens = max(10, int(sizes.expovariate(1.0 / MEAN_TOKENS)))
++            gap = sizes.expovariate(OPEN_LOAD / mean_service)
++            n_act = self._actions(acts)
++            if mode == "open":
++                t_next += gap
++                if t_next > env.now:
++                    yield env.timeout(t_next - env.now)
++            # open mode: latency runs from the arrival, so a request that finds the slot busy
++            # (the previous one ran long, or the governor stalled it) carries its queueing delay
++            arrived = t_next if mode == "open" else env.now
++            req = slot.request()
++            yield req
++            service = tokens * GPU_SECONDS_PER_TOKEN
++            if self.governed and n_act:
++                part = service / (n_act + 1)
++                for _ in range(n_act):                         # a mailbox call and a ticket mint block the issuing slot
++                    yield env.timeout(part)
++                    t0 = env.now
++                    yield from self.fw_do(COST_S["mailbox"] + COST_S["ticket"])
++                    self.stall_s += env.now - t0
++                yield env.timeout(part)
++            else:
++                yield env.timeout(service)
++            done_gpu = env.now
++            self.tokens += tokens
++            if not self.governed:
++                slot.release(req)
++                lat.append(done_gpu - arrived)
++                added.append(0.0)
++                continue
++            t0 = env.now
++            yield from self.fw_do(pol.log_write_s)             # the record is appended to the log
++            ready = env.now
++            self.stall_s += ready - t0                         # the log write is on the slot's path
++            if pol.gate:
++                ev = env.event()
++                self.pending.append((ev, ready))               # the window's seal will succeed it
++                slot.release(req)                              # the slot is free for the next request now
++                if pol.hold_slot:
++                    # worst case: the slot idles for the receipt, so that wait IS throughput loss
++                    yield ev
++                    released = self.env.now
++                    self.stall_s += released - ready
++                    lat.append(released - arrived)
++                    added.append(released - done_gpu)
++                    self.receipt_waits.append(released - done_gpu)
++                else:
++                    # plan of record: the slot is freed; the receipt is waited on off the slot's
++                    # path, so it adds latency to the response but not throughput to the GPU
++                    self.env.process(self._receipt_release(ev, done_gpu, arrived, lat, added))
++            else:
++                # no gate: the response is released at the log write; the receipt trails it
++                slot.release(req)
++                lat.append(ready - arrived)
++                added.append(0.0)
++                self.pending.append((env.event(), ready))
++
++    def _actions(self, rng: random.Random) -> int:
++        a = self.pol.actions_per_response
++        n = int(a)
++        return n + (1 if rng.random() < a - n else 0)
++
++
++def run_one(pol: Policy, mode: str, governed: bool, horizon: float, seed: int = 1) -> dict:
++    env = simpy.Environment()
++    lat: list[float] = []
++    added: list[float] = []
++    chips = [Chip(env, i, pol, governed, random.Random(seed + i)) for i in range(pol.governors)]
++    for c in chips:
++        if governed:
++            env.process(c.window_loop(c.rng.random() * pol.window_s))
++            env.process(c.heartbeats(c.rng.random() * HEARTBEAT_PERIOD_S))
++            if pol.edition_change:
++                env.process(c.edition_change(horizon / 2))
++        for s in range(SLOTS_PER_CHIP):
++            env.process(c.slot_loop(s, horizon, mode, lat, added, seed * 100003 + c.idx * 64 + s))
++    env.run(until=horizon)
++    slot_s = pol.governors * SLOTS_PER_CHIP * horizon
++    waits = sorted(w for c in chips for w in c.receipt_waits)
++    return {
++        "lat": lat, "added": added, "waits": waits,
++        "tokens": sum(c.tokens for c in chips),
++        "stall_pct": 100.0 * sum(c.stall_s for c in chips) / slot_s,
++        "engine_util_pct": 100.0 * max(c.engine_busy_s for c in chips) / horizon,
++        "fw_util_pct": 100.0 * max(c.fw_busy_s for c in chips) / horizon,
++        "requests": len(lat),
++    }
++
++
++def pct(xs: list[float], q: float) -> float:
++    if not xs:
++        return 0.0
++    xs = sorted(xs)
++    return xs[min(len(xs) - 1, int(q * len(xs)))]
++
++
++@lru_cache(maxsize=None)
++def measure(pol: Policy, horizon: float = 30.0, open_horizon: float = 30.0, seed: int = 1) -> dict:
++    """Throughput lost and tail latency added for one policy.
++
++    Throughput lost is *measured*: the tokens the governed saturated run produces below the no-
++    governor baseline, common random numbers. The bookkeeping stall share is reported beside it as
++    a cross-check; the two agree because the only stalls are the ones that reduce the token count.
++    """
++    sat_g = run_one(pol, "saturated", True, horizon, seed)
++    sat_b = run_one(pol, "saturated", False, horizon, seed)
++    open_g = run_one(pol, "open", True, open_horizon, seed)
++    open_b = run_one(pol, "open", False, open_horizon, seed)
++    base_tokens = sat_b["tokens"]
++    gov_tokens = sat_g["tokens"]
++    throughput = 100.0 * (base_tokens - gov_tokens) / base_tokens if base_tokens else 0.0
++    return {
++        "policy": pol,
++        "overhead_pct": throughput,
++        "stall_pct": sat_g["stall_pct"],
++        "tokens_governed": gov_tokens,
++        "tokens_baseline": base_tokens,
++        "engine_util_pct": sat_g["engine_util_pct"],
++        "fw_util_pct": sat_g["fw_util_pct"],
++        "p99_latency_s": pct(open_g["lat"], 0.99),
++        "p99_latency_base_s": pct(open_b["lat"], 0.99),
++        "p99_added_s": pct(open_g["lat"], 0.99) - pct(open_b["lat"], 0.99),
++        "p99_receipt_wait_s": pct(open_g["waits"], 0.99),
++        "max_receipt_wait_s": max(open_g["waits"], default=0.0),
++        "requests": open_g["requests"],
++    }
++
++
++def crossing(points: list[tuple[float, float]], level: float = ONE_PERCENT):
++    """First x where y reaches ``level``, linearly interpolated; None if it never does."""
++    for (x0, y0), (x1, y1) in zip(points, points[1:]):
++        if y0 < level <= y1:
++            return x0 + (level - y0) * (x1 - x0) / (y1 - y0)
++    return points[0][0] if points and points[0][1] >= level else None
++
++
++ACTION_AXIS = (0.05, 5, 20, 40, 80, 160)           # mailbox calls per response
++WINDOW_AXIS = (0.020, 0.030, 0.050, 0.100, 0.200)  # seconds, serviceable above the 17 ms signature
++
++
++@lru_cache(maxsize=None)
++def sweep_actions(base: Policy = PLAN_OF_RECORD, horizon: float = 10.0) -> list[tuple[float, float]]:
++    return [(a, run_one(replace(base, actions_per_response=a), "saturated", True, horizon)["stall_pct"])
++            for a in ACTION_AXIS]
++
++
++@lru_cache(maxsize=None)
++def sweep_window_held(horizon: float = 10.0) -> list[tuple[float, float]]:
++    """The worst case: the slot is held until the receipt. Overhead against the window."""
++    return [(w, run_one(Policy(window_s=w, hold_slot=True), "saturated", True, horizon)["stall_pct"])
++            for w in WINDOW_AXIS]
++
++
++@lru_cache(maxsize=None)
++def sensitivity(base: Policy = PLAN_OF_RECORD, horizon: float = 10.0) -> list[tuple[str, float]]:
++    """The three assumptions named in docs/12, each ten times its nominal value. None moves the
++    plan of record off the sub-one-percent figure."""
++    return [
++        ("log write 10x", run_one(replace(base, log_write_s=10 * base.log_write_s), "saturated", True, horizon)["stall_pct"]),
++        ("merkle root 10x", run_one(replace(base, merkle_s=10 * base.merkle_s), "saturated", True, horizon)["stall_pct"]),
++        ("heartbeat 10x", run_one(replace(base, heartbeat_s=10 * base.heartbeat_s), "saturated", True, horizon)["stall_pct"]),
++    ]
++
++
++def main() -> None:
++    p = PLAN_OF_RECORD
++    r = measure(p)
++    print(f"{p.governors} governors x {SLOTS_PER_CHIP} slots = {p.governors*SLOTS_PER_CHIP} GPUs; "
++          f"signature {SIGN_S*1e3:.1f} ms; edition change with revocation at mid-run")
++    print(f"plan of record ({p.label()}), serviceable={p.serviceable}")
++    print(f"  throughput lost (measured)      {r['overhead_pct']:.4f} %  "
++          f"(governed {r['tokens_governed']:,} vs baseline {r['tokens_baseline']:,} tokens)")
++    print(f"  cross-check: stall share        {r['stall_pct']:.4f} %")
++    print(f"  p99 added latency               {r['p99_added_s']*1e3:.1f} ms  "
++          f"(p99 {r['p99_latency_s']*1e3:.0f} ms vs {r['p99_latency_base_s']*1e3:.0f} ms without the governor)")
++    print(f"  p99 receipt wait                {r['p99_receipt_wait_s']*1e3:.1f} ms "
++          f"(idle-core bound {(p.window_s+SIGN_S)*1e3:.0f} ms; max seen {r['max_receipt_wait_s']*1e3:.1f} ms)")
++    print(f"  busiest engine / firmware core  {r['engine_util_pct']:.1f} % / {r['fw_util_pct']:.3f} %")
++    r0 = measure(replace(p, edition_change=False))
++    print(f"  without the edition change      max receipt wait {r0['max_receipt_wait_s']*1e3:.1f} ms, "
++          f"p99 added {r0['p99_added_s']*1e3:.1f} ms, throughput lost {r0['overhead_pct']:.4f} %")
++    ed = edition_firmware_s()
++    print(f"  one edition change              {ed*1e3:.0f} ms of firmware per chip; "
++          f"one a second is {ed*100:.1f} % of the core")
++    pts = sweep_actions()
++    print("policy sweep 1, mailbox calls per response (plan of record otherwise, 10 s; stall share of slot time):")
++    for a, o in pts:
++        print(f"  actions/response={a:>6g}  stall share={o:.4f} %")
++    c = crossing(pts)
++    if c is not None:
++        mult = round(c / p.actions_per_response / 100) * 100
++        print(f"  crosses 1 percent at about {c:.0f} mailbox calls per response (about {mult:,}x the reference)")
++    else:
++        print("  never crosses 1 percent on this axis")
++    held = sweep_window_held()
++    print("policy sweep 2, the slot held until the receipt, by batch window (10 s):")
++    for w, o in held:
++        print(f"  window={w*1e3:>4.0f} ms  serviceable={replace(p, window_s=w).serviceable!s:5}  stall share={o:.2f} %")
++    ok = [w for w, o in held if o < ONE_PERCENT and replace(p, window_s=w).serviceable]
++    print("  slot-held release stays under 1 percent at: " + (", ".join(f"{w*1e3:g} ms" for w in ok) if ok
++          else "no serviceable window (above 1 percent at every serviceable policy)"))
++    sens = sensitivity()
++    print("sensitivity, each named assumption 10x (plan of record otherwise, 10 s):")
++    for name, o in sens:
++        print(f"  {name:16s}  stall share={o:.4f} %")
++    moved = [n for n, o in sens if o >= ONE_PERCENT]
++    print("  none moves the plan of record off the sub-one-percent figure"
++          if not moved else f"  {', '.join(moved)} move it off the figure")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/tests/test_deploy_overhead.py b/tests/test_deploy_overhead.py
+new file mode 100644
+index 0000000..9159b86
+--- /dev/null
++++ b/tests/test_deploy_overhead.py
+@@ -0,0 +1,164 @@
++"""N1: the whole-deployment overhead (docs/12). 72 governors, eight slots each, in a
++discrete-event simulation. The plan of record must cost under one percent of throughput; the
++test prints where each policy axis crosses one percent. The disproof ("above one percent at
++every serviceable policy") holds for the slot-held release and does *not* hold for the plan of
++record, which is the real finding. Throughput lost is measured as tokens governed below baseline,
++not a bookkeeping sum."""
++from dataclasses import replace
++
++from govsim.bench import BATCH_WINDOW_S, GPU_SECONDS_PER_TOKEN, SIGN_S, SLOTS_PER_CHIP
++from govsim.deploy import (ACTIONS_PER_RESPONSE, HEARTBEAT_FANOUT_S, HEARTBEAT_PERIOD_S, LOG_WRITE_S,
++                           MERKLE_S, MEAN_TOKENS, ONE_PERCENT, PLAN_OF_RECORD, Policy,
++                           crossing, edition_firmware_s, measure, run_one, sensitivity,
++                           sweep_actions, sweep_window_held)
++
++
++def test_plan_of_record_costs_under_one_percent_and_tail_is_bounded():
++    p = PLAN_OF_RECORD
++    assert p.governors == 72 and p.serviceable
++    r = measure(p)                                   # 30 s, same as main and the docs/12 results table
++    print(f"\nplan of record {p.label()}: measured overhead {r['overhead_pct']:.4f} %, "
++          f"p99 added {r['p99_added_s']*1e3:.1f} ms, p99 receipt wait {r['p99_receipt_wait_s']*1e3:.1f} ms")
++    assert r["overhead_pct"] < ONE_PERCENT, r        # measured throughput loss, not a bookkeeping sum
++    assert r["engine_util_pct"] < 50.0, r
++    assert r["fw_util_pct"] < ONE_PERCENT, r
++    # the 67 ms bound of docs/04 §9 is for an idle firmware core at the window edge; with the mid-run
++    # edition change the worst receipt waits behind its firmware, so the realistic bound adds it
++    assert r["max_receipt_wait_s"] < p.window_s + SIGN_S + edition_firmware_s(), r
++    # and with no edition change the ideal bound holds
++    r0 = measure(replace(p, edition_change=False))
++    assert r0["max_receipt_wait_s"] < p.window_s + SIGN_S + 0.005, r0
++    assert 0 <= r["p99_added_s"] < 0.2, r
++
++
++def test_throughput_lost_is_measured_against_the_baseline():
++    """The headline number is tokens the governed run produces below the no-governor baseline in the
++    same simulation, not the stall share alone. The two must agree."""
++    r = measure(PLAN_OF_RECORD)
++    print(f"\nthroughput measured against the baseline: "
++          f"governed {r['tokens_governed']:,} vs baseline {r['tokens_baseline']:,} tokens "
++          f"= {r['overhead_pct']:.4f} % lost")
++    assert r["tokens_baseline"] > 0 and r["tokens_governed"] > 0, r
++    assert r["tokens_governed"] < r["tokens_baseline"], r       # the governor never speeds anything up
++    # the measured loss and the bookkeeping stall share agree to within 0.003 percentage points
++    # (0.0151 against 0.0168: the stall share also counts slot time inside requests unfinished at the horizon)
++    assert abs(r["overhead_pct"] - r["stall_pct"]) < 0.003, r
++    assert r["overhead_pct"] < ONE_PERCENT, r
++
++
++def test_disproof_is_not_met_for_the_plan_of_record():
++    """The brief's disproof ("above one percent at every serviceable policy") is about the plan of
++    record's family. The plan of record, read as the slot freed while the receipt is pending (docs/12's assumption,
++    not stated in docs/04), is *under* one percent; the
++    slot-held variant is *above* one percent at every serviceable window. Both sides, shown."""
++    plan = measure(PLAN_OF_RECORD)
++    assert plan["overhead_pct"] < ONE_PERCENT, plan          # plan of record: NOT above one percent
++    held = dict(sweep_window_held())
++    for w, o in held.items():
++        if replace(PLAN_OF_RECORD, window_s=w).serviceable:
++            assert o > ONE_PERCENT, (w, o)                   # slot-held: above one percent, every serviceable window
++    print(f"\nplan of record {plan['overhead_pct']:.4f} % (disproof not met); "
++          f"slot-held serviceable windows all > 1 %: "
++          + ", ".join(f"{w*1e3:g}ms:{o:.1f}%" for w, o in held.items()
++                      if replace(PLAN_OF_RECORD, window_s=w).serviceable))
++
++
++def test_where_the_mailbox_load_crosses_one_percent():
++    pts = sweep_actions()                                  # 10 s, same as main and the docs/12 sweep
++    by_a = dict(pts)
++    expect = {0.05: 0.02, 5: 0.11, 20: 0.38, 40: 0.73, 80: 1.45, 160: 3.01}
++    for a, e in expect.items():
++        assert abs(by_a[a] - e) <= max(0.02, 0.1 * e), (a, by_a[a], e)
++    c = crossing(pts)
++    mult = round(c / PLAN_OF_RECORD.actions_per_response / 100) * 100
++    print("\noverhead by mailbox calls per response: " + ", ".join(f"{a:g}: {o:.3f}%" for a, o in pts))
++    print(f"crosses 1 percent at about {c:.0f} mailbox calls per response, "
++          f"about {mult:,}x the reference (the plan of record makes {PLAN_OF_RECORD.actions_per_response:g})")
++    assert 40 < c < 70, c                                  # ~55, a thousand-fold the reference
++    assert mult == 1100, mult
++
++
++def test_slot_held_until_receipt_is_above_one_percent_at_every_serviceable_window():
++    pts = sweep_window_held()
++    print("\nslot held until receipt, overhead by window: " + ", ".join(f"{w*1e3:g} ms: {o:.1f}%" for w, o in pts))
++    for w, o in pts:
++        if replace(PLAN_OF_RECORD, window_s=w).serviceable:
++            assert o > ONE_PERCENT, (w, o)
++
++
++def test_named_assumptions_do_not_move_the_conclusion():
++    """docs/12 names three costs (log write, Merkle root, heartbeat fan-out) that are not in
++    bench.py. Ten times any one still leaves the plan of record under one percent."""
++    rows = dict(sensitivity())
++    print("\nsensitivity, each named assumption 10x: " + ", ".join(f"{n}={o:.3f}%" for n, o in rows.items()))
++    assert all(o < ONE_PERCENT for o in rows.values()), rows
++    assert set(rows) == {"log write 10x", "merkle root 10x", "heartbeat 10x"}, rows
++
++
++def test_governor_adds_nothing_when_it_is_absent():
++    base = run_one(replace(PLAN_OF_RECORD, governors=4), "saturated", False, 5.0)
++    assert base["stall_pct"] == 0.0 and base["tokens"] > 0
++
++
++def test_numbers_used_in_docs_12_are_computed():
++    """Every number docs/12 prints is pinned here, not typed: the "no number without an artifact"
++    rule. The runs are deterministic (fixed seeds), so the tolerances are for the Python version
++    and for the rounding in the doc."""
++    assert PLAN_OF_RECORD.governors * SLOTS_PER_CHIP == 576           # 72 governors x 8 slots
++    assert abs(SIGN_S * 1e3 - 17) < 0.5                               # the 17 ms signature
++    assert BATCH_WINDOW_S * 1e3 == 50.0                               # the 50 ms batch window
++    assert abs(MEAN_TOKENS * GPU_SECONDS_PER_TOKEN * 1e3 - 250) < 1e-9  # 500 tokens at 2000/s = 250 ms service
++    assert ACTIONS_PER_RESPONSE == 0.05                               # the reference workload
++    assert abs(LOG_WRITE_S * 1e6 - 30) < 1e-9                        # the 30 us log append
++    assert abs(MERKLE_S * 1e6 - 20) < 1e-9                           # the 20 us Merkle root
++    assert HEARTBEAT_FANOUT_S / 5e-6 == 1 + SLOTS_PER_CHIP           # 5 us x 9
++    ed = edition_firmware_s()
++    assert abs(ed * 1e3 - 18) < 1.0                                   # one edition change, 18 ms of firmware
++    assert ed / HEARTBEAT_PERIOD_S * 100 < 2.0                        # one a second is under two percent of the core
++    # the results table (30 s), the same measure() main prints
++    r = measure(PLAN_OF_RECORD)
++    assert abs(r["overhead_pct"] - 0.0151) < 0.002                   # throughput lost, measured
++    assert abs(r["tokens_governed"] / 34_273_417 - 1) < 1e-3         # the token counts in the table
++    assert abs(r["tokens_baseline"] / 34_278_595 - 1) < 1e-3
++    assert abs(r["stall_pct"] - 0.0168) < 0.002                      # the cross-check stall share
++    assert abs(r["p99_latency_s"] * 1e3 - 3337) < 20                 # p99, queueing included
++    assert abs(r["p99_latency_base_s"] * 1e3 - 3291) < 20            # without the governor
++    assert abs(r["p99_added_s"] * 1e3 - 45.6) < 5                    # the p99 added latency
++    assert abs(r["p99_receipt_wait_s"] * 1e3 - 66.5) < 3             # the p99 receipt wait
++    assert abs(r["max_receipt_wait_s"] * 1e3 - 68.4) < 1             # the max, with the edition change
++    assert abs(r["engine_util_pct"] - 28.5) < 1.5                    # busiest engine
++    assert abs(r["fw_util_pct"] - 0.209) < 0.02                      # busiest firmware core
++    r0 = measure(replace(PLAN_OF_RECORD, edition_change=False))
++    assert abs(r0["max_receipt_wait_s"] * 1e3 - 67.0) < 0.5          # without it: window plus signature
++    assert 0 < r["max_receipt_wait_s"] - r0["max_receipt_wait_s"] < 0.005   # the edition change adds ~1.4 ms, one firmware op, not 18 ms
++
++
++def test_open_loop_latency_includes_queueing():
++    """A request that arrives while the slot is busy waits, and the wait counts. At 70 percent load
++    the p99 without any governor is far above the ~1.1 s of service time alone."""
++    r = measure(PLAN_OF_RECORD)
++    assert r["p99_latency_base_s"] > 2.0, r                          # queueing, not just the service-time tail
++    assert 0 <= r["p99_added_s"] < 0.1, r                            # the governor adds little on top of it
++
++
++def test_slot_held_table_in_docs_12():
++    expect = {0.020: 9.9, 0.030: 11.4, 0.050: 14.3, 0.100: 21.2, 0.200: 32.9}
++    got = dict(sweep_window_held())
++    for w, e in expect.items():
++        assert abs(got[w] - e) <= 0.3, (w, got[w], e)
++
++
++def test_sensitivity_figures_in_docs_12():
++    rows = dict(sensitivity())
++    for name, e in {"log write 10x": 0.134, "merkle root 10x": 0.025, "heartbeat 10x": 0.025}.items():
++        assert abs(rows[name] - e) <= 0.01, (name, rows[name], e)
++
++
++def test_mailbox_sweep_stall_share_matches_measured_token_loss():
++    """The sweep tables report the stall share of slot time. At 80 calls per response (past the
++    crossing) the measured token loss against the baseline is within 0.35 points of it (1.71 against 1.45), so the crossing is not an
++    artefact of the bookkeeping."""
++    r = measure(replace(PLAN_OF_RECORD, actions_per_response=80), 10.0, 2.0)
++    print(f"\n80 calls/response: token loss {r['overhead_pct']:.3f} %, stall share {r['stall_pct']:.3f} %")
++    assert abs(r["overhead_pct"] - r["stall_pct"]) < 0.35, r      # 1.71 against 1.45 at 10 s
++    assert r["overhead_pct"] > ONE_PERCENT, r

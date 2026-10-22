@@ -1,0 +1,157 @@
+{
+ "id": "L6",
+ "verdict": "reject",
+ "trusted": true,
+ "verifier_ok": false,
+ "verifier_blocks": 2,
+ "review_blocks": 4,
+ "unsupported_claims": 5,
+ "unsupported_soft": 1,
+ "bad_citations": [],
+ "review_cost_usd": 0.6281097999999999,
+ "review_turns": 5,
+ "review_exit": 0,
+ "review": {
+  "verdict": "reject",
+  "summary": "The branch adds only govsim/mutants.py (423 lines). The acceptance file tests/test_mutants.py does not exist, so acceptance fails (exit 4).\nNo Makefile target, no results/mutants.md and no weekly CI job are in the diff, so every brief acceptance item except \"a mutator exists\" is missing.\nThe agent summary is empty and gives no evidence that the mutator has ever run or killed anything.\nThe mutator itself has gaps: GtE is never flipped (line 59), only single-statement refusal guards count as checks (lines 144-154), and any pytest ERROR line counts as a kill.\nIt is unproven that mutated copies are the code the tests import (suite run from the copy's cwd, tests path under ROOT).\nOpen question: this is a partial draft, not a gate. Redo it with the test, make target, report and CI, and with the mutator run against the real suite.",
+  "findings": [
+   {
+    "kind": "test_integrity",
+    "severity": "block",
+    "file": "govsim/mutants.py",
+    "line": 52,
+    "detail": "IGNORE refers to tests/test_mutants.py, the acceptance file, which is not in the diff or the checkout. The acceptance command exits 4 (file not found), per acceptance.log:1 and verify.json. Nothing tests the gate."
+   },
+   {
+    "kind": "scope",
+    "severity": "block",
+    "file": "govsim/mutants.py",
+    "line": 1,
+    "detail": "The only change is a new file under govsim/, which the issue's owned paths do not include (verify.json scope finding). The brief's deliverables (make mutants target, results/mutants.md, weekly CI workflow, tests/test_mutants.py) are all absent from the diff."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "block",
+    "file": "govsim/mutants.py",
+    "line": 13,
+    "detail": "The docstring says that `make mutants` writes results/mutants.md and that CI runs it weekly. No Makefile change, no report file and no workflow are in the diff, so the claim is not shown."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "block",
+    "file": "govsim/mutants.py",
+    "line": 323,
+    "detail": "The report text claims results (killed/survived counts, a gate that fails the build) but no committed artifact shows a run. The acceptance criterion 'zero surviving check-removing mutants' has no evidence; summary.md is empty."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "govsim/mutants.py",
+    "line": 59,
+    "detail": "_FLIP has the key 'Ge', but the ast class is 'GtE', so >= is never flipped. The docstring (line 21-22) promises the classic operators 'and the rest'. Coverage is silently smaller than described."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "govsim/mutants.py",
+    "line": 150,
+    "detail": "_check_sites only treats an `if` with a single-statement refusal body and no else as a check. Multi-statement guards, `continue` or `break` guards and checks written as other constructs are never mutated, so 'zero surviving check-removing mutants' would be a weaker claim than the brief's. The reason for the narrow definition is not shown."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "govsim/mutants.py",
+    "line": 278,
+    "detail": "Any output line containing 'ERROR' or 'FAILED' counts as a kill, and the fallback 'a test failed' covers any nonzero exit (collection errors, usage errors). A mutant that breaks collection is counted killed without a behavioural test failing, which can inflate the kill score. Nothing checks that the unmutated copy passes the suite in the same setup (a baseline)."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "govsim/mutants.py",
+    "line": 270,
+    "detail": "The suite is run with cwd=copy_dir but the tests path is ROOT/tests. Whether the tests import the mutated govsim copy or the real one at ROOT is not shown by any test. If it is the real one, every mutant would survive or the gate would be vacuous."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "govsim/mutants.py",
+    "line": 239,
+    "detail": "Mutants that time out or fail to import are classed 'invalid' and excluded from the score (line 312). A check-removing mutant that hangs the suite is therefore never counted as a survivor, nor as killed."
+   }
+  ],
+  "claims": [
+   {
+    "claim": "The second audit found and fixed twenty surviving mutants by hand (module docstring).",
+    "where": "code",
+    "evidence": "No artifact of the second audit is in the diff; origin of the number is not found.",
+    "supported": false
+   },
+   {
+    "claim": "`make mutants` runs the gate and writes results/mutants.md; CI runs it weekly.",
+    "where": "code",
+    "evidence": "No Makefile, results/mutants.md or workflow in the diff.",
+    "supported": false
+   },
+   {
+    "claim": "Three mutant classes (remove_check, flip, skip_log) are implemented, each a single change to one file.",
+    "where": "code",
+    "evidence": "_check_sites, _flip_sites and _log_sites exist at lines 144-174; the flip table is wrong for >= (line 59) and no test exercises them.",
+    "supported": false
+   },
+   {
+    "claim": "The model is never mutated in place; each worker mutates a private copy.",
+    "where": "code",
+    "evidence": "_work_dir copies govsim to a temp dir (line 220-225); that the suite then imports the copy is not tested.",
+    "supported": false
+   },
+   {
+    "claim": "The gate passes only when no check-removing mutant survives; the report states killed/survived counts.",
+    "where": "code",
+    "evidence": "gate()/main() return code from survivors (lines 395-425), but there is no run output, no report and no test in the diff.",
+    "supported": false
+   },
+   {
+    "claim": "Acceptance: python3 -m pytest -q tests/test_mutants.py passes.",
+    "where": "summary",
+    "evidence": "acceptance.log: file or directory not found, exit 4. Summary is empty.",
+    "supported": false
+   }
+  ]
+ },
+ "verify": {
+  "id": "L6",
+  "branch": "exp/l6",
+  "base": "main",
+  "head": "51b1203",
+  "commits": 1,
+  "agent_trailers": 1,
+  "files": 1,
+  "added": 423,
+  "removed": 0,
+  "ok": false,
+  "findings": [
+   {
+    "severity": "block",
+    "finding": "a file outside the issue's owned paths changed",
+    "where": "govsim/mutants.py"
+   },
+   {
+    "severity": "block",
+    "finding": "the acceptance command fails in a clean checkout of the branch (exit 4)",
+    "where": "python3 -m pytest -q tests/test_mutants.py"
+   }
+  ],
+  "runs": {
+   "suite": {
+    "command": "python3 -m pytest -x tests",
+    "exit": 0,
+    "tail": "........................................................................ [ 36%]\n........................................................................ [ 72%]\n........................................................                 [100%]\n200 passed in 2.81s\n"
+   },
+   "acceptance": {
+    "command": "python3 -m pytest -q tests/test_mutants.py",
+    "exit": 4,
+    "tail": "\nERROR: file or directory not found: tests/test_mutants.py\n\n"
+   }
+  }
+ }
+}

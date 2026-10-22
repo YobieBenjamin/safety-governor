@@ -1,0 +1,46 @@
+{
+ "id": "C3",
+ "branch": "exp/c3",
+ "base": "main",
+ "head": "2f7579a",
+ "commits": 3,
+ "agent_trailers": 3,
+ "files": 3,
+ "added": 124,
+ "removed": 1,
+ "ok": true,
+ "findings": [
+  {
+   "severity": "warn",
+   "finding": "a placeholder marker in added code",
+   "where": "govsim/bench.py:41: # UNVERIFIED PLACEHOLDER: the 10,000,000 figure has NO checked source at revisio"
+  },
+  {
+   "severity": "warn",
+   "finding": "a placeholder marker in added code",
+   "where": "govsim/bench.py:48: MLDSA65_SIGN_CYCLES = 10_000_000           # UNVERIFIED placeholder: Cortex-M4 p"
+  },
+  {
+   "severity": "warn",
+   "finding": "a placeholder marker in added code",
+   "where": "govsim/bench.py:105: src = \"sourced\" if MLDSA65_COST_SOURCED else \"UNVERIFIED placeholder, no checked"
+  },
+  {
+   "severity": "warn",
+   "finding": "a placeholder marker in added code",
+   "where": "tests/test_hybrid_signature.py:2: engine. ML-DSA's cycle count on OTBN is an UNVERIFIED placeholder (see govsim/be"
+  }
+ ],
+ "runs": {
+  "suite": {
+   "command": "python3 -m pytest -x tests",
+   "exit": 0,
+   "tail": "........................................................................ [ 34%]\n........................................................................ [ 69%]\n................................................................         [100%]\n208 passed in 17.18s\n"
+  },
+  "acceptance": {
+   "command": "make bench && python3 -m pytest -q tests/test_hybrid_signature.py",
+   "exit": 0,
+   "tail": "python3 -m govsim.cli bench\nsignature: ECDSA P-384 on OTBN at 100 MHz = 1,697,985 cycles = 17.0 ms (OpenTitan's published figure); batch window 50 ms; 8 slots per governor chip\nrack        tokens=  500,000  firmware=   23.8 ms of gpu= 250.0 s (0.010%)  engine: 54% unbatched -> 34% batched  record latency <= 67 ms  ops={'mailbox': 1100, 'sign': 1000, 'heartbeat': 50, 'fabric_msg': 100, 'fabric_rx': 300, 'action': 50, 'ticket': 50}\nintegrated  tokens=  500,000  firmware=   23.8 ms of gpu= 250.0 s (0.010%)  engine: 54% unbatched -> 34% batched  record latency <= 67 ms  ops={'output_bytes': 64000, 'mailbox': 1100, 'sign': 1000, 'heartbeat': 50, 'fabric_msg': 100, 'fabric_rx': 300, 'action': 50, 'ticket': 50}\nhybrid (P-384 + ML-DSA-65, both per batch): 117 ms per batch (ML-DSA-65 10,000,000 cycles, Cortex-M4 pqm4 figure, UNVERIFIED placeholder, no checked source; re-check pqm4 and the M4->OTBN scaling; OTBN 1.0x assumed); engine 234% at the 50 ms window (cannot keep up) -> 47% at a 250 ms window (keeps up); record latency <= 367 ms. Disproof did not hold: a window under 1 s keeps the one engine under 100 percent, conditional on the unverified ML-DSA figure. Only signing is counted; other uses of the engine are not modelled.\nshort responses (100 tokens): engine 272% unbatched, which cannot keep up, -> 34% batched (why the spec batches, docs/04 \u00a79)\n........                                                                 [100%]\n"
+  }
+ }
+}

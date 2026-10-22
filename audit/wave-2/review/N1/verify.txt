@@ -1,0 +1,8 @@
+N1 exp/n1 (c7b9882): 3 files, +664 -0, 3 commits (3 with agent trailers)
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/12-deployment-overhead.md:7: 46
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/12-deployment-overhead.md:45: 3.3
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/12-deployment-overhead.md:45: 1.15
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/12-deployment-overhead.md:64: 0.017
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/12-deployment-overhead.md:65: 46
+  [warn] a number added to a document appears in no added code, test, data or result of this branch: docs/12-deployment-overhead.md:69: 0.21
+  verdict: nothing blocks

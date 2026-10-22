@@ -1,0 +1,25 @@
+{
+ "id": "P3",
+ "branch": "exp/p3",
+ "base": "main",
+ "head": "134c4f0",
+ "commits": 3,
+ "agent_trailers": 3,
+ "files": 3,
+ "added": 226,
+ "removed": 0,
+ "ok": true,
+ "findings": [],
+ "runs": {
+  "suite": {
+   "command": "python3 -m pytest -x tests",
+   "exit": 0,
+   "tail": "........................................................................ [ 34%]\n........................................................................ [ 68%]\n...................................................................      [100%]\n211 passed in 2.80s\n"
+  },
+  "acceptance": {
+   "command": "python3 -m pytest -q tests/test_covert_budget.py",
+   "exit": 0,
+   "tail": "..........                                                               [100%]\n"
+  }
+ }
+}

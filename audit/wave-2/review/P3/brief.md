@@ -1,0 +1,21 @@
+# P3 · Covert-channel budget: the maximum rate at which weights could leak through permitted traffic under the byte and rate budgets, as a number per hour
+
+**Goal.** A reference monitor controls what is permitted to flow, not what can be inferred from the pattern of permitted traffic. Extend `tests/test_h10_leakage.py` with a model of the tightest serviceable policy (byte budgets per capability, rate windows, response budgets) and compute the maximum bytes per hour an adversary controlling the model could move out through allowed channels (response length, timing of permitted requests, choice among allowed peers). State the number and the policy in `docs/05-threat-model.md`.
+
+**Acceptance.** A test pins the number and fails if a policy change raises it; the threat model states it.
+
+**Disproof.** The rate would exfiltrate a frontier model's weights in practical time under any policy that still serves: then budgets are not a defence against exfiltration and the design must say so.
+
+**Budget.** One cloud agent, about 80k tokens.
+
+**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_covert_budget.py`
+
+## Rules for this run
+- You are in a git worktree on branch `exp/p3`; it is the only place you write. Run commands from this directory with relative paths; do not cd elsewhere.
+- The other repositories of the program are readable at: /Users/yb/safety /Users/yb/hardware-and-silicon. Never edit them: a change they need goes into `patches/<repo>/<file>.patch` here, with a note in your final summary.
+- Acceptance: `python3 -m pytest -q tests/test_covert_budget.py`. Run it at most three times. Stop when it passes, or after the third failure; then record exactly what fails in EXPERIMENTS.md (safety-governor) or in the hypothesis's section (safety), with the failing output.
+- Read only the files the brief names under Read first and the files you create. Do not read whole directories, do not run the full test suite (the acceptance command is enough), do not search the web, do not start sub-agents.
+- Never weaken, skip or delete an existing test. Do not refactor beyond the brief. No em dashes in anything you write.
+- Commit as you go with messages that name the issue (#9) and end with the line: Agent: wave 2, issue #9. Do not push, do not open a pull request; the launcher does both.
+- This run is capped at 40 turns and an estimated spend of $10. Keep the tree in a working, committed state at all times, so a cap mid-way still leaves usable work.
+- Finish with a summary of at most fifteen lines: what was built, what passes, what does not and why, open questions. It is posted on the issue as is.
