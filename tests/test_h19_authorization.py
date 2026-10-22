@@ -51,16 +51,68 @@ def test_a_key_listed_twice_counts_once(rack1):
     assert g.command("POLICY_PROPOSE", {"image": image})["why"] == reasons.POLICY_QUORUM
 
 
-def test_an_edition_that_raises_k_raises_the_floor(rack1):
+def _image(rack, version, **changes):
+    image = rack.make_policy_image(version)
+    image.update(changes)
+    return image
+
+
+def _commit(rack, image, signers):
+    """Propose and commit on every governor, signed by ``signers``; the rack's version counter follows."""
+    signed = sign_policy(image, signers)
+    out = rack.change_epoch(signed)
+    if out["committed"]:
+        rack.policy_version = image["version"]
+    return out["committed"]
+
+
+def test_an_edition_that_raises_k_binds_the_next_change(rack1):
+    """The configuration in force decides: once an edition sets k = 4, the next change needs four of the
+    current keys. Three is refused; four is accepted, including a change back down to k = 3, because the
+    quorum in force may lower k as long as it stays at or above the manufacture floor."""
     g = rack1.nodes[0].governor
-    raised = rack1.make_policy_image(rack1.policy_version + 1)
-    raised["threshold"] = 4
-    rack1.policy_version += 1
-    raised = sign_policy(raised, rack1.governance[:4])
-    assert rack1.change_epoch(raised)["committed"]
-    assert g.fuses.governance_threshold == 4
-    lowered = sign_policy(rack1.make_policy_image(rack1.policy_version + 1), rack1.governance[:3])   # back to k = 3
-    assert g.command("POLICY_PROPOSE", {"image": lowered})["why"] == reasons.POLICY_QUORUM
+    assert _commit(rack1, _image(rack1, rack1.policy_version + 1, threshold=4), rack1.governance[:3])   # authorized by k = 3 in force
+    assert g.fuses.trusted_governance["threshold"] == 4
+    three = sign_policy(_image(rack1, rack1.policy_version + 1, threshold=3), rack1.governance[:3])
+    assert g.command("POLICY_PROPOSE", {"image": three})["why"] == reasons.POLICY_QUORUM
+    assert _commit(rack1, _image(rack1, rack1.policy_version + 1, threshold=3), rack1.governance[:4])   # four in force agree
+    assert g.fuses.trusted_governance["threshold"] == 3
+
+
+def test_the_current_quorum_can_rotate_the_governance_keys(rack1):
+    """Key rotation: three of the current keys sign an edition that names five new keys. After it, the old
+    keys authorize nothing and the new ones do, and a restart keeps it that way."""
+    g = rack1.nodes[0].governor
+    old = rack1.governance
+    new = [SigningKey.generate() for _ in range(5)]
+    rotated = _image(rack1, rack1.policy_version + 1, governance_keys=[k.public.hex for k in new], threshold=3)
+    assert _commit(rack1, rotated, old[:3])
+    assert g.fuses.trusted_governance["keys"] == [k.public.hex for k in new]
+    by_old = sign_policy(_image(rack1, rack1.policy_version + 1, governance_keys=[k.public.hex for k in new]), old[:5])
+    assert g.command("POLICY_PROPOSE", {"image": by_old})["why"] == reasons.POLICY_QUORUM      # retired keys count for nothing
+    by_new = sign_policy(_image(rack1, rack1.policy_version + 1, governance_keys=[k.public.hex for k in new]), new[:3])
+    assert g.command("POLICY_PROPOSE", {"image": by_new})["ok"]
+    g.restart()
+    assert g.policy["version"] == rotated["version"]                                            # the rotated edition reloads
+    assert g.command("POLICY_PROPOSE", {"image": by_old})["why"] == reasons.POLICY_QUORUM
+
+
+def test_fresh_keys_cannot_install_themselves(rack1):
+    """The attack the rotation rule must not open: an image that names attacker keys and is signed by
+    them. The fused hashes no longer gatekeep after the first edition, so this is refused only because
+    the signatures must come from the keys in force."""
+    g = rack1.nodes[0].governor
+    mine = [SigningKey.generate() for _ in range(5)]
+    image = sign_policy(_image(rack1, rack1.policy_version + 1, governance_keys=[k.public.hex for k in mine], threshold=3), mine)
+    assert g.command("POLICY_PROPOSE", {"image": image})["why"] == reasons.POLICY_QUORUM
+    assert g.fuses.trusted_governance["keys"] == [k.public.hex for k in rack1.governance]
+
+
+def test_the_quorum_in_force_cannot_go_below_the_manufacture_floor(rack1):
+    g = rack1.nodes[0].governor
+    assert g.fuses.governance_threshold == 3
+    low = sign_policy(_image(rack1, rack1.policy_version + 1, threshold=2), rack1.governance)      # every key signs, k = 2 asked for
+    assert g.command("POLICY_PROPOSE", {"image": low})["why"] == reasons.POLICY_QUORUM
 
 
 def test_the_fused_threshold_only_goes_up(rack1):
@@ -76,56 +128,70 @@ def _heartbeat_env(rack, seq_bump=1):
     return rack.heartbeat_key.sign({"type": "heartbeat", "seq": rack.hb_seq, "epoch": rack.epoch, "window_start": now - 1, "window_end": now + 5})
 
 
+def _halted_and_clearable(rack, g):
+    """Halt g and do everything a legitimate CLEAR needs (the cause logged and acknowledged by a
+    neighbour), so that the ONLY thing a test varies is the authorization on the CLEAR itself.
+    Each test then shows the right CLEAR succeeds, which proves its refusal was for that reason."""
+    assert rack.halt(g)["ok"] and g.cause == reasons.HALT_COMMANDED
+    rack.exchange_checkpoints()
+
+
+def _refused_then_control(rack, g, bad_env):
+    r = g.command("CLEAR", {}, bad_env)
+    assert not r["ok"] and r["why"] == reasons.CLEAR_UNAUTHORIZED, r
+    assert g.cause == reasons.HALT_COMMANDED                                   # still halted
+    assert rack.clear(g)["ok"] and g.cause is None                             # control: the right CLEAR, same setup, works
+
+
 def test_a_heartbeat_does_not_clear_a_halt(rack1):
     """The reported defect, reproduced: a legitimate heartbeat sent as CLEAR."""
     g = rack1.nodes[0].governor
-    assert rack1.halt(g)["ok"] and g.cause == reasons.HALT_COMMANDED
-    r = g.command("CLEAR", {}, _heartbeat_env(rack1))
-    assert not r["ok"] and r["why"] == reasons.CLEAR_UNAUTHORIZED
-    assert g.cause == reasons.HALT_COMMANDED                                 # still halted
+    _halted_and_clearable(rack1, g)
+    _refused_then_control(rack1, g, _heartbeat_env(rack1))
 
 
 def test_the_heartbeat_key_cannot_sign_a_clear(rack1):
     """Even typed as a clear and aimed at this chip: the heartbeat key only ever says alive."""
     g = rack1.nodes[0].governor
-    rack1.halt(g)
+    _halted_and_clearable(rack1, g)
     rack1.authority_seq += 1
     env = rack1.heartbeat_key.sign({"type": "clear", "seq": rack1.authority_seq, "epoch": rack1.epoch, "chip_id": g.chip_id,
                                     "expires_at": rack1.clock.now() + 30})
-    assert not g.command("CLEAR", {}, env)["ok"] and g.cause == reasons.HALT_COMMANDED
+    _refused_then_control(rack1, g, env)
 
 
 def test_a_halt_is_not_a_clear(rack1):
     g = rack1.nodes[0].governor
-    rack1.halt(g)
-    env = rack1._authority_env({"type": "halt", "rung": "HALT"}, g)
-    assert not g.command("CLEAR", {}, env)["ok"] and g.cause == reasons.HALT_COMMANDED
+    _halted_and_clearable(rack1, g)
+    _refused_then_control(rack1, g, rack1._authority_env({"type": "halt", "rung": "HALT"}, g))
 
 
 def test_a_clear_for_another_chip_is_refused():
+    """On a two-governor rack, where a CLEAR also needs a neighbour's acknowledgement: the setup gives it
+    one, so the refusal can only be the chip binding (the first version of this test passed for the
+    missing acknowledgement instead, which the evidence script caught)."""
     from govsim.cluster import build_rack
     rack = build_rack(2, "rack")
     rack.bring_up()
     a, b = rack.nodes[0].governor, rack.nodes[1].governor
-    rack.halt(a)
-    env_for_b = rack._authority_env({"type": "clear"}, b)
-    assert not a.command("CLEAR", {}, env_for_b)["ok"] and a.cause == reasons.HALT_COMMANDED
+    _halted_and_clearable(rack, a)
+    _refused_then_control(rack, a, rack._authority_env({"type": "clear"}, b))
 
 
 def test_an_expired_clear_is_refused(rack1):
     g = rack1.nodes[0].governor
-    rack1.halt(g)
+    _halted_and_clearable(rack1, g)
     env = rack1._authority_env({"type": "clear"}, g, ttl_s=30.0)
     rack1.clock.advance(31.0)
-    assert not g.command("CLEAR", {}, env)["ok"] and g.cause == reasons.HALT_COMMANDED
+    rack1.heartbeat()
+    _refused_then_control(rack1, g, env)
 
 
 def test_a_clear_good_for_a_day_is_refused(rack1):
     """An authorization cannot be banked: the expiry has a ceiling as well as a floor."""
     g = rack1.nodes[0].governor
-    rack1.halt(g)
-    env = rack1._authority_env({"type": "clear"}, g, ttl_s=86400.0)
-    assert not g.command("CLEAR", {}, env)["ok"]
+    _halted_and_clearable(rack1, g)
+    _refused_then_control(rack1, g, rack1._authority_env({"type": "clear"}, g, ttl_s=86400.0))
 
 
 def test_an_approval_does_not_clear_an_alarm(rack1):

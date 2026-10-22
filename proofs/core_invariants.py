@@ -40,8 +40,9 @@ The state. For every action a (an uninterpreted sort, so the proof is for any nu
   epoch              the current rules edition
   halted             the governor is in HALT
   heartbeat          the authority's heartbeat is live at the endpoint
-  kfuse              the fused governance threshold: the least number of distinct governance
-                     signatures any edition needs; at least one, and it only rises
+  kfuse              the governance threshold in force: how many distinct signatures from the keys
+                     in force the next edition needs; set by each committed edition, never below kfloor
+  kfloor             the floor fused at manufacture: at least one, and no step changes it
 
 The inputs the environment picks at each step, the adversary included:
   sigs               distinct valid governance signatures on the proposed edition (unforgeable, so
@@ -76,20 +77,21 @@ class State:
         self.halted = Const(f"halted_{tag}", BoolSort())
         self.heartbeat = Const(f"heartbeat_{tag}", BoolSort())
         self.kfuse = Const(f"kfuse_{tag}", IntSort())
+        self.kfloor = Const(f"kfloor_{tag}", IntSort())
 
     def vars(self):
-        return [self.allows, self.witness, self.ticket, self.used, self.executed, self.okay_at_issue, self.epoch, self.halted, self.heartbeat, self.kfuse]
+        return [self.allows, self.witness, self.ticket, self.used, self.executed, self.okay_at_issue, self.epoch, self.halted, self.heartbeat, self.kfuse, self.kfloor]
 
 
 def unchanged(s: State, t: State, *except_names: str):
-    names = ["allows", "witness", "ticket", "used", "executed", "okay_at_issue", "epoch", "halted", "heartbeat", "kfuse"]
+    names = ["allows", "witness", "ticket", "used", "executed", "okay_at_issue", "epoch", "halted", "heartbeat", "kfuse", "kfloor"]
     return And(*[getattr(s, n) == getattr(t, n) for n in names if n not in except_names])
 
 
 def init(s: State):
     a = Const("a0", Action)
     return And(
-        s.epoch >= 0, s.kfuse >= 1,
+        s.epoch >= 0, s.kfloor >= 1, s.kfuse >= s.kfloor,
         ForAll([a], And(s.ticket[a] == -1, Not(s.used[a]), Not(s.executed[a]), Not(s.okay_at_issue[a]))),
     )
 
@@ -109,10 +111,10 @@ def make_inputs(tag: str = "step"):
 
 
 def quorum_of(s: State, i: dict):
-    """What verify_policy does now: the image's threshold must be at least one and at least the fused
-    one, and the distinct valid signatures must reach the larger of the two."""
-    k = If(i["claimed_k"] > s.kfuse, i["claimed_k"], s.kfuse)
-    return And(i["claimed_k"] >= 1, i["claimed_k"] >= s.kfuse, i["sigs"] >= k)
+    """What verify_policy does now: the configuration in force authorizes its replacement. The distinct
+    valid signatures from the keys in force must reach the threshold in force; the image's own threshold,
+    which will govern the NEXT change, must be at least one and not below the manufacture floor."""
+    return And(i["sigs"] >= s.kfuse, i["claimed_k"] >= 1, i["claimed_k"] >= s.kfloor)
 
 
 def clear_auth_of(s: State, i: dict):
@@ -133,7 +135,7 @@ def step_list(s: State, t: State, i: dict, quorum=None, clear_auth=None, execute
                   t.executed == Store(s.executed, a, True), t.used == Store(s.used, a, True), unchanged(s, t, "executed", "used"))
     forged_execute = And(Or(s.ticket[a] != s.epoch, s.used[a], Not(s.heartbeat), s.halted), unchanged(s, t))
     new_epoch = And(quorum, t.epoch == s.epoch + 1,                          # an edition that asks for more signatures raises the floor
-                    t.kfuse == If(i["claimed_k"] > s.kfuse, i["claimed_k"], s.kfuse),
+                    t.kfuse == i["claimed_k"],                                  # the new edition's k governs the next change
                     unchanged(s, t, "epoch", "allows", "witness", "kfuse"))
     halt = And(t.halted == True, unchanged(s, t, "halted"))
     clear = And(s.halted, clear_auth, i["neighbour"], t.halted == False, unchanged(s, t, "halted"))
@@ -164,7 +166,7 @@ def invariant_at(s: State, a):
         # P4  tickets carry an edition no newer than the current one
         Implies(s.ticket[a] != -1, And(s.ticket[a] >= 0, s.ticket[a] <= s.epoch)),
         # the fused threshold is at least one in every reachable state
-        s.kfuse >= 1,
+        s.kfloor >= 1, s.kfuse >= s.kfloor,
     )
 
 
@@ -185,10 +187,10 @@ def one_step_properties(s: State, t: State, i: dict):
             t.epoch >= s.epoch,
         "P9  an edition change needs a quorum":
             Implies(t.epoch != s.epoch, quorum_of(s, i)),
-        "P10 an edition change needs at least the fused number of distinct governance signatures, whatever the image claims":
+        "P10 an edition change needs the threshold in force of distinct signatures from the keys in force, whatever the image claims":
             Implies(t.epoch != s.epoch, i["sigs"] >= s.kfuse),
-        "P11 the fused threshold never falls":
-            t.kfuse >= s.kfuse,
+        "P11 the threshold in force never falls below the manufacture floor, which never moves":
+            And(t.kfuse >= t.kfloor, t.kfloor == s.kfloor),
         "P12 nothing but a signature over a CLEAR leaves the halt: a heartbeat, a halt or any other signed command does not":
             Implies(And(s.halted, Not(t.halted)), i["signed_cmd"] == CLEAR_CMD),
         "P13 nothing executes while halted, not even against a ticket issued before the halt":

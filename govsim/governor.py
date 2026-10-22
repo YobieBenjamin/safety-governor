@@ -204,8 +204,20 @@ class Governor:
         fabric.join(self)
 
     # ------------------------------------------------------------------ policy
+    def _trusted_governance(self) -> dict | None:
+        return getattr(self.fuses, "trusted_governance", None)
+
+    def _verify_policy(self, image: dict) -> tuple[bool, str]:
+        """Authorized by the governance configuration in force (the chip's protected record), or, for the
+        first rulebook on a new chip, by the key hashes and the floor fused at manufacture."""
+        return verify_policy(image, self.fuses.governance_key_hashes, self.fuses.governance_threshold, self._trusted_governance())
+
     def _accept_policy(self, image: dict, at_boot: bool = False) -> tuple[bool, str]:
-        ok, why = verify_policy(image, self.fuses.governance_key_hashes, self.fuses.governance_threshold)
+        trusted = self._trusted_governance()
+        if at_boot and trusted is not None and trusted.get("image_epoch") == policy_epoch(image):
+            ok, why = True, reasons.OK      # the edition that set the record in force: verified when it was committed
+        else:
+            ok, why = self._verify_policy(image)
         if not ok:
             return False, why
         if image["version"] < self.fuses.policy_version or (self.policy and image["version"] <= self.policy["version"] and not at_boot):
@@ -220,8 +232,8 @@ class Governor:
         self.policy = image
         self._epoch = policy_epoch(image)
         self.fuses.bump_policy(image["version"])
-        if int(image["threshold"]) > self.fuses.governance_threshold:
-            self.fuses.bump_governance_threshold(int(image["threshold"]))   # an edition that asks for more signatures raises the floor for every later one
+        # this edition's keys and k now authorize the next change (rotation included); never below the fused floor
+        self.fuses.record_governance(image["governance_keys"], int(image["threshold"]), self._epoch)
         self.store.data["policy_image"] = image
         if not self.epoch_history or self.epoch_history[-1] != self._epoch:
             self.epoch_history.append(self._epoch)        # the compliance report lists every edition this chip ran under
@@ -1168,7 +1180,7 @@ class Governor:
         image = body.get("image")
         if not image:
             return self._deny("policy_propose", reasons.POLICY_QUORUM)
-        ok, why = verify_policy(image, self.fuses.governance_key_hashes, self.fuses.governance_threshold)
+        ok, why = self._verify_policy(image)
         if not ok:
             return self._deny("policy_propose", why)
         if self.policy and image["version"] <= self.policy["version"]:

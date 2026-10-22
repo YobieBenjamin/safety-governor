@@ -40,6 +40,7 @@ class Fuses:
         self.governance_threshold = int(governance_threshold) if governance_threshold is not None else max(1, n // 2 + 1)
         if self.governance_threshold < 1:
             raise ValueError(reasons.POLICY_QUORUM)
+        self.trusted_governance: dict | None = None   # set by the first rulebook the fused key hashes admit; see record_governance
         self.zeroized = False
 
     # --- secret -------------------------------------------------------------
@@ -65,8 +66,19 @@ class Fuses:
             raise ValueError(reasons.POLICY_ROLLBACK)
         self.policy_version = to
 
+    def record_governance(self, keys: list[str], threshold: int, image_epoch: str) -> None:
+        """The chip's protected record of the governance configuration now in force: the keys whose
+        signatures count, the k they must reach, and the edition that set them. The next rulebook is
+        authorized by THIS record, not by anything it carries itself, so the configuration in force
+        authorizes its own replacement, keys and threshold included. The threshold can never be set
+        below the floor fused at manufacture."""
+        if threshold < max(1, self.governance_threshold):
+            raise ValueError(reasons.POLICY_QUORUM)
+        self.trusted_governance = {"keys": list(dict.fromkeys(keys)), "threshold": int(threshold), "image_epoch": image_epoch}
+
     def bump_governance_threshold(self, to: int) -> None:
-        """Thermometer-coded like the version counters: it only goes up."""
+        """The manufacture floor. Thermometer-coded like the version counters: it only goes up, and only at
+        provisioning; a rulebook never moves it (the current configuration's own k is in trusted_governance)."""
         if to < self.governance_threshold:
             raise ValueError(reasons.POLICY_QUORUM)
         self.governance_threshold = to

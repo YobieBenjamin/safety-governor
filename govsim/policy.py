@@ -117,32 +117,45 @@ def sign_policy(image: dict, keys: Iterable[SigningKey]) -> dict:
     return image
 
 
-def verify_policy(image: dict, governance_hashes: list[str] | None = None, min_threshold: int | None = None) -> tuple[bool, str]:
-    """k-of-n check. Governance keys are taken from the image but must match the fused hashes, and the
-    k that counts is the larger of the image's own threshold and the fused one: an image can ask for
-    more signatures than the chip requires, never fewer. A threshold under one, or above the number of
-    distinct keys, is refused outright, and each key counts once however many times it signed."""
+def verify_policy(image: dict, governance_hashes: list[str] | None = None, min_threshold: int | None = None,
+                  trusted: dict | None = None) -> tuple[bool, str]:
+    """Is this rulebook authorized? The answer comes from trusted state, never from the image.
+
+    ``trusted`` is the governance configuration in force (the keys whose signatures count and the k
+    they must reach, from the chip's protected record). When it is set, the image needs k distinct
+    valid signatures from THOSE keys over its body, whatever keys and threshold the image itself
+    names: the configuration in force authorizes its replacement, so the same quorum can rotate keys
+    and change k. When it is not set (the very first rulebook on a new chip), the image's keys must
+    match the key hashes fused at manufacture and k is the larger of the image's and the fused floor.
+
+    Either way the image's own threshold must be at least one, at most the number of its distinct
+    keys, and not below ``min_threshold`` (the manufacture floor), because it becomes the k that
+    authorizes the NEXT change. Each key counts once however often it signed or is listed.
+    (Until 22 October 2026 k was read from the image being checked, so threshold 0 with no
+    signatures passed; an external audit reproduced it.)"""
     try:
-        keys = list({h: VerifyKey.from_hex(h) for h in image["governance_keys"]}.values())   # a key listed twice counts once
+        own_keys = list({h: VerifyKey.from_hex(h) for h in image["governance_keys"]}.values())
         threshold = int(image["threshold"])
-        if threshold < 1 or threshold > len(keys):
+        floor = int(min_threshold) if min_threshold is not None else 1
+        if threshold < max(1, floor) or threshold > len(own_keys):
             return False, reasons.POLICY_QUORUM
-        if min_threshold is not None:
-            if threshold < int(min_threshold):
+        if trusted is not None:
+            signers = list({h: VerifyKey.from_hex(h) for h in trusted["keys"]}.values())
+            required = int(trusted["threshold"])
+        else:
+            if governance_hashes is not None and any(digest(k.hex) not in governance_hashes for k in own_keys):
                 return False, reasons.POLICY_QUORUM
-            threshold = max(threshold, int(min_threshold))
-        if governance_hashes is not None:
-            for k in keys:
-                if digest(k.hex) not in governance_hashes:
-                    return False, reasons.POLICY_QUORUM
+            signers, required = own_keys, max(threshold, floor)
+        if required < max(1, floor):
+            return False, reasons.POLICY_QUORUM
         body = {k: v for k, v in image.items() if k != "signatures"}
         epoch = digest(body)
         good: set[str] = set()
         for sig in image.get("signatures", []):
-            for k in keys:
+            for k in signers:
                 if sig.get("signer") == k.key_id and verify_object(sig, k) and sig["payload"].get("epoch") == epoch:
                     good.add(k.key_id)
-        if len(good) < threshold:
+        if len(good) < required:
             return False, reasons.POLICY_QUORUM
         return True, reasons.OK
     except (KeyError, TypeError, ValueError):
