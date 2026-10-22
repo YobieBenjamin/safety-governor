@@ -16,7 +16,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+# z3-solver runs the proofs (make proof); it was missing here, so a fresh .venv could not run them
+# and wave 2's L3 failed its acceptance on a ModuleNotFoundError, not on its work.
+dev = ["pytest>=7", "z3-solver>=4.12"]
 
 [project.scripts]
 govsim = "govsim.cli:main"

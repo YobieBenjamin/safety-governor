@@ -150,15 +150,28 @@ print(m[0]['number'] if m else '')" "$LOG/open-issues.json" "$1"; }
 # 3. One agent.
 run_agent() {
   local id="$1" number="$2" title="$3" accept="$4" backend="${5:-cloud}"
-  local branch wt brief state session attempt log rc summary finished is_error limit subtype resets secs prompt t0 pr primary
+  local branch wt brief state session attempt log rc summary finished is_error limit subtype resets secs prompt t0 pr primary prior
   branch="exp/$(echo "$id" | tr '[:upper:]' '[:lower:]')"; wt="$ROOT/.worktrees/$id"; brief="$LOG/$id.brief.md"; state="$LOG/$id.state.json"
   t0=$(date +%s)
   setstate() { printf '{"id": "%s", "phase": "%s", "wall_s": %s, "acceptance": "%s", "pr": "%s", "issue": "%s", "backend": "%s"}\n' "$id" "$1" "$(( $(date +%s) - t0 ))" "${2:-not run}" "${3:-none}" "#$number" "$backend" > "$state"; }
+  salvage() {   # why: commit what a run left unstaged, as found, so the gate can judge it and a later run continues from it
+    git -C "$wt" add -A >/dev/null 2>&1 && git -C "$wt" -c user.name="Yobie Benjamin" -c user.email="yobie@icloud.com" commit -q -m "Work left uncommitted by the agent, committed by the launcher (#$number)
+
+$1. The files are committed as found so the gate can judge them and a later run can continue from them; nothing here is claimed to pass.
+
+Agent: wave $WAVE, issue #$number (launcher commit)" 2>>"$LOG/launcher.err" && say "$id: uncommitted work committed as found ($1)"
+  }
   primary=cloud; [ "$backend" = local ] && primary=local
   setstate starting
+  # A worktree left by a run that was killed (the program stopped, the Mac went down) can hold work
+  # nobody committed; it is committed as found before anything else, so no restart starts from nothing.
+  if [ -d "$wt" ] && [ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then
+    salvage "an earlier run of this issue ended without committing these files" || true
+  fi
   if [ -d "$wt" ] && [ "$(git -C "$ROOT" rev-list --count "main..$branch" 2>/dev/null || echo 0)" = 0 ]; then
     git -C "$wt" reset -q --hard main 2>/dev/null || true   # a worktree left by an earlier run with nothing on it: start from today's main
   fi
+  prior=$(git -C "$ROOT" rev-list --count "main..$branch" 2>/dev/null || echo 0)
   if [ ! -d "$wt" ]; then
     git -C "$ROOT" worktree add -q --no-checkout -B "$branch" "$wt" main 2>/dev/null || git -C "$ROOT" worktree add -q --no-checkout "$wt" "$branch"
     if [ "$(git -C "$ROOT" config --get core.sparseCheckout 2>/dev/null)" = true ]; then
@@ -174,6 +187,8 @@ run_agent() {
     [ -n "$ADD_DIRS" ] && echo "- The other repositories of the program are readable at:$ADD_DIRS. Never edit them: a change they need goes into \`patches/<repo>/<file>.patch\` here, with a note in your final summary."
     echo "- Acceptance: \`${accept:-the command the brief names}\`. Run it at most three times. Stop when it passes, or after the third failure; then record exactly what fails in EXPERIMENTS.md (safety-governor) or in the hypothesis's section (safety), with the failing output."
     echo "- Read only the files the brief names under Read first and the files you create. Do not read whole directories, do not run the full test suite (the acceptance command is enough), do not search the web, do not start sub-agents."
+    echo "- $SHELL_RULE"
+    [ "$prior" -gt 0 ] && echo "- This branch already carries $prior commit(s) from an earlier run of this issue (a run that was stopped, or the launcher committing what it left behind). Start with \`git log --stat main..HEAD\` and \`git status\`, keep what is sound, and continue from it rather than starting over."
     echo "- Never weaken, skip or delete an existing test. Do not refactor beyond the brief. No em dashes in anything you write."
     echo "- Commit as you go with messages that name the issue (#$number) and end with the line: Agent: wave $WAVE, issue #$number. Do not push, do not open a pull request; the launcher does both."
     echo "- This run is capped at $TURNS turns and an estimated spend of \$$BUDGET. Keep the tree in a working, committed state at all times, so a cap mid-way still leaves usable work."
@@ -264,11 +279,7 @@ run_agent() {
     run_acceptance
   fi
   if [ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then
-    git -C "$wt" add -A >/dev/null 2>&1 && git -C "$wt" commit -q -m "Work left uncommitted by the agent, committed by the launcher (#$number)
-
-The agent ended (cap, timeout or its own stop) with these files unstaged. They are committed as found so the gate can judge them and a revision can continue from them; nothing here is claimed to pass.
-
-Agent: wave $WAVE, issue #$number (launcher commit)" 2>>"$LOG/launcher.err" && say "$id: the agent left uncommitted work; committed as found"
+    salvage "the agent ended (a cap, the watchdog or its own stop) with these files unstaged" || true
   fi
   local commits; commits=$(git -C "$wt" rev-list --count "main..$branch" 2>/dev/null || echo 0)
   if [ "$commits" -gt 0 ]; then

@@ -51,6 +51,7 @@ If you came to check the work rather than read about it, [`START-HERE.md`](START
 | [`rtl/`](rtl/) | The hard-core digital blocks in [Amaranth HDL](https://amaranth-lang.org/), simulated (20 block tests), with generated Verilog in `rtl/gen/` | `make rtl` |
 | [`hw/`](hw/) | The LibreLane flow for a SkyWater sky130 shuttle run, the pinout, and the rack integration reference (module, baseboard signals, switch management) | `make gds` on a machine with Docker |
 | [`results/`](results/) | The last sweep: which hypotheses hold at which tier of the design | `./run.sh` writes it |
+| [`proofs/`](proofs/) | The machine-checked part: the core invariants and the commit point proven by induction in Z3, and the kill-switch cuts checked by max-flow; `z3-solver` comes with `pip install -e ".[dev]"`, which `./run.sh` does | `make proof` |
 
 One command, under a minute, no hardware:
 
