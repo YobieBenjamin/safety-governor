@@ -12,7 +12,7 @@ research. Slide numbers are the deck's own (34 slides).
 |---|---|---|---|
 | 4, 26, 28, 31 | 200 hypothesis tests pass (H0 to H18) | `tests/` | `python3 -m pytest tests`: 200 passed |
 | 4, 26, 28, 31 | 20 RTL block tests pass | `rtl/tests/test_blocks.py` | `python3 -m pytest rtl/tests`: 20 passed |
-| 4, 16, 26, 31 | three proof files hold: P0 to P12, the commit-point properties (1) to (3), the kill-switch checks K0 to K5 | `proofs/core_invariants.py`, `proofs/commit_point.py`, `proofs/no_global_kill_switch.py` | `make proof`: "All proofs hold" twice, "All checks hold" once; 3.7 s |
+| 4, 16, 26, 31 | three proof files hold: P0 to P13, the commit-point properties (1) to (3), the kill-switch checks K0 to K5 | `proofs/core_invariants.py`, `proofs/commit_point.py`, `proofs/no_global_kill_switch.py` | `make proof`: "All proofs hold" twice, "All checks hold" once; 3.7 s |
 | 19, 26 | 56 tests in the reference stack, five of them the OpenShell contract | `hardware-and-silicon/tests/`, `tests/test_oasp.py` | `python3 -m pytest tests` in that repository: 56 passed; `docs/NVIDIA.md` describes the five contract tests; their names are in `tests/test_oasp.py` (five of its fourteen) |
 | 2, 19, 26 | 75 attacks blocked, 12 baselines allowed; 17 of the 87 on the OpenShell and Sentry path (13 attacks, 4 baselines) | `hardware-and-silicon/results/report.md` | the report's own header line; the "NVIDIA OASP path" section counted: 17 rows |
 | 26 | 317 µs worst case for the halt loop across 72 governors, 1 ms bound, 39 configurations | `hw/loop/results.md` | table row for N=72, last opener, 3 m hops: 317.15 µs total; 39 configuration rows; `docs/11` |

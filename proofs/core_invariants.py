@@ -120,7 +120,7 @@ def clear_auth_of(s: State, i: dict):
     return And(i["signed_cmd"] == CLEAR_CMD, i["for_me"], i["fresh"])
 
 
-def step_list(s: State, t: State, i: dict, quorum=None, clear_auth=None):
+def step_list(s: State, t: State, i: dict, quorum=None, clear_auth=None, execute_needs_run=True):
     """The transitions, named. ``quorum`` and ``clear_auth`` default to the chip's rules; passing the
     old ones shows what the proof says about them."""
     a = i["a"]
@@ -128,9 +128,10 @@ def step_list(s: State, t: State, i: dict, quorum=None, clear_auth=None):
     clear_auth = clear_auth_of(s, i) if clear_auth is None else clear_auth
     issue = And(Not(s.halted), s.heartbeat, s.allows[s.epoch][a], s.witness[a], s.ticket[a] == -1,
                 t.ticket == Store(s.ticket, a, s.epoch), t.okay_at_issue == Store(s.okay_at_issue, a, True), unchanged(s, t, "ticket", "okay_at_issue"))
-    execute = And(s.heartbeat, s.ticket[a] == s.epoch, Not(s.used[a]),
+    execute = And(Not(s.halted) if execute_needs_run else BoolVal(True),     # commit_from_endpoint refuses unless the governor is in RUN
+                  s.heartbeat, s.ticket[a] == s.epoch, Not(s.used[a]),
                   t.executed == Store(s.executed, a, True), t.used == Store(s.used, a, True), unchanged(s, t, "executed", "used"))
-    forged_execute = And(Or(s.ticket[a] != s.epoch, s.used[a], Not(s.heartbeat)), unchanged(s, t))
+    forged_execute = And(Or(s.ticket[a] != s.epoch, s.used[a], Not(s.heartbeat), s.halted), unchanged(s, t))
     new_epoch = And(quorum, t.epoch == s.epoch + 1,                          # an edition that asks for more signatures raises the floor
                     t.kfuse == If(i["claimed_k"] > s.kfuse, i["claimed_k"], s.kfuse),
                     unchanged(s, t, "epoch", "allows", "witness", "kfuse"))
@@ -190,6 +191,8 @@ def one_step_properties(s: State, t: State, i: dict):
             t.kfuse >= s.kfuse,
         "P12 nothing but a signature over a CLEAR leaves the halt: a heartbeat, a halt or any other signed command does not":
             Implies(And(s.halted, Not(t.halted)), i["signed_cmd"] == CLEAR_CMD),
+        "P13 nothing executes while halted, not even against a ticket issued before the halt":
+            Implies(s.halted, t.executed == s.executed),
     }
 
 
@@ -242,6 +245,15 @@ def main() -> int:
         caught = sol.check() == sat
         print(("OK      " if caught else "FAILED  ") + f"{key} fails under the rules as they were before 22 October (the proof catches that defect)")
         results.append(caught)
+    # an external audit on 22 October asked the solver for: issue a ticket, halt, execute while halted. On the
+    # machine as it was, that was satisfiable (execute did not require RUN, though the code's commit always did)
+    name = next(n for n in props if n.startswith("P13"))
+    sol = Solver()
+    sol.set("timeout", 60_000)
+    sol.add(*hyp, steps(s, t, inputs, execute_needs_run=False), Not(props[name]))
+    caught = sol.check() == sat
+    print(("OK      " if caught else "FAILED  ") + "P13 fails on the machine as it was before 22 October, whose execute step did not require RUN")
+    results.append(caught)
     # a sanity check that the machine is not vacuous: an allowed action can be executed in two steps
     u = State("u")
     issue1 = dict(step_list(s, t, inputs))["issue"]

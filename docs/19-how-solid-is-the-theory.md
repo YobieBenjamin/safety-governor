@@ -41,6 +41,7 @@ The properties proven, in the words of the file:
 - P10. An edition change needs at least the fused number of distinct governance signatures, whatever the image claims.
 - P11. The fused threshold never falls.
 - P12. Nothing but a signature over a CLEAR leaves the halt: a heartbeat, a halt or any other signed command does not.
+- P13. Nothing executes while halted, not even against a ticket issued before the halt (an external audit found the old machine allowed it; the code never did).
 
 Plus a check that the machine is not vacuous: an allowed action can in fact be executed, so the proofs are not true merely because nothing ever happens. All of it runs in well under a second.
 
@@ -111,7 +112,7 @@ Answer per claim, L, P, C, S, N, and say for each whether you consider it a theo
 
 ## 10. What exists to back this document
 
-- `proofs/core_invariants.py`: the Z3 proofs of P0 to P12, the non-vacuity checks, and the regression check that P10 and P12 fail under the rules as they were before 22 October; `python3 proofs/core_invariants.py`.
+- `proofs/core_invariants.py`: the Z3 proofs of P0 to P13, the non-vacuity checks, and the regression checks that P10, P12 and P13 fail on the machine as it was before 22 October; `python3 proofs/core_invariants.py`.
 - `proofs/no_global_kill_switch.py` and `docs/23-there-is-no-kill-switch.md`: why the gates belong at the ends of the model-to-world graph (Menger's theorem; minimum cuts checked by max-flow), and the part of the popular kill-switch argument that is wrong.
 - `govsim/` and `tests/`: the functional model and 200 hypothesis tests, H0 to H18.
 - `rtl/governor_rtl/` and `rtl/tests/`: the hard-core blocks and 20 simulation tests; formal proofs on the Verilog are the next step in `docs/07-verification-plan.md`.

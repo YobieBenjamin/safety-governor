@@ -183,6 +183,8 @@ def check_budget_owners(image: dict) -> list[str]:
     """Budget keys the rules use that no governor owns. There is no default owner."""
     owners = image.get("budget_owners", {})
     keys = [r["budget"]["key"] for r in image.get("rules", []) if r.get("budget")]
+    if any(r.get("hazard_budget") for r in image.get("rules", [])):
+        keys.append("hazard")       # a session's hazard budget is one budget, counted at one owner, like any other shared budget
     return [k for k in dict.fromkeys(keys) if k not in owners]
 
 

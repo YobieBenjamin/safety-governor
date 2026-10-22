@@ -4,7 +4,7 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
 
 | ID | Claim | Experiment | Where | Status | Result |
 |---|---|---|---|---|---|
-| L1 | L | Core invariants proven by induction on the abstract machine (P0 to P12, non-vacuity) | `proofs/core_invariants.py` | done | 2026-10-20: all proofs hold; the prover found a sentinel collision (edition -1 equal to "no ticket") in the first draft, closed by P0 |
+| L1 | L | Core invariants proven by induction on the abstract machine (P0 to P13, non-vacuity) | `proofs/core_invariants.py` | done | 2026-10-20: all proofs hold; the prover found a sentinel collision (edition -1 equal to "no ticket") in the first draft, closed by P0 |
 | L2 | L | Commit-point protocol: hold, clearance bound to the action version, all-clear inside the budget, alarm on expiry (YB-0039 extension, properties 1 to 3) | `proofs/commit_point.py` | done | 2026-10-20: all proofs hold; the prover found that a re-parameterised action kept an expired budget with no alarm; a new version now gets a fresh budget |
 | L3 | L | Widen the abstract machine: budgets, k-of-n approvals, buffer classes, egress release, loop beacon and clear | `proofs/` | open | |
 | L4 | L | Trace conformance of `govsim` to the abstract machines | `govsim/trace.py`, `tests/test_h19_conformance.py` | open | |

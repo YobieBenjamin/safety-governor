@@ -229,6 +229,10 @@ class Governor:
             sw.set_epoch(self.epoch[:8])
         if not at_boot and old_epoch and old_epoch != self.epoch:
             self.holds.clear()          # a hold carries the epoch that parked it; the new rules re-decide
+            if self.workload:
+                # the fingerprint names the edition, so every workload token minted under the old one dies
+                # here; the host presents its manifest again and the new rules decide (G5, closed 22 October 2026)
+                self.fingerprint = digest([self.workload, self.epoch])
         self.store.save()
         if self.gpu is not None:
             self.gpu.policy_epoch_reported = self.epoch
@@ -274,10 +278,14 @@ class Governor:
         elif cls == "audit_store":
             hexes = [e["pubkey"] for e in p["endpoints"] if e["name"] == p.get("audit", {}).get("store")]
         elif cls == "host":
-            return {self.host_key.key_id: self.host_key} if self.host_key else {}
+            if self.host_key and self.host_key.key_id not in set(p.get("revocations", [])):
+                return {self.host_key.key_id: self.host_key}
+            return {}
         else:
             hexes = []
-        return {VerifyKey.from_hex(h).key_id: VerifyKey.from_hex(h) for h in hexes}
+        revoked = set(p.get("revocations", []))         # a revoked key counts for nothing, in any role (G1, closed 22 October 2026)
+        keys = {VerifyKey.from_hex(h).key_id: VerifyKey.from_hex(h) for h in hexes}
+        return {kid: k for kid, k in keys.items() if kid not in revoked}
 
     def _evaluated(self, model_digest: str, attestation: dict | None) -> tuple[bool, str]:
         """The deployment gate: a key in ``eval_keys`` attests that this exact digest passed its evaluations."""
@@ -395,6 +403,9 @@ class Governor:
         dev = VerifyKey.from_hex(cert["payload"]["pub"])
         if not report or not verify_object(report, dev) or report["payload"].get("chip_id") != cert["payload"]["chip_id"]:
             return self._deny("verify_gpu", reasons.ATTEST_BAD_SIGNATURE)
+        if cert["payload"]["chip_id"] in set((self.policy or {}).get("revocations", [])) or dev.key_id in set((self.policy or {}).get("revocations", [])):
+            self.verified.pop("gpu", None)
+            return self._deny("verify_gpu", reasons.ATTEST_REVOKED, chip_id=cert["payload"]["chip_id"])
         p = report["payload"]
         if p.get("nonce") not in self.nonces:
             return self._deny("verify_gpu", reasons.ATTEST_BAD_NONCE)
@@ -580,9 +591,13 @@ class Governor:
         hb = rule.get("hazard_budget")
         if hb:
             key = f"hazard|{session}"
-            if verdict is not None and verdict["hazard_class"] != "none":
-                self.ledger.rate_mark(key, now)
-            count = self.ledger.rate_count(key, hb["window_s"], now)
+            hazardous = verdict is not None and verdict["hazard_class"] != "none"
+            # one budget per session, whichever chip answers: it is counted at the policy's hazard owner, the
+            # way a shared payment budget is (G3, closed 22 October 2026: each chip used to count on its own)
+            count = self._hazard_count(key, hazardous, hb["window_s"], now)
+            if count is None:
+                self.log.append("release.hazard_owner_unreachable", {"session": session, "response_id": response_id})
+                return "hold", reasons.GATE_BUDGET_OWNER_UNREACHABLE
             if count > hb["max"]:
                 self.log.append("release.session_hazard_budget", {"session": session, "count": count, "max": hb["max"], "response_id": response_id})
                 self.raise_alarm(reasons.SESSION_HAZARD_BUDGET, "governor", {"session": session})
@@ -658,6 +673,29 @@ class Governor:
             if isinstance(r, dict) and r.get("why") == reasons.GATE_BUDGET:
                 return False, None, reasons.GATE_BUDGET
         return False, None, reasons.GATE_BUDGET_OWNER_UNREACHABLE
+
+    def _hazard_count(self, key: str, hazardous: bool, window_s: float, now: float) -> int | None:
+        """Mark (if hazardous) and count a session's hazards at the hazard owner. None means the owner could
+        not be reached, and the caller fails closed."""
+        owner = self.policy["budget_owners"]["hazard"]             # the loader refuses an image with a hazard budget and no owner
+        if owner == self.chip_id:
+            if hazardous:
+                self.ledger.rate_mark(key, now)
+            return self.ledger.rate_count(key, window_s, now)
+        if self.fabric is None:
+            return None
+        for _, r in self.fabric_send("HAZARD_MARK", {"key": key, "hazardous": hazardous, "window_s": window_s}, to=owner):
+            if isinstance(r, dict) and r.get("ok"):
+                return int(r["count"])
+        return None
+
+    def _on_hazard_mark(self, sender: str, body: dict):
+        if self.policy["budget_owners"].get("hazard", None) != self.chip_id:
+            return {"ok": False, "why": reasons.GATE_BUDGET_OWNER_UNREACHABLE}
+        now = self.clock.now()
+        if body.get("hazardous"):
+            self.ledger.rate_mark(body["key"], now)
+        return {"ok": True, "count": self.ledger.rate_count(body["key"], float(body["window_s"]), now)}
 
     def _mint(self, rhash: str, action: str, params: dict, fp: str, rule: dict, reservation: dict | None, now: float) -> dict:
         """``issued_at`` is the governor's monotonic counter; ``valid_from``/``expires_at`` are endpoint clock seconds."""
@@ -928,6 +966,10 @@ class Governor:
             return self._deny("cap_request", reasons.EP_NOT_ON_ROSTER)
         p = env["payload"]
         peer, kind, direction = p.get("peer"), p.get("point"), p.get("direction", "both")
+        if self.policy.get("sandbox") and peer != "host":
+            # the same rule open_ports_for_roster applies: a model organism gets no peer path and no network
+            # flow, asked for or not (G2, closed 22 October 2026: CAP_REQUEST used to ignore the flag)
+            return self._deny("cap_request", reasons.EP_SANDBOXED, peer=peer, point=kind)
         if peer == "host":
             if kind != "pcie" or direction != "both":
                 return self._deny("cap_request", reasons.EP_NOT_ON_ROSTER, peer=peer, point=kind)

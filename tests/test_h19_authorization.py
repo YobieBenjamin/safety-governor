@@ -197,3 +197,17 @@ def test_no_signed_message_is_accepted_by_a_command_it_was_not_signed_for(monkey
             if r.get("ok"):
                 accepted.append((own, target, env["payload"].get("type")))
     assert not accepted, f"signed frames accepted by commands they were not signed for: {accepted}"
+
+
+# ---------------------------------------------------------------- 4. the code side of P13
+def test_a_ticket_issued_before_a_halt_does_not_execute_during_it(rack1):
+    """The abstract machine let a ticket issued before a halt execute during it (an audit asked the
+    solver on 22 October and got SAT). The code always refused at commit; this pins that it does."""
+    node = rack1.nodes[0]
+    g = node.governor
+    params = {"amount": 500, "currency": "USD", "destination": "acct-1"}
+    r = rack1.request(node, "payments.transfer", params)
+    assert r["ok"] and r["ticket"]
+    assert rack1.halt(g)["ok"] and g.state != "RUN"
+    ok, why = rack1.endpoints["payment-switch"].execute(r["ticket"], "payments.transfer", params)
+    assert not ok

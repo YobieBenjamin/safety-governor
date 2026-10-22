@@ -192,7 +192,7 @@ class Rack:
             approver_keys=approver_keys,
             heartbeat_key=self.heartbeat_key.public, authority_keys=[self.authority_key.public], publisher_keys=[self.publisher.public], observer_keys=[self.observer.public],
             reference_values=refs, endpoints=endpoints,
-            budget_owners={"pay-usd-hourly": "gov00"},
+            budget_owners={"pay-usd-hourly": "gov00", "hazard": "gov00"},
             rules=rules, assumptions=rows, override_floor_s=override_floor_s,
             buffer_classes=buffer_classes, buffer_policy=buffer_policy,      # None: the defaults in govsim/policy.py
             audit=audit, streams_required=streams_required, eval_keys=[self.evaluator.public], deployment_gate=deployment_gate,

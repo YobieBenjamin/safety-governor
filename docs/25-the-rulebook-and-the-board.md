@@ -25,7 +25,7 @@ through them.
 > `test_h00_contract.py`, `test_h01_attestation.py`, `test_h02_enforcement_points.py`,
 > `test_h03_quorum.py` (the mailbox order), `test_h04_lane.py`,
 > `test_h05_alarms.py`, `test_h07_register.py`, `test_h08_override.py`; spec
-> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (P0 to P12).
+> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (P0 to P13).
 
 ## 0. Two scenarios first: a request for a weapon that destroys a city
 
@@ -86,9 +86,11 @@ are rack-wide. The rulebook edition is one for the whole rack, staged and commit
 governor at once. A typed budget (the hourly payment limit in the model's rulebook) is kept by
 one owner governor, and the others reserve against it over the message fabric, so two racks
 cannot each spend it. An alarm fans out over the same fabric to every governor in the rack, and
-the halt loop, a wire, stops every GPU slot in the domain if any governor opens its switch. One
-thing is not rack-wide yet: the session's hazard budget is a window on each governor's own
-ledger, so a session spread over several governors has one count per governor. Another site
+the halt loop, a wire, stops every GPU slot in the domain if any governor opens its switch. The
+session's hazard budget is rack-wide too: it is counted at the hazard owner the rulebook names,
+the way a shared payment budget is, and a governor that cannot reach the owner parks the response
+(until 22 October 2026 each governor counted on its own ledger, so a session spread over several
+chips got several budgets). Another site
 checks the same signed ticket under its own key; there is no planet-wide wire, by design
 (Part 7).
 
@@ -216,7 +218,7 @@ authenticated NVM and nowhere else (`04-specification.md` §10). What is in it, 
 | Field | What it is | What the chip does with it |
 |---|---|---|
 | `reference_values` | Per device class: the vendor's verification key and the firmware digests that are acceptable, each with an expiry; written by governance from the vendors' published reference measurements | The verifier compares the GPU's and the host's reports against these and nothing else (`attest.firmware_not_in_reference`) |
-| `revocations` | Chip ids and key ids that are dead | In the schema; the model does not enforce it yet (the field is stored and never read), which is on the list for the program |
+| `revocations` | Chip ids and key ids that are dead | A revoked key counts for nothing in any role (observer, approver, endpoint, publisher, authority, host); a revoked GPU fails `VERIFY_GPU` with `attest.revoked`. Enforced since 22 October 2026; before that the field was stored and never read |
 | `endpoints` | Name, public key, `safe_transition` (what the device does when it cannot reach a governor), the register rows it relies on | Binds a rule to the one device that may act on its tickets: the device refuses a ticket made for another (`ticket.wrong_endpoint`); at the mailbox a `COMMIT` is accepted from any endpoint key the image names |
 | `budget_owners` | Budget key to the one governor chip that keeps its ledger | A rule naming a budget with no owner makes the image unloadable (`policy.budget_owner_missing`); there is no default owner |
 
@@ -239,7 +241,7 @@ authenticated NVM and nowhere else (`04-specification.md` §10). What is in it, 
 | `buffer_classes`, `buffer_policy` | Which classes of GPU memory (weights, KV cache, activations, outputs) may leave the GPU, and for whom (nobody, roster peers, the verified host) | The integrated tier's copy-engine and peer-MMU checks; the rack tier records the gap (`ep.unchecked_path`) |
 | `audit` | The share of responses the chip's own random source picks for review (five percent in the model), the verdict classes always held in escrow, which endpoint is the audit store | A sampled or escrowed response needs the audit store's signed receipt before it may leave (`release.escrow_receipt_required`) |
 | `streams_required` | Which streams a response must present for signing before it can be released | `release.required_stream_missing` |
-| `compute_budget`, `sandbox` | A cycle budget and the licence keys that may extend it; whether this is a sandbox (a model organism) | `compute.budget_exceeded`; in a sandbox the roster opens no peer port, only the verified host's, and the release rule's endpoint is the audit store (a port asked for by name through `CAP_REQUEST` is still judged by the roster alone, a gap the program has on its list) |
+| `compute_budget`, `sandbox` | A cycle budget and the licence keys that may extend it; whether this is a sandbox (a model organism) | `compute.budget_exceeded`; in a sandbox the roster opens no peer port, only the verified host's, the release rule's endpoint is the audit store, and a port asked for by name through `CAP_REQUEST` is refused too (`ep.sandboxed`; since 22 October 2026) |
 
 Everything in those tables is a key, a number, a digest, a list of digests, or a table of those.
 There is no free text the chip acts on. The only prose in the image is the assumptions
@@ -267,8 +269,10 @@ digest of the new image, every hold parked under the old edition is dropped (the
 re-decide), every switch gets the new epoch tag, and every ticket, frame and fabric message
 stamped with the old edition is dead from that instant (`ticket.stale_epoch`,
 `policy.stale_epoch` at the mailbox, `ep.stale_epoch` at the ports, `fabric.stale_epoch` on the
-wire). The workload token is the one thing that carries over: its fingerprint is fixed at
-`BEGIN_MODEL` and renewed at the next one. One edition in force per rack, never two.
+wire). The workload token goes too: the fingerprint names the edition, so the commit renews it and
+every token minted under the old edition is refused (`gate.not_attested`) until the host
+presents its manifest again and the new rules decide whether the model may run (until 22
+October 2026 the token carried over). One edition in force per rack, never two.
 
 ## 3. One rule, field by field
 
@@ -708,7 +712,7 @@ for labels (H4), alarms that anyone may raise and only the alarm key clears (H5)
 and the register completeness refusal (H7), the override floor and the quorum (H8), output
 that left without being presented (H10), the use cases end to end including the
 hazardous-knowledge release and a stale witness (H17), witness impersonation, the deployment
-gate and the audit sample (H18), and the core invariants P0 to P12 in Z3
+gate and the audit sample (H18), and the core invariants P0 to P13 in Z3
 (`proofs/core_invariants.py`): nothing executes unless a rule allowed it with its witnesses
 present when the ticket was issued (P1, P2); no replay (P3); no ticket from an edition newer
 than the current one (P4); halt is absorbing without a quorum (P5); with the heartbeat lost

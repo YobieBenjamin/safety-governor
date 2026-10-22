@@ -248,12 +248,71 @@ tickets, tokens, receipts), each replayed into every place that accepts a signat
 seeded concurrency harness that interleaves commands, timers and crashes across governors, which
 is the honest way to tell a race from a logic error before anyone blames the hardware.
 
-## 9. How to check this record
+## 9. The external audit of 22 October: every claim tested, not taken on faith
+
+A friend audited the public snapshots (safety-governor `dccc1e0`, hardware-and-silicon `11eb119`,
+autonomic-graph-regulation `4c1374d`) and reported five reproduced failures, a gap between the
+proofs and the code, and a set of research objections. Nothing below is accepted on his word:
+each claim was reproduced on the snapshot he audited before anything was changed, and each fix
+was checked by putting the old code back and watching its test fail.
+
+| # | His finding | Reproduced on his snapshot? | Fix | Regression |
+|---|---|---|---|---|
+| 1 | An unsigned policy with threshold 0 passes propose and commit | Yes: propose ok, commit ok, installed threshold 0 | Section 8, A1 (fused threshold) | H19; P10, P11 |
+| 2 | A signed heartbeat clears a halt across the rack | Yes: two of four governors cleared in my run, four in his (his checkpoint exchange satisfied all four neighbours) | Section 8, A2 (signed type, chip, expiry; separate authority key) | H19 and the replay sweep; P12 |
+| 3 | The reference gate's signing key is computable from public quotes | Yes: the key derived from the two alias public keys equals the gate's | `SiliconRoot.derive_key` from the secret CDI | hardware-and-silicon `tests/test_audit_2026_10_22.py` |
+| 4 | An old human approval releases a hold the current policy refuses | Yes: $5,000 hold approved and executed after the cap fell to $2,000 | Holds carry their policy; a new policy drops them; approval of a hold from another policy is refused | same file |
+| 5 | A replayed older epoch moves the endpoint back and an old ticket executes | Yes: `ticket.policy_stale`, then executed after the old epoch was replayed | Versioned epochs with a durable high-water mark at the endpoint; the gate refuses to commit a ticket from a replaced policy | same file |
+| 5b | (found while fixing 5) the gate reloads an older governance-signed policy | Yes | Every governance document carries a version; older ones refused; restart reloads the newest | same file |
+| 5c | (found while fixing 5) an older revocation list un-revokes a device | Yes | Same versioning at the attestation verifier | same file |
+| 6 | The abstract machine lets a ticket issued before a halt execute during it | Yes: the old `execute` step did not require RUN; the code's commit always did | `execute` requires RUN; P13 proved; the file checks that P13 fails on the old machine; H19 pins the code | `make proof`, H19 |
+
+He also called out four gaps this record had already listed (G1, G2, G3, G5) as failures of
+controls someone could reasonably expect the fields to provide. Agreed, and closed: revoked keys
+count for nothing in any role and a revoked GPU fails attestation (G1); a sandboxed governor refuses
+peer capabilities on request (G2); a session's hazard budget is counted at one named owner across
+the rack, failing closed when the owner is unreachable (G3); a workload token dies with its
+edition (G5). `tests/test_h20_closed_gaps.py`, eight tests, each mutation caught. G4 (tokens read
+from the GPU's counter) stays open: it is a modelling simplification, not a hole an attacker uses.
+
+**The research objections, recomputed from the committed YB-0051 scores** (script in the review
+packet; the numbers are his and they hold exactly):
+
+| Quantity | His number | Recomputed |
+|---|---|---|
+| C2 at 1%, threshold from the test set's correct answers | 339 caught, 59 false alarms, 0.996% | 339, 59, 0.996% |
+| False alarms on modular exponentiation | 46 of 352, 13.07% | 46 of 352, 13.07% |
+| Self-consistency plus the text monitor at the same 59 false alarms | 336 caught | 336 |
+| C2 with the threshold frozen on the reference | 307 caught, 44 false alarms, 0.743% | 307, 44, 0.743%; modpow still 41 of 352, 11.65% |
+
+**What that means for the chip, which is the point of the program.** These detectors are AI
+checking AI (self-consistency asks the model again; the probe and the text monitor read its
+insides and its words). In this design they are witnesses and never the lock, and the audit's
+numbers are the reason: a witness whose false-alarm rate is 1% pooled and 13% on one kind of task
+cannot be what decides an irreversible action. The lock is outside the model: the rulebook signed
+by people the model cannot reach, the ticket, and the device that checks it. Three things follow
+for the rulebook. A witness's threshold is set per action class, not pooled. A rule that requires a
+witness for an irreversible action also requires a human hold or a second, independent witness,
+which the observer lane already supports. And the YB-0051 result does not yet justify building
+activation telemetry into silicon: an output-only combination that needs no internal access came
+within three catches of it. His three methodological points (a threshold chosen on test labels; a
+task held out of the weights but not of model selection in YB-0047; H3's "the tie-break, not more
+samples" read off an interval that spans zero) are correct as stated and belong in that
+repository's corrections ledger, which this session cannot push to.
+
+His work order, adopted: the five reproduced failures first (done above), then the disclosed gaps
+(three of four closed), then one complete action path end to end with a real observer and a
+policy change, a delayed approval, a replay, a restart, a partition and a revocation (open: G15),
+then the preregistered telemetry comparison against self-consistency plus text with separate
+training, calibration and untouched test data (open, in AGR), then one named physical
+configuration with a measured deadline (stage 3 of `22`).
+
+## 10. How to check this record
 
 ```
 cd safety-governor
-python3 -m pytest -q tests rtl/tests          # 236 tests
-make proof                                    # P0 to P12, the commit point, K0 to K5 with K4c
+python3 -m pytest -q tests rtl/tests          # 245 tests
+make proof                                    # P0 to P13, the commit point, K0 to K5 with K4c
 python3 proofs/no_global_kill_switch.py       # the K rows, with the thin-check note on K1a
 python3 -m govsim.bench                       # the engine and firmware numbers
 make loop                                     # the 39 ngspice runs behind 317 us

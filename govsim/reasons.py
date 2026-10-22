@@ -24,6 +24,8 @@ MBOX_NOT_RUNNING = "mailbox.governor_not_running"
 MBOX_UNKNOWN_COMMAND = "mailbox.unknown_command"
 MBOX_WRONG_COMMAND = "mailbox.wrong_command"        # a valid signature over a different command, or for another chip
 MBOX_EXPIRED = "mailbox.expired"                    # an authority command past its expiry, or with none
+ATTEST_REVOKED = "attest.revoked"                    # the device is on the rulebook's revocation list
+EP_SANDBOXED = "ep.sandboxed"                       # a sandboxed workload gets no peer path and no network flow
 
 # gate
 GATE_REPLAY = "gate.replay"
