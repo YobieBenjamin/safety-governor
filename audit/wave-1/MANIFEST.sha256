@@ -16,7 +16,7 @@ eb0695be700e8e43802031a822c567dbdcf204899ca2b12b28430d202191b1ea  ./H1.revise-2.
 95d63d113fd2e57800207fd2923e9edb3ec313d52bd55cbb633ac540e3d6d024  ./REPORT.md
 dd05da09009b91e2695ca7ff73d09febff32d0eee10cbae4268620f4a98ed4b4  ./review/H1/acceptance.log
 548da9dc8b75d4118298e066b2e8574e4647a2cdd00275e1d0f5f9d92f197925  ./review/H1/brief.md
-b486907bb260290ea12fa3aaf168fcf9700ecd9b81fbafc1f5bc84bf9bbb6ca5  ./review/H1/claims-local.md
+dc6a845da2e417b219f931dbe9363cceaf5aadb9dd5608b110fc7323a2669f55  ./review/H1/claims-local.md
 bc4c59246fe82a272c0fd39f103ad7c34bea73c091a268c6f5a974265eff1cef  ./review/H1/diff.patch
 104d3555c0b5dd7972e71ca922d9bbd42726c60aabb53efb6dc07e83991fff60  ./review/H1/reader.err
 df68365ffc4646272f026d4f44e168ed4e260581a46cda8eeab7fd63b532ad89  ./review/H1/review.json
