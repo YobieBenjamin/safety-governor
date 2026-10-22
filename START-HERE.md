@@ -29,7 +29,7 @@ Read in this order. Each one stands alone.
 5. How solid any of it is: [docs/19-how-solid-is-the-theory.md](docs/19-how-solid-is-the-theory.md).
 6. Why there is no kill switch for AI and why there is one at the exits, with the theorem and the check: [docs/23-there-is-no-kill-switch.md](docs/23-there-is-no-kill-switch.md).
 7. The ladder every safety measure sits on, from a prompt that says "don't" to the chip to a person with a key, with what each rung catches, how it gets removed and the paper that showed it: [docs/24-the-ladder.md](docs/24-the-ladder.md).
-8. The rulebook field by field, every no the chip can say and the evidence behind it, and how the chip talks to the NVIDIA GPU and the host CPU on the board, handshake by handshake: [docs/25-the-rulebook-and-the-board.md](docs/25-the-rulebook-and-the-board.md).
+8. A request for a weapon that destroys a city, walked from the keyboard to the chip's no with an abliterated model and with a frontier lab's model; then the rulebook field by field, every no the chip can say and the evidence behind it, and how the chip talks to the NVIDIA GPU and the host CPU on the board, handshake by handshake: [docs/25-the-rulebook-and-the-board.md](docs/25-the-rulebook-and-the-board.md).
 9. Where it sits next to the hardware-governance literature (flexHEGs and the rest), and what it borrows from them: [docs/18 §8b](docs/18-viability-and-open-questions.md). It takes the story apart into claims (L the logic, P the physical paths, C the cryptography, S the semantics, N the numbers) and says for each whether it is a theorem, engineering, trust, or not yet measured.
 
 ## 2. Follow the logic

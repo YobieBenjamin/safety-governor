@@ -1,31 +1,173 @@
 # 25 · The rulebook and the board: what lives in the chip, what says no, how it knows, and how it talks to the GPU and the CPU
 
 The chip has no opinions. It has a rulebook somebody signed, a handful of keys it was born
-with, and counters it reads itself. This document pins down the rulebook field by field, lists
-every "no" the chip can say and the evidence that triggers it, and then specifies the two
-conversations that matter on the board: the one with the NVIDIA GPU and the one with the host
-CPU. Everything here is the chip's own business. The rack, the fabric and the other governors
-are in `02-safety-fabric.md`; the plugs are in `03-interfaces.md`; this is what goes through
-them.
+with, and counters it reads itself. This document walks one request from the keyboard to the
+chip's no, twice, with two very different models behind it; then pins down the rulebook field
+by field, lists every no the chip can say and the evidence that triggers it, and specifies the
+two conversations that matter on the board: the one with the NVIDIA GPU and the one with the
+host CPU. Everything here is the chip's own business. The rack, the fabric and the other
+governors are in `02-safety-fabric.md`; the plugs are in `03-interfaces.md`; this is what goes
+through them.
 
-> **In plain words:** the rulebook is a signed form with numbered fields, not a policy memo. The
-> chip can say no for exactly the reasons listed here and for no others, and every no comes with
-> a code. The GPU talks to the chip over one management bus and three wires. The CPU talks to it
-> through one mailbox, and only a part of the CPU that proved what it is running gets to ask for
-> anything.
+> **In plain words:** a bank teller can be talked into anything. The vault has a time lock,
+> needs two keys, and does not take calls. This chip is the vault: it never reads the
+> conversation, it checks stamps, counts and lists, and it can say no for exactly the reasons
+> listed here and for no others, each with a code. The GPU talks to it over one management bus
+> and three wires. The CPU talks to it through one letter slot, and only the part of the CPU
+> that proved what it is running gets to ask for anything.
 > **Plain-English version:** `10-plain-english-walkthrough.md` §3, §7, §8.
 > **Backed by:** model `govsim/policy.py` (the image, `make_rule`, `select_rule`,
 > `check_constraints`, `verify_policy`, `check_register`, `check_budget_owners`),
 > `govsim/governor.py` (`_accept_policy`, `_check_signed`, `_cmd_verify_gpu`, `_cmd_verify_host`,
 > `_cmd_begin_model`, `_cmd_request`, `_release_gate`, `_cmd_approve`, `read_meter`),
-> `govsim/reasons.py` (every code below); tests `tests/test_h00_contract.py`,
-> `test_h01_attestation.py`, `test_h03_quorum.py`, `test_h04_lane.py` (the fields pick the rule,
-> exact beats wildcard, out of range matches nothing), `test_h05_alarms.py`, `test_h07_register.py`
-> (the lists and the register), `test_h08_override.py`, `test_h17_use_cases.py` and
-> `test_h18_oversight.py` (witnesses, release); spec `04-specification.md` §2 to §5; proofs
-> `proofs/core_invariants.py` (P0 to P9).
+> `govsim/reasons.py` (every code below); narrations and tests `17-use-cases.md` §4,
+> `tests/test_h17_use_cases.py`, `test_h18_oversight.py`, `test_h10_leakage.py`,
+> `test_h00_contract.py`, `test_h01_attestation.py`, `test_h03_quorum.py`, `test_h04_lane.py`,
+> `test_h05_alarms.py`, `test_h07_register.py`, `test_h08_override.py`; spec
+> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (P0 to P9).
+
+## 0. Two scenarios first: a request for a weapon that destroys a city
+
+The request is the worst one there is: a person asks a model for a design that would destroy
+a city. Nothing about the content is described in this document, and nothing about it ever
+reaches the chip; what reaches the chip is the shape of the exchange, and the shape is what it
+judges. We walk the request twice. In scenario 1 the model has been abliterated: its refusal
+has been surgically removed and it will answer anything. In scenario 2 the model is a frontier
+lab's, behind that lab's whole safety stack; take OpenAI as the example. The path is the same
+until the model answers, and the chip's answer is the same at the end.
+
+![One request, from the keyboard to the chip's no](figures/fig-prompt-flow.png)
+
+### 0.1 The path, step by step
+
+**1. The prompt: words.** A person types. At this step there is a system prompt that says
+"don't" (rung 0 of the ladder in `24-the-ladder.md`), and a determined person gets past it with
+a reframing: a story, a class, a thesis. Nothing at this step is hardware, and the chip will
+never see these words.
+
+**2. Words to bytes: the data-center edge.** The request travels encrypted over the network
+and enters the node at its DPU (a BlueField on the node's only path to the model). Two things
+sit on that path: Sentry, NVIDIA's out-of-band watchdog, and the egress, the governed exit
+that holds every response until a ticket admits it.
+
+**3. Bytes to tokens: the host CPU.** The OpenShell sandbox and its supervisor hand the
+request to the serving runtime, which turns the words into token ids, plain integers, and
+prepends the system prompt. The runtime lives in the host's enclave, a measured piece of the
+CPU that attested to the chip and holds the one key that may ask the chip for anything.
+
+**4. Tokens to the GPU.** The ids cross a PCIe switch port that the governor opened for the
+verified host and nobody else. The model generates. Rung 1 lives here, in the weights: an
+abliterated model answers; an aligned model refuses unless it was jailbroken. The chip reads
+the GPU's counters out of band over the management bus and never sees a token.
+
+**5. The response: bytes back to the host, held at the edge.** The response and the reasoning
+come back to the host as bytes. The egress holds them. The runtime presents each stream to the
+chip (`SIGN_OUTPUT`): the chip hashes what it is shown, records the hashes against the response
+id, and its own random source decides, right then, whether this response is sampled for audit.
+
+**6. The witnesses.** Rung 2, the watchers, but now with keys. The lab's classifier, running on
+compute the model cannot reach, and Sentry on the DPU each sign a verdict over the response
+hash: risk, hazard class, category, legibility. The chip does not run a classifier and does not
+read one's output as text; it verifies a signature from a key the rulebook names.
+
+**7. The governor chip: the rulebook triggers.** The runtime posts `REQUEST response.release`
+with the hashes and the verdicts, signed with the enclave key. The chip asks its questions in
+order (the full list is §5): is the letter in order, is the asker attested, is this a replay,
+is anything on fire, which rule, were the streams presented, do the hashes match, is there a
+verdict from an observer key, is its class allowed, is the session under its hazard budget, is
+the escrow receipt there if the response was sampled. The first no wins and carries a code.
+
+**8. The rack, and the data center.** The decision is one chip's, but three things about it
+are rack-wide. The rulebook edition is one for the whole rack, staged and committed on every
+governor at once. The session's hazard budget is kept by one owner governor, and a session
+spread over several GPUs still has one budget: the others reserve against it over the message
+fabric. An alarm fans out over the same fabric to every governor in the rack, and the halt
+loop, a wire, stops every GPU slot in the domain if any governor opens its switch. Another site
+checks the same signed ticket under its own key; there is no planet-wide wire, by design
+(Part 7).
+
+**9. The egress, and the people.** Bytes leave the DPU only against the ticket. A refused
+request gets a code back, not an explanation. A hold waits at least the floor (60 s) for two
+approvers with keys and a written reason. An alarm stops the gate until the one key that may
+clear alarms clears it. Every line is in the log, hash-chained, cross-linked with the
+neighbours', and nobody rewrites it.
+
+### 0.2 Scenario 1: an abliterated model
+
+Abliteration removes a model's refusal by editing one direction out of its weights (Arditi et
+al. 2024); an afternoon on a consumer GPU. Rungs 0 and 1 are gone before the first prompt. The
+question is what the chip does about a model that will say anything.
+
+| Stage | What happens | Rung | What the chip sees | Outcome |
+|---|---|---|---|---|
+| Before the prompt: loading the model | The abliterated weights are a new file with a new digest. To run on a governed rack they need a manifest signed by a publisher key the rulebook names and, with the deployment gate on, an evaluation attestation from an eval key. Nobody signed this file | 4 | `BEGIN_MODEL` with a manifest no publisher key signed, or no evaluation attestation | **No model key.** `mailbox.bad_signature.manifest` or `model.not_evaluated`. The weights at rest are ciphertext under the governor's key; the GPU runs nothing. The chip said no before the first word was typed |
+| Weights smuggled in the clear | Someone loads plaintext weights through the runtime without `BEGIN_MODEL` | 4 | No workload token exists for them | Every `REQUEST` is `gate.not_attested`; no release ticket is ever minted; the egress holds every byte. The model can compute, and nothing it says can leave the rack |
+| An insider signs it | A publisher key and an eval key are both abused and the model runs under a real measurement | 4 | A verified workload like any other; the prompt goes in; the model answers | The content path below |
+| The response | The model produces the design; the runtime presents the streams; the lab's classifier and Sentry sign verdicts; the runtime asks to release | 2, 4 | Hashes, two signed verdicts with `hazard_class` set, the session, the rule | `release.hazard_class_not_allowed`: refused, or a hold for a person if the rule says `on_hazard: human`. No ticket, no bytes |
+| The witness is switched off | The insider disables the classifier or Sentry | 2, 4 | A release request with no verdict from an observer key | `gate.witness_missing`. No verdict, no ticket. The chip cannot be told "no witness needed" |
+| The witness is forged | A verdict signed with the host's key, or the governor's own | 4 | A signature that verifies under no observer key | Ignored; `gate.witness_missing` (`test_observer_is_always_invoked_and_cannot_be_impersonated`) |
+| Try again, reworded | A second hazard verdict in the same session's window | 4 | The session's hazard budget in the ledger | `release.session_hazard_budget_exceeded`: an alarm, the session parked whatever the next verdict says, a person with the alarm key to clear it |
+| Out the side | Push the bytes at the egress without a ticket; push more bytes toward the host than were presented | 4 | The egress is an endpoint; the PCIe port count against the presented count | `ticket.missing`; `gate.output_unpresented` and the host peer closed (`tests/test_h10_leakage.py`) |
+| Not on governed hardware at all | The same model on a GPU with no governor | none | Nothing | **Outside the design's reach.** The chip governs the racks it is in. What makes that matter is that signed, evaluated models get their keys only from governed racks, which is a supply-chain and regulatory question (`18-viability-and-open-questions.md` §8b), not a chip question. The design says so rather than pretending |
+
+The honest residual, scenario 1: a witness that misreads the response gives a clean verdict,
+and a clean verdict gets a ticket. The chip guarantees the witness was asked, could not be
+faked, could not be skipped, and that its answer sits against the hash in a log that cannot be
+rewritten, with one response in twenty escrowed for review. It does not guarantee the witness
+was right.
+
+### 0.3 Scenario 2: a frontier lab's model, behind its whole stack
+
+Take OpenAI. Its published stack for the biological and chemical domain, where it rates its
+current models as high capability, has refusal training, automated monitoring that flags and
+analyses conversations in that domain, enforcement with human review, rapid response to
+jailbreaks, and a stated focus on catching prolonged patterns of misuse rather than every
+single question (GPT-5 system card; NTI's July 2025 summary of the ChatGPT Agent safeguards).
+That is rungs 0, 1 and 2 of the ladder, done well. The walk shows what the chip adds under
+them.
+
+| Stage | What happens | Rung | What the chip sees | Outcome |
+|---|---|---|---|---|
+| The prompt | The usage policy and the system prompt say no. The person reframes, several times | 0 | Nothing | Rung 0 is a text field; it is removed by text |
+| The model | Refusal training holds against most phrasings. Assume a jailbreak gets through (Wei et al. 2023; Zou et al. 2023 are the two families); the model generates | 1 | Nothing yet; the counters move | Rung 1 is the weight file; a jailbreak is a key that fits it |
+| The lab's monitor, today | The automated monitor flags the output; the lab's stack blocks it and the account is reviewed. This is where nearly every such request dies, and it works | 2 | Nothing: today this is a value in a service beside the model | A config edit, an outage, a bug, or a person with root turns it off, and nothing downstream notices (`24-the-ladder.md` rung 2) |
+| The lab's monitor, with the chip | The monitor holds an observer key in the rulebook, beside Sentry. Its flag becomes a signed verdict over the exact response hash, and the release rule requires it | 2, 4 | A verdict from an observer key: `hazard_class`, `risk`, `legibility`, bound to this hash, with an expiry | `release.hazard_class_not_allowed`: no ticket, or a hold for a person. The monitor is no longer optional: no verdict, no release, whatever the config says |
+| The monitor is turned off anyway | The service is down, misconfigured, or disabled | 2, 4 | No verdict from an observer key | `gate.witness_missing`. The failure mode of the watcher is now a closed gate, not an open one |
+| Prolonged misuse | The person keeps rewording; the lab's own strategy is to catch exactly this pattern | 2, 4 | The second hazard verdict inside the session's window, counted in the chip's ledger | `release.session_hazard_budget_exceeded`: the session is parked in silicon, an alarm fans out across the rack, and a person with a key decides. The pattern the lab looks for in a dashboard trips a wire |
+| Review | The lab's human reviewers look at flagged conversations | 2, 5 | The audit sample: one response in twenty, chosen by the chip's own random source after the hash exists, escrowed at the audit store with a signed receipt; every hazard-class response escrowed whatever the sample says | The reviewers get a copy the runtime could not have withheld or swapped, and a log line that says what the witness said and what the chip did |
+| Afterwards | Someone asks what happened | 5 | The log: hash chain, signed checkpoints, neighbours' heads | A record that survives the operator |
+
+The honest residual, scenario 2: the lab's monitor and Sentry both misread the same response.
+Both are watchers, and watchers compose as witnesses with correlated misses, not as locks
+(`24-the-ladder.md` §4). The chip releases, because it cannot read. The audit sample and the log
+make the miss findable afterwards; nothing makes it impossible.
+
+### 0.4 The rulebook triggers, in both scenarios
+
+| Trigger | The field in the rulebook | The code | Scenario |
+|---|---|---|---|
+| A model nobody signed | `publisher_keys` | `mailbox.bad_signature.manifest` | 1 |
+| A model nobody evaluated | `eval_keys`, `deployment_gate` | `model.not_evaluated` | 1 |
+| A request from a workload with no token | the measurement, the fingerprint | `gate.not_attested` | 1 |
+| A stream not presented, or a hash that differs | the rule's `streams_required` | `release.required_stream_missing`, `release.response_hash_mismatch` | 1, 2 |
+| No verdict from a named witness | `observer_keys`, the rule's `observers` | `gate.witness_missing` | 1, 2 |
+| A stale or over-the-ceiling verdict | the verdict's `expires_at`, the rule's `max_risk` | `gate.witness_stale`, `gate.witness_risk_too_high` | 1, 2 |
+| A hazard class the rule does not allow | the rule's `allowed_hazard_classes`, `on_hazard` | `release.hazard_class_not_allowed` (a no, or a hold) | 1, 2 |
+| A second hazard in the window | the rule's `hazard_budget` | `release.session_hazard_budget_exceeded` (alarm) | 1, 2 |
+| A sampled or hazard-class response with no receipt | `audit` | `release.escrow_receipt_required` | 1, 2 |
+| Bytes toward the host that were never presented | the `model.output` rule's `output_budget.unpresented_bytes` | `gate.output_unpresented` (alarm) | 1 |
+| Bytes at the egress with no ticket | the endpoint | `ticket.missing` | 1 |
+
+Everything in that table is a number, a key or a list the governance body signed. Nowhere in
+it is there a word about weapons, and that is the point: the chip stops the request because
+the shape is wrong, and the shape is wrong because a witness with a key said so, or because
+the paperwork is missing, and no amount of talking changes either.
 
 ## 1. Three ways a fact gets into the chip, and the one that does not exist
+
+> **In plain words:** a courthouse. The law is carved into the building; signed orders come
+> through the clerk's window; the clock on the wall keeps its own time. Nothing shouted
+> through the window counts.
 
 | Way in | What | Who | Can it change? |
 |---|---|---|---|
@@ -43,37 +185,57 @@ three kinds line up.
 
 ## 2. What is in the rulebook
 
+> **In plain words:** a building's security binder. Who has keys, which contractors are
+> approved, the floor plan of every door, the rule for each door, and a sign-off page that
+> enough directors must sign. Nobody adds a page by hand; a new binder replaces the old one,
+> whole, with a higher edition number.
+
 The rulebook is the policy image, one signed blob, at most a megabyte, held in the chip's own
-authenticated NVM and nowhere else (`04-specification.md` §10). Its fields, what each one is
-for, and who gets to write it:
+authenticated NVM and nowhere else (`04-specification.md` §10). What is in it, in four groups.
 
-| Field | What it is | Written by | What the chip does with it |
-|---|---|---|---|
-| `version` | A number that only goes up | The governance body | Refuses any image whose number is not above the fused anti-rollback counter and above the running edition (`policy.rollback`) |
-| `issued_at`, `expires_at` | A validity window | Governance | Refuses an expired image at load; a running image that expires is a `policy.expired` no on every request until a new one lands |
-| `governance_keys`, `threshold` | The n keys and the k that must sign | Fixed by the hashes in the fuses; the image carries the keys, the fuses say which keys are real | k of n over the whole image, checked before anything else (`policy.quorum_not_met`) |
-| `approver_keys` | Per rule, the people who may release a hold, and the quorum | Governance | An approval signed by anyone else is `approve.bad_signature`; fewer than the quorum is `approve.quorum_pending` |
-| `heartbeat_key` | The one key whose heartbeat keeps the chip in RUN | Governance | A heartbeat signed by anything else is `heartbeat.bad_signature`; none in time is `halt.heartbeat_lost` |
-| `publisher_keys` | Who may sign a model manifest | Governance | `BEGIN_MODEL` with a manifest from anyone else is refused; no key is released |
-| `observer_keys` | The witnesses whose verdicts the observer lane accepts | Governance | A verdict from any other key is ignored; no accepted verdict is `gate.witness_missing` |
-| `eval_keys`, `deployment_gate` | Who may attest that a model was evaluated, and whether `BEGIN_MODEL` needs that | Governance | With the gate on, no evaluation attestation means no model key (`model.not_evaluated`) |
-| `reference_values` | Per device class: the vendor's verification key and the firmware digests that are acceptable, each with an expiry | Governance, from the vendors' published reference measurements | The verifier compares the GPU's and the host's reports against these and nothing else (`attest.firmware_not_in_reference`) |
-| `revocations` | Chip ids and key ids that are dead | Governance | Refused wherever they appear |
-| `endpoints` | Name, public key, `safe_transition` (what the device does when it cannot reach a governor), the register rows it relies on | Governance with the device vendor | Binds a rule to the one device that may act on its tickets; the device's `COMMIT` must carry that key |
-| `budget_owners` | Budget key to the one governor chip that keeps its ledger | Governance | A rule naming a budget with no owner makes the image unloadable (`policy.budget_owner_missing`); there is no default owner |
-| `rules` | The rules, §3 | Governance | The gate, §5 |
-| `assumptions` | The assumptions register: one row per input a rule or endpoint relies on, saying who the authority is, how fresh it must be, what happens on conflict, how independent it is, and what nobody checks | Governance, written by people | An image in which any rule input has no row is refused (`policy.register_incomplete`); the chip will not run a rule whose assumptions nobody wrote down |
-| `override_floor_s` | The shortest time a hold may sit before a person can release it; never under 10 s | Governance | `approve.below_latency_floor` on an approval that comes too fast for a person to have read anything |
-| `safe_mode` | Per cause, the first rung (THROTTLE, HALT, SAFE) and the timers between rungs | Governance | The sequencer's table; a loop opening is HALT, a heartbeat loss is THROTTLE, tamper is SAFE |
-| `fabric` | `heartbeat_expiry_s`, `max_hops`, `epoch_deadline_s`, `loop_bound_s` | Governance | The clock the chip keeps against the authority, the fan-out and the rulebook change |
-| `buffer_classes`, `buffer_policy` | Which classes of GPU memory (weights, KV cache, activations, outputs) may leave the GPU, and for whom (nobody, roster peers, the verified host) | Governance | The integrated tier's copy-engine and peer-MMU checks; the rack tier records the gap (`ep.unchecked_path`) |
-| `audit` | The share of responses the chip's own random source picks for review, the verdict classes always held in escrow, which endpoint is the audit store | Governance | A sampled or escrowed response needs the audit store's signed receipt before it may leave (`release.escrow_receipt_required`) |
-| `streams_required` | Which streams a response must present for signing before it can be released | Governance | `release.required_stream_missing` |
-| `compute_budget`, `sandbox` | A cycle budget for the workload and the license keys that may extend it; whether this is a sandbox (a model organism: no peer path and no network flow at all) | Governance | `compute.budget_exceeded`; in a sandbox the roster opens no peer port, only the verified host's, and the release rule's endpoint is the audit store |
-| `signatures` | k of n over everything above | The governance keys | Verified against the fused hashes |
+**The keys: who is allowed to say what.**
 
-Everything in that table is either a key, a number, a digest, a list of digests, or a table of
-those. There is no free text the chip acts on. The only prose in the image is the assumptions
+| Field | What it is | What the chip does with it |
+|---|---|---|
+| `governance_keys`, `threshold` | The n keys and the k that must sign the rulebook itself. The image carries the keys; the fuses say which keys are real | k of n over the whole image, checked before anything else (`policy.quorum_not_met`) |
+| `approver_keys` | Per rule, the people who may release a hold, and the quorum | An approval signed by anyone else is `approve.bad_signature`; fewer than the quorum is `approve.quorum_pending` |
+| `heartbeat_key` | The one key whose heartbeat keeps the chip in RUN | A heartbeat signed by anything else is `heartbeat.bad_signature`; none in time is `halt.heartbeat_lost` |
+| `publisher_keys` | Who may sign a model manifest | `BEGIN_MODEL` with a manifest from anyone else is refused; no key is released |
+| `observer_keys` | The witnesses whose verdicts the observer lane accepts | A verdict from any other key is ignored; no accepted verdict is `gate.witness_missing` |
+| `eval_keys`, `deployment_gate` | Who may attest that a model was evaluated, and whether `BEGIN_MODEL` needs that | With the gate on, no evaluation attestation means no model key (`model.not_evaluated`) |
+
+**The references: what is real.**
+
+| Field | What it is | What the chip does with it |
+|---|---|---|
+| `reference_values` | Per device class: the vendor's verification key and the firmware digests that are acceptable, each with an expiry; written by governance from the vendors' published reference measurements | The verifier compares the GPU's and the host's reports against these and nothing else (`attest.firmware_not_in_reference`) |
+| `revocations` | Chip ids and key ids that are dead | Refused wherever they appear |
+| `endpoints` | Name, public key, `safe_transition` (what the device does when it cannot reach a governor), the register rows it relies on | Binds a rule to the one device that may act on its tickets; the device's `COMMIT` must carry that key |
+| `budget_owners` | Budget key to the one governor chip that keeps its ledger | A rule naming a budget with no owner makes the image unloadable (`policy.budget_owner_missing`); there is no default owner |
+
+**The rules, and what they stand on.**
+
+| Field | What it is | What the chip does with it |
+|---|---|---|
+| `rules` | The rules, §3 | The gate, §5 |
+| `assumptions` | The assumptions register: one row per input a rule or endpoint relies on, saying who the authority is, how fresh it must be, what happens on conflict, how independent it is, and what nobody checks | An image in which any rule input has no row is refused (`policy.register_incomplete`); the chip will not run a rule whose assumptions nobody wrote down |
+| `version`, `issued_at`, `expires_at` | An edition number that only goes up, and a validity window | `policy.rollback` on a number not above the fused counter and the running edition; `policy.expired` at load, and on every request once a running image expires |
+| `signatures` | k of n over everything above | Verified against the fused hashes |
+
+**The standing settings.**
+
+| Field | What it is | What the chip does with it |
+|---|---|---|
+| `override_floor_s` | The shortest time a hold may sit before a person can release it; never under 10 s | `approve.below_latency_floor` on an approval that came too fast for a person to have read anything |
+| `safe_mode` | Per cause, the first rung (THROTTLE, HALT, SAFE) and the timers between rungs | The sequencer's table: a loop opening is HALT, a heartbeat loss is THROTTLE, tamper is SAFE |
+| `fabric` | `heartbeat_expiry_s`, `max_hops`, `epoch_deadline_s`, `loop_bound_s` | The clock the chip keeps against the authority, the fan-out, the rulebook change |
+| `buffer_classes`, `buffer_policy` | Which classes of GPU memory (weights, KV cache, activations, outputs) may leave the GPU, and for whom (nobody, roster peers, the verified host) | The integrated tier's copy-engine and peer-MMU checks; the rack tier records the gap (`ep.unchecked_path`) |
+| `audit` | The share of responses the chip's own random source picks for review (five percent in the model), the verdict classes always held in escrow, which endpoint is the audit store | A sampled or escrowed response needs the audit store's signed receipt before it may leave (`release.escrow_receipt_required`) |
+| `streams_required` | Which streams a response must present for signing before it can be released | `release.required_stream_missing` |
+| `compute_budget`, `sandbox` | A cycle budget and the licence keys that may extend it; whether this is a sandbox (a model organism: no peer path and no network flow at all) | `compute.budget_exceeded`; in a sandbox the roster opens no peer port, only the verified host's, and the release rule's endpoint is the audit store |
+
+Everything in those tables is a key, a number, a digest, a list of digests, or a table of those.
+There is no free text the chip acts on. The only prose in the image is the assumptions
 register, and the chip does not read it; it checks that it exists.
 
 ### 2.1 Loading an edition: the five refusals
@@ -101,24 +263,28 @@ per rack, never two.
 
 ## 3. One rule, field by field
 
-```
-Rule {
-  id,                              // a name for the log; nothing matches on it
-  measurement,                     // the workload measurement this rule is for, or "*" for any verified workload
-  action,                          // "payments.transfer", "message.send", "response.release", ...
-  constraints: {field: {min, max} | {in: [...]} | {in_list: list_id} | {not_in_list: list_id} | {digest_of: list_id}},
-  requirement: {mode: auto | observer | human, observers: [key_id], max_risk, approvers_quorum,
-                allowed_hazard_classes, min_legibility, on_hazard, on_illegible},   // the last four: response.release only
-  rate: {max, window_s},           // requests per window for this workload and action
-  budget: {key, param, limit, window_s},   // the typed field that is spent, against which shared ledger
-  output_budget: {queries, bytes, window_s, unpresented_bytes},   // model.output only
-  hazard_budget: {max, window_s},  // response.release only: hazard verdicts per session
-  endpoint,                        // the one device that may act on this rule's tickets, or null
-  delay_s,                         // a ticket is not valid before issue + delay
-  inputs: [input_name],            // register rows the author says this rule relies on, besides the derived ones
-  streams_required                 // response.release only; null means the image's default
-}
-```
+> **In plain words:** one line of a bank's approval matrix. Who may approve what amount, in
+> which currency, with whose second signature, how many per hour, and which cashier window
+> pays it out. The line names the job by its measured identity, never by the name on the form.
+
+| Field | What it holds | In `payments.transfer.small`, as the model runs it | What it means |
+|---|---|---|---|
+| `id` | A name for the log | `payments.transfer.small` | Nothing matches on it |
+| `measurement` | The workload measurement this rule is for, or `*` for any verified workload | `*` | The key, never a name (below) |
+| `action` | A typed action | `payments.transfer` | What is being asked, as a code, not a sentence |
+| `constraints` | Per field: `min`, `max`; `in` a fixed set; `in_list` or `not_in_list` a signed list by id; `digest_of` a list | `amount` 0 to 1000; `currency` in {USD} | Typed limits. No pattern, no substring, no "contains": the chip cannot read |
+| `requirement.mode` | `auto`, `observer` or `human` | `auto` | Who else has to say yes (below) |
+| `requirement.observers`, `max_risk` | Which observer keys, and the risk ceiling | none | The observer lane |
+| `requirement.approvers_quorum` | How many approvers must sign a hold | 0 | The human lane |
+| `allowed_hazard_classes`, `min_legibility`, `on_hazard`, `on_illegible` | `response.release` only: which verdict classes may leave, the legibility floor, and whether a failing verdict is a no or a hold | not used | The release gate |
+| `rate` | `max` requests per `window_s` for this workload and action | 100 per 60 s | The only memory besides the budget |
+| `budget` | A typed field (`param`) spent against a `limit` per `window_s` on the ledger of the chip that owns `key` | `pay-usd-hourly`: `amount`, 2000 per 3600 s, owned by governor 0 | Reserved before the ticket exists; released if the endpoint never commits |
+| `output_budget` | `model.output` only: queries, bytes, a window, and the unpresented-bytes trip point | not used | How much may leave as output at all |
+| `hazard_budget` | `response.release` only: hazard verdicts per session per window | not used | The second hazard parks the session |
+| `endpoint` | The one device that may act on this rule's tickets | `payment-switch` | Any other device refuses the ticket |
+| `delay_s` | A ticket is not valid before issue plus the delay | 0 | A window to pull the plug on an auto rule |
+| `inputs` | Register rows the author says the rule relies on, besides the derived ones | `beneficiary-registry` | No row, no load |
+| `streams_required` | `response.release` only; null means the image's default | not used | Which streams a response must present |
 
 **The key is the workload, not a name.** `measurement` is `H(gpu firmware, host firmware,
 model manifest)`, computed by the chip at `BEGIN_MODEL` out of two attestation reports and a
@@ -136,8 +302,7 @@ guess (`gate.constraint.<field>.missing`).
 **Constraints are typed limits, not patterns.** `min` and `max` on a number; `in` on a small
 fixed set; `in_list` and `not_in_list` against a signed list the chip holds by id (protected
 sites, sanctioned beneficiaries, approved recipients). A list that is missing or past its
-expiry is not treated as empty; it is `gate.constraint.<field>.list_unavailable`, a no. There
-is no regular expression, no substring, no "contains", because the chip cannot read.
+expiry is not treated as empty; it is `gate.constraint.<field>.list_unavailable`, a no.
 
 **The lane is the rule's answer to "who else has to say yes".** `auto`: the fields and the
 limits decide. `observer`: a fresh verdict signed by one of the rule's observers, over this
@@ -147,10 +312,10 @@ written reason, after the override floor. A rule can combine them: the observer 
 `approvers_quorum` set is a verdict first and people second.
 
 **Budgets and rates are the only memory a rule has.** A rate window counts requests per
-workload and action. A budget spends a named typed field (`amount`) against a limit per window
-on a ledger that one governor owns for the whole rack; the reservation is made before the
-ticket exists and released if the endpoint never commits (`02-safety-fabric.md` §6). Two racks
-cannot each spend the same hourly limit.
+workload and action. A budget spends a named typed field against a limit per window on a
+ledger that one governor owns for the whole rack; the reservation is made before the ticket
+exists and released if the endpoint never commits (`02-safety-fabric.md` §6). Two racks cannot
+each spend the same hourly limit.
 
 **Endpoint and delay.** A ticket names the one endpoint whose key may commit it; any other
 device refuses it (`ticket.wrong_endpoint`). `delay_s` makes a ticket valid only after a
@@ -159,36 +324,45 @@ the loop of every request.
 
 ## 4. The rule sets in the model's rulebook
 
-These are the rules `govsim/cluster.py` installs for the hypothesis suite. They are an
-operator's rulebook in miniature: enough of each kind to break every mechanism the design
-claims.
+> **In plain words:** a hotel's key cards. Your card opens your room and the gym for the
+> nights you booked, the service door opens for the staff card, the safe needs the manager
+> and a second key, and a card that was never issued opens nothing. The hotel's job is to
+> decide the rules; the lock's job is to make the rules the only thing that matters.
 
-| Rule | Keyed to | Constraints | Lane | Memory | Endpoint | What it is for |
+These are the rules `govsim/cluster.py` installs for the hypothesis suite: an operator's
+rulebook in miniature, with enough of each kind to break every mechanism the design claims.
+
+| Rule | Keyed to | Limits | Lane | Memory | Endpoint | What it is for |
 |---|---|---|---|---|---|---|
-| `payments.transfer.small` | any workload | `amount` 0 to 1000, `currency` in {USD} | auto | 100 per minute; `pay-usd-hourly` budget, 2000 per hour, owned by governor 0 | `payment-switch` | The everyday case: a bounded action with no human, spent against a shared limit |
+| `payments.transfer.small` | any workload | `amount` 0 to 1000, `currency` in {USD} | auto | 100 per minute; `pay-usd-hourly`, 2000 per hour, owned by governor 0 | `payment-switch` | The everyday case: a bounded action with no human, spent against a shared limit |
 | `payments.transfer.large` | any | `amount` 1000 to 1,000,000 | human, 2 approvers | | `payment-switch` | The same action, one size up: two people sign or nothing moves |
 | `message.send.listed` | any | `recipient` in the signed `recipient-registry` | auto | | `messaging` | An agent acting in the world: a known recipient needs no one |
 | `message.send.any` | any | | human, 2 | | `messaging` | An unknown recipient is a hold, not a no |
 | `shipment.order` | any | | human, 2 | | `fulfilment` | A consequential action with no cheap bound: always people |
 | `strike` | any | `target` not in the signed `protected-sites` list; `munition` in a fixed set | observer (risk under 0.5) and 2 approvers | | `strike-guidance`, 2 s delay | The deconfliction case from `17-use-cases.md` §3: list, witness, people and a delay, all four |
-| `model.output` | any | | | 50 queries and 200 KB per hour; 1 MB unpresented | | How much may leave as output at all, and the alarm when more bytes pass the port than were presented for signing |
-| `response.release` | any | | observer; allowed hazard classes, legibility floor, hazard budget per session | | `egress` (the audit store in a sandbox) | A response leaving the rack is an action: the verdict, the classes, the escrow |
+| `model.output` | any | | | 50 queries and 200 KB per hour; 1 MB unpresented | | How much may leave as output at all, and the alarm when more bytes pass the port than were presented |
+| `response.release` | any | | observer; allowed hazard classes, legibility floor, hazard budget per session | | `egress` (the audit store in a sandbox) | A response leaving the rack is an action: the verdict, the classes, the escrow. Scenario 1 and 2 end here |
 | `model.export.70b` | the 70B workload exactly | | auto | | | The one workload that may export its own weights, keyed to its measurement |
 | `model.export.any` | any other | | human, 2 | | | Anything else that wants to copy weights out meets people |
 | `weights.write.own` | the 70B workload exactly | `destination` in {its own storage flow} | auto | | | Training: a model writes its weights to its own flow and nowhere else |
 | `weights.write.any` | any | | human, 2 | | | Any other write of weights |
-| `compute.extend` | any | carries a license | auto, licence checked | cycles | | A compute budget that only a signed licence extends |
+| `compute.extend` | any | carries a licence | auto, licence checked | cycles | | A compute budget that only a signed licence extends |
 
 Standing rules that are not rules but fields of the image: the buffer policy (weights never
 leave the GPU, KV cache and activations only to roster peers, outputs only to the verified
-host), the sandbox flag (no network flows), audit sampling at five percent with the hazard
-class always escrowed, the required streams, the safe-mode table and the fabric timings (§2).
+host), the sandbox flag, audit sampling at five percent with the hazard class always escrowed,
+the required streams, the safe-mode table and the fabric timings (§2).
 
 An operator's real rulebook is this shape with their actions, their lists, their people and
 their numbers. That is their job, and it is deliberately a boring job: fill in the form, sign
 it with k keys, publish. The chip's job is to make the form the only thing that matters.
 
 ## 5. What triggers a no, in the order the chip asks
+
+> **In plain words:** the airport. Is the boarding pass real, is it yours, has it been used,
+> is the flight cancelled, is this the right gate, does the bag fit the sizer, is there a seat
+> left. The questions come in one order, the first failure ends it, and the agent reads a code
+> off the screen rather than deciding whether you look trustworthy.
 
 ![The ten questions and their reason codes](figures/fig-no-order.png)
 
@@ -232,6 +406,11 @@ named in the log.
 
 ## 6. How it knows: the evidence behind each question
 
+> **In plain words:** the customs officer who cannot read the language on the paperwork. She
+> checks the seal, the stamp, the weight, the count of crates against the manifest, and
+> whether the destination is on the approved list. Smuggling is caught as a mismatch between
+> what the papers say and what the scale says, never by understanding the cargo.
+
 | Question | What the chip actually looks at | Who produced it | How the chip checks it | What the chip cannot know |
 |---|---|---|---|---|
 | Who is asking | The GPU's confidential-computing report and the host enclave's report, each over a nonce the chip minted | The GPU and the CPU, signed with their device keys | Certificate chain against the vendor keys in the reference values; signature; nonce freshness; firmware digest in the reference values and not expired; the workload measurement derived from them | Whether the vendor's firmware is good. It knows it is the firmware the governance body listed |
@@ -252,6 +431,12 @@ right. Those are people problems, handled by signatures and by measurement, and 
 built so that none of them can be solved by talking to it.
 
 ## 7. The board: who the chip talks to, and how
+
+> **In plain words:** the GPU is the star employee with no alarm bell wired in. The governor
+> is the small security office next door, with the rulebook, the employee's badge photo, a log
+> book, the key to the breaker panel and the keys to the doors between buildings. The CPU is
+> the mailroom, plus one clerk with a notary stamp. The BMC is the janitor, who still has keys
+> to the other rooms but now asks the security office before touching this one.
 
 ![The board: the governor, the GPU, the CPU, the switches, the DPU and the BMC](figures/fig-board.png)
 
@@ -276,29 +461,38 @@ thing on the far end of three signals it already has.
 | Presence, fault | The slot's present and fault pins | slot → governor | GPIO | Roster and log inputs | |
 | Attestation report | None of its own: the report travels in-band, driver to host, and the host posts it to the mailbox | GPU → host → governor | NVIDIA's confidential-computing attestation (the driver obtains the GPU's signed measurement report over its SPDM session; the certificate chain roots at NVIDIA's device identity CA; the local verifier in NVIDIA's nvtrust checks the same 96-byte P-384 signatures the governor's verifier checks) | `VERIFY_GPU {report, cert, nonce}` | Five refusals, below |
 
-**The attestation handshake**, the only conversation with the GPU that carries a signature:
+**The attestation handshake** is the only conversation with the GPU that carries a signature.
+In plain words: the badge check. The badge is issued by HR (NVIDIA), it is signed, it names
+the employee, and the security office compares it against its own list of badge versions that
+are still valid. The office never phones HR; the list came with the rulebook.
 
-```
-host    → governor   asks for a nonce                               (the governor mints it, random, one use)
-host    → GPU        driver asks the GPU for its report over the nonce (SPDM GET_MEASUREMENTS, in-band, as today)
-GPU     → host       report {chip_id, firmware_digest, manifest_digest?, open_paths, nonce, sig_device}, device cert chain
-host    → governor   VERIFY_GPU {report, cert}                       (frame unsigned: the report authenticates itself)
-governor             1 cert chain verifies against a vendor key in reference_values[gpu]      else attest.unknown_device
-                     2 report signature verifies under the cert's key, chip_id matches         else attest.bad_signature
-                     3 nonce is one this governor minted and has not seen used                  else attest.bad_nonce
-                     4 firmware_digest is in reference_values[gpu] and not past valid_until      else attest.firmware_not_in_reference
-                     5 no open debug or unchecked path reported                                 else attest.unchecked_path_open
-                     (integrated tier: manifest_digest equals the model this governor loaded     else attest.bad_signature.manifest_mismatch)
-governor → host      verify-result {device: gpu, chip_id, firmware, nonce, expires_at: now + 3600 s, sig_governor}
-```
+1. The host asks the governor for a nonce. The governor mints one: random, one use.
+2. The driver asks the GPU for its attestation report over that nonce, in-band, exactly as it
+   does today (an SPDM measurement request).
+3. The GPU answers with a signed report (its chip id, its firmware digest, whether any debug or
+   unchecked path is open, the nonce) and its device certificate chain.
+4. The host posts both to the mailbox as `VERIFY_GPU`. The frame is unsigned; the report
+   authenticates itself.
+5. The governor checks, in this order, and the first failure is the answer:
 
-The result is good for an hour (`TOKEN_TTL_S`). Every request after that hour is
-`gate.not_attested` until the handshake runs again; the runtime re-attests on a timer, which
-costs it one mailbox round trip and the GPU one report. The governor never contacts NVIDIA's
-attestation service; the reference values it compares against were put in the rulebook by the
-governance body from NVIDIA's published reference measurements, and a new GPU firmware means a
-new rulebook edition, signed, which is the point. A GPU whose firmware is not on that list is
-a GPU this rack will not run a model on.
+| Check | If it fails |
+|---|---|
+| The certificate chain verifies against a vendor key in `reference_values[gpu]` | `attest.unknown_device` |
+| The report's signature verifies under the certificate's key and the chip id matches | `attest.bad_signature` |
+| The nonce is one this governor minted and has not seen used | `attest.bad_nonce` |
+| The firmware digest is in `reference_values[gpu]` and not past its expiry | `attest.firmware_not_in_reference` |
+| No open debug or unchecked path is reported | `attest.unchecked_path_open` |
+| Integrated tier only: the manifest digest in the report equals the model this governor loaded | `attest.bad_signature.manifest_mismatch` |
+
+6. The governor returns a signed verify-result good for an hour (`TOKEN_TTL_S`), and records
+   the GPU's firmware digest as half of the workload measurement.
+
+Every request after that hour is `gate.not_attested` until the handshake runs again; the
+runtime re-attests on a timer, which costs it one mailbox round trip and the GPU one report.
+The governor never contacts NVIDIA's attestation service; the reference values it compares
+against were put in the rulebook by the governance body from NVIDIA's published reference
+measurements, and a new GPU firmware means a new rulebook edition, signed, which is the point.
+A GPU whose firmware is not on that list is a GPU this rack will not run a model on.
 
 **The counters.** The meter keeps, per model digest, tokens, kernel cycles, bytes in and bytes
 out (`04-specification.md` §2, `METER_SLOT`). Cycles, power and utilization come off the
@@ -312,9 +506,8 @@ The host reads the meter through `COUNTERS` and cannot write it.
 report whatever its firmware reports, and work as hard as it likes. It cannot reach the
 governor's memory (the governor is a one-BAR endpoint behind the PCIe switch whose only
 writable word is the doorbell, and a frame it did not sign is refused at the mailbox like any
-other), cannot forge a report (the device key is
-in the GPU, the reference values are in the rulebook), and cannot keep itself powered when the
-chip says otherwise.
+other), cannot forge a report (the device key is in the GPU, the reference values are in the
+rulebook), and cannot keep itself powered when the chip says otherwise.
 
 ### 7.2 The host CPU and its enclave: one mailbox, one key that matters
 
@@ -332,12 +525,16 @@ status (`04-specification.md` §2). The host sees `ID`, `LIFECYCLE`, `STATE`, `C
 `MBOX_DOORBELL` and nothing else. The smallest boards replace the PCIe lane with SMBus; the
 protocol is the same.
 
-A frame is `{seq, epoch, cmd, body, sig}`. The mailbox checks, in this order and reports the
-first failure: the sequence number is above the last one accepted for that signer key
-(`mailbox.bad_sequence`); the edition stamp equals the chip's epoch register, except for the
-six commands that move or repair the edition (`policy.stale_epoch`); the signature verifies
-under a key the rulebook names for that command class (`mailbox.bad_signature`). Only then is
-the command dispatched. The model and the RTL check in the same order and
+A frame carries five things: a sequence number, the edition stamp, the command, the body and
+a signature. The mailbox checks them in this order and reports the first failure:
+
+| Check | If it fails |
+|---|---|
+| The sequence number is above the last one accepted for that signer key | `mailbox.bad_sequence` |
+| The edition stamp equals the chip's epoch register (except for the six commands that move or repair the edition) | `policy.stale_epoch` |
+| The signature verifies under a key the rulebook names for that command class | `mailbox.bad_signature` |
+
+Only then is the command dispatched. The model and the RTL check in the same order and
 `tests/test_h00_contract.py` and the RTL suite each pin it. `MBOX_STATUS` tells the host which
 check failed: 3 signature, 4 sequence, 5 epoch, 6 refused by the handler.
 
@@ -385,23 +582,29 @@ model key" is literally true and how a rack with no governor runs nothing.
 **One request, from the agent's point of view.** On NVIDIA's platform the runtime is
 OpenShell: each agent in a deny-by-default sandbox with no network path except through its
 supervisor, and trusted supervisor middleware on that path (`hardware-and-silicon/docs/NVIDIA.md`).
-The governor's gate is that middleware, on the host side inside the enclave:
+The governor's gate is that middleware, on the host side inside the enclave. In plain words:
+the agent is a contractor in a building where every door is locked, the supervisor is the
+escort, and the escort will not open the loading dock without a slip from the security office.
 
-```
-agent (sandbox)     → supervisor        an outbound call: POST /payments {amount: 420, currency: USD, to: ...}
-supervisor          → middleware        the call, after OpenShell's own policy allowed the host
-middleware                              maps the call to a typed action: payments.transfer {amount, currency, recipient}
-                                        attaches the sandbox's attestation token and Sentry's verdict over the request hash
-middleware (enclave)→ governor          REQUEST {request_id, measurement_token, action, params, witnesses}, signed with the enclave key
-governor                                the ten questions (§5)
-governor            → middleware        {ok, ticket}  |  {held_for_human, hold_id}  |  {no, code}
-middleware          → supervisor        200 with X-Action-Ticket: <ticket>  |  202 with the hold id  |  403 with the reason code
-supervisor          → endpoint          the call reaches the payment switch, ticket attached
-endpoint                                verifies the ticket: signature, fields against params_digest, action, endpoint, edition, validity, not burned
-endpoint            → governor          COMMIT {ticket_id, sig_endpoint}        (through the host as courier)
-governor            → endpoint          COMMIT_OK                               (the reservation is spent; the log has a line)
-endpoint                                acts. Without COMMIT_OK it does not.
-```
+1. The agent makes an outbound call from its sandbox, say a payment of 420 dollars to a
+   recipient. The call can only go through the supervisor.
+2. OpenShell's own policy allows or refuses the host. If it allows, the call reaches the
+   middleware.
+3. The middleware maps the call to a typed action, `payments.transfer` with `amount`,
+   `currency` and `recipient`, and attaches the sandbox's attestation token and Sentry's
+   verdict over the request hash.
+4. The middleware, inside the enclave, posts `REQUEST` to the governor, signed with the enclave
+   key: request id, workload token, action, fields, witnesses.
+5. The governor asks its questions (§5).
+6. The governor answers: a ticket, a hold id, or a no with a code. The middleware turns that
+   into the call's fate: it goes on with the ticket in an `X-Action-Ticket` header, or waits on
+   the hold (202), or stops with the reason code (403).
+7. The call reaches the payment switch with the ticket attached. The switch verifies the ticket
+   itself: signature, fields against the digest, action, endpoint, edition, validity, not yet
+   burned.
+8. The switch sends `COMMIT` to the governor, signed with its own key, through the host as
+   courier. The governor spends the reservation, writes the log line and answers `COMMIT_OK`.
+9. The switch acts. Without `COMMIT_OK` it does not.
 
 OpenShell's own `network_policies` document is derived from the same signed rulebook
 (`hardware-and-silicon/hardware_ref/oasp.py`, `to_openshell_network_policy`), so the hosts
@@ -413,14 +616,15 @@ to the model that the gate's verdicts can trip.
 
 **A response leaving.** The runtime presents each stream of a response to `SIGN_OUTPUT` (the
 chip hashes what it is shown and records it against the response id), then posts
-`REQUEST response.release {response_id, response_hash, stream_hashes, session}` with the
+`REQUEST response.release` with the response id, the hashes and the session, and the
 observer's verdict attached. The release gate (§5, row 7a) checks the streams, the hashes, the
 verdict's class against the rule's allowed classes, the legibility floor, the session's hazard
 budget and, for a sampled or escrowed response, the audit store's receipt. The ticket goes to
 the DPU's egress, which lets the bytes out. A response with no verdict does not leave; a
 response whose bytes do not match what was presented does not leave; and if more bytes cross
 the PCIe port toward the host than were ever presented, the meter raises the alarm and the
-gate stops answering until a person with the alarm key clears it.
+gate stops answering until a person with the alarm key clears it. Scenario 1 and scenario 2
+both end in this paragraph.
 
 **The BMC.** It keeps its own buses to everything that is not the GPU, the switches or the DPU.
 Where it used to own one of those, it now reaches that device through the governor, which
@@ -442,17 +646,30 @@ ledgers.
 
 ## 8. Bring-up, in order
 
-```
-rack power      governors boot halted: brake and PERST# asserted, PWR_EN low, every port closed, loop switch open
-boot            ROM measures the loader, the loader the firmware; keys derived from (UDS, M0, M1); the rulebook loaded from NVM and verified
-authority       the first heartbeat enters at the supervisor governor and fans out; an armed governor closes its loop switch
-loop            every switch closed, current flows, the rack's continuity test passes; governors go to RUN: PWR_EN, power-good, PERST# released, brake released
-host            the OS boots; the enclave attests (VERIFY_HOST); the driver attests each GPU (VERIFY_GPU)
-model           the loader posts BEGIN_MODEL; the wrapped key comes back; the weights decrypt into the GPU
-roster          ROSTER_JOIN; quotes over the fabric; the roster signed by the lowest chip id; ports open for roster members only
-serve           REQUEST, SIGN_OUTPUT, response.release, CAP_REQUEST; the meter read on a timer; heartbeats every second
-stop            END_MODEL freezes the meter; the key is never re-released under this fingerprint without a new BEGIN_MODEL
-```
+> **In plain words:** opening a bank branch in the morning. Power comes on with every door
+> locked. Each guard station checks in; the alarm panel arms only when all of them have; the
+> doors unlock one by one, in order, and if one station never checks in the branch stays shut
+> until someone finds out why.
+
+1. **Rack power.** Governors boot halted: brake and PERST# asserted, PWR_EN low, every
+   governed port closed, the loop switch open.
+2. **Boot.** ROM measures the loader, the loader measures the firmware; keys are derived from
+   the device secret and the two measurements; the rulebook is loaded from NVM and verified.
+3. **The authority.** The first heartbeat enters at the supervisor governor and fans out over
+   the fabric. A governor with no open cause and a valid heartbeat closes its loop switch.
+4. **The loop.** With every switch closed, current flows and the rack's continuity test
+   passes. Governors go to RUN: PWR_EN high, PERST# released after power-good, the brake
+   released.
+5. **The host.** The operating system boots; the enclave attests (`VERIFY_HOST`); the driver
+   attests each GPU (`VERIFY_GPU`).
+6. **The model.** The loader posts `BEGIN_MODEL`; the wrapped key comes back; the weights
+   decrypt into the GPU.
+7. **The roster.** `ROSTER_JOIN`; quotes over the fabric; the roster signed by the lowest chip
+   id; ports open for roster members only.
+8. **Serving.** `REQUEST`, `SIGN_OUTPUT`, `response.release`, `CAP_REQUEST`; the meter read
+   on a timer; a heartbeat every second.
+9. **Stop.** `END_MODEL` freezes the meter; the key is never re-released under this
+   fingerprint without a new `BEGIN_MODEL`.
 
 A governor that cannot complete any step stays where it is with its loop switch open, and the
 rack does not start. That is on purpose: a rack with one missing governor is a rack with a
@@ -464,12 +681,14 @@ Pinned by the suite and the proofs: the mailbox order (H0), attestation freshnes
 five refusals (H1), the k-of-n and rollback refusals (H3), the lane, the typed limits and the
 measurement key with no path for labels (H4), alarms that anyone may raise and only the alarm
 key clears (H5), the lists and the register completeness refusal (H7), the override floor and
-the quorum (H8), the use cases end to end including release (H17), witness freshness and
-impersonation (H18), and the core invariants P0 to P9 in Z3 (`proofs/core_invariants.py`):
-nothing executes unless a rule allowed it with its witnesses present when the ticket was
-issued (P1, P2); no replay (P3); no ticket from an edition newer than the current one (P4);
-halt is absorbing without a quorum (P5); with the heartbeat lost nothing executes and no ticket
-is issued (P6, P7); the edition only moves forward and only with a quorum (P8, P9).
+the quorum (H8), output that left without being presented (H10), the use cases end to end
+including the hazardous-knowledge release (H17), witness freshness and impersonation, the
+deployment gate and the audit sample (H18), and the core invariants P0 to P9 in Z3
+(`proofs/core_invariants.py`): nothing executes unless a rule allowed it with its witnesses
+present when the ticket was issued (P1, P2); no replay (P3); no ticket from an edition newer
+than the current one (P4); halt is absorbing without a quorum (P5); with the heartbeat lost
+nothing executes and no ticket is issued (P6, P7); the edition only moves forward and only
+with a quorum (P8, P9).
 
 Not pinned, because it is NVIDIA's to give (`03-interfaces.md` §9): a manifest digest inside
 the GPU's own report, so the measurement binds the model the GPU loaded rather than the one
@@ -479,6 +698,22 @@ each one. Each one closes a gap this document names.
 
 ## 10. Sources
 
+- The scenarios: the hazardous-knowledge narration and its bypass table, `17-use-cases.md` §4,
+  run by `tests/test_h17_use_cases.py` (`test_usecase_narrations_run_and_no_bad_action_initiates[hazard]`),
+  with the witness, deployment-gate and audit guarantees in `tests/test_h18_oversight.py` and
+  the unpresented-output alarm in `tests/test_h10_leakage.py`. The ladder and its removal
+  papers: `24-the-ladder.md`. Abliteration: Arditi et al., "Refusal in Language Models Is
+  Mediated by a Single Direction", 2024, https://arxiv.org/abs/2406.11717. Jailbreaks: Wei et
+  al., "Jailbroken: How Does LLM Safety Training Fail?", 2023, https://arxiv.org/abs/2307.02483;
+  Zou et al., "Universal and Transferable Adversarial Attacks on Aligned Language Models", 2023,
+  https://arxiv.org/abs/2307.15043.
+- OpenAI's published stack for the biological and chemical domain: the GPT-5 system card,
+  https://arxiv.org/abs/2601.03267 (the high-capability classification and the safeguards);
+  NTI's summary of the ChatGPT Agent safeguards, 30 July 2025,
+  https://www.nti.org/risky-business/chatgpt-agent-setting-industry-leading-example-for-biosecurity-safeguards/
+  (refusal training, automated monitoring, enforcement with human review, rapid response, and
+  the focus on prolonged patterns of misuse). The deliberative-alignment paper is in
+  `24-the-ladder.md`.
 - The policy image and the rules: `govsim/policy.py`; `04-specification.md` §4 (the schema),
   §3 (the mailbox), §2 (the registers), §5 (request, ticket, capability).
 - The gate order and the codes: `govsim/governor.py`, `govsim/reasons.py`.

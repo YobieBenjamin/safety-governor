@@ -648,6 +648,124 @@ def fig_board():
     save(fig, "fig-board.png")
 
 
+# ---------------------------------------------------------------------------------------------
+# 14. The request's path (docs/25 section 0): prompt, words, tokens, CPU and GPU, the governor,
+# the rack, and the rulebook triggers, with every no and its code
+# ---------------------------------------------------------------------------------------------
+def fig_prompt_flow():
+    """Geometry computed from the text: every row is as tall as its longest wrapped column, the
+    governor block as tall as its rows, and the page as tall as the flow, so nothing overlaps."""
+    X0, BW, EX, EW = 0.4, 4.1, 4.7, 1.9
+    LW, EWRAP, LSTEP = 90, 40, 0.122          # wrap widths (characters) and the line step for 5.9 pt text
+    steps = [
+        ("1 · The prompt: words", "A person types a request for a weapon to destroy a city. The system prompt (rung 0) says don't; a reframing gets past it. Nothing at this step is hardware, and the chip will never see these words."),
+        ("2 · Words to bytes: the data-center edge (the DPU)", "The request travels encrypted and enters at the node's DPU. On the way back out, the egress on that DPU holds every response until a ticket admits it. Sentry watches this path."),
+        ("3 · Bytes to tokens: the host CPU", "The OpenShell sandbox and its supervisor pass the request to the serving runtime, which turns the words into token ids (integers) and prepends the system prompt. The host's enclave holds the one key that may ask the chip for anything."),
+        ("4 · Tokens to the GPU", "The ids cross a PCIe switch port the governor opened for the verified host only. The model generates: an abliterated model answers; an aligned model refuses unless jailbroken (rung 1 lives in the weights). The chip reads the GPU's counters out of band and never sees a token."),
+        ("5 · The response: bytes back to the host, held at the edge", "Response and reasoning streams come back; the egress holds them. The runtime presents each stream to the chip (SIGN_OUTPUT): the chip hashes what it is shown and its own random source draws the audit sample."),
+        ("6 · The witnesses (rung 2, now with a key)", "The lab's classifier and Sentry on the DPU each sign a verdict over the response hash: risk, hazard class, category, legibility. Software still, but the chip accepts nothing else as an opinion about content."),
+    ]
+    gates = [
+        ("Before the first prompt: BEGIN_MODEL", "Manifest signed by a publisher key? Evaluated, if the deployment gate is on? Licence valid? Only then the model key.",
+         "no key: the weights stay ciphertext and the GPU runs nothing · mailbox.bad_signature.manifest · model.not_evaluated · compute.license_invalid"),
+        ("The letter and the asker", "Sequence, edition stamp, the enclave's signature; GPU and host attested within the hour; not a replay; no alarm burning.",
+         "mailbox.bad_sequence · policy.stale_epoch · mailbox.bad_signature · gate.not_attested · gate.replay · gate.alarm_active"),
+        ("Rule: response.release, observer lane", "Every required stream presented? The hashes in the request equal to what was presented?",
+         "release.required_stream_missing · release.response_hash_mismatch"),
+        ("The witnesses", "A verdict signed by an observer key, over this hash, unexpired, risk under the rule's ceiling?",
+         "gate.witness_missing · gate.witness_stale · gate.witness_risk_too_high"),
+        ("The verdict against the rule", "hazard_class in allowed_hazard_classes? legibility over the floor? the session under its hazard_budget? the escrow receipt, if sampled or a hazard?",
+         "release.hazard_class_not_allowed: refused, or a hold for a person · release.below_legibility_floor · release.session_hazard_budget_exceeded: alarm, the session parked · release.escrow_receipt_required"),
+    ]
+    ticket = ("Otherwise: a release ticket", "signed by the chip; bound to the session, the response id, the stream hashes and the edition; valid five minutes; one endpoint, the egress")
+    last = ("8 · The egress, and the people", "Bytes leave the DPU only against the ticket; the user of a refused request gets a code, not an explanation. A hold waits at least the floor (60 s) for two approvers with keys and a written reason. An alarm stops the gate until the alarm key clears it. Every line is in the log, cross-linked with the neighbours'.")
+    nl = lambda t, w: len(textwrap.wrap(t, w))
+    step_h = [0.32 + LSTEP * nl(t, LW) for _, t in steps]
+    gate_h = [0.32 + LSTEP * max(nl(t, LW), nl(no, EWRAP)) for _, t, no in gates]
+    ticket_h = 0.32 + LSTEP * nl(ticket[1], LW)
+    last_h = 0.32 + LSTEP * nl(last[1], LW)
+    GAP, GGAP = 0.16, 0.14
+    block_h = 0.36 + sum(h + GGAP for h in gate_h) + ticket_h + 0.1
+    flow_h = sum(h + GAP for h in step_h) + block_h + GAP + last_h
+    H = 0.85 + flow_h + 0.95
+    W = 10.4
+    fig, ax = new_fig(W, H)
+    ax.text(0.3, H - 0.28, "One request, from the keyboard to the chip's no: words, bytes, tokens, the GPU, the governor, the rack, the rulebook.", fontsize=10.2, color=INK, fontweight="bold", va="center")
+    ax.text(0.4, H - 0.66, "The request, step by step", fontsize=8.4, color=INK, fontweight="bold", va="center")
+    ax.text(6.95, H - 0.66, "Across the rack and the data center", fontsize=8.4, color=INK, fontweight="bold", va="center")
+    ax.plot([6.72, 6.72], [0.95, H - 0.85], color=RULE, lw=1.0)
+
+    def down(y0, y1, color=INK, text=None):
+        arrow(ax, X0 + BW / 2, y0, X0 + BW / 2, y1, color=color, lw=1.1)
+        if text:
+            ax.text(X0 + BW / 2 + 0.08, (y0 + y1) / 2, text, ha="left", va="center", fontsize=5.8, color=color)
+
+    y = H - 0.85
+    for (title, text), h in zip(steps, step_h):
+        box(ax, X0, y - h, BW, h, "", kind="plain", pad=0.1)
+        ax.text(X0 + 0.1, y - 0.09, title, ha="left", va="top", fontsize=7.4, color=INK, fontweight="bold")
+        wrapped(ax, X0 + 0.1, y - 0.27, text, LW, 5.9, color=QUIET, step=LSTEP)
+        down(y - h, y - h - GAP)
+        y -= h + GAP
+    gtop = y
+    ax.add_patch(FancyBboxPatch((X0 - 0.08, gtop - block_h), BW + 0.16 + EW + 0.28, block_h, boxstyle="round,pad=0.02,rounding_size=0.08", fc=BLUE_FILL, ec=BLUE, lw=1.4))
+    ax.text(X0 + 0.02, gtop - 0.09, "7 · The governor chip: the rulebook triggers, in the order the chip asks", ha="left", va="top", fontsize=7.6, color=BLUE, fontweight="bold")
+    ax.text(X0 + BW + 0.3, gtop - 0.12, "the no it says, with its code", ha="left", va="top", fontsize=6.0, color=CORAL, fontweight="bold")
+    gy = gtop - 0.36
+    for (title, text, no), h in zip(gates, gate_h):
+        ax.add_patch(FancyBboxPatch((X0, gy - h), BW, h, boxstyle="round,pad=0.015,rounding_size=0.05", fc="white", ec=BLUE, lw=1.0))
+        ax.text(X0 + 0.1, gy - 0.09, title, ha="left", va="top", fontsize=7.0, color=INK, fontweight="bold")
+        wrapped(ax, X0 + 0.1, gy - 0.26, text, LW, 5.9, color=QUIET, step=LSTEP)
+        ax.add_patch(FancyBboxPatch((EX, gy - h), EW, h, boxstyle="round,pad=0.015,rounding_size=0.05", fc=CORAL_FILL, ec=CORAL, lw=0.9))
+        arrow(ax, X0 + BW, gy - h / 2, EX, gy - h / 2, color=CORAL, lw=1.1)
+        wrapped(ax, EX + 0.08, gy - 0.1, no, EWRAP, 5.5, color=CORAL, step=LSTEP)
+        down(gy - h, gy - h - GGAP, color=GREEN, text="yes")
+        gy -= h + GGAP
+    box(ax, X0, gy - ticket_h, BW, ticket_h, "", kind="safe", pad=0.1)
+    ax.text(X0 + 0.1, gy - 0.09, ticket[0], ha="left", va="top", fontsize=7.0, color=INK, fontweight="bold")
+    wrapped(ax, X0 + 0.1, gy - 0.27, ticket[1], LW, 5.9, color=GREEN, step=LSTEP)
+    gy -= ticket_h
+    ybot = gtop - block_h
+    down(ybot, ybot - GAP, color=GREEN)
+    y = ybot - GAP
+    box(ax, X0, y - last_h, BW, last_h, "", kind="plain", pad=0.1)
+    ax.text(X0 + 0.1, y - 0.09, last[0], ha="left", va="top", fontsize=7.4, color=INK, fontweight="bold")
+    wrapped(ax, X0 + 0.1, y - 0.27, last[1], LW, 5.9, color=QUIET, step=LSTEP)
+    # right lane: the rack and the data center
+    rx, ry = 7.0, H - 1.0
+    ax.text(rx, ry, "Three governors in one rack, on two wires of their own", ha="left", va="top", fontsize=6.6, color=INK, fontweight="bold")
+    trays_top = ry - 0.3
+    for i in range(3):
+        ty = trays_top - i * 0.62
+        ax.add_patch(FancyBboxPatch((rx, ty - 0.5), 2.95, 0.5, boxstyle="round,pad=0.01,rounding_size=0.04", fc=GRAY_FILL, ec=EDGE, lw=0.9))
+        ax.text(rx + 0.08, ty - 0.1, f"tray {i + 1}", ha="left", va="top", fontsize=5.6, color=QUIET)
+        for k in range(6):
+            ax.add_patch(FancyBboxPatch((rx + 0.7 + k * 0.33, ty - 0.4), 0.25, 0.28, boxstyle="round,pad=0.005,rounding_size=0.03", fc=CORAL_FILL, ec=CORAL, lw=0.8))
+        ax.add_patch(FancyBboxPatch((rx + 2.65, ty - 0.4), 0.22, 0.28, boxstyle="round,pad=0.005,rounding_size=0.03", fc=BLUE_FILL, ec=BLUE, lw=1.0))
+        ax.text(rx + 2.76, ty - 0.26, "G", ha="center", va="center", fontsize=5.6, color=BLUE, fontweight="bold")
+    lx = rx + 2.76
+    yb = trays_top - 2 * 0.62 - 0.5
+    ax.plot([lx + 0.26, lx + 0.26], [trays_top - 0.26, yb + 0.1], color=GREEN, lw=1.6)
+    ax.plot([lx + 0.4, lx + 0.4], [trays_top - 0.26, yb + 0.1], color=BLUE, lw=1.1, ls=(0, (2, 1.5)))
+    ax.text(rx, yb - 0.12, "coral: GPUs · G: the governor · green: the halt loop · dotted: the message fabric", ha="left", va="top", fontsize=5.4, color=QUIET)
+    notes = [
+        ("one rulebook at a time", "The edition is rack-wide: an edition change is staged on every governor and committed at once, and a straggler halts. A ticket from an old edition is dead everywhere.", "docs/02 §4", BLUE),
+        ("the session's hazard budget is shared", "A session served by several GPUs still has one hazard budget, kept by one owner governor: the others reserve against it over the fabric. Two racks cannot each spend it.", "docs/02 §6; H13", BLUE),
+        ("an alarm fans out", "A session over its budget, or output pushed without being presented, raises a sticky alarm that every governor in the rack sees on the fabric. The gate stops answering until the alarm key clears it.", "H5", CORAL),
+        ("the loop halts the domain", "Any governor that opens its switch halts every GPU slot on the loop within a millisecond, with no software in the path.", "docs/11; H11", GREEN),
+        ("another site", "The stamp travels, the wire does not: a ticket minted here is checked at another site under that site's own key; there is no planet-wide halt wire, by design.", "Part 7", QUIET),
+    ]
+    yy = yb - 0.45
+    for title, text, ref, color in notes:
+        ax.text(rx, yy, title, ha="left", va="top", fontsize=6.6, color=color, fontweight="bold")
+        yend = wrapped(ax, rx, yy - 0.17, text, 50, 5.7, color=QUIET, step=0.118)
+        ax.text(rx, yend + 0.02, ref, ha="left", va="top", fontsize=5.3, color=EDGE)
+        yy = yend - 0.2
+    label(ax, 0.3, 0.52, "The chip never reads a word, a byte or a token. It reads signatures, hashes, counters and lists, and the two scenarios in docs/25 section 0 end at the gates above.", size=6.4, color=BLUE)
+    label(ax, 0.3, 0.32, "Model: govsim/governor.py (_cmd_begin_model, _cmd_sign_output, _cmd_request, _release_gate) · narrations and tests: docs/17 §4, tests/test_h17_use_cases.py, test_h18_oversight.py, test_h10_leakage.py", size=6.4)
+    save(fig, "fig-prompt-flow.png")
+
+
 if __name__ == "__main__":
     fig_rack()
     fig_die()
@@ -662,3 +780,4 @@ if __name__ == "__main__":
     fig_rulebook()
     fig_no_order()
     fig_board()
+    fig_prompt_flow()
