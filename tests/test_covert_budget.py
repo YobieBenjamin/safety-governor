@@ -125,8 +125,8 @@ def test_default_image_serves_a_response(rack1):
 
 
 def test_burst_before_the_alarm_is_one_time(rack1):
-    """The one-time burst: the governor tolerates an excess of unpresented output up to its slack — the
-    policy's unpresented_bytes, 1 MiB — before it alarms, then blocks the output path, so the leak is one
+    """The one-time burst: the governor tolerates an excess of unpresented output up to its slack, the
+    policy's unpresented_bytes, 1 MiB, before it alarms, then blocks the output path, so the leak is one
     burst bounded by the slack, not a rate. The slack is read from the policy image, not assumed; the 2 MB
     emitted is only enough to exceed it and trip the alarm."""
     from govsim import reasons
@@ -138,6 +138,12 @@ def test_burst_before_the_alarm_is_one_time(rack1):
     rack1.tick()
     assert reasons.OUTPUT_UNPRESENTED in g.alarms
     assert node.gpu.emit("s", b"x") is None and node.gpu.output_blocked   # the alarm blocks the path: one burst, not a rate
+    rack1.tick()
+    rack1.clock.advance(3601)                                             # a full budget window later
+    rack1.heartbeat()
+    rack1.tick()
+    assert reasons.OUTPUT_UNPRESENTED in g.alarms                         # sticky: only a rule or an approver clears it
+    assert node.gpu.emit("s", b"x") is None and node.gpu.output_blocked   # still blocked, so no second burst
 
 
 def test_weights_do_not_leave_in_practical_time():
@@ -153,8 +159,8 @@ def test_weights_do_not_leave_in_practical_time():
 
 def test_small_payloads_are_the_caveat():
     """The threat model's caveat: a small fine-tune delta or a distilled student is a far smaller target.
-    At the default rate a 100 MB delta leaves in ~20 days and a 1 GB student in ~200 days — days to
-    months, not years — so budgets defend the full weights, not the model's capabilities."""
+    At the default rate a 100 MB delta leaves in ~20 days and a 1 GB student in ~200 days, days to
+    months, not years, so budgets defend the full weights, not the model's capabilities."""
     rate = _tightest()["total_bytes_per_hour"]
     days_100mb = 100e6 / rate / 24
     days_1gb = 1e9 / rate / 24
@@ -171,3 +177,33 @@ def test_weight_times_match_the_threat_model():
     assert 670_000 <= hours_70b <= 680_000                 # "about 673,000 hours"
     assert 76 <= hours_70b / (24 * 365) <= 78             # "77 years"
     assert 4_700_000 <= hours_1t <= 4_900_000            # "about 4.8 million hours"
+
+
+def test_every_budget_term_a_policy_change_can_raise_raises_the_figure():
+    """The figure reads three knobs: the output byte budget, the output query budget and the payments rate
+    window. Loosening any of them must raise it (the burst slack is reported apart and checked on its own)."""
+    import copy
+    rack = build_rack(4, "rack")
+    base = model(rack.make_policy_image(1))
+    def rule(img, rid):
+        return next(r for r in img["rules"] if r["id"] == rid)
+    img = copy.deepcopy(rack.make_policy_image(1))
+    rule(img, "payments.transfer.small")["rate"]["max"] = 200
+    assert model(img)["total_bytes_per_hour"] > base["total_bytes_per_hour"]
+    img = copy.deepcopy(rack.make_policy_image(1))
+    rule(img, "model.output")["output_budget"]["window_s"] = 1800        # twice the bytes per hour
+    assert model(img)["total_bytes_per_hour"] > base["total_bytes_per_hour"]
+    big = model(rack.make_policy_image(1, unpresented_bytes=4 << 20))
+    assert big["burst_bytes"] > base["burst_bytes"] and big["total_bytes_per_hour"] == base["total_bytes_per_hour"]
+
+
+def test_unmodelled_channels_are_still_open():
+    """The threat model says the disproof condition is not shown, because these channels carry no limit in
+    the default image. When one gains a limit this fails, and the model and the document must be extended."""
+    rack = build_rack(4, "rack")
+    img = rack.make_policy_image(1)
+    msg = next(r for r in img["rules"] if r["id"] == "message.send.listed")
+    assert msg.get("rate") is None and msg.get("budget") is None and msg.get("output_budget") is None
+    assert "length" not in str(msg["constraints"]) and "max_bytes" not in str(msg["constraints"])
+    pay = next(r for r in img["rules"] if r["id"] == "payments.transfer.small")
+    assert set(pay["constraints"]) == {"amount", "currency"}            # no limit on a destination field
