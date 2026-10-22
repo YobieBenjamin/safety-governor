@@ -63,8 +63,9 @@ py() { python3 "$LIB" "$@"; }
 claude_local() { if [ "$LOCAL_URL" = cloud ]; then claude "$@"; else ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY="" ANTHROPIC_BASE_URL="$LOCAL_URL" claude "$@"; fi; }
 local_lock_wait() { until mkdir "$LOCAL_LOCK" 2>/dev/null; do sleep 30; done; echo $$ > "$LOCAL_LOCK/pid"; }   # one local run on the Mac at a time, across repositories
 local_lock_release() { rm -rf "$LOCAL_LOCK" 2>/dev/null || true; }
-stop_bg() { pkill -P "$1" 2>/dev/null || true; kill "$1" 2>/dev/null || true; wait "$1" 2>/dev/null || true; }
-watchdog() { ( trap - ERR; sleep "$1"; kill -INT "$2" 2>/dev/null || true; sleep 90; kill -TERM "$2" 2>/dev/null || true; sleep 30; pkill -P "$2" 2>/dev/null || true; kill -KILL "$2" 2>/dev/null || true ) & disown $! 2>/dev/null || true; }
+stop_bg() { sig_tree "$1" TERM; wait "$1" 2>/dev/null || true; }
+# the cap: a gentle INT to the agent and everything under it, then TERM, then KILL; children first each time (paths.sh sig_tree)
+watchdog() { ( trap - ERR; sleep "$1"; sig_tree "$2" INT; sleep 90; sig_tree "$2" TERM; sleep 30; sig_tree "$2" KILL ) & disown $! 2>/dev/null || true; }
 jget() { python3 -c "import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print('' if v is None else v)" "$1" "$2"; }
 
 # Detach when asked (the background process is the one kept awake), else keep this one awake (macOS).
@@ -224,7 +225,7 @@ Agent: wave $WAVE, issue #$number (launcher commit)" 2>>"$LOG/launcher.err" && s
     cpid=$!
     if [ "$primary" = local ]; then watchdog "$((LOCAL_TIMEOUT_MIN * 60))" "$cpid"; else watchdog "$((TIMEOUT_MIN * 60))" "$cpid"; fi; wpid=$!
     rc=0; wait "$cpid" || rc=$?
-    stop_bg "$wpid"
+    stop_bg "$wpid"; sig_tree "$cpid" KILL   # nothing of the agent survives its run
     [ "$primary" = local ] && local_lock_release
     cd "$ROOT"
     set -e
@@ -274,7 +275,7 @@ Agent: wave $WAVE, issue #$number (launcher commit)" 2>>"$LOG/launcher.err" && s
       --permission-mode acceptEdits $PROMPTS_FLAG --allowedTools "${ALLOW[@]}" --disallowedTools "${DENY[@]}" --add-dir "$LOG" $ADD_DIRS \
       --output-format stream-json --verbose < /dev/null > "$rlog" 2> "$rlog.err" &
     cpid=$!; watchdog "$((LOCAL_TIMEOUT_MIN * 60))" "$cpid"; wpid=$!
-    rc=0; wait "$cpid" || rc=$?; stop_bg "$wpid"; local_lock_release; cd "$ROOT"; set -e
+    rc=0; wait "$cpid" || rc=$?; stop_bg "$wpid"; sig_tree "$cpid" KILL; local_lock_release; cd "$ROOT"; set -e
     repaired=" after a local repair pass ($(jget "$(py summarize "$rlog")" turns) turns on $LOCAL_MODEL, exit $rc)"
     run_acceptance
   fi

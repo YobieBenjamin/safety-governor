@@ -60,6 +60,7 @@ if [ "$MODE" = stop ]; then
   for pat in "tools/agents/run_program.sh" "tools/agents/run_wave.sh" "tools/agents/review_pr.sh" "tools/agents/revise_pr.sh"; do
     for p in $(pgrep -f "$pat" 2>/dev/null | grep -vx "$$" || true); do is_mirror "$p" || kill -KILL "$p" 2>/dev/null || true; done
   done
+  for p in $(orphan_agents); do sig_tree "$p" TERM; done; sleep 3; for p in $(orphan_agents); do sig_tree "$p" KILL; done
   rm -f "$PROG/pid" "$HOME/.agents-local.lock/pid" 2>/dev/null; rmdir "$HOME/.agents-local.lock" 2>/dev/null || true
   echo "stopped $n program instance(s) and their agents; the backups' background mirror jobs were left running; the Ollama server was left running"
   exit 0

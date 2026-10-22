@@ -82,18 +82,26 @@ echo "account: $OWNER"
 #    are running); then it is stopped, the clones move, and it is started again from WORK.
 program_pids() { pgrep -f "tools/agents/run_program.sh" 2>/dev/null | while read -r p; do [ "$p" = "$$" ] || ps -o command= -p "$p" 2>/dev/null | grep -q -- "--mirror-job" || echo "$p"; done; }
 kill_tree() { local c; for c in $(pgrep -P "$1" 2>/dev/null || true); do kill_tree "$c"; done; kill -TERM "$1" 2>/dev/null || true; }
+# An agent is a claude process the launchers started with --add-dir <clone>/.agents/wave-N; nothing a
+# person runs by hand carries that. The watchdog before 22 October signalled the shell around the
+# agent, not the agent, so a killed shell left its claude running (L6 kept writing its log for an
+# hour after its launcher had reported it done, and the move's compare failed on that file).
+orphan_agents() { pgrep -f -- "--add-dir [^ ]*/\.agents/wave-" 2>/dev/null || true; }
 stop_program() {   # the program and its agents, whichever version of run_program.sh is installed: the one before 21 October did not know --stop
   local pats="tools/agents/run_program.sh tools/agents/run_wave.sh tools/agents/review_pr.sh tools/agents/revise_pr.sh" pat p
   bash "$HOME/safety-governor/tools/agents/run_program.sh" --stop >/dev/null 2>&1 || true
   for pat in $pats; do for p in $(pgrep -f "$pat" 2>/dev/null || true); do
     [ "$p" = "$$" ] && continue; ps -o command= -p "$p" 2>/dev/null | grep -q -- "--mirror-job" && continue; kill_tree "$p"
   done; done
+  for p in $(orphan_agents); do kill_tree "$p"; done
   sleep 5
   for pat in $pats; do for p in $(pgrep -f "$pat" 2>/dev/null || true); do
     [ "$p" = "$$" ] && continue; ps -o command= -p "$p" 2>/dev/null | grep -q -- "--mirror-job" && continue; kill -KILL "$p" 2>/dev/null || true
   done; done
+  for p in $(orphan_agents); do kill -KILL "$p" 2>/dev/null || true; done
   rm -f "$HOME/safety-governor/.agents/program/pid" "$HOME/.agents-local.lock/pid" 2>/dev/null; rmdir "$HOME/.agents-local.lock" 2>/dev/null || true
-  echo "program stopped ($(program_pids | wc -l | tr -d ' ') instance(s) left); the backup's mirror jobs and the Ollama server were left running"
+  local left; left=$( { program_pids; orphan_agents; } | wc -l | tr -d ' ' || true)
+  echo "program stopped (${left:-0} process(es) left); the backup's mirror jobs and the Ollama server were left running"
 }
 agents_running() {   # the last tick of the old program's log: "tick: N running"
   local log="$HOME/safety-governor/.agents/program/program.log" n
@@ -105,17 +113,28 @@ move_repo() {
   local r="$1" src="$HOME/$1" dst="$WORK/$1"
   echo "$r: copying $src to $dst"
   mkdir -p "$dst"
-  if command -v rsync >/dev/null 2>&1; then rsync -a --delete --exclude .venv "$src/" "$dst/"
-  else rm -rf "$dst"; cp -a "$src" "$dst"; rm -rf "$dst/.venv"; fi   # a copy that was interrupted is finished by rsync, or started over by cp
-  # compared file by file before anything is removed; .venv is remade at the new place by launch.sh
-  if diff -rq -x .venv "$src" "$dst" >/dev/null 2>&1; then
+  # Copied, then compared file by file before anything is removed (.venv is remade at the new place
+  # by launch.sh; Finder's .DS_Store is noise). A file that was still being written during the copy
+  # fails the compare; the orphan hunt above is the cure, and two more passes catch a straggler.
+  local pass ok=""
+  for pass in 1 2 3; do
+    if command -v rsync >/dev/null 2>&1; then rsync -a --delete --exclude .venv --exclude .DS_Store "$src/" "$dst/"
+    else rm -rf "$dst"; cp -a "$src" "$dst"; rm -rf "$dst/.venv"; fi   # a copy that was interrupted is finished by rsync, or started over by cp
+    if diff -rq -x .venv -x .DS_Store "$src" "$dst" > "$WORK/migrate.diff" 2>&1; then ok=1; break; fi
+    echo "$r: pass $pass: the copy differs from the source in $(wc -l < "$WORK/migrate.diff" | tr -d ' ') place(s); copying again"
+    for p in $(orphan_agents); do kill -KILL "$p" 2>/dev/null || true; done
+    sleep 5
+  done
+  if [ -n "$ok" ]; then
+    rm -f "$WORK/migrate.diff"
     rm -rf "$src"
     # worktrees under .worktrees name the old absolute path on both sides; repaired while that path is gone, before the symlink makes it resolve again
     for w in "$dst"/.worktrees/*/; do [ -d "$w" ] && git -C "$dst" worktree repair "$w" >/dev/null 2>&1 || true; done
     ln -s "$dst" "$src"
     echo "$r: moved; $src is now a symlink to $dst"
   else
-    fail "$r: the copy at $dst does not match $src; nothing was removed. Run again (rsync resumes), or compare with: diff -rq -x .venv \"$src\" \"$dst\""
+    sed 's/^/    /' "$WORK/migrate.diff"
+    fail "$r: the copy at $dst still differs from $src after three passes (the list above; also in $WORK/migrate.diff); nothing was removed. Something is still writing there: find it with: lsof +D \"$src\" | head"
   fi
 }
 if [ "$WORK" != "$HOME" ] && needs_move; then
@@ -138,9 +157,12 @@ if [ "$WORK" != "$HOME" ] && needs_move; then
       done
     fi
     echo "stopping the program at $HOME/safety-governor (it restarts from $WORK at the end)"
+    touch "$WORK/.restart-program"   # survives a failed run: the next run restarts the program even though it found it stopped
     stop_program
     sleep 3
   fi
+  [ -f "$WORK/.restart-program" ] && was_running=1
+  for p in $(orphan_agents); do kill_tree "$p"; done   # agents a stopped program left behind (the old watchdog did that)
   for repo in $REPOS; do
     if [ -d "$HOME/$repo/.git" ] && [ ! -L "$HOME/$repo" ]; then move_repo "$repo"; fi
   done
@@ -236,7 +258,8 @@ for repo in safety-governor safety hardware-and-silicon autonomic-graph-regulati
   echo "https://github.com/$OWNER/$repo/issues"
 done
 echo "clones: $WORK   bundles inbox: $INBOX"
-if [ -n "${was_running:-}" ]; then
+if [ -n "${was_running:-}" ] || [ -f "$WORK/.restart-program" ]; then
   step "Program"
+  rm -f "$WORK/.restart-program"
   bash "$WORK/safety-governor/tools/agents/run_program.sh" --detach
 fi

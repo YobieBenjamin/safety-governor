@@ -11,3 +11,10 @@ if [ -z "$WORK" ]; then
   if [ -d "/Volumes/External_4TB/Safety Experiments" ]; then WORK="/Volumes/External_4TB/Safety Experiments"; else WORK="$HOME"; fi
 fi
 INBOX="$WORK/inbox"   # bundles made in the program's container land here (setup_and_publish.sh also looks beside itself)
+
+# Signal a process and everything under it, children first. Every watchdog here used to signal the
+# shell around an agent; the shell died on TERM and its claude lived on as an orphan (L6 on 21 October
+# kept writing its log for an hour after its launcher had reported it done).
+sig_tree() { local pid="$1" sig="${2:-TERM}" c; for c in $(pgrep -P "$pid" 2>/dev/null || true); do sig_tree "$c" "$sig"; done; kill -"$sig" "$pid" 2>/dev/null || true; }
+# An agent is a claude process a launcher started with --add-dir <clone>/.agents/wave-N; a person's own claude session never carries that.
+orphan_agents() { pgrep -f -- "--add-dir [^ ]*/\.agents/wave-" 2>/dev/null || true; }
