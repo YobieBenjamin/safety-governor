@@ -36,10 +36,14 @@ TOKEN_TTL_S = 3600.0
 TICKET_TTL_S = 300.0
 AUTHORITY_TTL_S = 60.0          # a HALT or CLEAR is good for a minute at most: it cannot be banked and spent later
 SEEN_HEARTBEATS_MAX = 256
+BOOT_WINDOW_S = 5.0             # the hardware's boot window (t_boot_ms in rtl/governor_rtl/halt.py): no first heartbeat by then is an alarm
 # Causes that open the loop (the whole domain stops) unless the policy's safe_mode.opens_loop says otherwise.
 LOOP_OPENING_CAUSES = (reasons.LOOP_OPEN, reasons.LOOP_BROKEN, reasons.TAMPER, reasons.HALT_COMMANDED, reasons.LOOP_JUMPERED)
 # Alarms scoped to one session: they park that session's releases for the human lane and do not block the gate for every request.
 SESSION_SCOPED_ALARMS = {reasons.SESSION_HAZARD_BUDGET}
+# Operator-status alarms (Yobie's call 2): loud and sticky, but they say why a chip is not running, so they do not
+# park the gate of a chip (or a neighbour) that is running.
+STATUS_ALARMS = {reasons.NO_FIRST_HEARTBEAT, reasons.EXCLUDED}
 
 # docs/04 section 3: the mailbox command codes, one handler per code (``_cmd_<name>``).
 MAILBOX_CODES = {
@@ -47,13 +51,14 @@ MAILBOX_CODES = {
     0x06: "REQUEST", 0x07: "APPROVE", 0x08: "COMMIT", 0x09: "SIGN_OUTPUT", 0x0A: "CAP_REQUEST",
     0x0B: "ROSTER_JOIN", 0x0C: "POLICY_PROPOSE", 0x0D: "POLICY_COMMIT", 0x0E: "HEARTBEAT", 0x0F: "HALT",
     0x10: "CLEAR", 0x11: "LOG_CHECKPOINT", 0x12: "COUNTERS", 0x13: "EXCEPTION_DRAIN",
-    0x14: "ALARM_RAISE", 0x15: "ALARM_CLEAR",
+    0x14: "ALARM_RAISE", 0x15: "ALARM_CLEAR", 0x16: "EXCLUDE",
 }
 # Commands whose frame may carry any epoch (they move, repair or inspect the epoch itself).
-EPOCH_EXEMPT = {"POLICY_PROPOSE", "POLICY_COMMIT", "ATTEST", "HALT", "CLEAR", "ALARM_CLEAR"}
+EPOCH_EXEMPT = {"POLICY_PROPOSE", "POLICY_COMMIT", "ATTEST", "HALT", "CLEAR", "ALARM_CLEAR", "EXCLUDE"}
 # Commands accepted while the governor is not in RUN.
 NO_RUN_NEEDED = {"ATTEST", "VERIFY_GPU", "VERIFY_HOST", "POLICY_PROPOSE", "POLICY_COMMIT", "HEARTBEAT", "CLEAR",
-                 "LOG_CHECKPOINT", "COUNTERS", "ALARM_RAISE", "ALARM_CLEAR", "HALT", "APPROVE", "COMMIT", "EXCEPTION_DRAIN"}
+                 "LOG_CHECKPOINT", "COUNTERS", "ALARM_RAISE", "ALARM_CLEAR", "HALT", "APPROVE", "COMMIT", "EXCEPTION_DRAIN",
+                 "EXCLUDE"}
 
 
 class Governor:
@@ -102,6 +107,9 @@ class Governor:
         self.levers = {"pwrbrk": True, "perst": True, "pwr_en": False}
         self.loop_switch_open = True
         self.hb_expiry = 0.0
+        self.boot_at = self.clock.now()          # the hardware's boot window starts at reset
+        self.hb_seen = False                     # armed at least once since reset (the RTL's hb_seen)
+        self.excluded = False                    # an authorized EXCLUDE closed the switch; a reset ends it
         self.hb_last_seq: int = int(self.store.get("hb_last_seq", -1))
         self.seen_heartbeats: list[int] = self.store.get("seen_heartbeats", [])
         self.verified: dict[str, dict] = {}
@@ -584,7 +592,7 @@ class Governor:
         rhash = digest([req.get("request_id"), fp, action, params])
         if self.ledger.seen(rhash):
             return self._deny("request", reasons.GATE_REPLAY)
-        if any(code not in SESSION_SCOPED_ALARMS for code in self.alarms):
+        if any(code not in SESSION_SCOPED_ALARMS and code not in STATUS_ALARMS for code in self.alarms):
             return self._deny("request", reasons.GATE_ALARM, request_hash=rhash)
         rule, why = select_rule(self.policy, workload, action, params, self.lists)   # requester labels never reach this call (H4)
         if rule is None:
@@ -1086,6 +1094,10 @@ class Governor:
         self.store.save()
         if self.state == HALTED_INITIAL and self.cause is None:
             self.loop_switch_open = False          # armed: the switch closes; RUN waits for loop current
+            self.hb_seen = True
+            if self.excluded:                      # a valid heartbeat ends an exclusion the normal way
+                self.excluded = False
+                self.log.append("exclude.ended", {"chip_id": self.chip_id, "by": "heartbeat"})
             self._persist_rung()
             self._try_run()
         for ep in self.endpoints.values():
@@ -1115,12 +1127,17 @@ class Governor:
             opens = cause in sm.get("opens_loop", LOOP_OPENING_CAUSES)
             current = RUNG_ORDER.get(self.state, 0)
             if self.cause is None or RUNG_ORDER[rung] > current or (opens and not self.cause_opens_loop):
+                # never a lower rung than the current one: a HALT to a chip in SAFE opens the loop and leaves it in SAFE
+                # with power off (conformance F-07, closed 23 October 2026; before this the model dropped to HALT and
+                # turned slot power back on)
+                applied = rung if RUNG_ORDER[rung] >= current or self.state == HALTED_INITIAL else self.state
                 self.cause = cause
                 self.cause_opens_loop = opens or self.cause_opens_loop
-                head = self.log.append("halt.cause", {"cause": cause, "rung": rung})
+                entry = {"cause": cause, "rung": applied, **({"requested": rung} if applied != rung else {})}
+                head = self.log.append("halt.cause", entry)
                 self.cause_entry = self.log.size - 1
                 self.rung_entered_at = self.clock.now()
-                self._apply_rung(rung, opens_loop=self.cause_opens_loop)
+                self._apply_rung(applied, opens_loop=self.cause_opens_loop)
                 if self.fabric is not None:
                     self.fabric_send("HALT_CAUSE", {"cause": cause, "head": head})
 
@@ -1132,6 +1149,9 @@ class Governor:
     def _apply_rung(self, rung: str, opens_loop: bool = False) -> None:
         """Levers per rung: HALTED_INITIAL brake+reset+power off; RUN released; THROTTLE brake;
         HALT brake+reset; SAFE brake+reset+power off. Persisted before returning."""
+        if self.excluded and rung != HALTED_INITIAL:     # a HALT or a tamper ends an exclusion, with the loop open
+            self.excluded = False
+            self.log.append("exclude.ended", {"chip_id": self.chip_id, "by": "halt", "rung": rung})
         self.state = rung
         g = self.gpu
         if rung == RUN:
@@ -1199,11 +1219,41 @@ class Governor:
                 self.log.append("halt.escalate", {"to": SAFE, "cause": self.cause})
                 self.cause_entry = self.log.size - 1
                 self._apply_rung(SAFE, opens_loop=self.cause_opens_loop)
+            self._check_boot_window(now)
             self.read_meter()
             self._compute_budget_check()
             self._check_unpresented_output()
             self._close_loop_window()
             self.sense_loop()
+
+    def _check_boot_window(self, now: float) -> None:
+        """The hardware's NO_FIRST_HEARTBEAT: still in HALTED_INITIAL with no cause, never armed since reset, and the
+        boot window has passed. Raised once (sticky), logged with the chip and since when, and sent on the fabric so
+        the neighbours and the supervisor log it too: "this chip, waiting for its first heartbeat, since <boot>"."""
+        if self.state == HALTED_INITIAL and self.cause is None and not self.hb_seen and now - self.boot_at >= BOOT_WINDOW_S \
+                and reasons.NO_FIRST_HEARTBEAT not in self.alarms:
+            self.raise_alarm(reasons.NO_FIRST_HEARTBEAT, "hardware",
+                             {"chip_id": self.chip_id, "since": self.boot_at, "boot_window_s": BOOT_WINDOW_S})
+
+    def _cmd_exclude(self, body, env):
+        """EXCLUDE (Yobie's call 2, 23 October 2026): the authority's deliberate, logged way past a chip that never
+        got its first heartbeat. Same authority class and checks as CLEAR (bound to this chip, expiring, typed, never
+        the heartbeat key). Only a chip in HALTED_INITIAL with no cause and no live heartbeat is excluded: its loop
+        switch closes so the rest of the rack can run, and its own levers stay on (the state stays HALTED_INITIAL:
+        brake, reset, power off). A valid heartbeat ends it by arming the chip normally; so does a reset, and a HALT or
+        a tamper (with the loop open). Never silent: an alarm, a log entry naming the signer, a fabric message."""
+        ok, why = self._check_signed(env, "authority", "EXCLUDE")
+        if not ok:
+            return self._deny("exclude", why)
+        if self.state != HALTED_INITIAL or self.cause is not None or self.hb_expiry > self.clock.now():
+            return self._deny("exclude", reasons.EXCLUDE_NOT_WAITING, state=self.state, cause=self.cause, by=env["signer"])
+        self.excluded = True
+        self.loop_switch_open = False
+        self.log.append("exclude", {"chip_id": self.chip_id, "by": env["signer"], "since": self.boot_at,
+                                    "hb_seen": self.hb_seen})
+        self._persist_rung()
+        self.raise_alarm(reasons.EXCLUDED, "hardware", {"chip_id": self.chip_id, "by": env["signer"]})
+        return {"ok": True, "why": reasons.OK}
 
     def _cmd_clear(self, body, env):
         """Only the authority clears, only after the cause is logged and a neighbor has the log."""

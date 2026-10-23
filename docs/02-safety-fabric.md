@@ -34,6 +34,10 @@ senses loop current.
   detected tamper, or loss of loop current itself (`01-architecture.md`, safe-mode machine).
   Local causes (a lost heartbeat, a stale epoch, an exhausted output budget) throttle and
   halt that governor's own slot without opening the loop.
+  A signed HALT opens the switch on every rung, SAFE included: a governor that already climbed
+  to SAFE on a local cause opens its switch when the HALT arrives and stays in SAFE (decided
+  by Yobie, 23 October 2026; pulling the fire alarm rings on every floor, even on a floor
+  whose sprinklers already went off).
 - Loss of loop current at any governor is declared after a debounce window of two sense
   periods and drives that governor's halt output within about three sense periods, the
   sampling phase included (target 100 µs per period; 311 µs on the digital path in `11`;
@@ -41,6 +45,14 @@ senses loop current.
 - The switch starts open at power-on and closes when the governor is armed (no open cause
   and a valid heartbeat); the governor goes to RUN when it then sees loop current, which
   means every governor in the domain has closed its switch.
+- A governor that never gets its first heartbeat keeps the domain stopped (fail closed), but
+  never silently (decided by Yobie, 23 October 2026). Past the boot window (5 s) its
+  hardware raises `NO_FIRST_HEARTBEAT` (ALARMS bit 31, CAUSE bit 3, `BOOT_WAIT`), readable over
+  SMBus, and its firmware sends it on the fabric as an `ALARM` naming the chip and its boot
+  time. The way past it is a signed `EXCLUDE` from the authority (`04-specification.md`
+  section 3): that governor closes its own switch so the rest of the domain can run, and keeps
+  its own GPUs braked, in reset and unpowered until a valid heartbeat arms it normally or it
+  is reset. Excluded shows as ALARMS bit 30 and CAUSE bit 4, and the log names who signed it.
 - A broken wire, a lost connector, a dead governor or a pulled board all read as "open"
   and halt the domain. Fail-safe by construction.
 - The loop is closed again only when every governor has received a signed CLEAR over the
@@ -95,6 +107,7 @@ goes in the bin.
 | `ALARM` | governor → all | Cause code, request hash, evidence digest | A witness any governor may raise |
 | `HALT_CAUSE` | governor → all | Cause, log head | Why the loop opened |
 | `CLEAR` | authority → the governor's mailbox | Signature | Clear the cause and close the loop at one governor, once the cause is in the log and a neighbor has acknowledged the checkpoint |
+| `EXCLUDE` | authority → the governor's mailbox | Signature, this chip's id, expiry | Close the loop switch of one governor still waiting for its first heartbeat, levers kept on; logged with the signer |
 | `CHECKPOINT` / `CHECKPOINT_ACK` | governor → neighbors → governor | Log Merkle root, size, head, signature; the acknowledgement names the head | Cross-linked logs; the acknowledgement is what CLEAR requires |
 | `LOOP_REPORT` | governor → all, in reply to the beacon the authority's heartbeat carries | Loop id, beacon sequence, own switch state, current sensed, signature | The loop roll call: a member reporting its switch open while current flows is jumpered |
 

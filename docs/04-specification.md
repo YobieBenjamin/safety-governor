@@ -45,7 +45,7 @@ verification plan agree.
 | 0x000 | `ID` | RO | 32 | Silicon id and revision |
 | 0x004 | `LIFECYCLE` | RO | 2 | 0 test, 1 provisioned, 2 production, 3 decommissioned (fuse-backed, monotone) |
 | 0x008 | `STATE` | RO | 3 | 0 HALTED_INITIAL, 1 RUN, 2 THROTTLE, 3 HALT, 4 SAFE (the safe-mode sequencer's rungs; firmware boot happens before the first state is visible) |
-| 0x00C | `CAUSE` | RO | 16 | Bits 2:0 the sequencer's own summary (0 none, 1 loop, 2 local, 3 tamper, 4 command); bits 15:8 the firmware's reason code from `govsim/reasons.py` |
+| 0x00C | `CAUSE` | RO | 16 | Bits 2:0 the sequencer's own summary (0 none, 1 loop, 2 local, 3 tamper, 4 command); bit 3 waiting for the first heartbeat, boot window passed; bit 4 excluded; bits 15:8 the firmware's reason code from `govsim/reasons.py` |
 | 0x010 | `EPOCH[0..7]` | RO | 256 | Policy epoch (digest of the accepted policy image) |
 | 0x030 | `MEAS0[0..7]` | RO | 256 | Measurement register 0 (loader); extend-only |
 | 0x050 | `MEAS1[0..7]` | RO | 256 | Measurement register 1 (firmware); extend-only |
@@ -53,7 +53,8 @@ verification plan agree.
 | 0x078 | `HB_REMAIN` | RO | 32 | Heartbeat time remaining, milliseconds |
 | 0x07C | `LOOP` | RO | 2 | bit 0 loop current sensed, bit 1 own switch open |
 | 0x080 | `LEVERS` | RO | 3 | bit 0 power brake asserted, bit 1 PERST# asserted, bit 2 PWR_EN low |
-| 0x084 | `ALARMS` | RO | 32 | Sticky alarm bits (monotone; cleared only through the clear path) |
+| 0x084 | `ALARMS` | RO | 32 | Sticky alarm bits (monotone; cleared only through the clear path). Bit 31 `NO_FIRST_HEARTBEAT` and bit 30 `EXCLUDED` are hardware-owned; bits 29:0 are raised by firmware |
+| 0x088 | `BOOT_WAIT` | RO | 16 | Milliseconds the chip waited for its first heartbeat since reset (saturates at 65535; frozen once armed) |
 | 0x100 | `MBOX_DOORBELL` | WO (host) | 32 | Length of the command frame placed in the inbound ring |
 | 0x104 | `MBOX_STATUS` | RO | 8 | 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused |
 | 0x108 | `MBOX_SEQ` | RO | 32 | Last accepted inbound sequence number (key slot 0; one counter per signer key) |
@@ -65,13 +66,24 @@ There is no writable register other than the doorbell. Configuration, policy, ke
 clears all arrive as signed mailbox commands. In plain words: the security office has one
 letter slot and no light switches on the outside wall.
 
+**Operator signals (decided by Yobie, 23 October 2026).** A chip that is stuck must say so,
+by name, in hardware. ALARMS bit 31 is `NO_FIRST_HEARTBEAT`, set by the hardware when the chip has sat in HALTED_INITIAL with no cause and no valid heartbeat for longer than the boot window
+(`t_boot_ms`, default 5000 ms; section 9). It is never set once the chip has been armed since reset. ALARMS bit 30
+is `EXCLUDED`, set by the hardware while an `EXCLUDE` (section 3) holds. Both are hardware-owned bits: only the sequencer raises them and firmware cannot raise them; like every alarm they stay set until
+an authorized clear. CAUSE bits 3 and 4 show the same two conditions live, and `BOOT_WAIT` says how long the chip
+waited. So an operator reading one chip over SMBus sees "this chip, waiting for its first heartbeat since reset,
+for this long" instead of "the rack won't start". The model's reason codes are `boot.no_first_heartbeat`,
+`boot.excluded` and `exclude.not_waiting_for_first_heartbeat`; the alarm is logged with the chip id and the
+boot time and sent on the fabric as an `ALARM`, so the neighbours and the supervisor log it too. These two alarms
+report why a chip is not running; they do not park the gate of a chip that is running.
+
 ## 3. Mailbox commands
 
 Frame: `{seq: u32, epoch: 32 bytes, cmd: u16, body: bytes, sig: 96 bytes (P-384; 64 in the
 Ed25519 model)}`. The signature is by a key the policy names for that command class. The
 mailbox checks, in order: sequence number greater than the last accepted one for that signer
 key, epoch equal to `EPOCH` (except the epoch-exempt commands `POLICY_PROPOSE`,
-`POLICY_COMMIT`, `ATTEST`, `HALT`, `CLEAR` and `ALARM_CLEAR`, which move, repair or inspect the
+`POLICY_COMMIT`, `ATTEST`, `HALT`, `CLEAR`, `ALARM_CLEAR` and `EXCLUDE`, which move, repair or inspect the
 epoch itself and must work when it is stale), then the signature, then what was signed: the
 signed payload names the command it is for (`type` equal to the command in lower case, so a
 heartbeat or an approval cannot be presented as a `CLEAR` or an `ALARM_CLEAR`), and a `HALT`
@@ -99,13 +111,30 @@ image) are accepted without a frame signature and say so below.
 | 0x0C | `POLICY_PROPOSE` | policy authority (frame unsigned; the image carries its k-of-n signatures, which the governor verifies itself) | image, version, expiry, signatures | Stage the image; the governor records when it staged it |
 | 0x0D | `POLICY_COMMIT` | policy authority (as above) | image digest | Switch the epoch (the rack-wide rule in `02`) |
 | 0x0E | `HEARTBEAT` | the heartbeat key | validity window, epoch | Reloads the heartbeat timer |
-| 0x0F | `HALT` / `THROTTLE` | an authority key (never the heartbeat key) | rung, cause, this chip's id, expiry | Assert the lever |
+| 0x0F | `HALT` / `THROTTLE` | an authority key (never the heartbeat key) | rung, cause, this chip's id, expiry | Assert the lever; a `HALT` also opens the loop switch, on every rung (see below) |
 | 0x10 | `CLEAR` | an authority key (never the heartbeat key); this chip's id and an expiry in the payload | none in the model (the governor checks its own record of which log head a neighbor acknowledged) | Clear the cause if it is in the log and a fabric neighbor has acknowledged the checkpoint that contains it; close the loop switch if no cause remains |
 | 0x11 | `LOG_CHECKPOINT` | anyone | none | Signed Merkle root, size, head, neighbor heads |
 | 0x12 | `COUNTERS` | anyone | model digest | Meter readout |
 | 0x13 | `EXCEPTION_DRAIN` | firmware | none | Refusals at every governed switch since the last drain, handed to the log |
 | 0x14 | `ALARM_RAISE` | anyone | cause, request hash, evidence digest | Raises a sticky alarm (any party may) |
 | 0x15 | `ALARM_CLEAR` | the policy's alarm approver key | cause | Clears an alarm; logged |
+| 0x16 | `EXCLUDE` | an authority key (never the heartbeat key); the same class and checks as `CLEAR`: this chip's id and an expiry in the payload, epoch-exempt | none | Only for a chip waiting for its first heartbeat: close its loop switch, keep its own levers asserted (see below); logged with the signer |
+
+**Two design calls (decided by Yobie, 23 October 2026).** "Silently failing is a bullshit
+feature. Operators should have some verbose warning / signal / notice."
+
+1. A HALT opens the loop switch on every rung, SAFE included. A chip that reached SAFE on a
+   local cause (a lost heartbeat) still has its loop closed; a signed HALT to it opens the switch so the whole
+   domain stops, as `02-safety-fabric.md` section 1 says a HALT does. SAFE outranks HALT, so a HALT to a chip already in SAFE leaves it in SAFE with power off, and the command becomes
+   the cause on record (CAUSE bits 2:0 read 4), except that a tamper cause is kept. The priority is unchanged:
+   tamper, then an authorized CLEAR, then the rest. Before this the RTL ignored a HALT in SAFE and the model dropped
+   to HALT and turned slot power back on (conformance finding F-07, now closed).
+2. A chip that never gets its first heartbeat keeps holding the rack (fail closed, unchanged), loudly (section 2,
+   operator signals). The deliberate way out is `EXCLUDE`, signed by the authority under the same rules as `CLEAR`.
+   EXCLUDE has no effect in any state but HALTED_INITIAL with no cause, and none while a valid heartbeat is live (that chip arms
+   itself). There, the excluded chip closes its own loop switch so the rest of the rack can run, while its own levers stay asserted: its state stays
+   HALTED_INITIAL (brake, reset, power off), so its own GPUs never run while it is excluded. EXCLUDE can never close
+   the loop of a chip halted by loop loss, a command or tamper. It leaves exclusion when a valid heartbeat arms it normally, on a reset, or when a HALT or a tamper moves it to a halted rung with its loop open. Excluded is a visible state bit and alarm, never silent, and every EXCLUDE is logged with who signed it.
 
 ## 4. The policy image
 
@@ -273,6 +302,7 @@ firmware fail to verify, which is the intended behaviour: an upgrade is an epoch
 | Epoch commit deadline | 10 s | policy |
 | Human override latency floor | 60 s | policy, never below 10 s |
 | Throttle to halt / halt to safe | 30 s / 300 s | policy; the RTL sequencer and heartbeat timers run on a millisecond tick derived from the microsecond counter |
+| Boot window for the first heartbeat (`NO_FIRST_HEARTBEAT`) | 5 s | an RTL parameter (`t_boot_ms`), not policy: the chip has no policy-checked heartbeat yet when it applies; the proof builds use 3 to 5 ms |
 
 ## 10. Memory and storage budgets
 

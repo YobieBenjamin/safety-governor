@@ -1,12 +1,12 @@
 
 (* top =  1  *)
 module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mono_load_hwm, mono_dec_req, meas0_extend, meas0_data, meas0_hash_done, meas0_hash_out, meas1_extend, meas1_data, meas1_hash_done, meas1_hash_out, epoch_commit, epoch_quorum_ok, epoch_new_epoch, epoch_host_wr, epoch_host_data
-, life_fuse_state, life_load, life_advance, life_advance_to, life_debug_req, tickets_query, tickets_burn, tickets_id_in, hb_hb_valid, hb_window, halt_tamper, halt_cmd_halt, halt_cmd_throttle, halt_local_trip, halt_clear, meter_slot, meter_add_tokens, meter_add_cycles, meter_add_in, meter_add_out, meter_strobe
-, mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_signed_cmd, mbox_epoch_match, mbox_epoch_exempt, mbox_needs_run, mbox_sig_done, mbox_sig_ok, alarms_set_mask, alarms_clear_mask, alarms_clear_authorized, cap_nvswitch_ins, cap_nvswitch_ins_point, cap_nvswitch_ins_peer, cap_nvswitch_ins_dir, cap_nvswitch_ins_budget, cap_nvswitch_ins_expiry, cap_nvswitch_ins_epoch_tag, cap_nvswitch_mac_ok, cap_nvswitch_lk
-, cap_nvswitch_lk_point, cap_nvswitch_lk_peer, cap_nvswitch_lk_dir, cap_nvswitch_lk_bytes, cap_pcie_ins, cap_pcie_ins_point, cap_pcie_ins_peer, cap_pcie_ins_dir, cap_pcie_ins_budget, cap_pcie_ins_expiry, cap_pcie_ins_epoch_tag, cap_pcie_mac_ok, cap_pcie_lk, cap_pcie_lk_point, cap_pcie_lk_peer, cap_pcie_lk_dir, cap_pcie_lk_bytes, cap_dpu_ins, cap_dpu_ins_point, cap_dpu_ins_peer, cap_dpu_ins_dir
-, cap_dpu_ins_budget, cap_dpu_ins_expiry, cap_dpu_ins_epoch_tag, cap_dpu_mac_ok, cap_dpu_lk, cap_dpu_lk_point, cap_dpu_lk_peer, cap_dpu_lk_dir, cap_dpu_lk_bytes, cap_storage_ins, cap_storage_ins_point, cap_storage_ins_peer, cap_storage_ins_dir, cap_storage_ins_budget, cap_storage_ins_expiry, cap_storage_ins_epoch_tag, cap_storage_mac_ok, cap_storage_lk, cap_storage_lk_point, cap_storage_lk_peer, cap_storage_lk_dir
-, cap_storage_lk_bytes, clk, rst, csr_rdata, pwrbrk_n, perst_n, pwr_en, loop_out_open, tick_ms, mono_refused, meas0_hash_req, meas0_hash_in, meas1_hash_req, meas1_hash_in, life_debug_grant, tickets_seen, tickets_burned, tickets_full, mbox_verify_req, mbox_dispatch, mbox_cmd_out
-, cap_nvswitch_ins_ok, cap_nvswitch_allow, cap_nvswitch_reason, cap_pcie_ins_ok, cap_pcie_allow, cap_pcie_reason, cap_dpu_ins_ok, cap_dpu_allow, cap_dpu_reason, cap_storage_ins_ok, cap_storage_allow, cap_storage_reason, csr_addr);
+, life_fuse_state, life_load, life_advance, life_advance_to, life_debug_req, tickets_query, tickets_burn, tickets_id_in, hb_hb_valid, hb_window, halt_tamper, halt_cmd_halt, halt_cmd_throttle, halt_local_trip, halt_clear, halt_cmd_exclude, meter_slot, meter_add_tokens, meter_add_cycles, meter_add_in, meter_add_out
+, meter_strobe, mbox_frame_seq, mbox_key_slot, mbox_cmd, mbox_signed_cmd, mbox_epoch_match, mbox_epoch_exempt, mbox_needs_run, mbox_sig_done, mbox_sig_ok, alarms_set_mask, alarms_clear_mask, alarms_clear_authorized, cap_nvswitch_ins, cap_nvswitch_ins_point, cap_nvswitch_ins_peer, cap_nvswitch_ins_dir, cap_nvswitch_ins_budget, cap_nvswitch_ins_expiry, cap_nvswitch_ins_epoch_tag, cap_nvswitch_mac_ok
+, cap_nvswitch_lk, cap_nvswitch_lk_point, cap_nvswitch_lk_peer, cap_nvswitch_lk_dir, cap_nvswitch_lk_bytes, cap_pcie_ins, cap_pcie_ins_point, cap_pcie_ins_peer, cap_pcie_ins_dir, cap_pcie_ins_budget, cap_pcie_ins_expiry, cap_pcie_ins_epoch_tag, cap_pcie_mac_ok, cap_pcie_lk, cap_pcie_lk_point, cap_pcie_lk_peer, cap_pcie_lk_dir, cap_pcie_lk_bytes, cap_dpu_ins, cap_dpu_ins_point, cap_dpu_ins_peer
+, cap_dpu_ins_dir, cap_dpu_ins_budget, cap_dpu_ins_expiry, cap_dpu_ins_epoch_tag, cap_dpu_mac_ok, cap_dpu_lk, cap_dpu_lk_point, cap_dpu_lk_peer, cap_dpu_lk_dir, cap_dpu_lk_bytes, cap_storage_ins, cap_storage_ins_point, cap_storage_ins_peer, cap_storage_ins_dir, cap_storage_ins_budget, cap_storage_ins_expiry, cap_storage_ins_epoch_tag, cap_storage_mac_ok, cap_storage_lk, cap_storage_lk_point, cap_storage_lk_peer
+, cap_storage_lk_dir, cap_storage_lk_bytes, clk, rst, csr_rdata, pwrbrk_n, perst_n, pwr_en, loop_out_open, tick_ms, mono_refused, meas0_hash_req, meas0_hash_in, meas1_hash_req, meas1_hash_in, life_debug_grant, tickets_seen, tickets_burned, tickets_full, mbox_verify_req, mbox_dispatch
+, mbox_cmd_out, cap_nvswitch_ins_ok, cap_nvswitch_allow, cap_nvswitch_reason, cap_pcie_ins_ok, cap_pcie_allow, cap_pcie_reason, cap_dpu_ins_ok, cap_dpu_allow, cap_dpu_reason, cap_storage_ins_ok, cap_storage_allow, cap_storage_reason, csr_addr);
   reg \$auto$verilog_backend.cc:2355:dump_module$1  = 0;
   wire \$1 ;
   wire \$10 ;
@@ -19,7 +19,7 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   wire \$17 ;
   wire \$18 ;
   wire \$19 ;
-  wire [12:0] \$2 ;
+  wire [31:0] \$2 ;
   wire \$20 ;
   wire \$21 ;
   wire \$22 ;
@@ -30,12 +30,14 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   wire \$27 ;
   wire \$28 ;
   wire \$29 ;
-  wire \$3 ;
+  wire [31:0] \$3 ;
   wire \$30 ;
-  wire [31:0] \$31 ;
-  wire [10:0] \$32 ;
-  reg [9:0] \$33 ;
-  wire \$4 ;
+  wire \$31 ;
+  wire \$32 ;
+  wire [31:0] \$33 ;
+  wire [10:0] \$34 ;
+  reg [9:0] \$35 ;
+  wire [12:0] \$4 ;
   wire \$5 ;
   wire \$6 ;
   wire \$7 ;
@@ -46,6 +48,7 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   wire alarms_clear_authorized;
   input [31:0] alarms_clear_mask;
   wire [31:0] alarms_clear_mask;
+  wire [31:0] alarms_hw_set;
   input [31:0] alarms_set_mask;
   wire [31:0] alarms_set_mask;
   output cap_dpu_allow;
@@ -210,19 +213,24 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   wire [255:0] epoch_new_epoch;
   input epoch_quorum_ok;
   wire epoch_quorum_ok;
+  wire [15:0] halt_boot_timer;
   wire [2:0] halt_cause;
   input halt_clear;
   wire halt_clear;
+  input halt_cmd_exclude;
+  wire halt_cmd_exclude;
   input halt_cmd_halt;
   wire halt_cmd_halt;
   input halt_cmd_throttle;
   wire halt_cmd_throttle;
+  wire halt_excluded;
   wire halt_hb_expired;
   wire halt_hb_ok;
   input halt_local_trip;
   wire halt_local_trip;
   wire halt_loop_lost;
   wire halt_loop_sense;
+  wire halt_no_first_hb;
   wire halt_perst;
   wire halt_ports_closed;
   wire halt_pwr_en;
@@ -255,10 +263,10 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   wire loop_lost;
   output loop_out_open;
   wire loop_out_open;
-  wire \loop_out_open$147 ;
+  wire \loop_out_open$148 ;
   input loop_sense;
   wire loop_sense;
-  wire \loop_sense$144 ;
+  wire \loop_sense$145 ;
   input [7:0] mbox_cmd;
   wire [7:0] mbox_cmd;
   output [7:0] mbox_cmd_out;
@@ -352,7 +360,7 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   wire rst;
   input sample;
   wire sample;
-  wire \sample$143 ;
+  wire \sample$144 ;
   wire [31:0] seq0;
   wire switch_open;
   input tick;
@@ -377,43 +385,45 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   assign mbox_running = halt_state == 1'h1;
   assign pwrbrk_n = ~ halt_pwrbrk;
   assign perst_n = ~ halt_perst;
-  assign \$2  = csr_addr - 10'h200;
-  assign \$3  = ~ pwr_en;
-  assign \$4  = csr_addr == 5'h10;
-  assign \$5  = csr_addr == 6'h30;
-  assign \$6  = csr_addr == 7'h50;
-  assign \$7  = csr_addr == 5'h14;
-  assign \$8  = csr_addr == 6'h34;
-  assign \$9  = csr_addr == 7'h54;
-  assign \$10  = csr_addr == 5'h18;
-  assign \$11  = csr_addr == 6'h38;
-  assign \$12  = csr_addr == 7'h58;
-  assign \$13  = csr_addr == 5'h1c;
-  assign \$14  = csr_addr == 6'h3c;
-  assign \$15  = csr_addr == 7'h5c;
-  assign \$16  = csr_addr == 6'h20;
-  assign \$17  = csr_addr == 7'h40;
-  assign \$18  = csr_addr == 7'h60;
-  assign \$19  = csr_addr == 6'h24;
-  assign \$20  = csr_addr == 7'h44;
-  assign \$21  = csr_addr == 7'h64;
-  assign \$22  = csr_addr == 6'h28;
-  assign \$23  = csr_addr == 7'h48;
-  assign \$24  = csr_addr == 7'h68;
-  assign \$25  = csr_addr == 6'h2c;
-  assign \$26  = csr_addr == 7'h4c;
-  assign \$27  = csr_addr == 7'h6c;
-  assign \$28  = csr_addr >= 10'h200;
-  assign \$29  = csr_addr < 10'h280;
-  assign \$30  = \$28  & \$29 ;
-  assign \$31  = \$2 [2] ? meter_val[63:32] : meter_val[31:0];
-  assign \$32  = ms_div + 1'h1;
+  assign alarms_hw_set = \$2  | \$3 ;
+  assign \$4  = csr_addr - 10'h200;
+  assign \$5  = ~ pwr_en;
+  assign \$6  = csr_addr == 5'h10;
+  assign \$7  = csr_addr == 6'h30;
+  assign \$8  = csr_addr == 7'h50;
+  assign \$9  = csr_addr == 5'h14;
+  assign \$10  = csr_addr == 6'h34;
+  assign \$11  = csr_addr == 7'h54;
+  assign \$12  = csr_addr == 5'h18;
+  assign \$13  = csr_addr == 6'h38;
+  assign \$14  = csr_addr == 7'h58;
+  assign \$15  = csr_addr == 5'h1c;
+  assign \$16  = csr_addr == 6'h3c;
+  assign \$17  = csr_addr == 7'h5c;
+  assign \$18  = csr_addr == 6'h20;
+  assign \$19  = csr_addr == 7'h40;
+  assign \$20  = csr_addr == 7'h60;
+  assign \$21  = csr_addr == 6'h24;
+  assign \$22  = csr_addr == 7'h44;
+  assign \$23  = csr_addr == 7'h64;
+  assign \$24  = csr_addr == 6'h28;
+  assign \$25  = csr_addr == 7'h48;
+  assign \$26  = csr_addr == 7'h68;
+  assign \$27  = csr_addr == 6'h2c;
+  assign \$28  = csr_addr == 7'h4c;
+  assign \$29  = csr_addr == 7'h6c;
+  assign \$30  = csr_addr >= 10'h200;
+  assign \$31  = csr_addr < 10'h280;
+  assign \$32  = \$30  & \$31 ;
+  assign \$33  = \$4 [2] ? meter_val[63:32] : meter_val[31:0];
+  assign \$34  = ms_div + 1'h1;
   always @(posedge clk)
-    ms_div <= \$33 ;
+    ms_div <= \$35 ;
   \governor_core.alarms  alarms (
     .alarms_alarms(alarms_alarms),
     .alarms_clear_authorized(alarms_clear_authorized),
     .alarms_clear_mask(alarms_clear_mask),
+    .alarms_hw_set(alarms_hw_set),
     .alarms_set_mask(alarms_set_mask),
     .clk(clk),
     .rst(rst)
@@ -521,15 +531,19 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   );
   \governor_core.halt  halt (
     .clk(clk),
+    .halt_boot_timer(halt_boot_timer),
     .halt_cause(halt_cause),
     .halt_clear(halt_clear),
+    .halt_cmd_exclude(halt_cmd_exclude),
     .halt_cmd_halt(halt_cmd_halt),
     .halt_cmd_throttle(halt_cmd_throttle),
+    .halt_excluded(halt_excluded),
     .halt_hb_expired(halt_hb_expired),
     .halt_hb_ok(halt_hb_ok),
     .halt_local_trip(halt_local_trip),
     .halt_loop_lost(halt_loop_lost),
     .halt_loop_sense(loop_sense),
+    .halt_no_first_hb(halt_no_first_hb),
     .halt_perst(halt_perst),
     .halt_ports_closed(cap_nvswitch_clear_all),
     .halt_pwr_en(pwr_en),
@@ -617,7 +631,7 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
     .meter_rd_cycles(meter_rd_cycles),
     .meter_rd_in(meter_rd_in),
     .meter_rd_out(meter_rd_out),
-    .meter_rd_slot(\$2 [6:5]),
+    .meter_rd_slot(\$4 [6:5]),
     .meter_rd_tokens(meter_rd_tokens),
     .meter_slot(meter_slot),
     .meter_strobe(meter_strobe),
@@ -644,7 +658,7 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
     (* full_case = 32'd1 *)
-    casez (\$2 [4:3])
+    casez (\$4 [4:3])
       2'h0:
           meter_val = { 16'h0000, meter_rd_tokens };
       2'h1:
@@ -666,7 +680,7 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
       12'h008:
           csr_rdata = { 29'h00000000, halt_state };
       12'h00c:
-          csr_rdata = { 16'h0000, cause_fw, 5'h00, halt_cause };
+          csr_rdata = { 16'h0000, cause_fw, 3'h0, halt_excluded, halt_no_first_hb, halt_cause };
       12'h070:
           csr_rdata = mono_value[31:0];
       12'h074:
@@ -676,9 +690,11 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
       12'h07c:
           csr_rdata = { 30'h00000000, loop_out_open, loop_sense };
       12'h080:
-          csr_rdata = { 29'h00000000, \$3 , halt_perst, halt_pwrbrk };
+          csr_rdata = { 29'h00000000, \$5 , halt_perst, halt_pwrbrk };
       12'h084:
           csr_rdata = alarms_alarms;
+      12'h088:
+          csr_rdata = { 16'h0000, halt_boot_timer };
       12'h104:
           csr_rdata = { 29'h00000000, mbox_status };
       12'h108:
@@ -686,100 +702,100 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
       default:
           csr_rdata = 32'd0;
     endcase
-    if (\$4 ) begin
+    if (\$6 ) begin
       csr_rdata = epoch_epoch[31:0];
     end
-    if (\$5 ) begin
+    if (\$7 ) begin
       csr_rdata = meas0_value[31:0];
     end
-    if (\$6 ) begin
+    if (\$8 ) begin
       csr_rdata = meas1_value[31:0];
     end
-    if (\$7 ) begin
+    if (\$9 ) begin
       csr_rdata = epoch_epoch[63:32];
     end
-    if (\$8 ) begin
+    if (\$10 ) begin
       csr_rdata = meas0_value[63:32];
     end
-    if (\$9 ) begin
+    if (\$11 ) begin
       csr_rdata = meas1_value[63:32];
     end
-    if (\$10 ) begin
+    if (\$12 ) begin
       csr_rdata = epoch_epoch[95:64];
     end
-    if (\$11 ) begin
+    if (\$13 ) begin
       csr_rdata = meas0_value[95:64];
     end
-    if (\$12 ) begin
+    if (\$14 ) begin
       csr_rdata = meas1_value[95:64];
     end
-    if (\$13 ) begin
+    if (\$15 ) begin
       csr_rdata = epoch_epoch[127:96];
     end
-    if (\$14 ) begin
+    if (\$16 ) begin
       csr_rdata = meas0_value[127:96];
     end
-    if (\$15 ) begin
+    if (\$17 ) begin
       csr_rdata = meas1_value[127:96];
     end
-    if (\$16 ) begin
+    if (\$18 ) begin
       csr_rdata = epoch_epoch[159:128];
     end
-    if (\$17 ) begin
+    if (\$19 ) begin
       csr_rdata = meas0_value[159:128];
     end
-    if (\$18 ) begin
+    if (\$20 ) begin
       csr_rdata = meas1_value[159:128];
     end
-    if (\$19 ) begin
+    if (\$21 ) begin
       csr_rdata = epoch_epoch[191:160];
     end
-    if (\$20 ) begin
+    if (\$22 ) begin
       csr_rdata = meas0_value[191:160];
     end
-    if (\$21 ) begin
+    if (\$23 ) begin
       csr_rdata = meas1_value[191:160];
     end
-    if (\$22 ) begin
+    if (\$24 ) begin
       csr_rdata = epoch_epoch[223:192];
     end
-    if (\$23 ) begin
+    if (\$25 ) begin
       csr_rdata = meas0_value[223:192];
     end
-    if (\$24 ) begin
+    if (\$26 ) begin
       csr_rdata = meas1_value[223:192];
     end
-    if (\$25 ) begin
+    if (\$27 ) begin
       csr_rdata = epoch_epoch[255:224];
     end
-    if (\$26 ) begin
+    if (\$28 ) begin
       csr_rdata = meas0_value[255:224];
     end
-    if (\$27 ) begin
+    if (\$29 ) begin
       csr_rdata = meas1_value[255:224];
     end
-    if (\$30 ) begin
-      csr_rdata = \$31 ;
+    if (\$32 ) begin
+      csr_rdata = \$33 ;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$33  = ms_div;
+    \$35  = ms_div;
     if (tick) begin
-      \$33  = \$32 [9:0];
+      \$35  = \$34 [9:0];
     end
     if (rst) begin
-      \$33  = 10'h000;
+      \$35  = 10'h000;
     end
   end
   assign mono_inc = tick;
   assign hb_tick = tick_ms;
   assign halt_tick = tick_ms;
-  assign \sample$143  = sample;
-  assign \loop_sense$144  = loop_sense;
+  assign \sample$144  = sample;
+  assign \loop_sense$145  = loop_sense;
   assign switch_open = loop_out_open;
   assign halt_switch_open = loop_out_open;
-  assign \loop_out_open$147  = loop_out_open;
+  assign \loop_out_open$148  = loop_out_open;
   assign loop_lost = halt_loop_lost;
   assign hb_expired = halt_hb_expired;
   assign halt_loop_sense = loop_sense;
@@ -798,21 +814,26 @@ module governor_core(doorbell, cause_fw, loop_sense, tick, sample, mono_hwm, mon
   assign cap_storage_now = mono_value[31:0];
   assign cap_storage_epoch_tag = epoch_epoch[15:0];
   assign cap_storage_clear_all = cap_nvswitch_clear_all;
-  assign meter_off = \$2 [11:0];
-  assign meter_rd_slot = \$2 [6:5];
+  assign meter_off = \$4 [11:0];
+  assign meter_rd_slot = \$4 [6:5];
   assign mono_refused = mono_dec_req;
   assign meas0_hash_in = { meas0_value, meas0_data };
   assign meas1_hash_in = { meas1_value, meas1_data };
+  assign \$2  = { halt_no_first_hb, 31'h00000000 };
+  assign \$3  = { 1'h0, halt_excluded, 30'h00000000 };
 endmodule
 
-module \governor_core.alarms (alarms_clear_mask, alarms_clear_authorized, clk, rst, alarms_alarms, alarms_set_mask);
+module \governor_core.alarms (alarms_clear_mask, alarms_clear_authorized, clk, rst, alarms_hw_set, alarms_alarms, alarms_set_mask);
   reg \$auto$verilog_backend.cc:2355:dump_module$2  = 0;
   wire [31:0] \$1 ;
   wire [31:0] \$2 ;
   wire \$3 ;
   wire \$4 ;
-  wire [31:0] \$5 ;
-  reg [31:0] \$6 ;
+  wire [32:0] \$5 ;
+  wire [31:0] \$6 ;
+  wire [32:0] \$7 ;
+  wire [32:0] \$8 ;
+  reg [31:0] \$9 ;
   output [31:0] alarms_alarms;
   reg [31:0] alarms_alarms = 32'd0;
   wire alarms_any;
@@ -821,6 +842,8 @@ module \governor_core.alarms (alarms_clear_mask, alarms_clear_authorized, clk, r
   input [31:0] alarms_clear_mask;
   wire [31:0] alarms_clear_mask;
   wire alarms_clear_refused;
+  input [31:0] alarms_hw_set;
+  wire [31:0] alarms_hw_set;
   input [31:0] alarms_set_mask;
   wire [31:0] alarms_set_mask;
   wire [31:0] cleared;
@@ -828,23 +851,28 @@ module \governor_core.alarms (alarms_clear_mask, alarms_clear_authorized, clk, r
   wire clk;
   input rst;
   wire rst;
+  assign \$1  = alarms_clear_mask & { alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized };
+  assign \$2  = ~ \$1 ;
+  assign cleared = alarms_alarms & \$2 ;
   assign alarms_any = | alarms_alarms;
   assign \$3  = | alarms_clear_mask;
   assign \$4  = ~ alarms_clear_authorized;
   assign alarms_clear_refused = \$3  & \$4 ;
-  assign \$5  = cleared | alarms_set_mask;
+  assign \$7  = \$5  | { 1'h0, \$6  };
+  assign \$8  = { 1'h0, cleared } | \$7 ;
   always @(posedge clk)
-    alarms_alarms <= \$6 ;
-  assign \$1  = alarms_clear_mask & { alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized, alarms_clear_authorized };
-  assign \$2  = ~ \$1 ;
-  assign cleared = alarms_alarms & \$2 ;
+    alarms_alarms <= \$9 ;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$2 ) begin end
-    \$6  = \$5 ;
+    \$9  = \$8 [31:0];
     if (rst) begin
-      \$6  = 32'd0;
+      \$9  = 32'd0;
     end
   end
+  assign \$5 [31:30] = 2'h0;
+  assign { \$5 [32], \$5 [29:0] } = { 1'h0, alarms_set_mask[29:0] };
+  assign \$6 [29:0] = 30'h00000000;
+  assign \$6 [31:30] = alarms_hw_set[31:30];
 endmodule
 
 module \governor_core.cap_dpu (cap_dpu_ins_point, cap_dpu_ins_peer, cap_dpu_ins_dir, cap_dpu_ins_budget, cap_dpu_ins_expiry, cap_dpu_ins_epoch_tag, cap_dpu_mac_ok, cap_dpu_lk, cap_dpu_lk_point, cap_dpu_lk_peer, cap_dpu_lk_dir, cap_dpu_lk_bytes, clk, rst, cap_dpu_clear_all, cap_dpu_now, cap_dpu_epoch_tag, cap_dpu_ins_ok, cap_dpu_allow, cap_dpu_reason, cap_dpu_ins
@@ -9612,7 +9640,8 @@ module \governor_core.epoch (epoch_quorum_ok, epoch_new_epoch, epoch_host_refuse
   assign epoch_host_wr = epoch_host_refused;
 endmodule
 
-module \governor_core.halt (halt_tamper, halt_cmd_halt, halt_cmd_throttle, halt_local_trip, halt_clear, clk, rst, halt_tick, halt_hb_ok, halt_hb_expired, halt_pwrbrk, halt_perst, halt_pwr_en, halt_ports_closed, halt_loop_lost, halt_state, halt_cause, halt_switch_open, halt_loop_sense);
+module \governor_core.halt (halt_tamper, halt_cmd_halt, halt_cmd_throttle, halt_local_trip, halt_clear, halt_cmd_exclude, clk, rst, halt_tick, halt_hb_ok, halt_hb_expired, halt_no_first_hb, halt_pwrbrk, halt_perst, halt_pwr_en, halt_ports_closed, halt_loop_lost, halt_state, halt_cause, halt_switch_open, halt_excluded
+, halt_boot_timer, halt_loop_sense);
   reg \$auto$verilog_backend.cc:2355:dump_module$8  = 0;
   wire \$1 ;
   wire \$10 ;
@@ -9629,49 +9658,80 @@ module \governor_core.halt (halt_tamper, halt_cmd_halt, halt_cmd_throttle, halt_
   wire \$20 ;
   wire \$21 ;
   wire \$22 ;
-  wire [20:0] \$23 ;
+  wire \$23 ;
   wire \$24 ;
-  wire [20:0] \$25 ;
-  wire [20:0] \$26 ;
+  wire \$25 ;
+  wire \$26 ;
   wire \$27 ;
   wire [20:0] \$28 ;
   wire \$29 ;
   wire \$3 ;
-  wire \$30 ;
-  wire \$31 ;
+  wire [20:0] \$30 ;
+  wire [20:0] \$31 ;
   wire \$32 ;
-  wire \$33 ;
+  wire [20:0] \$33 ;
   wire \$34 ;
-  reg [2:0] \$35 ;
-  reg [2:0] \$36 ;
-  reg \$37 ;
-  reg [19:0] \$38 ;
+  wire \$35 ;
+  wire \$36 ;
+  wire \$37 ;
+  wire \$38 ;
+  wire \$39 ;
   wire \$4 ;
+  wire \$40 ;
+  wire \$41 ;
+  wire \$42 ;
+  wire \$43 ;
+  wire \$44 ;
+  wire [16:0] \$45 ;
+  wire \$46 ;
+  wire \$47 ;
+  wire \$48 ;
+  wire \$49 ;
   wire \$5 ;
+  wire \$50 ;
+  wire \$51 ;
+  wire \$52 ;
+  wire \$53 ;
+  reg [2:0] \$54 ;
+  reg [2:0] \$55 ;
+  reg \$56 ;
+  reg [19:0] \$57 ;
+  reg \$58 ;
+  reg \$59 ;
   wire \$6 ;
+  reg [15:0] \$60 ;
   wire \$7 ;
   wire \$8 ;
   wire \$9 ;
   input clk;
   wire clk;
+  output [15:0] halt_boot_timer;
+  reg [15:0] halt_boot_timer = 16'h0000;
   output [2:0] halt_cause;
   reg [2:0] halt_cause = 3'h0;
   input halt_clear;
   wire halt_clear;
+  input halt_cmd_exclude;
+  wire halt_cmd_exclude;
   input halt_cmd_halt;
   wire halt_cmd_halt;
   input halt_cmd_throttle;
   wire halt_cmd_throttle;
+  output halt_excluded;
+  reg halt_excluded = 1'h0;
   input halt_hb_expired;
   wire halt_hb_expired;
   input halt_hb_ok;
   wire halt_hb_ok;
+  reg halt_hb_seen = 1'h0;
   input halt_local_trip;
   wire halt_local_trip;
   input halt_loop_lost;
   wire halt_loop_lost;
   input halt_loop_sense;
   wire halt_loop_sense;
+  output halt_no_first_hb;
+  wire halt_no_first_hb;
   output halt_perst;
   wire halt_perst;
   output halt_ports_closed;
@@ -9691,13 +9751,46 @@ module \governor_core.halt (halt_tamper, halt_cmd_halt, halt_cmd_throttle, halt_
   reg [19:0] halt_timer = 20'h00000;
   input rst;
   wire rst;
+  assign \$40  = ~ halt_hb_ok;
+  assign \$41  = \$39  & \$40 ;
+  assign \$42  = \$41  & halt_tick;
+  assign \$43  = halt_boot_timer != 16'hffff;
+  assign \$44  = \$42  & \$43 ;
+  assign \$45  = halt_boot_timer + 1'h1;
+  assign \$46  = ~ halt_hb_seen;
+  assign \$47  = halt_boot_timer >= 13'h1388;
+  assign halt_no_first_hb = \$46  & \$47 ;
+  assign halt_pwrbrk = halt_state != 1'h1;
+  assign \$48  = ! halt_state;
+  assign \$49  = halt_state == 2'h3;
+  assign \$50  = \$48  | \$49 ;
+  assign \$51  = halt_state == 3'h4;
+  assign halt_perst = \$50  | \$51 ;
+  assign \$52  = | halt_state;
+  assign \$53  = halt_state != 3'h4;
+  assign halt_pwr_en = \$52  & \$53 ;
+  assign halt_ports_closed = halt_state != 1'h1;
+  always @(posedge clk)
+    halt_state <= \$54 ;
+  always @(posedge clk)
+    halt_cause <= \$55 ;
+  always @(posedge clk)
+    halt_switch_open <= \$56 ;
+  always @(posedge clk)
+    halt_timer <= \$57 ;
+  always @(posedge clk)
+    halt_hb_seen <= \$58 ;
+  always @(posedge clk)
+    halt_excluded <= \$59 ;
+  always @(posedge clk)
+    halt_boot_timer <= \$60 ;
   assign \$1  = | halt_state;
   assign \$2  = halt_clear & \$1 ;
   assign \$3  = halt_state == 1'h1;
   assign \$4  = halt_state == 2'h2;
   assign \$5  = \$3  | \$4 ;
   assign \$6  = halt_loop_lost & \$5 ;
-  assign \$7  = halt_state != 3'h4;
+  assign \$7  = halt_state == 3'h4;
   assign \$8  = halt_cmd_halt & \$7 ;
   assign \$9  = halt_hb_expired | halt_local_trip;
   assign \$10  = \$9  | halt_cmd_throttle;
@@ -9707,132 +9800,184 @@ module \governor_core.halt (halt_tamper, halt_cmd_halt, halt_cmd_throttle, halt_
   assign \$14  = ! halt_cause;
   assign \$15  = \$13  & \$14 ;
   assign \$16  = \$15  & halt_hb_ok;
-  assign \$17  = halt_state == 2'h2;
-  assign \$18  = halt_tick & \$17 ;
-  assign \$19  = halt_state == 2'h3;
-  assign \$20  = halt_tick & \$19 ;
-  assign \$21  = ~ halt_loop_lost;
-  assign \$22  = halt_loop_sense & \$21 ;
-  assign \$23  = halt_timer + 1'h1;
-  assign \$24  = \$23  >= 15'h7530;
-  assign \$25  = halt_timer + 1'h1;
-  assign \$26  = halt_timer + 1'h1;
-  assign \$27  = \$26  >= 19'h493e0;
+  assign \$17  = ! halt_state;
+  assign \$18  = halt_cmd_exclude & \$17 ;
+  assign \$19  = ! halt_cause;
+  assign \$20  = \$18  & \$19 ;
+  assign \$21  = halt_state == 2'h2;
+  assign \$22  = halt_tick & \$21 ;
+  assign \$23  = halt_state == 2'h3;
+  assign \$24  = halt_tick & \$23 ;
+  assign \$25  = halt_cause != 2'h3;
+  assign \$26  = ~ halt_loop_lost;
+  assign \$27  = halt_loop_sense & \$26 ;
   assign \$28  = halt_timer + 1'h1;
-  assign halt_pwrbrk = halt_state != 1'h1;
-  assign \$29  = ! halt_state;
-  assign \$30  = halt_state == 2'h3;
-  assign \$31  = \$29  | \$30 ;
-  assign \$32  = halt_state == 3'h4;
-  assign halt_perst = \$31  | \$32 ;
-  assign \$33  = | halt_state;
-  assign \$34  = halt_state != 3'h4;
-  assign halt_pwr_en = \$33  & \$34 ;
-  assign halt_ports_closed = halt_state != 1'h1;
-  always @(posedge clk)
-    halt_state <= \$35 ;
-  always @(posedge clk)
-    halt_cause <= \$36 ;
-  always @(posedge clk)
-    halt_switch_open <= \$37 ;
-  always @(posedge clk)
-    halt_timer <= \$38 ;
+  assign \$29  = \$28  >= 15'h7530;
+  assign \$30  = halt_timer + 1'h1;
+  assign \$31  = halt_timer + 1'h1;
+  assign \$32  = \$31  >= 19'h493e0;
+  assign \$33  = halt_timer + 1'h1;
+  assign \$34  = halt_tamper | halt_cmd_halt;
+  assign \$35  = ~ halt_hb_seen;
+  assign \$36  = ! halt_state;
+  assign \$37  = \$35  & \$36 ;
+  assign \$38  = ! halt_cause;
+  assign \$39  = \$37  & \$38 ;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
-    \$35  = halt_state;
+    \$54  = halt_state;
     if (halt_tamper) begin
-      \$35  = 3'h4;
+      \$54  = 3'h4;
     end else if (\$2 ) begin
-      \$35  = 3'h0;
+      \$54  = 3'h0;
     end else if (\$6 ) begin
-      \$35  = 3'h3;
+      \$54  = 3'h3;
     end else if (\$8 ) begin
-      \$35  = 3'h3;
+    end else if (halt_cmd_halt) begin
+      \$54  = 3'h3;
     end else if (\$12 ) begin
-      \$35  = 3'h2;
+      \$54  = 3'h2;
     end else if (\$16 ) begin
-      if (\$22 ) begin
-        \$35  = 3'h1;
-      end
-    end else if (\$18 ) begin
-      if (\$24 ) begin
-        \$35  = 3'h3;
+      if (\$27 ) begin
+        \$54  = 3'h1;
       end
     end else if (\$20 ) begin
-      if (\$27 ) begin
-        \$35  = 3'h4;
+    end else if (\$22 ) begin
+      if (\$29 ) begin
+        \$54  = 3'h3;
+      end
+    end else if (\$24 ) begin
+      if (\$32 ) begin
+        \$54  = 3'h4;
       end
     end
     if (rst) begin
-      \$35  = 3'h0;
+      \$54  = 3'h0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
-    \$36  = halt_cause;
+    \$55  = halt_cause;
     if (halt_tamper) begin
-      \$36  = 3'h3;
+      \$55  = 3'h3;
     end else if (\$2 ) begin
-      \$36  = 3'h0;
+      \$55  = 3'h0;
     end else if (\$6 ) begin
-      \$36  = 3'h1;
+      \$55  = 3'h1;
     end else if (\$8 ) begin
-      \$36  = 3'h4;
-    end else if (\$12 ) begin
-      \$36  = 3'h2;
-    end
-    if (rst) begin
-      \$36  = 3'h0;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
-    \$37  = halt_switch_open;
-    if (halt_tamper) begin
-      \$37  = 1'h1;
-    end else if (\$2 ) begin
-    end else if (\$6 ) begin
-      \$37  = 1'h1;
-    end else if (\$8 ) begin
-      \$37  = 1'h1;
-    end else if (\$12 ) begin
-    end else if (\$16 ) begin
-      \$37  = 1'h0;
-    end
-    if (rst) begin
-      \$37  = 1'h1;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
-    \$38  = halt_timer;
-    if (halt_tamper) begin
-    end else if (\$2 ) begin
-      \$38  = 20'h00000;
-    end else if (\$6 ) begin
-      \$38  = 20'h00000;
-    end else if (\$8 ) begin
-      \$38  = 20'h00000;
-    end else if (\$12 ) begin
-      \$38  = 20'h00000;
-    end else if (\$16 ) begin
-    end else if (\$18 ) begin
-      (* full_case = 32'd1 *)
-      if (\$24 ) begin
-        \$38  = 20'h00000;
-      end else begin
-        \$38  = \$25 [19:0];
+      if (\$25 ) begin
+        \$55  = 3'h4;
       end
+    end else if (halt_cmd_halt) begin
+      \$55  = 3'h4;
+    end else if (\$12 ) begin
+      \$55  = 3'h2;
+    end
+    if (rst) begin
+      \$55  = 3'h0;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
+    \$56  = halt_switch_open;
+    if (halt_tamper) begin
+      \$56  = 1'h1;
+    end else if (\$2 ) begin
+    end else if (\$6 ) begin
+      \$56  = 1'h1;
+    end else if (\$8 ) begin
+      \$56  = 1'h1;
+    end else if (halt_cmd_halt) begin
+      \$56  = 1'h1;
+    end else if (\$12 ) begin
+    end else if (\$16 ) begin
+      \$56  = 1'h0;
     end else if (\$20 ) begin
+      \$56  = 1'h0;
+    end
+    if (rst) begin
+      \$56  = 1'h1;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
+    \$57  = halt_timer;
+    if (halt_tamper) begin
+    end else if (\$2 ) begin
+      \$57  = 20'h00000;
+    end else if (\$6 ) begin
+      \$57  = 20'h00000;
+    end else if (\$8 ) begin
+    end else if (halt_cmd_halt) begin
+      \$57  = 20'h00000;
+    end else if (\$12 ) begin
+      \$57  = 20'h00000;
+    end else if (\$16 ) begin
+    end else if (\$20 ) begin
+    end else if (\$22 ) begin
       (* full_case = 32'd1 *)
-      if (\$27 ) begin
-        \$38  = 20'h00000;
+      if (\$29 ) begin
+        \$57  = 20'h00000;
       end else begin
-        \$38  = \$28 [19:0];
+        \$57  = \$30 [19:0];
+      end
+    end else if (\$24 ) begin
+      (* full_case = 32'd1 *)
+      if (\$32 ) begin
+        \$57  = 20'h00000;
+      end else begin
+        \$57  = \$33 [19:0];
       end
     end
     if (rst) begin
-      \$38  = 20'h00000;
+      \$57  = 20'h00000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
+    \$58  = halt_hb_seen;
+    if (halt_tamper) begin
+    end else if (\$2 ) begin
+    end else if (\$6 ) begin
+    end else if (\$8 ) begin
+    end else if (halt_cmd_halt) begin
+    end else if (\$12 ) begin
+    end else if (\$16 ) begin
+      \$58  = 1'h1;
+    end
+    if (rst) begin
+      \$58  = 1'h0;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
+    \$59  = halt_excluded;
+    if (halt_tamper) begin
+    end else if (\$2 ) begin
+    end else if (\$6 ) begin
+    end else if (\$8 ) begin
+    end else if (halt_cmd_halt) begin
+    end else if (\$12 ) begin
+    end else if (\$16 ) begin
+      \$59  = 1'h0;
+    end else if (\$20 ) begin
+      \$59  = 1'h1;
+    end
+    if (\$34 ) begin
+      \$59  = 1'h0;
+    end
+    if (rst) begin
+      \$59  = 1'h0;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
+    \$60  = halt_boot_timer;
+    if (\$44 ) begin
+      \$60  = \$45 [15:0];
+    end
+    if (rst) begin
+      \$60  = 16'h0000;
     end
   end
 endmodule

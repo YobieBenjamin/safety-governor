@@ -170,47 +170,127 @@ def sim_loop_io(cycles: int = 4000, seed: int = 5, cls=None) -> tuple[bool, str]
 HALTED_INITIAL, RUN, THROTTLE, HALT, SAFE = 0, 1, 2, 3, 4
 
 
-class CoreRef:
-    """The sequencer, heartbeat, loop debounce and millisecond prescaler of governor_core, from the spec:
-    docs/01 (ladder; loop-opening vs local causes), docs/07 section 3 (halt, heartbeat, halt_loop, top rows),
-    docs/04 section 9 (ms tick from the us tick). Levers per rung from docs/07: brake unless RUN; reset in
-    HALTED_INITIAL, HALT, SAFE; power off in HALTED_INITIAL and SAFE."""
+class SeqRef:
+    """The safe-mode sequencer from the spec: docs/01 (ladder; loop-opening vs local causes), docs/07 section 3 (halt
+    row), and Yobie's two calls of 23 October 2026 (docs/04 sections 2 and 3, docs/02 section 1): a HALT opens the loop
+    on every rung, SAFE included (SAFE stays SAFE, the command is the cause unless it is tamper); a chip never armed
+    since reset raises NO_FIRST_HEARTBEAT once it has waited t_boot milliseconds; an authorized EXCLUDE closes the
+    switch of a chip in HALTED_INITIAL with no cause and no live heartbeat, and nothing else."""
 
-    def __init__(self, t_throttle, t_halt, ms_shift):
-        self.tt, self.th, self.ms = t_throttle, t_halt, 1 << ms_shift
+    def __init__(self, t_throttle, t_halt, t_boot):
+        self.tt, self.th, self.tb = t_throttle, t_halt, t_boot
         self.state, self.cause, self.sw_open, self.timer = HALTED_INITIAL, 0, True, 0
-        self.rem, self.div, self.samples = 0, 0, []
+        self.hb_seen, self.boot, self.excluded = False, 0, False
+
+    def no_first_hb(self):
+        return (not self.hb_seen) and self.boot >= self.tb
+
+    def step(self, i):
+        """i: tamper, clear, lost, cmd_halt, hb_expired, local_trip, cmd_throttle, hb_ok, loop_sense, tick, cmd_exclude."""
+        s, run_like = self.state, self.state in (RUN, THROTTLE)
+        ns, nc, nsw, nt = s, self.cause, self.sw_open, self.timer
+        seen, exc = self.hb_seen, self.excluded
+        if i["tamper"]:                                       # tamper outranks CLEAR (F-05, fixed 23 October)
+            ns, nc, nsw = SAFE, 3, True
+        elif i["clear"] and s != HALTED_INITIAL:
+            ns, nc, nt = HALTED_INITIAL, 0, 0                # clear does not touch the switch
+        elif i["lost"] and run_like:
+            ns, nc, nsw, nt = HALT, 1, True, 0
+        elif i["cmd_halt"] and s == SAFE:                     # Yobie's call 1: SAFE stays SAFE, the loop opens
+            nc, nsw = (3 if self.cause == 3 else 4), True
+        elif i["cmd_halt"]:
+            ns, nc, nsw, nt = HALT, 4, True, 0
+        elif (i["hb_expired"] or i["local_trip"] or i["cmd_throttle"]) and s == RUN:
+            ns, nc, nt = THROTTLE, 2, 0
+        elif s == HALTED_INITIAL and self.cause == 0 and i["hb_ok"]:
+            nsw, seen, exc = False, True, False               # armed: ends any exclusion
+            if i["loop_sense"] and not i["lost"]:             # RUN needs a clean loop sample (F1, fixed 23 October)
+                ns = RUN
+        elif i["cmd_exclude"] and s == HALTED_INITIAL and self.cause == 0:
+            nsw, exc = False, True                            # Yobie's call 2: the levers stay, the loop closes
+        elif i["tick"] and s == THROTTLE:
+            ns, nt = (HALT, 0) if self.timer + 1 >= self.tt else (s, self.timer + 1)
+        elif i["tick"] and s == HALT:
+            ns, nt = (SAFE, 0) if self.timer + 1 >= self.th else (s, self.timer + 1)
+        if i["tamper"] or i["cmd_halt"]:
+            exc = False
+        waiting = not self.hb_seen and s == HALTED_INITIAL and self.cause == 0 and not i["hb_ok"]
+        nb = self.boot + 1 if waiting and i["tick"] and self.boot != 0xFFFF else self.boot
+        self.state, self.cause, self.sw_open, self.timer = ns, nc, nsw, nt
+        self.hb_seen, self.boot, self.excluded = seen, nb, exc
+
+
+def sim_halt_seq(cycles: int = 4000, seed: int = 11, cls=None) -> tuple[bool, str]:
+    """Several fresh power-ons (a new DUT each), so the boot window and EXCLUDE are visited often."""
+    from rtl.governor_rtl import HaltSeq
+    rng = random.Random(seed)
+    names = ("tamper", "clear", "loop_lost", "cmd_halt", "hb_expired", "local_trip", "cmd_throttle", "hb_ok",
+             "loop_sense", "tick", "cmd_exclude")
+    stats = {"seen": set(), "excl": 0, "nfh": 0}
+    seg = 500
+
+    def segment(base):
+        dut = (cls or HaltSeq)(t_throttle=3, t_halt=4, t_boot=5)
+        ref = SeqRef(3, 4, 5)
+        quiet_hb = rng.random() < 0.5                          # half the power-ons wait a long time for a heartbeat
+
+        async def bench(ctx):
+            for c in range(base, base + seg):
+                i = {"tamper": rng.random() < 0.004, "clear": rng.random() < 0.02, "loop_lost": rng.random() < 0.05,
+                     "cmd_halt": rng.random() < 0.02, "hb_expired": rng.random() < 0.05, "local_trip": rng.random() < 0.01,
+                     "cmd_throttle": rng.random() < 0.01, "hb_ok": rng.random() < (0.01 if quiet_hb else 0.08),
+                     "loop_sense": rng.random() < 0.9, "tick": rng.random() < 0.7, "cmd_exclude": rng.random() < 0.05}
+                for k in names:
+                    ctx.set(getattr(dut, k), i[k])
+                got = {k: ctx.get(getattr(dut, k)) for k in ("state", "cause", "switch_open", "timer", "hb_seen",
+                                                              "boot_timer", "excluded", "no_first_hb", "pwr_en", "perst", "pwrbrk")}
+                s = ref.state
+                want = {"state": s, "cause": ref.cause, "switch_open": int(ref.sw_open), "timer": ref.timer,
+                        "hb_seen": int(ref.hb_seen), "boot_timer": ref.boot, "excluded": int(ref.excluded),
+                        "no_first_hb": int(ref.no_first_hb()), "pwr_en": int(s not in (HALTED_INITIAL, SAFE)),
+                        "perst": int(s in (HALTED_INITIAL, HALT, SAFE)), "pwrbrk": int(s != RUN)}
+                _check(got == want, seed, c, f"{got} != {want}")
+                stats["seen"].add(s); stats["excl"] += ref.excluded; stats["nfh"] += ref.no_first_hb()
+                ref.step({**i, "lost": i["loop_lost"]})
+                await ctx.tick()
+            return ""
+        return _run(dut, bench)
+
+    for base in range(0, cycles, seg):
+        ok, why = segment(base)
+        if not ok:
+            return ok, why
+    return True, (f"{cycles} random cycles over {cycles // seg} power-ons match the spec model; rungs visited "
+                  f"{sorted(stats['seen'])}, {stats['excl']} cycles excluded, {stats['nfh']} with the boot alarm up (seed {seed})")
+
+
+class CoreRef:
+    """The sequencer (SeqRef), heartbeat, loop debounce, millisecond prescaler and hardware alarm bits of
+    governor_core, from the spec: docs/07 section 3 (halt, heartbeat, halt_loop, top rows), docs/04 section 9 (ms tick
+    from the us tick), docs/04 section 2 (ALARMS bits 31 NO_FIRST_HEARTBEAT and 30 EXCLUDED: hardware-owned, sticky).
+    Levers per rung from docs/07: brake unless RUN; reset in HALTED_INITIAL, HALT, SAFE; power off in HALTED_INITIAL
+    and SAFE."""
+
+    def __init__(self, t_throttle, t_halt, ms_shift, t_boot):
+        self.seq = SeqRef(t_throttle, t_halt, t_boot)
+        self.ms = 1 << ms_shift
+        self.rem, self.div, self.samples, self.alarms = 0, 0, [], 0
+
+    state = property(lambda self: self.seq.state)
+    cause = property(lambda self: self.seq.cause)
 
     def outputs(self):
-        s = self.state
+        s = self.seq.state
         return {"pwrbrk_n": int(s == RUN), "perst_n": int(s not in (HALTED_INITIAL, HALT, SAFE)),
-                "pwr_en": int(s not in (HALTED_INITIAL, SAFE)), "loop_out_open": int(self.sw_open)}
+                "pwr_en": int(s not in (HALTED_INITIAL, SAFE)), "loop_out_open": int(self.seq.sw_open)}
 
     def step(self, i):
         tick_ms = i["tick"] and self.div == self.ms - 1
         expired = self.rem == 0
         lost = len(self.samples) == 2 and not any(self.samples)
-        s, run_like = self.state, self.state in (RUN, THROTTLE)
-        ns, nc, nsw, nt = s, self.cause, self.sw_open, self.timer
-        if i["tamper"]:                                       # tamper outranks CLEAR (F-05, fixed 23 October)
-            ns, nc, nsw = SAFE, 3, True
-        elif i["clear"] and s != HALTED_INITIAL:
-            ns, nc, nt = HALTED_INITIAL, 0, 0                # clear does not touch the switch
-        elif lost and run_like:
-            ns, nc, nsw, nt = HALT, 1, True, 0
-        elif i["cmd_halt"] and s != SAFE:
-            ns, nc, nsw, nt = HALT, 4, True, 0
-        elif (expired or i["local_trip"] or i["cmd_throttle"]) and s == RUN:
-            ns, nc, nt = THROTTLE, 2, 0
-        elif s == HALTED_INITIAL and self.cause == 0 and not expired:
-            nsw = False                                       # armed
-            if i["loop_sense"] and not lost:                  # RUN needs a clean loop sample (F1, fixed 23 October)
-                ns = RUN
-        elif tick_ms and s == THROTTLE:
-            ns, nt = (HALT, 0) if self.timer + 1 >= self.tt else (s, self.timer + 1)
-        elif tick_ms and s == HALT:
-            ns, nt = (SAFE, 0) if self.timer + 1 >= self.th else (s, self.timer + 1)
-        self.state, self.cause, self.sw_open, self.timer = ns, nc, nsw, nt
+        hw = (int(self.seq.no_first_hb()) << 31) | (int(self.seq.excluded) << 30)
+        self.alarms |= hw | (i["set_mask"] & ~(3 << 30))     # firmware cannot raise the hardware bits
+        self.seq.step({**i, "lost": lost, "hb_expired": expired, "hb_ok": not expired, "tick": tick_ms})
         self.rem = i["window"] if i["hb_valid"] else (self.rem - 1 if tick_ms and self.rem else self.rem)
         if i["tick"]:
             self.div = (self.div + 1) % self.ms
@@ -221,23 +301,25 @@ class CoreRef:
 
 def sim_governor_core(cycles: int = 3000, seed: int = 6, cls=None) -> tuple[bool, str]:
     from rtl.governor_rtl import GovernorCore
-    kw = dict(cap_entries=2, ticket_entries=2, t_throttle_ms=3, t_halt_ms=4, ms_shift=2)
+    kw = dict(cap_entries=2, ticket_entries=2, t_throttle_ms=3, t_halt_ms=4, ms_shift=2, t_boot_ms=3)
     dut = (cls or GovernorCore)(**kw)
-    ref = CoreRef(3, 4, 2)
+    ref = CoreRef(3, 4, 2, 3)
     rng = random.Random(seed)
     pins = {"pwrbrk_n": dut.pwrbrk_n, "perst_n": dut.perst_n, "pwr_en": dut.pwr_en, "loop_out_open": dut.loop_out_open}
 
     async def bench(ctx):
-        seen = set()
+        seen, excl = set(), 0
         for c in range(cycles):
             # rare causes, so the ladder gets climbed instead of being reset every few cycles
             i = {"tick": rng.random() < 0.8, "sample": rng.random() < 0.3, "loop_sense": rng.random() < 0.85,
                  "hb_valid": rng.random() < 0.03, "window": rng.randrange(0, 12),
                  "tamper": rng.random() < 0.003, "cmd_halt": rng.random() < 0.004, "cmd_throttle": rng.random() < 0.004,
-                 "local_trip": rng.random() < 0.004, "clear": rng.random() < 0.01}
+                 "local_trip": rng.random() < 0.004, "clear": rng.random() < 0.01, "cmd_exclude": rng.random() < 0.02,
+                 "set_mask": rng.choice([0, 0, 0, 0, 1 << 31, 1 << 30, rng.randrange(1 << 32)])}
             sigs = {"tick": dut.tick, "sample": dut.sample, "loop_sense": dut.loop_sense, "hb_valid": dut.hb.hb_valid,
                     "window": dut.hb.window, "tamper": dut.halt.tamper, "cmd_halt": dut.halt.cmd_halt,
-                    "cmd_throttle": dut.halt.cmd_throttle, "local_trip": dut.halt.local_trip, "clear": dut.halt.clear}
+                    "cmd_throttle": dut.halt.cmd_throttle, "local_trip": dut.halt.local_trip, "clear": dut.halt.clear,
+                    "cmd_exclude": dut.halt.cmd_exclude, "set_mask": dut.alarms.set_mask}
             for k, s in sigs.items():
                 ctx.set(s, i[k])
             # the host side does random things too: reads anywhere, rings the doorbell; none of it may matter
@@ -254,15 +336,19 @@ def sim_governor_core(cycles: int = 3000, seed: int = 6, cls=None) -> tuple[bool
             _check(ctx.get(dut.halt.state) == ref.state, seed, c, f"state {ctx.get(dut.halt.state)} != {ref.state}")
             _check(ctx.get(dut.halt.cause) == ref.cause, seed, c, f"cause {ctx.get(dut.halt.cause)} != {ref.cause}")
             _check(ctx.get(dut.hb.remaining) == ref.rem, seed, c, f"heartbeat {ctx.get(dut.hb.remaining)} != {ref.rem}")
+            _check(ctx.get(dut.halt.excluded) == int(ref.seq.excluded), seed, c, "excluded")
+            _check(ctx.get(dut.halt.no_first_hb) == int(ref.seq.no_first_hb()), seed, c, "no_first_hb")
+            _check(ctx.get(dut.alarms.alarms) == ref.alarms, seed, c, f"ALARMS {ctx.get(dut.alarms.alarms):#x} != {ref.alarms:#x}")
+            excl += ref.seq.excluded
             tms = ref.step(i)
             _check(ctx.get(dut.tick_ms) == tms, seed, c, "millisecond strobe")
             seen.add(ref.state)
             await ctx.tick()
-        return f"{cycles} random cycles match the spec model; rungs visited {sorted(seen)} (seed {seed})"
+        return f"{cycles} random cycles match the spec model; rungs visited {sorted(seen)}, {excl} cycles excluded (seed {seed})"
     return _run(dut, bench)
 
 
-SIMS = {"heartbeat": sim_heartbeat, "meter": sim_meter, "alarms": sim_alarms, "measure_reg": sim_measure_reg,
+SIMS = {"halt_seq": sim_halt_seq, "heartbeat": sim_heartbeat, "meter": sim_meter, "alarms": sim_alarms, "measure_reg": sim_measure_reg,
         "loop_io": sim_loop_io, "governor_core": sim_governor_core}
 
 if __name__ == "__main__":

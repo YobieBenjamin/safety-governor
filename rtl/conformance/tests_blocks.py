@@ -1695,15 +1695,16 @@ def test_alarm_monotone_without_authorization_random():
 
 @conformance("R-071")
 def test_core_alarms_csr():
-    """ALARMS at 0x084 reads the sticky alarm word."""
+    """ALARMS at 0x084 reads the sticky alarm word. (Bits 31 and 30 became hardware-owned on 23 October 2026, so the
+    firmware-raised word here uses bit 29; R-148 checks that firmware cannot raise 31 and 30.)"""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
 
     async def tb(ctx):
-        ctx.set(dut.alarms.set_mask, 0x8000_0001)
+        ctx.set(dut.alarms.set_mask, 0x2000_0001)
         await ctx.tick()
         ctx.set(dut.alarms.set_mask, 0)
         ctx.set(dut.csr_addr, 0x084)
-        assert ctx.get(dut.csr_rdata) == 0x8000_0001
+        assert ctx.get(dut.csr_rdata) == 0x2000_0001
     sim(dut, tb)
 
 

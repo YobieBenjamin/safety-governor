@@ -13,6 +13,13 @@ increment and can move the value anywhere upward, so whoever drives ``load_hwm``
 bits off 1023 and stop every millisecond strobe: the heartbeat never expired and the rung timers froze,
 with no valid heartbeat. L7 found it (rtl/formal/governor_core.sv, rule G5; FINDINGS-b.md, F2).
 ``ms_shift`` is a parameter only so the proof can run a short millisecond; the chip uses 10.
+
+Operator signals (Yobie's calls, 23 October 2026; docs/04 section 2). ALARMS bit 31 NO_FIRST_HEARTBEAT and bit 30
+EXCLUDED are hardware-owned: the sequencer raises them (``alarms.hw_set``) and firmware cannot. CAUSE bit 3 is the
+live "waiting for the first heartbeat, boot window passed" flag and bit 4 the live "excluded" flag. BOOT_WAIT
+(0x088) is how many milliseconds the chip waited before its first heartbeat (saturating at 65535; frozen once
+armed), so an operator reading one chip over SMBus sees "this chip, waiting for its first heartbeat since reset".
+``t_boot_ms`` (default 5000) is the boot window; the proof builds use a few milliseconds.
 """
 from amaranth import Cat, Const, Elaboratable, Module, Mux, Signal
 
@@ -31,11 +38,14 @@ from .ticket_store import TicketStore
 
 POINTS = ("nvswitch", "pcie", "dpu", "storage")
 MS_SHIFT = 10            # 2^10 microsecond ticks per millisecond strobe
+ALARM_NO_FIRST_HEARTBEAT = 31   # ALARMS bits owned by the hardware (docs/04 section 2)
+ALARM_EXCLUDED = 30
+HW_ALARMS = (1 << ALARM_NO_FIRST_HEARTBEAT) | (1 << ALARM_EXCLUDED)
 
 
 class GovernorCore(Elaboratable):
     def __init__(self, cap_entries: int = 8, ticket_entries: int = 8, t_throttle_ms: int = 30_000, t_halt_ms: int = 300_000,
-                 ms_shift: int = MS_SHIFT):
+                 ms_shift: int = MS_SHIFT, t_boot_ms: int = 5_000):
         self.ms_shift = ms_shift
         self.ms_div = Signal(ms_shift, name="ms_div")     # microsecond ticks into the current millisecond
         self.mono = MonotonicCounter()
@@ -46,11 +56,11 @@ class GovernorCore(Elaboratable):
         self.caps = {p: CapTable(entries=cap_entries) for p in POINTS}
         self.tickets = TicketStore(entries=ticket_entries)
         self.hb = Heartbeat()
-        self.halt = HaltSeq(t_throttle=t_throttle_ms, t_halt=t_halt_ms)
+        self.halt = HaltSeq(t_throttle=t_throttle_ms, t_halt=t_halt_ms, t_boot=t_boot_ms)
         self.loop = LoopIO()
         self.meter = Meter()
         self.mbox = Mailbox()
-        self.alarms = Alarms()
+        self.alarms = Alarms(hw_mask=HW_ALARMS)
         # CSR window
         self.csr_addr = Signal(12)
         self.csr_rdata = Signal(32)
@@ -113,6 +123,8 @@ class GovernorCore(Elaboratable):
             self.pwrbrk_n.eq(~self.halt.pwrbrk),
             self.perst_n.eq(~self.halt.perst),
             self.pwr_en.eq(self.halt.pwr_en),
+            # the sequencer's operator signals become sticky, hardware-owned alarm bits
+            self.alarms.hw_set.eq((self.halt.no_first_hb << ALARM_NO_FIRST_HEARTBEAT) | (self.halt.excluded << ALARM_EXCLUDED)),
         ]
         with m.If(self.tick):
             m.d.sync += self.ms_div.eq(self.ms_div + 1)
@@ -142,7 +154,10 @@ class GovernorCore(Elaboratable):
             with m.Case(0x008):
                 m.d.comb += self.csr_rdata.eq(self.halt.state)
             with m.Case(0x00C):
-                m.d.comb += self.csr_rdata.eq(Cat(self.halt.cause, Const(0, 5), self.cause_fw))   # CAUSE: [2:0] hardware, [15:8] firmware
+                # CAUSE: [2:0] the sequencer's summary, [3] waiting for the first heartbeat past the boot window,
+                # [4] excluded, [15:8] the firmware's reason code
+                m.d.comb += self.csr_rdata.eq(Cat(self.halt.cause, self.halt.no_first_hb, self.halt.excluded, Const(0, 3),
+                                                  self.cause_fw))
             with m.Case(0x070):
                 m.d.comb += self.csr_rdata.eq(self.mono.value[:32])
             with m.Case(0x074):
@@ -155,6 +170,8 @@ class GovernorCore(Elaboratable):
                 m.d.comb += self.csr_rdata.eq(Cat(self.halt.pwrbrk, self.halt.perst, ~self.halt.pwr_en))
             with m.Case(0x084):
                 m.d.comb += self.csr_rdata.eq(self.alarms.alarms)
+            with m.Case(0x088):
+                m.d.comb += self.csr_rdata.eq(self.halt.boot_timer)                  # BOOT_WAIT, ms
             with m.Case(0x104):
                 m.d.comb += self.csr_rdata.eq(self.mbox.status)
             with m.Case(0x108):
@@ -183,6 +200,7 @@ class GovernorCore(Elaboratable):
              self.tickets.query, self.tickets.burn, self.tickets.id_in, self.tickets.seen, self.tickets.burned, self.tickets.full,
              self.hb.hb_valid, self.hb.window,
              self.halt.tamper, self.halt.cmd_halt, self.halt.cmd_throttle, self.halt.local_trip, self.halt.clear,
+             self.halt.cmd_exclude,
              self.meter.slot, self.meter.add_tokens, self.meter.add_cycles, self.meter.add_in, self.meter.add_out, self.meter.strobe,
              self.mbox.frame_seq, self.mbox.key_slot, self.mbox.cmd, self.mbox.signed_cmd, self.mbox.epoch_match, self.mbox.epoch_exempt,
              self.mbox.needs_run, self.mbox.sig_done, self.mbox.sig_ok, self.mbox.verify_req, self.mbox.dispatch, self.mbox.cmd_out,
