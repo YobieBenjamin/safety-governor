@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from govsim import false_halt as fh
+from govsim import faults as fh
 from govsim import reasons
 
 
@@ -50,8 +50,8 @@ def test_rack_year_is_the_sum_of_its_rows_by_hand():
     hand_rack = sum(fh.fit_to_per_year(fh.MODE[k].fit, 72) for k in
                     ("gov_power", "fw_hang", "loop_wire", "comparator_stuck_open", "clock_glitch_detector", "beacon_readback_stuck"))
     hand_rack += 1e-4 * 8766 * 72 * fh.survive_debounce(20e-6)
-    hand_rack += r["rows"]["beacon_transient"]
-    hand_slot = fh.fit_to_per_year(100, 72) + 1e-5 * 8766 + r["rows"]["heartbeat_loss"]
+    hand_rack += r["rows"]["beacon_transient"] + 1e-5 * 8766        # an authority outage halts every GPU: a rack event
+    hand_slot = fh.fit_to_per_year(100, 72) + r["rows"]["heartbeat_loss"]
     assert r["rack"] == pytest.approx(hand_rack)
     assert r["slot"] == pytest.approx(hand_slot)
     assert r["total"] == pytest.approx(r["rack"] + r["slot"])
@@ -79,93 +79,78 @@ def test_doc_carries_the_numbers():
     r = fh.rack_year()
     for token in (f"{r['rack']:.3f}", f"{r['slot']:.3f}", f"{r['total']:.3f}", f"{fh.SWITCH_OFF_THRESHOLD:.2f}"):
         assert token in text, token
+    rows = r["rows"]
+    for key in ("gov_power", "fw_hang", "loop_wire", "comparator_stuck_open", "clock_glitch_detector",
+                "beacon_readback_stuck", "sense_glitch", "beacon_transient", "fabric_port", "authority_outage"):
+        assert f"{rows[key]:.3f}" in text, key
+    assert f"{fh.survive_debounce(20e-6):.5f}" in text
+    assert f"{fh.rack_year(samples=1)['rows']['sense_glitch']:.1f}" in text
+    assert f"{fh.fw_hang_break_even_fit():.0f}" in text and f"{fh.sense_glitch_break_even_rate() * 1e4:.1f}e-4" in text
+    assert f"{fh.BASELINE_INTERRUPTIONS_PER_RACK_YEAR:.1f}" in text
 
 
 # ------------------------------------------------------------------ fault injection in govsim
-class _StuckOpen:
-    """A comparator stuck reading 'no current': wraps the real loop for everything else."""
-    def __init__(self, loop):
-        self._loop = loop
-
-    def current(self):
-        return False
-
-    def __getattr__(self, name):
-        return getattr(self._loop, name)
+# Each test calls the named injector in govsim/faults.py and reads which slots halted.
+def test_break_even_points_cross_the_threshold_exactly():
+    hang = fh.fw_hang_break_even_fit()
+    assert 1150 < hang < 1160
+    assert fh.fit_to_per_year(hang - fh.MODE["fw_hang"].fit, 72) + fh.rack_year()["total"] == pytest.approx(fh.SWITCH_OFF_THRESHOLD)
+    g = fh.sense_glitch_break_even_rate()
+    assert 5.8e-4 < g < 6.0e-4
+    extra = (g - fh.SENSE_GLITCH_RATE_PER_H) * 8766 * 72 * fh.survive_debounce(20e-6)
+    assert extra + fh.rack_year()["total"] == pytest.approx(fh.SWITCH_OFF_THRESHOLD)
 
 
 def test_inject_governor_power_loss_halts_the_rack(rack):
-    rack.nodes[1].governor.loop_switch_open = True
-    rack.loop.propagate()
-    assert not any(rack.running()) and fh.MODE["gov_power"].scope == "rack"
+    assert fh.inject_power_loss(rack, rack.nodes[1].governor) == [False] * 4
+    assert fh.MODE["gov_power"].scope == "rack"
 
 
 def test_inject_loop_wire_open_halts_the_rack(rack):
-    rack.loop.cut()
-    rack.loop.propagate()
-    assert not any(rack.running()) and fh.MODE["loop_wire"].scope == "rack"
+    assert fh.inject_wire_cut(rack) == [False] * 4
+    assert fh.MODE["loop_wire"].scope == "rack"
 
 
 def test_inject_comparator_stuck_open_halts_the_rack(rack):
     g = rack.nodes[2].governor
-    g.loop = _StuckOpen(rack.loop)
-    rack.loop.propagate()
-    rack.loop.propagate()
-    assert g.cause == reasons.LOOP_OPEN
-    assert not any(rack.running()) and fh.MODE["comparator_stuck_open"].scope == "rack"
+    assert fh.inject_comparator_stuck_open(rack, g) == [False] * 4
+    assert g.cause == reasons.LOOP_OPEN and not rack.loop.current()
+    assert fh.MODE["comparator_stuck_open"].scope == "rack"
 
 
-def test_inject_firmware_hang_halts_the_slot_at_heartbeat_expiry(rack):
-    """A hung governor stops consuming heartbeats. Here the whole fabric is silent to it."""
-    rack.fabric.down.add("gov01")
-    for _ in range(3):
-        rack.tick(seconds=2.0)
-        rack.heartbeat()
-    assert rack.running() == [True, False, True, True]
-    assert rack.nodes[1].governor.cause == reasons.HEARTBEAT_LOST
+def test_inject_firmware_hang_watchdog_reset_opens_the_loop_and_halts_the_rack(rack):
+    g = rack.nodes[1].governor
+    assert g.state == "RUN"
+    assert fh.inject_firmware_hang(rack, g) == [False] * 4
+    assert g.state == "HALTED_INITIAL" and g.loop_switch_open and not rack.loop.current()
+    assert fh.MODE["fw_hang"].scope == "rack"
 
 
 def test_inject_fabric_port_failure_halts_the_slot_not_the_rack(rack):
-    rack.fabric.down.add("gov02")
-    for _ in range(3):
-        rack.tick(seconds=2.0)
-        rack.heartbeat()
-    assert rack.running() == [True, True, False, True]
+    assert fh.inject_fabric_port_failure(rack, rack.nodes[2].governor) == [True, True, False, True]
     assert rack.nodes[2].governor.cause == reasons.HEARTBEAT_LOST
     assert rack.loop.current() and fh.MODE["fabric_port"].scope == "slot"
 
 
 def test_inject_authority_outage_halts_every_slot_but_leaves_the_loop_closed(rack):
-    for _ in range(3):
-        rack.tick(seconds=2.0)                           # no heartbeat ever arrives
-    assert not any(rack.running())
+    assert fh.inject_authority_outage(rack) == [False] * 4
     assert rack.loop.current()
+    assert all(n.governor.cause == reasons.HEARTBEAT_LOST for n in rack.nodes)
 
 
 def test_inject_one_missed_heartbeat_halts_nothing(rack):
-    rack.tick(seconds=2.0)
-    rack.tick(seconds=2.0)                               # 4 s of silence, expiry is 5 s
-    rack.heartbeat()
-    rack.tick(seconds=2.0)
-    assert all(rack.running())
+    assert fh.inject_missed_heartbeat(rack) == [True] * 4        # 4 s of silence against a 5 s expiry
 
 
 def test_inject_readback_stuck_open_is_named_by_the_beacon_and_halts_the_rack(rack):
     g2 = rack.nodes[2].governor
-    rack.loop.jumper(g2.chip_id)                         # its switch no longer matters to the loop
-    g2.loop_switch_open = True                           # and its readback says open
-    rack.heartbeat()
-    rack.heartbeat()
-    assert not any(rack.running())
+    assert fh.inject_readback_stuck_open(rack, g2) == [False] * 4
     assert all(n.governor.alarms[reasons.LOOP_JUMPERED]["member"] == g2.chip_id for n in rack.nodes)
     assert fh.MODE["beacon_readback_stuck"].scope == "rack"
 
 
 def test_inject_silent_member_is_logged_and_halts_nothing(rack):
-    rack.fabric.down.add("gov03")
-    rack.heartbeat()
-    rack.heartbeat()
-    assert rack.running()[:3] == [True, True, True]
+    assert fh.inject_silent_member(rack, rack.nodes[3].governor)[:3] == [True, True, True]
     assert rack.nodes[0].governor.log.has("loop.member_silent", member="gov03", why=reasons.LOOP_MEMBER_SILENT)
 
 

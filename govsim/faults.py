@@ -8,9 +8,9 @@ Rates are in FIT (failures per 10^9 device-hours). They are planning values: not
 this design and not looked up out of a licensed table in this run. The IEC 61508-6 data annex,
 IEC 62380, SN 29500 and MIL-HDBK-217F (connector class) and the public datasheets for regulators,
 comparators and PHYs are the places N3 (an FPGA beside a real GPU) checks each one; every row tagged
-``assumed`` has no public rate at all, so it is an assumption to be measured, not a figure. The
-module proves the arithmetic; ``tests/test_false_halt_model.py`` reproduces it by hand and drives
-each mode through govsim (the injector below) to confirm the effect column, which slots halt.
+``assumed`` has no public rate at all, so it is an assumption to be measured, not a figure.
+``tests/test_false_halt_model.py`` reproduces the arithmetic by hand and drives each mode through
+the ``inject_*`` functions below to confirm the effect column, which slots halt.
 """
 from __future__ import annotations
 
@@ -152,7 +152,7 @@ def rack_year(n: int = RACK_GOVERNORS, confirm: int = BEACON_CONFIRM_WINDOWS, sa
 
 def fw_hang_break_even_fit(n: int = RACK_GOVERNORS, confirm: int = BEACON_CONFIRM_WINDOWS, samples: int = DEBOUNCE_SAMPLES) -> float:
     """The firmware-hang FIT at which the expected false halts cross the switch-off threshold. The
-    model's claim fails if N3 measures watchdog trips above this (about 1150 FIT)."""
+    model's claim fails if N3 measures watchdog trips above this (about 1157 FIT)."""
     base = rack_year(n, confirm, samples)["total"]
     per_fit = fit_to_per_year(1.0, n)
     return MODE["fw_hang"].fit + (SWITCH_OFF_THRESHOLD - base) / per_fit
@@ -160,7 +160,7 @@ def fw_hang_break_even_fit(n: int = RACK_GOVERNORS, confirm: int = BEACON_CONFIR
 
 def sense_glitch_break_even_rate(n: int = RACK_GOVERNORS, confirm: int = BEACON_CONFIRM_WINDOWS, samples: int = DEBOUNCE_SAMPLES) -> float:
     """The sense-transient rate per hour (at the 20 us mean) at which the expected false halts cross
-    the switch-off threshold. The model's claim fails if N3 measures above this (about 5.9e-4/h)."""
+    the switch-off threshold. The model's claim fails if N3 measures above this (about 5.9e-4 per hour)."""
     base = rack_year(n, confirm, samples)["total"]
     per_rate = HOURS_PER_YEAR * n * survive_debounce(SENSE_GLITCH_MEAN_S, samples=samples)
     return SENSE_GLITCH_RATE_PER_H + (SWITCH_OFF_THRESHOLD - base) / per_rate
@@ -208,8 +208,8 @@ def inject_wire_cut(rack) -> list[bool]:
 
 def inject_comparator_stuck_open(rack, governor) -> list[bool]:
     """The governor's loop-sense comparator is stuck open: it senses 'no current' though the loop
-    carries it, opens its own switch, and the rack halts (scope: rack). Two sense periods: the loop
-    debounces over two samples."""
+    carries it, opens its own switch, and the rack halts (scope: rack). govsim senses the loop with one
+    sample, so the second propagate is harmless; the two-sample debounce is in the model, not here."""
     governor.loop = _StuckOpenLoop(rack.loop)
     rack.loop.propagate()
     rack.loop.propagate()
@@ -220,7 +220,7 @@ def inject_firmware_hang(rack, governor) -> list[bool]:
     """The governor's firmware hangs and its watchdog resets it into HALTED_INITIAL, whose loop switch
     is open; the loop loses current and the whole rack halts (scope: rack). The effect is a rack halt
     -- the loop opens -- not the one slot a fabric-port cut gives."""
-    governor.loop_switch_open = True      # the watchdog reset leaves the switch open, as HALTED_INITIAL does
+    governor.restart()                    # the watchdog reset: govsim reboots into HALTED_INITIAL, switch open
     rack.loop.propagate()
     return rack.running()
 
