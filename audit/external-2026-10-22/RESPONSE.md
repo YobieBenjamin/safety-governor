@@ -336,15 +336,20 @@ A program that only publishes the reviews it survived isn't doing science. Objec
 **How to check me.** Clone at the fix commits once they're published, then:
 
 ```
-git clone https://github.com/YobieBenjamin/safety-governor && cd safety-governor
-python3 -m pytest -q tests rtl/tests                               # 248 tests
-make proof                                                         # P0 to P13, the regression checks, K0 to K5
-PYTHONPATH=. python3 audit/external-2026-10-22/repro_sg.py         # your findings 1 and 2: NOT reproduced
-
-git clone https://github.com/YobieBenjamin/hardware-and-silicon && cd hardware-and-silicon
-python3 -m pytest -q tests                                         # 67 tests, 11 of them yours
-PYTHONPATH=. python3 ../safety-governor/audit/external-2026-10-22/repro_hs.py   # 3, 4, 5: NOT reproduced
+mkdir -p ~/recheck && cd ~/recheck
+git clone https://github.com/YobieBenjamin/safety-governor
+git clone https://github.com/YobieBenjamin/hardware-and-silicon
+bash safety-governor/tools/verify_audit_fixes.sh
 ```
+
+One command does all of it: both test suites, the proofs, findings 1 to 5 NOT reproduced on the fixed code and
+REPRODUCED on the audited snapshots, and each regression failing for the intended reason. It builds its own Python
+environments, so it needs only a Python 3.11 or newer on the PATH, not the libraries. Clone the two repositories
+side by side in an empty folder, not inside another repository.
+
+(The first version of these instructions listed bare `python3` commands. They fail on a machine whose `python3` has
+no pytest, z3 or cryptography, which is most Macs, and the second clone landed inside the first. Found on 23 October
+when I ran them myself on the Mac mini. Replaced by the script above.)
 
 Check out `dccc1e0` and `11eb119` and run the same two scripts, and they print REPRODUCED. If you find a way around any of these fixes, send me the reproduction and it goes into the next one of these memos with your name on it.
 

@@ -327,14 +327,24 @@ Results:
 ## 10. How to check this record
 
 ```
-cd safety-governor
-python3 -m pytest -q tests rtl/tests          # 245 tests
-make proof                                    # P0 to P13, the commit point, K0 to K5 with K4c
-python3 proofs/no_global_kill_switch.py       # the K rows, with the thin-check note on K1a
-python3 -m govsim.bench                       # the engine and firmware numbers
-make loop                                     # the 39 ngspice runs behind 317 us
-python3 docs/tools/build_doc_docx.py docs/25-the-rulebook-and-the-board.md
+mkdir -p ~/recheck && cd ~/recheck
+git clone https://github.com/YobieBenjamin/safety-governor
+git clone https://github.com/YobieBenjamin/hardware-and-silicon
+bash safety-governor/tools/verify_audit_fixes.sh
 ```
+
+One command does all of it: both test suites, the proofs, findings 1 to 5 NOT reproduced on the fixed code and
+REPRODUCED on the audited snapshots, and each regression failing for the intended reason. It builds its own Python
+environments, so it needs only a Python 3.11 or newer on the PATH, not the libraries. Clone the two repositories
+side by side in an empty folder, not inside another repository.
+
+(The first version of these instructions listed bare `python3` commands. They fail on a machine whose `python3` has
+no pytest, z3 or cryptography, which is most Macs, and the second clone landed inside the first. Found on 23 October
+when I ran them myself on the Mac mini. Replaced by the script above.)
+
+The individual pieces, once the script has built `.venv` (run from `safety-governor`): `.venv/bin/python -m pytest
+-q tests rtl/tests`, `make proof`, `.venv/bin/python -m govsim.bench`, `make loop` (needs ngspice),
+`.venv/bin/python -m rtl.formal`, `.venv/bin/python -m rtl.conformance`.
 
 The documents changed by this review: `02`, `04`, `22`, `23`, `24`, `25`, `START-HERE.md`,
 `docs/brief/build_deck.js` and `SOURCES.md`, the figures under `docs/figures/`, and in the
