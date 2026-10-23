@@ -1,0 +1,25 @@
+{
+ "id": "L7",
+ "branch": "exp/l7",
+ "base": "main",
+ "head": "942abbd",
+ "commits": 2,
+ "agent_trailers": 2,
+ "files": 10,
+ "added": 544,
+ "removed": 1,
+ "ok": true,
+ "findings": [],
+ "runs": {
+  "suite": {
+   "command": "python3 -m pytest -x tests",
+   "exit": 0,
+   "tail": "........................................................................ [ 31%]\n........................................................................ [ 63%]\n........................................................................ [ 95%]\n...........                                                              [100%]\n227 passed in 2.96s\n"
+  },
+  "acceptance": {
+   "command": "make formal",
+   "exit": 0,
+   "tail": "python3 rtl/formal/run_formal.py\nSKIP    tooling absent: sby, yosys not on PATH (the program's container has sby/yosys-smtbmc/z3). No property was checked; run `make formal` in the container to run them.\nSKIP    ticket_store:prove\nSKIP    epoch_reg:prove\nSKIP    halt_seq:prove\nSKIP    cap_table:prove\nSKIP    monotonic_counter:prove\nSKIP    monotonic_counter:wrap\nSKIP    mailbox:prove\nSKIP    mailbox:nolatch\nSKIP    mailbox:midhalt\nSKIP    equiv:ticket_store\nSKIP    equiv:epoch_reg\nSKIP    equiv:halt_seq\nSKIP    equiv:cap_table\nSKIP    equiv:monotonic_counter\nSKIP    equiv:mailbox\nSKIP    15 job(s) not run (tools absent). A SKIP is not a PROVED; run in the container to check the properties.\n"
+  }
+ }
+}

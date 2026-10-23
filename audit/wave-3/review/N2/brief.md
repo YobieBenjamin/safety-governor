@@ -1,0 +1,22 @@
+# N2 · False-halt rate model: component failure rates, debounce, beacon windows and heartbeat loss combined into expected false halts per rack-year
+
+**Goal.** Make the FMEA numeric. Take the failure modes in `docs/07-verification-plan.md` section 5, attach failure rates with sources (IEC 61508 tables, component datasheets where public), and compute expected false halts per rack-year under the loop's two-sense-period debounce and the beacon's two-heartbeat window; add fault injection to `govsim` to confirm each mode's effect.
+
+**Acceptance.** `docs/07` carries the numbers with sources; a test reproduces the arithmetic.
+
+**Disproof.** A rate operators would switch the governor off for; state what that threshold is and where it came from.
+
+**Budget.** About 100k tokens.
+
+**Acceptance command (the launcher runs it after the agent).** `python3 -m pytest -q tests/test_false_halt_model.py`
+
+## Rules for this run
+- You are in a git worktree on branch `exp/n2`; it is the only place you write. Run commands from this directory with relative paths; do not cd elsewhere.
+- The other repositories of the program are readable at: /Volumes/External_4TB/Safety Experiments/safety /Volumes/External_4TB/Safety Experiments/hardware-and-silicon. Never edit them: a change they need goes into `patches/<repo>/<file>.patch` here, with a note in your final summary.
+- Acceptance: `python3 -m pytest -q tests/test_false_halt_model.py`. Run it at most three times. Stop when it passes, or after the third failure; then record exactly what fails in EXPERIMENTS.md (safety-governor) or in the hypothesis's section (safety), with the failing output.
+- Read only the files the brief names under Read first and the files you create. Do not read whole directories, do not run the full test suite (the acceptance command is enough), do not search the web, do not start sub-agents.
+- Shell commands run without anyone to approve them: a command passes only when every program in it is one of python3, python, pytest, make, pip, git (add, commit, status, diff, log, show, rev-parse, ls-files), ls, cat, head, tail, wc, grep, find, diff, sed, awk, sort, uniq, tr, cut, xargs, printf, mkdir, cp, mv, touch, echo, shasum. Write plain commands: no environment-variable prefix (put a path on sys.path inside the script instead), no sudo, no network, nothing outside this directory. A denied command is denied for good; do not retry it, rewrite it.
+- Never weaken, skip or delete an existing test. Do not refactor beyond the brief. No em dashes in anything you write.
+- Commit as you go with messages that name the issue (#12) and end with the line: Agent: wave 3, issue #12. Do not push, do not open a pull request; the launcher does both.
+- This run is capped at 40 turns and an estimated spend of $10. Keep the tree in a working, committed state at all times, so a cap mid-way still leaves usable work.
+- Finish with a summary of at most fifteen lines: what was built, what passes, what does not and why, open questions. It is posted on the issue as is.
