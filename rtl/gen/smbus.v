@@ -242,8 +242,6 @@ module smbus(sda_i, tick, csr_rdata, clk, rst, scl_oe, sda_oe, csr_addr, doorbel
   wire [3:0] \$97 ;
   wire [3:0] \$98 ;
   wire \$99 ;
-  wire \$signal ;
-  wire \$signal$37 ;
   output ack;
   reg ack = 1'h0;
   output armed;
@@ -292,6 +290,7 @@ module smbus(sda_i, tick, csr_rdata, clk, rst, scl_oe, sda_oe, csr_addr, doorbel
   wire scl_oe;
   output scl_p;
   reg scl_p = 1'h1;
+  wire scl_s;
   output sda_f;
   reg sda_f = 1'h1;
   reg [1:0] sda_fcnt = 2'h0;
@@ -301,6 +300,7 @@ module smbus(sda_i, tick, csr_rdata, clk, rst, scl_oe, sda_oe, csr_addr, doorbel
   reg sda_oe = 1'h0;
   output sda_p;
   reg sda_p = 1'h1;
+  wire sda_s;
   output [7:0] shift;
   reg [7:0] shift = 8'h00;
   output [31:0] snap;
@@ -324,10 +324,10 @@ module smbus(sda_i, tick, csr_rdata, clk, rst, scl_oe, sda_oe, csr_addr, doorbel
   reg [7:0] txsh = 8'h00;
   output [31:0] wbuf;
   reg [31:0] wbuf = 32'd0;
-  assign \$1  = \$signal  != scl_f;
+  assign \$1  = scl_s != scl_f;
   assign \$2  = scl_fcnt == 2'h2;
   assign \$3  = scl_fcnt + 1'h1;
-  assign \$4  = \$signal$37  != sda_f;
+  assign \$4  = sda_s != sda_f;
   assign \$5  = sda_fcnt == 2'h2;
   assign \$6  = sda_fcnt + 1'h1;
   assign \$7  = | phase;
@@ -601,20 +601,20 @@ module smbus(sda_i, tick, csr_rdata, clk, rst, scl_oe, sda_oe, csr_addr, doorbel
     .clk(clk),
     .rst(rst),
     .scl_i(scl_i),
-    .stage1(\$signal )
+    .stage1(scl_s)
   );
   \smbus.sda_sync  sda_sync (
     .clk(clk),
     .rst(rst),
     .sda_i(sda_i),
-    .stage1(\$signal$37 )
+    .stage1(sda_s)
   );
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
     \$211  = scl_f;
     if (\$1 ) begin
       if (\$2 ) begin
-        \$211  = \$signal ;
+        \$211  = scl_s;
       end
     end
     if (rst) begin
@@ -643,7 +643,7 @@ module smbus(sda_i, tick, csr_rdata, clk, rst, scl_oe, sda_oe, csr_addr, doorbel
     \$213  = sda_f;
     if (\$4 ) begin
       if (\$5 ) begin
-        \$213  = \$signal$37 ;
+        \$213  = sda_s;
       end
     end
     if (rst) begin
@@ -1413,14 +1413,14 @@ module smbus(sda_i, tick, csr_rdata, clk, rst, scl_oe, sda_oe, csr_addr, doorbel
 endmodule
 
 module \smbus.scl_sync (clk, rst, stage1, scl_i);
-  (* init = 1'h1 *)
-  wire \$signal ;
   input clk;
   wire clk;
   input rst;
   wire rst;
   input scl_i;
   wire scl_i;
+  (* init = 1'h1 *)
+  wire scl_s;
   reg stage0 = 1'h1;
   output stage1;
   reg stage1 = 1'h1;
@@ -1428,18 +1428,18 @@ module \smbus.scl_sync (clk, rst, stage1, scl_i);
     stage0 <= scl_i;
   always @(posedge clk)
     stage1 <= stage0;
-  assign \$signal  = stage1;
+  assign scl_s = stage1;
 endmodule
 
 module \smbus.sda_sync (clk, rst, stage1, sda_i);
-  (* init = 1'h1 *)
-  wire \$signal ;
   input clk;
   wire clk;
   input rst;
   wire rst;
   input sda_i;
   wire sda_i;
+  (* init = 1'h1 *)
+  wire sda_s;
   reg stage0 = 1'h1;
   output stage1;
   reg stage1 = 1'h1;
@@ -1447,5 +1447,5 @@ module \smbus.sda_sync (clk, rst, stage1, sda_i);
     stage0 <= sda_i;
   always @(posedge clk)
     stage1 <= stage0;
-  assign \$signal  = stage1;
+  assign sda_s = stage1;
 endmodule

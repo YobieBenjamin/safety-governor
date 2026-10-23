@@ -18,3 +18,17 @@ jobs:
         with:
           name: sweep-report
           path: results/report.md
+  # The checked-in Verilog must come out byte-identical on every Python a contributor might use: Amaranth names
+  # signals from the source, and that naming once differed between 3.11 and 3.12 (23 October 2026).
+  gen-check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install "amaranth>=0.5,<0.6" amaranth-yosys
+      - run: python -m rtl.gen --check

@@ -115,7 +115,10 @@ class SMBusTarget(Elaboratable):
     def elaborate(self, platform):
         m = Module()
         # ---- synchronize and filter
-        scl_s, sda_s = Signal(init=1), Signal(init=1)
+        # explicit names: Amaranth infers a name from the assignment, and how it reads a tuple assignment differs
+        # between Python versions (3.11 named one of these, 3.12 and later neither), which made rtl.gen --check call
+        # the same circuit stale on a Mac whose venv was built with 3.11 (23 October 2026)
+        scl_s, sda_s = Signal(init=1, name="scl_s"), Signal(init=1, name="sda_s")
         m.submodules.scl_sync = FFSynchronizer(self.scl_i, scl_s, init=1)
         m.submodules.sda_sync = FFSynchronizer(self.sda_i, sda_s, init=1)
         for raw, filt, name in ((scl_s, self.scl_f, "scl"), (sda_s, self.sda_f, "sda")):
