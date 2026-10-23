@@ -11,15 +11,15 @@
   "DIE_AREA": [
     0,
     0,
-    1400,
-    1400
+    1800,
+    1800
   ],
   "FP_CORE_UTIL": 35,
   "PL_TARGET_DENSITY_PCT": 45,
   "FP_PDN_MULTILAYER": true,
   "RUN_CTS": true,
   "RUN_HEURISTIC_DIODE_INSERTION": true,
-  "DIODE_ON_PORTS": "in",
+  "DIODE_ON_PORTS": "none",
   "RUN_MAGIC_DRC": true,
   "RUN_KLAYOUT_DRC": true,
   "RUN_LVS": true,
@@ -30,5 +30,7 @@
   "pdk::sky130*": {
     "FP_IO_VLENGTH": 2,
     "FP_IO_HLENGTH": 2
-  }
+  },
+  "FP_IO_MIN_DISTANCE": 1.5,
+  "GRT_REPAIR_ANTENNAS": false
 }

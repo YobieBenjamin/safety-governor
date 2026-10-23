@@ -1,0 +1,22 @@
+# Formal equivalence: RTL (gold) vs post-synthesis sky130 netlist (gate).
+# @RTL@, @NL@, @LIB@ are filled in by equiv.sh.
+read_verilog @RTL@
+hierarchy -top governor_core
+proc; flatten; opt_clean; rename -top gold
+design -stash gold
+
+read_liberty -ignore_miss_func @LIB@
+read_verilog @NL@
+hierarchy -top governor_core
+flatten; opt_clean; rename -top gate
+design -stash gate
+
+design -copy-from gold -as gold gold
+design -copy-from gate -as gate gate
+async2sync
+dffunmap
+equiv_make gold gate equiv
+hierarchy -top equiv
+equiv_simple -seq 2
+equiv_induct -seq 2
+equiv_status -assert
