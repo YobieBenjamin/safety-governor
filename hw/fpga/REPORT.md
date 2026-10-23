@@ -1,6 +1,6 @@
 # FPGA build report: governor core + SMBus target on the ULX3S (ECP5 LFE5U-85F-6BG381C)
 
-Written by `hw/fpga/build.sh` on 2026-10-23 18:56 UTC, nextpnr seed 1, router2. Do not edit by hand: rerun the build.
+Written by `hw/fpga/build.sh` on 2026-10-23 19:58 UTC, nextpnr seed 1, router2. Do not edit by hand: rerun the build.
 
 ## Verdict
 
