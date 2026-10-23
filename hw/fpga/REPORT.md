@@ -1,72 +1,39 @@
 # FPGA build report: governor core + SMBus target on the ULX3S (ECP5 LFE5U-85F-6BG381C)
 
-Written by `hw/fpga/build.sh` on 2026-10-23 02:50 UTC, nextpnr seed 1, router2. Do not edit by hand: rerun the build.
+Written by `hw/fpga/build.sh` on 2026-10-23 18:09 UTC, nextpnr seed 1, router2. Do not edit by hand: rerun the build.
 
 ## Verdict
 
-- 50 MHz (the ASIC flow's clock): **NOT met**. The design reaches 37.90 MHz on this part.
-- 30 MHz: met, Fmax 36.44 MHz.
+- 30 MHz: met, Fmax 36.07 MHz.
 - Bench bitstream: `build/30mhz/governor_ulx3s_85f_30mhz.bit` at 30 MHz. The governor's timers run on a 1 us tick divided from whatever the clock is, so the heartbeat, throttle, halt and loop-sense timings are the same at any of these clocks.
 
 ## Utilisation
 
-After synthesis (yosys `synth_ecp5`) and after place and route (nextpnr), 50 MHz build:
+After synthesis (yosys `synth_ecp5`) and after place and route (nextpnr), 30 MHz build:
 
 | Cell | Synthesis |
 |---|---|
-| CCU2C | 378 |
+| CCU2C | 399 |
 | EHXPLLL | 1 |
-| L6MUX21 | 2465 |
-| LUT4 | 16550 |
-| PFUMX | 5007 |
-| TRELLIS_FF | 12831 |
+| L6MUX21 | 3209 |
+| LUT4 | 17957 |
+| PFUMX | 5513 |
+| TRELLIS_FF | 12857 |
 | TRELLIS_IO | 2 |
 
 | Resource | Used | Available | Percent |
 |---|---|---|---|
 | DCCA | 1 | 56 | 1.8 |
 | EHXPLLL | 1 | 4 | 25.0 |
-| TRELLIS_COMB | 17408 | 83640 | 20.8 |
-| TRELLIS_FF | 12831 | 83640 | 15.3 |
+| TRELLIS_COMB | 18869 | 83640 | 22.6 |
+| TRELLIS_FF | 12857 | 83640 | 15.4 |
 | TRELLIS_IO | 26 | 365 | 7.1 |
-
-## Timing, 50 MHz build
-
-| Clock | Achieved (MHz) | Constraint (MHz) | Met |
-|---|---|---|---|
-| `$glbnet$clk` | 37.90 | 50.00 | NO |
-
-Critical path:
-
-From `posedge $glbnet$clk` to `posedge $glbnet$clk`:
-
-| Step | Delay (ns) | Net or cell |
-|---|---|---|
-| clk-to-q | 0.52 | `core.gov.core.cap_dpu.cap_dpu_lk_peer_TRELLIS_FF_Q_2 -> core.gov.core.cap_dpu.cap_dpu_lk_p` |
-| routing | 3.61 | `core.gov.core.cap_dpu.cap_dpu_lk_peer[2]` |
-| logic | 0.24 | `core.gov.core.cap_dpu.point5_LUT4_D_Z_LUT4_Z_1_D_LUT4_Z_1 -> core.gov.core.cap_dpu.point5_` |
-| routing | 0.61 | `core.gov.core.cap_dpu.point5_LUT4_D_Z_LUT4_Z_1_C[3]` |
-| logic | 0.24 | `core.gov.core.cap_dpu.point5_LUT4_D_Z_LUT4_Z_1_D_LUT4_D -> core.gov.core.cap_dpu.point5_LU` |
-| routing | 0.42 | `core.gov.core.cap_dpu.point5_LUT4_D_Z_LUT4_Z_1_D_LUT4_D_Z[3]` |
-| logic | 0.24 | `core.gov.core.cap_dpu.point5_LUT4_D_Z_LUT4_Z_1_D_LUT4_D_Z_LUT4_D -> core.gov.core.cap_dpu.` |
-| ... | | 37 more steps |
-| logic | 0.17 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_21_DI_L6MUX21_Z_D0_L6MUX21_Z_D1_PFUMX_Z_BLUT_LU` |
-| routing | 0.00 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_21_DI_L6MUX21_Z_D0_L6MUX21_Z_D1` |
-| logic | 0.24 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_21_DI_L6MUX21_Z_D0_L6MUX21_Z_D1_PFUMX_Z_ALUT_LU` |
-| routing | 0.00 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_21_DI_L6MUX21_Z_D0` |
-| logic | 0.24 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_21_DI_L6MUX21_Z_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LU` |
-| routing | 0.37 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_21_DI` |
-| setup | 0.00 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_21 -> core.gov.core.cap_dpu.budget0_TRELLIS_FF_` |
-
-51 steps, 26.39 ns in total.
-
-Bitstream `governor_ulx3s_85f_50mhz.bit`: 561607 bytes, sha256 `9d42c3f3398ebdabab87c0652bb06ae94480fbd85714037d1fc11e045db39813`.
 
 ## Timing, 30 MHz build
 
 | Clock | Achieved (MHz) | Constraint (MHz) | Met |
 |---|---|---|---|
-| `$glbnet$clk` | 36.44 | 30.00 | yes |
+| `$glbnet$clk` | 36.07 | 30.00 | yes |
 
 Critical path:
 
@@ -74,25 +41,25 @@ From `posedge $glbnet$clk` to `posedge $glbnet$clk`:
 
 | Step | Delay (ns) | Net or cell |
 |---|---|---|
-| clk-to-q | 0.52 | `core.gov.core.cap_dpu.cap_dpu_lk_peer_TRELLIS_FF_Q_14 -> core.gov.core.cap_dpu.cap_dpu_lk_` |
-| routing | 3.52 | `core.gov.core.cap_dpu.cap_dpu_lk_peer[14]` |
-| logic | 0.24 | `core.gov.core.cap_dpu.valid2_LUT4_D_Z_LUT4_D_Z_LUT4_Z_2_D_LUT4_Z_D_LUT4_Z_1 -> core.gov.co` |
-| routing | 0.61 | `core.gov.core.cap_dpu.valid2_LUT4_D_Z_LUT4_D_Z_LUT4_Z_2_D_LUT4_Z_D[2]` |
-| logic | 0.24 | `core.gov.core.cap_dpu.valid2_LUT4_D_Z_LUT4_D_Z_LUT4_Z_2_D_LUT4_Z -> core.gov.core.cap_dpu.` |
-| routing | 0.66 | `core.gov.core.cap_dpu.valid2_LUT4_D_Z_LUT4_D_Z_LUT4_Z_2_D[3]` |
-| logic | 0.24 | `core.gov.core.cap_dpu.valid2_LUT4_D_Z_LUT4_D_Z_LUT4_Z_2 -> core.gov.core.cap_dpu.valid2_LU` |
-| ... | | 57 more steps |
-| logic | 0.17 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_17_DI_L6MUX21_Z_D0_L6MUX21_Z_D1_PFUMX_Z_BLUT_LU` |
-| routing | 0.00 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_17_DI_L6MUX21_Z_D0_L6MUX21_Z_D1` |
-| logic | 0.24 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_17_DI_L6MUX21_Z_D0_L6MUX21_Z_D1_PFUMX_Z_ALUT_LU` |
-| routing | 0.00 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_17_DI_L6MUX21_Z_D0` |
-| logic | 0.24 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_17_DI_L6MUX21_Z_D1_L6MUX21_Z_D0_PFUMX_Z_ALUT_LU` |
-| routing | 0.62 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_17_DI` |
-| setup | 0.00 | `core.gov.core.cap_dpu.budget0_TRELLIS_FF_Q_17 -> core.gov.core.cap_dpu.budget0_TRELLIS_FF_` |
+| clk-to-q | 0.52 | `core.gov.core.cap_storage.cap_storage_lk_peer_TRELLIS_FF_Q_2 -> core.gov.core.cap_storage.` |
+| routing | 3.27 | `core.gov.core.cap_storage.cap_storage_lk_peer[2]` |
+| logic | 0.24 | `core.gov.core.cap_storage.point0_LUT4_D_1_Z_LUT4_D_Z_LUT4_Z_D_PFUMX_Z_C0_LUT4_Z -> core.go` |
+| routing | 0.42 | `core.gov.core.cap_storage.point0_LUT4_D_1_Z_LUT4_D_Z_LUT4_Z_D_PFUMX_Z_C0[4]` |
+| logic | 0.26 | `core.gov.core.cap_storage.point0_LUT4_D_1_Z_LUT4_D_Z_LUT4_Z_D_PFUMX_Z_BLUT_LUT4_Z -> core.` |
+| routing | 0.78 | `core.gov.core.cap_storage.point0_LUT4_D_1_Z_LUT4_D_Z_LUT4_Z_D[2]` |
+| logic | 0.24 | `core.gov.core.cap_storage.point0_LUT4_D_1_Z_LUT4_D_Z_LUT4_Z -> core.gov.core.cap_storage.p` |
+| ... | | 43 more steps |
+| logic | 0.24 | `core.rb_TRELLIS_FF_Q_20_DI_L6MUX21_Z_D1_PFUMX_Z_C0_LUT4_Z_D_CCU2C_COUT_CIN_CCU2C_COUT_CIN_` |
+| routing | 5.38 | `core.rb_TRELLIS_FF_Q_20_DI_L6MUX21_Z_D1_PFUMX_Z_C0_LUT4_Z_D_CCU2C_COUT_CIN_CCU2C_COUT_CIN_` |
+| logic | 0.26 | `core.gov.core.cap_storage.budget2_TRELLIS_FF_Q_14_DI_L6MUX21_Z_D1_L6MUX21_Z_D1_PFUMX_Z_ALU` |
+| routing | 0.00 | `core.gov.core.cap_storage.budget2_TRELLIS_FF_Q_14_DI_L6MUX21_Z_D1` |
+| logic | 0.24 | `core.gov.core.cap_storage.budget2_TRELLIS_FF_Q_14_DI_L6MUX21_Z_D1_L6MUX21_Z_D0_PFUMX_Z_ALU` |
+| routing | 0.61 | `core.gov.core.cap_storage.budget2_TRELLIS_FF_Q_14_DI` |
+| setup | 0.00 | `core.gov.core.cap_storage.budget2_TRELLIS_FF_Q_14 -> core.gov.core.cap_storage.budget2_TRE` |
 
-71 steps, 27.44 ns in total.
+57 steps, 27.72 ns in total.
 
-Bitstream `governor_ulx3s_85f_30mhz.bit`: 558349 bytes, sha256 `a2d4c3dd3ff730c48c6040dcfa0e5243842a5386006da7adc78d83cb668a7fef`.
+Bitstream `governor_ulx3s_85f_30mhz.bit`: 577314 bytes, sha256 `477de080ac9bd84a1f79e2440f19d9268f94b5e730181378cb2ac48b90b6aa60`.
 
 ## What is in the bitstream
 
@@ -154,6 +121,6 @@ docs/04 says 16 meter slots; the RTL meter has 4, so CSR reads of METER_SLOT[4..
 | Package | Version |
 |---|---|
 | amaranth | 0.5.10 |
-| amaranth-yosys | 0.50.0.0.post130 |
+| amaranth-yosys | 0.50.0.0.post129 |
 | yowasp-yosys | 0.70.0.0.post1259 |
 | yowasp-nextpnr-ecp5 | 0.11.1.0.post826 |
