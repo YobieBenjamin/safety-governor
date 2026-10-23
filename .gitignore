@@ -10,3 +10,4 @@ dist/
 .worktrees/
 node_modules/
 hw/librelane/evidence/*/run.log
+rtl/formal/build/
