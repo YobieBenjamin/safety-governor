@@ -1,0 +1,717 @@
+{
+ "length": 2544,
+ "spi_mode": 0,
+ "bit_order": "msb_first_of_the_whole_vector",
+ "inputs": [
+  {
+   "name": "alarms_clear_authorized",
+   "offset": 0,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "alarms_clear_mask",
+   "offset": 1,
+   "width": 32,
+   "strobe": false
+  },
+  {
+   "name": "alarms_set_mask",
+   "offset": 33,
+   "width": 32,
+   "strobe": true
+  },
+  {
+   "name": "cap_dpu_ins",
+   "offset": 65,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "cap_dpu_ins_budget",
+   "offset": 66,
+   "width": 24,
+   "strobe": false
+  },
+  {
+   "name": "cap_dpu_ins_dir",
+   "offset": 90,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "cap_dpu_ins_epoch_tag",
+   "offset": 92,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_dpu_ins_expiry",
+   "offset": 108,
+   "width": 32,
+   "strobe": false
+  },
+  {
+   "name": "cap_dpu_ins_peer",
+   "offset": 140,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_dpu_ins_point",
+   "offset": 156,
+   "width": 3,
+   "strobe": false
+  },
+  {
+   "name": "cap_dpu_lk",
+   "offset": 159,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "cap_dpu_lk_bytes",
+   "offset": 160,
+   "width": 24,
+   "strobe": false
+  },
+  {
+   "name": "cap_dpu_lk_dir",
+   "offset": 184,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "cap_dpu_lk_peer",
+   "offset": 186,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_dpu_lk_point",
+   "offset": 202,
+   "width": 3,
+   "strobe": false
+  },
+  {
+   "name": "cap_dpu_mac_ok",
+   "offset": 205,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_ins",
+   "offset": 206,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "cap_nvswitch_ins_budget",
+   "offset": 207,
+   "width": 24,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_ins_dir",
+   "offset": 231,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_ins_epoch_tag",
+   "offset": 233,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_ins_expiry",
+   "offset": 249,
+   "width": 32,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_ins_peer",
+   "offset": 281,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_ins_point",
+   "offset": 297,
+   "width": 3,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_lk",
+   "offset": 300,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "cap_nvswitch_lk_bytes",
+   "offset": 301,
+   "width": 24,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_lk_dir",
+   "offset": 325,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_lk_peer",
+   "offset": 327,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_lk_point",
+   "offset": 343,
+   "width": 3,
+   "strobe": false
+  },
+  {
+   "name": "cap_nvswitch_mac_ok",
+   "offset": 346,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_ins",
+   "offset": 347,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "cap_pcie_ins_budget",
+   "offset": 348,
+   "width": 24,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_ins_dir",
+   "offset": 372,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_ins_epoch_tag",
+   "offset": 374,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_ins_expiry",
+   "offset": 390,
+   "width": 32,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_ins_peer",
+   "offset": 422,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_ins_point",
+   "offset": 438,
+   "width": 3,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_lk",
+   "offset": 441,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "cap_pcie_lk_bytes",
+   "offset": 442,
+   "width": 24,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_lk_dir",
+   "offset": 466,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_lk_peer",
+   "offset": 468,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_lk_point",
+   "offset": 484,
+   "width": 3,
+   "strobe": false
+  },
+  {
+   "name": "cap_pcie_mac_ok",
+   "offset": 487,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_ins",
+   "offset": 488,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "cap_storage_ins_budget",
+   "offset": 489,
+   "width": 24,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_ins_dir",
+   "offset": 513,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_ins_epoch_tag",
+   "offset": 515,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_ins_expiry",
+   "offset": 531,
+   "width": 32,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_ins_peer",
+   "offset": 563,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_ins_point",
+   "offset": 579,
+   "width": 3,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_lk",
+   "offset": 582,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "cap_storage_lk_bytes",
+   "offset": 583,
+   "width": 24,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_lk_dir",
+   "offset": 607,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_lk_peer",
+   "offset": 609,
+   "width": 16,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_lk_point",
+   "offset": 625,
+   "width": 3,
+   "strobe": false
+  },
+  {
+   "name": "cap_storage_mac_ok",
+   "offset": 628,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "cause_fw",
+   "offset": 629,
+   "width": 8,
+   "strobe": false
+  },
+  {
+   "name": "epoch_commit",
+   "offset": 637,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "epoch_host_data",
+   "offset": 638,
+   "width": 256,
+   "strobe": false
+  },
+  {
+   "name": "epoch_host_wr",
+   "offset": 894,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "epoch_new_epoch",
+   "offset": 895,
+   "width": 256,
+   "strobe": false
+  },
+  {
+   "name": "epoch_quorum_ok",
+   "offset": 1151,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "halt_cmd_throttle",
+   "offset": 1152,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "halt_local_trip",
+   "offset": 1153,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "life_advance",
+   "offset": 1154,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "life_advance_to",
+   "offset": 1155,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "life_debug_req",
+   "offset": 1157,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "life_fuse_state",
+   "offset": 1158,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "life_load",
+   "offset": 1160,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "mbox_cmd",
+   "offset": 1161,
+   "width": 8,
+   "strobe": false
+  },
+  {
+   "name": "mbox_epoch_exempt",
+   "offset": 1169,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "mbox_epoch_match",
+   "offset": 1170,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "mbox_frame_seq",
+   "offset": 1171,
+   "width": 32,
+   "strobe": false
+  },
+  {
+   "name": "mbox_key_slot",
+   "offset": 1203,
+   "width": 3,
+   "strobe": false
+  },
+  {
+   "name": "mbox_needs_run",
+   "offset": 1206,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "mbox_sig_done",
+   "offset": 1207,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "mbox_sig_ok",
+   "offset": 1208,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "mbox_signed_cmd",
+   "offset": 1209,
+   "width": 8,
+   "strobe": false
+  },
+  {
+   "name": "meas0_data",
+   "offset": 1217,
+   "width": 256,
+   "strobe": false
+  },
+  {
+   "name": "meas0_extend",
+   "offset": 1473,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "meas0_hash_done",
+   "offset": 1474,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "meas0_hash_out",
+   "offset": 1475,
+   "width": 256,
+   "strobe": false
+  },
+  {
+   "name": "meas1_data",
+   "offset": 1731,
+   "width": 256,
+   "strobe": false
+  },
+  {
+   "name": "meas1_extend",
+   "offset": 1987,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "meas1_hash_done",
+   "offset": 1988,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "meas1_hash_out",
+   "offset": 1989,
+   "width": 256,
+   "strobe": false
+  },
+  {
+   "name": "meter_add_cycles",
+   "offset": 2245,
+   "width": 48,
+   "strobe": false
+  },
+  {
+   "name": "meter_add_in",
+   "offset": 2293,
+   "width": 48,
+   "strobe": false
+  },
+  {
+   "name": "meter_add_out",
+   "offset": 2341,
+   "width": 48,
+   "strobe": false
+  },
+  {
+   "name": "meter_add_tokens",
+   "offset": 2389,
+   "width": 48,
+   "strobe": false
+  },
+  {
+   "name": "meter_slot",
+   "offset": 2437,
+   "width": 2,
+   "strobe": false
+  },
+  {
+   "name": "meter_strobe",
+   "offset": 2439,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "mono_dec_req",
+   "offset": 2440,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "mono_hwm",
+   "offset": 2441,
+   "width": 64,
+   "strobe": false
+  },
+  {
+   "name": "mono_load_hwm",
+   "offset": 2505,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "tickets_burn",
+   "offset": 2506,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "tickets_id_in",
+   "offset": 2507,
+   "width": 32,
+   "strobe": false
+  },
+  {
+   "name": "tickets_query",
+   "offset": 2539,
+   "width": 1,
+   "strobe": true
+  }
+ ],
+ "outputs": [
+  {
+   "name": "cap_dpu_allow",
+   "offset": 0,
+   "width": 1
+  },
+  {
+   "name": "cap_dpu_ins_ok",
+   "offset": 1,
+   "width": 1
+  },
+  {
+   "name": "cap_dpu_reason",
+   "offset": 2,
+   "width": 3
+  },
+  {
+   "name": "cap_nvswitch_allow",
+   "offset": 5,
+   "width": 1
+  },
+  {
+   "name": "cap_nvswitch_ins_ok",
+   "offset": 6,
+   "width": 1
+  },
+  {
+   "name": "cap_nvswitch_reason",
+   "offset": 7,
+   "width": 3
+  },
+  {
+   "name": "cap_pcie_allow",
+   "offset": 10,
+   "width": 1
+  },
+  {
+   "name": "cap_pcie_ins_ok",
+   "offset": 11,
+   "width": 1
+  },
+  {
+   "name": "cap_pcie_reason",
+   "offset": 12,
+   "width": 3
+  },
+  {
+   "name": "cap_storage_allow",
+   "offset": 15,
+   "width": 1
+  },
+  {
+   "name": "cap_storage_ins_ok",
+   "offset": 16,
+   "width": 1
+  },
+  {
+   "name": "cap_storage_reason",
+   "offset": 17,
+   "width": 3
+  },
+  {
+   "name": "life_debug_grant",
+   "offset": 20,
+   "width": 1
+  },
+  {
+   "name": "mbox_cmd_out",
+   "offset": 21,
+   "width": 8
+  },
+  {
+   "name": "mbox_dispatch",
+   "offset": 29,
+   "width": 1
+  },
+  {
+   "name": "mbox_verify_req",
+   "offset": 30,
+   "width": 1
+  },
+  {
+   "name": "meas0_hash_in",
+   "offset": 31,
+   "width": 512
+  },
+  {
+   "name": "meas0_hash_req",
+   "offset": 543,
+   "width": 1
+  },
+  {
+   "name": "meas1_hash_in",
+   "offset": 544,
+   "width": 512
+  },
+  {
+   "name": "meas1_hash_req",
+   "offset": 1056,
+   "width": 1
+  },
+  {
+   "name": "mono_refused",
+   "offset": 1057,
+   "width": 1
+  },
+  {
+   "name": "tick_ms",
+   "offset": 1058,
+   "width": 1
+  },
+  {
+   "name": "tickets_burned",
+   "offset": 1059,
+   "width": 1
+  },
+  {
+   "name": "tickets_full",
+   "offset": 1060,
+   "width": 1
+  },
+  {
+   "name": "tickets_seen",
+   "offset": 1061,
+   "width": 1
+  }
+ ],
+ "hb_window_ms": 5000
+}
