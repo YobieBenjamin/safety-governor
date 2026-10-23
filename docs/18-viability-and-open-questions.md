@@ -294,6 +294,35 @@ So the gate contains what leaves a governed rack, and names what it does not rea
 
 The right answer, and the one architectural piece beyond bandwidth, is this. You do not contain the stub; it escapes, and nothing stops a few kilobytes. You contain what it can *do*. A stub is harmless without a brain: it has to call a capable model to act. So the containment of a weightless replica is not at its origin rack at all, it is twofold at the destination: every irreversible effector demands a ticket (the destination gate, `23`), and every capable model it could call is governed at *that* model's own origin (the origin gate, 8d, applied universally). A replica with no governed brain to phone, and no ungoverned effector to reach, is a script. This only holds to the degree that capable compute and irreversible effectors are broadly governed, which is coverage, adoption and regulation, not silicon, and is exactly the gap `23` and question 1 already name as the thing no chip moves. The chip is necessary and not sufficient, and the boundary of what it does about replication is: nothing, directly; it bounds what a replica can irreversibly do, only where there is a governor. Said plainly so the claim is not mistaken for more than it is.
 
+## 8h. Distillation: capability leaves as outputs, not as weights (Question 24)
+
+A second reader put it better than I had: weights are the wrong unit of escape. The governor signs
+outputs and bounds their rate; it does not read them, and it is not supposed to. But the outputs are
+the product. A competitor, or the model's own operator, can train a smaller model on a stream of
+perfectly legitimate, perfectly ticketed outputs and walk away with most of the capability, without
+one weight ever crossing the gate. Provenance binding (`Watermark`) says who produced a given piece
+of text; it does not stop that text from being used to teach. A byte budget slows a bulk dump; it
+does nothing about capability distilled patiently inside the allowance, because useful work and
+teaching material are the same bytes.
+
+So this is a real leak and the chip does not close it, by design. The honest boundary: the governor
+can bound the rate of outputs, bind their provenance, and refuse to release them without the escrow
+and observer checks the policy names; it cannot make an output non-teaching. That is not a silicon
+problem. It is a licensing, terms-of-use and liability problem, plus whatever detection the provenance
+lane can offer after the fact. It belongs on the policy layer, next to open weights already released
+and ungoverned compute, and it is one more reason the honest framing is layered governance with the
+chip as the enforcement floor, not the whole building. What would settle it is not a register on a
+die; it is a licensing and attribution regime with teeth, which no chip can supply.
+
+One related correction while I am here, because the same reader caught it and was right. The
+containment numbers in `results/containment.md` are arithmetic on the budgets configured in the
+simulator, not a measurement of silicon that does not exist yet. They are a design target, and the
+"slack" term is a one-time lifetime allowance in the governor's actual check (cumulative bytes to the
+host minus cumulative presented bytes, bounded once, with no hourly refill), so the honest
+time-to-exfiltrate is the long one; an earlier writeup that added that one-time budget onto a per-hour
+rate was wrong, and the corrected experiment reports burst and sustained separately and measures
+delivered bytes at the egress boundary rather than counting signing calls.
+
 ## 9. What I would do next
 
 Three bounded moves, in this order.
