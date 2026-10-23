@@ -1,14 +1,20 @@
 """L7: prove the chip's properties on the generated Verilog, then prove the proofs can fail.
 
     python -m rtl.formal          # every block that has a property file; exit 1 on anything that does not hold
+    python -m rtl.formal meter    # only the blocks named
 
 For each block: yosys reads rtl/gen/<block>.v and rtl/formal/<block>.sv, a bounded check runs to DEPTH cycles,
 then k-induction at the same depth, which, when it passes, makes every assertion hold in every reachable state.
-Then each mutant (a one-line change to the block's Amaranth source, a bug on purpose) is regenerated and must
-FAIL the same properties. A property that passes on the mutant proves nothing about that line.
+The same proof is then repeated with every other SMT solver this machine has (yices, boolector), so a solver bug
+cannot carry a result alone. Then each mutant (a one-line change to the block's Amaranth source, a bug on purpose)
+is regenerated and must FAIL the same properties. A property that passes on the mutant proves nothing about that line.
+
+Blocks may add, in rtl/formal/blocks_*.py, extra checks (miters on the full-size core), a randomized simulation
+against a reference model written from the spec, and a parameterized build for blocks too big to prove at full size.
 
 Tools: yowasp-yosys (yosys and yosys-smtbmc as Python wheels) and z3, all pip-installed by ".[dev]",
-so this runs the same on a Mac, on Linux and in CI with no system packages.
+so this runs the same on a Mac, on Linux and in CI with no system packages. yowasp-boolector (portable) and
+yices-solver (Linux x86-64 only) are the second and third solvers; a missing one is reported, not hidden.
 """
 from __future__ import annotations
 
@@ -41,6 +47,16 @@ BLOCKS = {
          "with m.Elif(self.cmd_halt & (self.state != SAFE)):", "with m.Elif(self.cmd_halt & (self.state != SAFE) & (self.state != THROTTLE)):"),
     ]),
 }
+OPTIONS: dict = {}
+
+# blocks proven in other files (one file per work stream, so parallel branches do not collide here)
+try:
+    from .blocks_b import BLOCKS_B, OPTIONS_B
+    BLOCKS.update(BLOCKS_B)
+    OPTIONS.update(OPTIONS_B)
+except ImportError as e:                                   # pragma: no cover - only when the file is absent
+    if "blocks_b" not in str(e):
+        raise
 
 
 def tool(name: str) -> str:
@@ -48,60 +64,159 @@ def tool(name: str) -> str:
     return here if os.path.exists(here) else (shutil.which(name) or sys.exit(f"{name} not found: pip install -e '.[dev]'"))
 
 
-def prove(verilog_path: str, props: str, work: str) -> tuple[bool, str]:
-    # yowasp's yosys runs in WebAssembly and sees only the folder it starts in, so everything is copied there
-    smt = "design.smt2"
-    top = os.path.splitext(os.path.basename(props))[0] + "_props"
-    if os.path.abspath(verilog_path) != os.path.join(work, "dut.v"):
-        shutil.copy(verilog_path, os.path.join(work, "dut.v"))
-    shutil.copy(props, os.path.join(work, "props.sv"))
+_SOLVERS: list | None = None
+
+
+def solvers() -> list:
+    """The SMT solvers yosys-smtbmc can reach here, z3 first. Boolector is the portable yowasp wheel, run through a
+    two-line shim named 'boolector' because smtbmc calls it by that name."""
+    global _SOLVERS
+    if _SOLVERS is None:
+        _SOLVERS = ["z3"]
+        venv = os.path.dirname(sys.executable)
+        if shutil.which("yices-smt2", path=venv + os.pathsep + os.environ.get("PATH", "")):
+            _SOLVERS.append("yices")
+        bl = shutil.which("yowasp-boolector", path=venv + os.pathsep + os.environ.get("PATH", ""))
+        if bl and os.name == "posix":
+            shim = os.path.join(tempfile.gettempdir(), f"rtl-formal-shim-{os.getuid()}")
+            os.makedirs(shim, exist_ok=True)
+            with open(os.path.join(shim, "boolector"), "w") as f:
+                f.write(f'#!/bin/sh\nexec "{bl}" "$@"\n')
+            os.chmod(os.path.join(shim, "boolector"), 0o755)
+            os.environ["PATH"] = shim + os.pathsep + os.environ.get("PATH", "")
+            # the wheel compiles itself on first use and prints a banner smtbmc would misread; get that over with
+            subprocess.run([bl, "--version"], capture_output=True, text=True)
+            _SOLVERS.append("boolector")
+        os.environ["PATH"] = venv + os.pathsep + os.environ.get("PATH", "")
+    return _SOLVERS
+
+
+def smt(work: str, top: str, yosys_extra: str = "") -> str | None:
+    """yosys: dut.v + props.sv in work -> design.smt2. Returns an error text, or None."""
     y = subprocess.run([tool("yowasp-yosys"), "-q", "-p",
-                        f"read_verilog -sv dut.v; read_verilog -formal -sv props.sv; prep -top {top}; "
-                        f"async2sync; dffunmap; write_smt2 -wires {smt}"], capture_output=True, text=True, cwd=work)
-    if y.returncode:
-        return False, "TOOL ERROR (yosys): " + (y.stderr or y.stdout)[-800:]
+                        f"read_verilog -sv dut.v; read_verilog -formal -sv props.sv; {yosys_extra} prep -top {top}; "
+                        f"async2sync; dffunmap; write_smt2 -wires design.smt2"], capture_output=True, text=True, cwd=work)
+    return ("TOOL ERROR (yosys): " + (y.stderr or y.stdout)[-800:]) if y.returncode else None
+
+
+def bmc_and_induction(work: str, depth: int, solver: str, smt2: str = "design.smt2") -> tuple[bool, str]:
     for mode in ([], ["-i"]):
-        r = subprocess.run([tool("yowasp-yosys-smtbmc"), "-s", "z3", *mode, "-t", str(DEPTH), smt],
+        r = subprocess.run([tool("yowasp-yosys-smtbmc"), "-s", solver, *mode, "-t", str(depth), smt2],
                            capture_output=True, text=True, cwd=work)
         if "Status: PASSED" not in r.stdout:
             failed = [l.split("Assert failed in ")[-1] for l in r.stdout.splitlines() if "Assert failed" in l]
             if not failed:
-                return False, "TOOL ERROR (smtbmc): " + (r.stderr or r.stdout)[-400:]
-            return False, ("induction" if mode else "bounded check") + " failed: " + ", ".join(failed)
-    return True, f"bounded to {DEPTH} cycles and k-induction: every reachable state"
+                return False, f"TOOL ERROR (smtbmc, {solver}): " + (r.stderr or r.stdout)[-400:]
+            return False, ("induction" if mode else "bounded check") + f" failed ({solver}): " + ", ".join(failed)
+    return True, "ok"
+
+
+def prove(verilog_path: str, props: str, work: str, depth: int = DEPTH, all_solvers: bool = False,
+          yosys_extra: str = "", props_text: str | None = None, solver: str = "z3") -> tuple[bool, str]:
+    # yowasp's yosys runs in WebAssembly and sees only the folder it starts in, so everything is copied there
+    top = os.path.splitext(os.path.basename(props))[0] + "_props"
+    if os.path.abspath(verilog_path) != os.path.join(work, "dut.v"):
+        shutil.copy(verilog_path, os.path.join(work, "dut.v"))
+    with open(os.path.join(work, "props.sv"), "w", encoding="utf-8") as f:
+        f.write(props_text if props_text is not None else open(props, encoding="utf-8").read())
+    err = smt(work, top, yosys_extra)
+    if err:
+        return False, err
+    first = solver if solver in solvers() else "z3"
+    order = [first] + ([s for s in solvers() if s != first] if all_solvers else [])
+    for s in order:
+        ok, why = bmc_and_induction(work, depth, s)
+        if not ok:
+            return False, why
+    return True, f"bounded to {depth} cycles and k-induction: every reachable state ({', '.join(order)})"
+
+
+def load_block(src_file: str, cls: str, old: str | None = None, new: str | None = None, kwargs: dict | None = None):
+    """Instantiate a block from its Amaranth source, optionally with one text change (a mutant). The source runs as a
+    module of rtl.governor_rtl, so the core's relative imports resolve to the real (unmutated) sub-blocks."""
+    src = open(os.path.join(RTL, "governor_rtl", src_file), encoding="utf-8").read()
+    if old is not None:
+        if src.count(old) != 1:
+            sys.exit(f"mutant text not found exactly once in {src_file}: {old!r} (the source moved; update BLOCKS)")
+        src = src.replace(old, new)
+    ns: dict = {"__name__": "rtl.governor_rtl._mutant", "__package__": "rtl.governor_rtl"}
+    exec(compile(src, src_file + (" (mutant)" if old is not None else ""), "exec"), ns)
+    return ns[cls](**(kwargs or {}))
 
 
 def mutant_verilog(src_file: str, cls: str, old: str, new: str, out: str, name: str) -> None:
-    src = open(os.path.join(RTL, "governor_rtl", src_file), encoding="utf-8").read()
-    if src.count(old) != 1:
-        sys.exit(f"mutant text not found exactly once in {src_file}: {old!r} (the source moved; update BLOCKS)")
-    ns: dict = {"__name__": "mutant"}
-    exec(compile(src.replace(old, new), src_file + " (mutant)", "exec"), ns)
-    dut = ns[cls]()
+    dut = load_block(src_file, cls, old, new)
     ports = [v for v in vars(dut).values() if isinstance(v, Signal)]
     with open(out, "w", encoding="utf-8") as f:
         f.write(verilog.convert(dut, name=name, ports=ports, emit_src=False))
 
 
-def main() -> int:
+def check_block(block: str, src_file: str, cls: str, work: str, mutant: tuple | None, all_solvers: bool) -> tuple[bool, str]:
+    """The block's properties (and any extra checks) on the checked-in Verilog, or on one mutant of it."""
+    opt = OPTIONS.get(block, {})
+    props = os.path.join(HERE, block + ".sv")
+    mv = os.path.join(work, "dut.v")
+    if "verilog" in opt:                                     # a parameterized build (the core)
+        opt["verilog"](mv, mutant)
+        src_v = mv
+    elif mutant is None:
+        src_v = os.path.join(GEN, block + ".v")
+    else:
+        mutant_verilog(src_file, cls, mutant[1], mutant[2], mv, block)
+        src_v = mv
+    props_text = opt["props_text"](open(src_v, encoding="utf-8").read()) if "props_text" in opt else None
+    ok, why = prove(src_v, props, work, depth=opt.get("depth", DEPTH), all_solvers=all_solvers,
+                    yosys_extra=opt.get("yosys_extra", ""), props_text=props_text, solver=opt.get("solver", "z3"))
+    notes = [why]
+    for label, fn in opt.get("checks", []):
+        sub = os.path.join(work, label.replace(" ", "_"))
+        os.makedirs(sub, exist_ok=True)
+        c_ok, c_why = fn(sub, mutant, all_solvers)
+        notes.append(f"{label}: {c_why}")
+        if not c_ok:
+            ok = False
+            if "TOOL ERROR" in c_why and "TOOL ERROR" not in why:
+                notes[0] = c_why                              # never let a tool error pass as a catch
+    return ok, "; ".join(notes)
+
+
+def main(argv: list) -> int:
+    sys.stdout.reconfigure(line_buffering=True)              # a long run shows its progress line by line
     bad = 0
-    for block, (src_file, cls, mutants) in BLOCKS.items():
-        props = os.path.join(HERE, block + ".sv")
+    names = [a for a in argv if not a.startswith("-")] or list(BLOCKS)
+    print("  solvers here: " + ", ".join(solvers()) + ("" if len(solvers()) > 1 else " (no second solver installed)"))
+    for block in names:
+        src_file, cls, mutants = BLOCKS[block]
+        opt = OPTIONS.get(block, {})
         with tempfile.TemporaryDirectory() as work:
-            ok, why = prove(os.path.join(GEN, block + ".v"), props, work)
+            ok, why = check_block(block, src_file, cls, work, None, all_solvers=True)
             print(f"  {'PROVED' if ok else 'FAILED'}  {block}: {why}")
             bad += not ok
+            if "sim" in opt:
+                s_ok, s_why = opt["sim"]()
+                print(f"  {'SIM-OK' if s_ok else 'SIM-FAILED'}  {block}: {s_why}")
+                bad += not s_ok
             for desc, old, new in mutants:
-                mv = os.path.join(work, "dut.v")
-                mutant_verilog(src_file, cls, old, new, mv, block)
-                passed, why = prove(mv, props, work)
+                with tempfile.TemporaryDirectory() as mwork:
+                    passed, why = check_block(block, src_file, cls, mwork, (desc, old, new), all_solvers=False)
                 # a mutant counts as caught only when an assertion fails; a tool error proves nothing
                 caught = not passed and "TOOL ERROR" not in why
-                print(f"  {'caught' if caught else 'MISSED'}  {block} mutant: {desc}" + ("" if caught else f" ({why})"))
+                extra = ""
+                if "sim_mutant" in opt:                      # information only: does the simulation see it too?
+                    try:
+                        s_ok, _ = opt["sim_mutant"](lambda _o=old, _n=new, **kw: load_block(src_file, cls, _o, _n, kw))
+                        extra = " [simulation: " + ("missed it" if s_ok else "caught it too") + "]"
+                    except Exception as e:                   # e.g. the mutant drives a port the bench sets
+                        extra = f" [simulation: could not run it, {type(e).__name__}]"
+                print(f"  {'caught' if caught else 'MISSED'}  {block} mutant: {desc}" + ("" if caught else f" ({why})") + extra)
                 bad += not caught
+        for label, fn in opt.get("facts", []):
+            f_ok, f_why = fn()
+            print(f"  {'FACT' if f_ok else 'FACT-FAILED'}  {block}: {label}: {f_why}")
+            bad += not f_ok
     print("L7: every property proven on the Verilog, every mutant caught" if not bad else f"L7: {bad} problem(s)")
     return 1 if bad else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

@@ -18,7 +18,10 @@ dependencies = [
 [project.optional-dependencies]
 # z3-solver runs the proofs (make proof); it was missing here, so a fresh .venv could not run them
 # and wave 2's L3 failed its acceptance on a ModuleNotFoundError, not on its work.
-dev = ["pytest>=7", "z3-solver>=4.12", "yowasp-yosys>=0.50"]
+# second and third solvers for python -m rtl.formal (L7): boolector runs everywhere (WebAssembly); the yices wheel
+# carries a native binary for Linux x86-64 only, so a Mac runs z3 and boolector and says so in the output.
+dev = ["pytest>=7", "z3-solver>=4.12", "yowasp-yosys>=0.50", "yowasp-boolector>=3.2",
+       "yices-solver>=2.6; platform_system == 'Linux' and platform_machine == 'x86_64'"]
 
 [project.scripts]
 govsim = "govsim.cli:main"

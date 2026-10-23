@@ -3,29 +3,41 @@
 module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, clk, rst, host_wr_refused, rd_tokens, rd_cycles, rd_in, rd_out, slot);
   reg \$auto$verilog_backend.cc:2355:dump_module$1  = 0;
   reg [47:0] \$1 ;
-  reg [47:0] \$10 ;
+  wire [47:0] \$10 ;
   reg [47:0] \$11 ;
-  reg [47:0] \$12 ;
+  wire [48:0] \$12 ;
   reg [47:0] \$13 ;
-  reg [47:0] \$14 ;
-  reg [47:0] \$15 ;
+  wire [48:0] \$14 ;
+  wire [47:0] \$15 ;
   reg [47:0] \$16 ;
-  reg [47:0] \$17 ;
+  wire [48:0] \$17 ;
   reg [47:0] \$18 ;
-  reg [47:0] \$19 ;
+  wire [48:0] \$19 ;
   wire [48:0] \$2 ;
-  reg [47:0] \$20 ;
+  wire [47:0] \$20 ;
   reg [47:0] \$21 ;
   reg [47:0] \$22 ;
   reg [47:0] \$23 ;
   reg [47:0] \$24 ;
+  reg [47:0] \$25 ;
+  reg [47:0] \$26 ;
+  reg [47:0] \$27 ;
+  reg [47:0] \$28 ;
+  reg [47:0] \$29 ;
   reg [47:0] \$3 ;
+  reg [47:0] \$30 ;
+  reg [47:0] \$31 ;
+  reg [47:0] \$32 ;
+  reg [47:0] \$33 ;
+  reg [47:0] \$34 ;
+  reg [47:0] \$35 ;
+  reg [47:0] \$36 ;
   wire [48:0] \$4 ;
-  reg [47:0] \$5 ;
-  wire [48:0] \$6 ;
-  reg [47:0] \$7 ;
-  wire [48:0] \$8 ;
-  reg [47:0] \$9 ;
+  wire [47:0] \$5 ;
+  reg [47:0] \$6 ;
+  wire [48:0] \$7 ;
+  reg [47:0] \$8 ;
+  wire [48:0] \$9 ;
   input [47:0] add_cycles;
   wire [47:0] add_cycles;
   input [47:0] add_in;
@@ -73,41 +85,49 @@ module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, 
   reg [47:0] tok2 = 48'h000000000000;
   reg [47:0] tok3 = 48'h000000000000;
   assign \$2  = \$1  + add_tokens;
-  assign \$4  = \$3  + add_cycles;
-  assign \$6  = \$5  + add_in;
-  assign \$8  = \$7  + add_out;
+  assign \$4  = \$3  + add_tokens;
+  assign \$5  = \$2 [48] ? 48'hffffffffffff : \$4 [47:0];
+  assign \$7  = \$6  + add_cycles;
+  assign \$9  = \$8  + add_cycles;
+  assign \$10  = \$7 [48] ? 48'hffffffffffff : \$9 [47:0];
+  assign \$12  = \$11  + add_in;
+  assign \$14  = \$13  + add_in;
+  assign \$15  = \$12 [48] ? 48'hffffffffffff : \$14 [47:0];
+  assign \$17  = \$16  + add_out;
+  assign \$19  = \$18  + add_out;
+  assign \$20  = \$17 [48] ? 48'hffffffffffff : \$19 [47:0];
   always @(posedge clk)
-    tok0 <= \$9 ;
+    tok0 <= \$21 ;
   always @(posedge clk)
-    tok1 <= \$10 ;
+    tok1 <= \$22 ;
   always @(posedge clk)
-    tok2 <= \$11 ;
+    tok2 <= \$23 ;
   always @(posedge clk)
-    tok3 <= \$12 ;
+    tok3 <= \$24 ;
   always @(posedge clk)
-    cyc0 <= \$13 ;
+    cyc0 <= \$25 ;
   always @(posedge clk)
-    cyc1 <= \$14 ;
+    cyc1 <= \$26 ;
   always @(posedge clk)
-    cyc2 <= \$15 ;
+    cyc2 <= \$27 ;
   always @(posedge clk)
-    cyc3 <= \$16 ;
+    cyc3 <= \$28 ;
   always @(posedge clk)
-    bin0 <= \$17 ;
+    bin0 <= \$29 ;
   always @(posedge clk)
-    bin1 <= \$18 ;
+    bin1 <= \$30 ;
   always @(posedge clk)
-    bin2 <= \$19 ;
+    bin2 <= \$31 ;
   always @(posedge clk)
-    bin3 <= \$20 ;
+    bin3 <= \$32 ;
   always @(posedge clk)
-    bout0 <= \$21 ;
+    bout0 <= \$33 ;
   always @(posedge clk)
-    bout1 <= \$22 ;
+    bout1 <= \$34 ;
   always @(posedge clk)
-    bout2 <= \$23 ;
+    bout2 <= \$35 ;
   always @(posedge clk)
-    bout3 <= \$24 ;
+    bout3 <= \$36 ;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
     (* full_case = 32'd1 *)
@@ -127,13 +147,13 @@ module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, 
     (* full_case = 32'd1 *)
     casez (slot)
       2'h0:
-          \$3  = cyc0;
+          \$3  = tok0;
       2'h1:
-          \$3  = cyc1;
+          \$3  = tok1;
       2'h2:
-          \$3  = cyc2;
+          \$3  = tok2;
       2'h3:
-          \$3  = cyc3;
+          \$3  = tok3;
     endcase
   end
   always @* begin
@@ -141,13 +161,13 @@ module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, 
     (* full_case = 32'd1 *)
     casez (slot)
       2'h0:
-          \$5  = bin0;
+          \$6  = cyc0;
       2'h1:
-          \$5  = bin1;
+          \$6  = cyc1;
       2'h2:
-          \$5  = bin2;
+          \$6  = cyc2;
       2'h3:
-          \$5  = bin3;
+          \$6  = cyc3;
     endcase
   end
   always @* begin
@@ -155,13 +175,69 @@ module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, 
     (* full_case = 32'd1 *)
     casez (slot)
       2'h0:
-          \$7  = bout0;
+          \$8  = cyc0;
       2'h1:
-          \$7  = bout1;
+          \$8  = cyc1;
       2'h2:
-          \$7  = bout2;
+          \$8  = cyc2;
       2'h3:
-          \$7  = bout3;
+          \$8  = cyc3;
+    endcase
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    (* full_case = 32'd1 *)
+    casez (slot)
+      2'h0:
+          \$11  = bin0;
+      2'h1:
+          \$11  = bin1;
+      2'h2:
+          \$11  = bin2;
+      2'h3:
+          \$11  = bin3;
+    endcase
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    (* full_case = 32'd1 *)
+    casez (slot)
+      2'h0:
+          \$13  = bin0;
+      2'h1:
+          \$13  = bin1;
+      2'h2:
+          \$13  = bin2;
+      2'h3:
+          \$13  = bin3;
+    endcase
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    (* full_case = 32'd1 *)
+    casez (slot)
+      2'h0:
+          \$16  = bout0;
+      2'h1:
+          \$16  = bout1;
+      2'h2:
+          \$16  = bout2;
+      2'h3:
+          \$16  = bout3;
+    endcase
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    (* full_case = 32'd1 *)
+    casez (slot)
+      2'h0:
+          \$18  = bout0;
+      2'h1:
+          \$18  = bout1;
+      2'h2:
+          \$18  = bout2;
+      2'h3:
+          \$18  = bout3;
     endcase
   end
   always @* begin
@@ -222,206 +298,11 @@ module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, 
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$9  = tok0;
+    \$21  = tok0;
     if (strobe) begin
       casez (slot)
         2'h0:
-            \$9  = \$2 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$9  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$10  = tok1;
-    if (strobe) begin
-      casez (slot)
-        2'h0:
-            /* empty */;
-        2'h1:
-            \$10  = \$2 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$10  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$11  = tok2;
-    if (strobe) begin
-      casez (slot)
-        2'h0:
-            /* empty */;
-        2'h1:
-            /* empty */;
-        2'h2:
-            \$11  = \$2 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$11  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$12  = tok3;
-    if (strobe) begin
-      (* full_case = 32'd1 *)
-      casez (slot)
-        2'h0:
-            /* empty */;
-        2'h1:
-            /* empty */;
-        2'h2:
-            /* empty */;
-        2'h3:
-            \$12  = \$2 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$12  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$13  = cyc0;
-    if (strobe) begin
-      casez (slot)
-        2'h0:
-            \$13  = \$4 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$13  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$14  = cyc1;
-    if (strobe) begin
-      casez (slot)
-        2'h0:
-            /* empty */;
-        2'h1:
-            \$14  = \$4 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$14  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$15  = cyc2;
-    if (strobe) begin
-      casez (slot)
-        2'h0:
-            /* empty */;
-        2'h1:
-            /* empty */;
-        2'h2:
-            \$15  = \$4 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$15  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$16  = cyc3;
-    if (strobe) begin
-      (* full_case = 32'd1 *)
-      casez (slot)
-        2'h0:
-            /* empty */;
-        2'h1:
-            /* empty */;
-        2'h2:
-            /* empty */;
-        2'h3:
-            \$16  = \$4 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$16  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$17  = bin0;
-    if (strobe) begin
-      casez (slot)
-        2'h0:
-            \$17  = \$6 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$17  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$18  = bin1;
-    if (strobe) begin
-      casez (slot)
-        2'h0:
-            /* empty */;
-        2'h1:
-            \$18  = \$6 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$18  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$19  = bin2;
-    if (strobe) begin
-      casez (slot)
-        2'h0:
-            /* empty */;
-        2'h1:
-            /* empty */;
-        2'h2:
-            \$19  = \$6 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$19  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$20  = bin3;
-    if (strobe) begin
-      (* full_case = 32'd1 *)
-      casez (slot)
-        2'h0:
-            /* empty */;
-        2'h1:
-            /* empty */;
-        2'h2:
-            /* empty */;
-        2'h3:
-            \$20  = \$6 [47:0];
-      endcase
-    end
-    if (rst) begin
-      \$20  = 48'h000000000000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$21  = bout0;
-    if (strobe) begin
-      casez (slot)
-        2'h0:
-            \$21  = \$8 [47:0];
+            \$21  = \$5 ;
       endcase
     end
     if (rst) begin
@@ -430,13 +311,13 @@ module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, 
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$22  = bout1;
+    \$22  = tok1;
     if (strobe) begin
       casez (slot)
         2'h0:
             /* empty */;
         2'h1:
-            \$22  = \$8 [47:0];
+            \$22  = \$5 ;
       endcase
     end
     if (rst) begin
@@ -445,7 +326,7 @@ module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, 
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$23  = bout2;
+    \$23  = tok2;
     if (strobe) begin
       casez (slot)
         2'h0:
@@ -453,7 +334,7 @@ module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, 
         2'h1:
             /* empty */;
         2'h2:
-            \$23  = \$8 [47:0];
+            \$23  = \$5 ;
       endcase
     end
     if (rst) begin
@@ -462,7 +343,7 @@ module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, 
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$24  = bout3;
+    \$24  = tok3;
     if (strobe) begin
       (* full_case = 32'd1 *)
       casez (slot)
@@ -473,11 +354,206 @@ module meter(add_tokens, add_cycles, add_in, add_out, strobe, host_wr, rd_slot, 
         2'h2:
             /* empty */;
         2'h3:
-            \$24  = \$8 [47:0];
+            \$24  = \$5 ;
       endcase
     end
     if (rst) begin
       \$24  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$25  = cyc0;
+    if (strobe) begin
+      casez (slot)
+        2'h0:
+            \$25  = \$10 ;
+      endcase
+    end
+    if (rst) begin
+      \$25  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$26  = cyc1;
+    if (strobe) begin
+      casez (slot)
+        2'h0:
+            /* empty */;
+        2'h1:
+            \$26  = \$10 ;
+      endcase
+    end
+    if (rst) begin
+      \$26  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$27  = cyc2;
+    if (strobe) begin
+      casez (slot)
+        2'h0:
+            /* empty */;
+        2'h1:
+            /* empty */;
+        2'h2:
+            \$27  = \$10 ;
+      endcase
+    end
+    if (rst) begin
+      \$27  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$28  = cyc3;
+    if (strobe) begin
+      (* full_case = 32'd1 *)
+      casez (slot)
+        2'h0:
+            /* empty */;
+        2'h1:
+            /* empty */;
+        2'h2:
+            /* empty */;
+        2'h3:
+            \$28  = \$10 ;
+      endcase
+    end
+    if (rst) begin
+      \$28  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$29  = bin0;
+    if (strobe) begin
+      casez (slot)
+        2'h0:
+            \$29  = \$15 ;
+      endcase
+    end
+    if (rst) begin
+      \$29  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$30  = bin1;
+    if (strobe) begin
+      casez (slot)
+        2'h0:
+            /* empty */;
+        2'h1:
+            \$30  = \$15 ;
+      endcase
+    end
+    if (rst) begin
+      \$30  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$31  = bin2;
+    if (strobe) begin
+      casez (slot)
+        2'h0:
+            /* empty */;
+        2'h1:
+            /* empty */;
+        2'h2:
+            \$31  = \$15 ;
+      endcase
+    end
+    if (rst) begin
+      \$31  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$32  = bin3;
+    if (strobe) begin
+      (* full_case = 32'd1 *)
+      casez (slot)
+        2'h0:
+            /* empty */;
+        2'h1:
+            /* empty */;
+        2'h2:
+            /* empty */;
+        2'h3:
+            \$32  = \$15 ;
+      endcase
+    end
+    if (rst) begin
+      \$32  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$33  = bout0;
+    if (strobe) begin
+      casez (slot)
+        2'h0:
+            \$33  = \$20 ;
+      endcase
+    end
+    if (rst) begin
+      \$33  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$34  = bout1;
+    if (strobe) begin
+      casez (slot)
+        2'h0:
+            /* empty */;
+        2'h1:
+            \$34  = \$20 ;
+      endcase
+    end
+    if (rst) begin
+      \$34  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$35  = bout2;
+    if (strobe) begin
+      casez (slot)
+        2'h0:
+            /* empty */;
+        2'h1:
+            /* empty */;
+        2'h2:
+            \$35  = \$20 ;
+      endcase
+    end
+    if (rst) begin
+      \$35  = 48'h000000000000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$36  = bout3;
+    if (strobe) begin
+      (* full_case = 32'd1 *)
+      casez (slot)
+        2'h0:
+            /* empty */;
+        2'h1:
+            /* empty */;
+        2'h2:
+            /* empty */;
+        2'h3:
+            \$36  = \$20 ;
+      endcase
+    end
+    if (rst) begin
+      \$36  = 48'h000000000000;
     end
   end
   assign host_wr_refused = host_wr;

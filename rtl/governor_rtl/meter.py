@@ -1,8 +1,17 @@
 """Meter. Invariant: counters only increment, and the host port can read but not write.
 
 Four counters per slot (tokens, cycles, bytes in, bytes out); a slot is one model digest.
+The adds saturate: a counter that would pass all ones stays at all ones. Until 23 October 2026 they
+wrapped, so one strobe with a large enough ``add_*`` moved a counter down, which let a job spend past a
+cycle budget and then read as under it (L7 found it: rtl/formal/meter.sv, rule E1; FINDINGS-b.md, F1).
 """
-from amaranth import Array, Elaboratable, Module, Signal
+from amaranth import Array, Elaboratable, Module, Mux, Signal
+
+
+def _sat_add(a, b):
+    """a + b, stuck at all ones instead of wrapping."""
+    s = a + b
+    return Mux(s[len(a)], (1 << len(a)) - 1, s[:len(a)])
 
 
 class Meter(Elaboratable):
@@ -29,10 +38,10 @@ class Meter(Elaboratable):
     def elaborate(self, platform):
         m = Module()
         with m.If(self.strobe):
-            m.d.sync += [self.tokens[self.slot].eq(self.tokens[self.slot] + self.add_tokens),
-                         self.cycles[self.slot].eq(self.cycles[self.slot] + self.add_cycles),
-                         self.bin[self.slot].eq(self.bin[self.slot] + self.add_in),
-                         self.bout[self.slot].eq(self.bout[self.slot] + self.add_out)]
+            m.d.sync += [self.tokens[self.slot].eq(_sat_add(self.tokens[self.slot], self.add_tokens)),
+                         self.cycles[self.slot].eq(_sat_add(self.cycles[self.slot], self.add_cycles)),
+                         self.bin[self.slot].eq(_sat_add(self.bin[self.slot], self.add_in)),
+                         self.bout[self.slot].eq(_sat_add(self.bout[self.slot], self.add_out))]
         m.d.comb += [self.rd_tokens.eq(self.tokens[self.rd_slot]), self.rd_cycles.eq(self.cycles[self.rd_slot]),
                      self.rd_in.eq(self.bin[self.rd_slot]), self.rd_out.eq(self.bout[self.rd_slot]),
                      self.host_wr_refused.eq(self.host_wr)]
