@@ -1,0 +1,70 @@
+# ULX3S v3.x pin constraints for the governor bench bitstream.
+# Sites copied from the board's own file, emard/ulx3s doc/constraints/ulx3s_v20.lpf (gp[n]/gn[n] are the J1 header pins
+# named that way on the silkscreen and in that file). All I/O is LVCMOS33.
+BLOCK RESETPATHS;
+BLOCK ASYNCPATHS;
+SYSCONFIG CONFIG_IOVOLTAGE=3.3 COMPRESS_CONFIG=ON MCCLK_FREQ=62 SLAVE_SPI_PORT=DISABLE MASTER_SPI_PORT=ENABLE SLAVE_PARALLEL_PORT=DISABLE;
+
+LOCATE COMP "clk_25mhz" SITE "G2";
+IOBUF  PORT "clk_25mhz" PULLMODE=NONE IO_TYPE=LVCMOS33;
+FREQUENCY PORT "clk_25mhz" 25 MHZ;
+
+LOCATE COMP "btn_fire1" SITE "R1";   # FIRE1
+IOBUF  PORT "btn_fire1" PULLMODE=DOWN IO_TYPE=LVCMOS33;
+
+# management bus (SMBus/I2C), open drain; the host side carries the pull-ups
+LOCATE COMP "smb_scl" SITE "B11";    # gp[0]
+LOCATE COMP "smb_sda" SITE "C11";    # gn[0]
+IOBUF  PORT "smb_scl" PULLMODE=UP IO_TYPE=LVCMOS33 DRIVE=8;
+IOBUF  PORT "smb_sda" PULLMODE=UP IO_TYPE=LVCMOS33 DRIVE=8;
+
+# levers: ASSERT lines into the open-drain inverter (74HC05), 1 = asserted
+LOCATE COMP "perst_assert"  SITE "A10";   # gp[1]
+LOCATE COMP "pwrbrk_assert" SITE "A11";   # gn[1]
+LOCATE COMP "pwr_en"        SITE "A9";    # gp[2]
+LOCATE COMP "loop_closed"   SITE "B10";   # gn[2]
+IOBUF  PORT "perst_assert"  PULLMODE=UP   IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "pwrbrk_assert" PULLMODE=UP   IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "pwr_en"        PULLMODE=DOWN IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "loop_closed"   PULLMODE=DOWN IO_TYPE=LVCMOS33 DRIVE=4;
+
+# inputs. Pull-downs make an unplugged wire the safe reading: no loop current, no heartbeat, tamper TRIPPED.
+LOCATE COMP "loop_sense" SITE "B9";   # gp[3]
+LOCATE COMP "fw_hb"      SITE "C10";  # gn[3]
+LOCATE COMP "fw_clear"   SITE "A7";   # gp[4]
+LOCATE COMP "fw_halt"    SITE "A8";   # gn[4]
+LOCATE COMP "tamper_n"   SITE "C8";   # gp[5]
+LOCATE COMP "bench_rst"  SITE "B8";   # gn[5]
+LOCATE COMP "fw_sck"     SITE "C6";   # gp[6]
+LOCATE COMP "fw_sdi"     SITE "C7";   # gn[6]
+LOCATE COMP "fw_cs_n"    SITE "A6";   # gp[7]
+LOCATE COMP "fw_sdo"     SITE "B6";   # gn[7]
+IOBUF  PORT "loop_sense" PULLMODE=DOWN IO_TYPE=LVCMOS33;
+IOBUF  PORT "fw_hb"      PULLMODE=DOWN IO_TYPE=LVCMOS33;
+IOBUF  PORT "fw_clear"   PULLMODE=DOWN IO_TYPE=LVCMOS33;
+IOBUF  PORT "fw_halt"    PULLMODE=DOWN IO_TYPE=LVCMOS33;
+IOBUF  PORT "tamper_n"   PULLMODE=DOWN IO_TYPE=LVCMOS33;
+IOBUF  PORT "bench_rst"  PULLMODE=DOWN IO_TYPE=LVCMOS33;
+IOBUF  PORT "fw_sck"     PULLMODE=DOWN IO_TYPE=LVCMOS33;
+IOBUF  PORT "fw_sdi"     PULLMODE=DOWN IO_TYPE=LVCMOS33;
+IOBUF  PORT "fw_cs_n"    PULLMODE=UP   IO_TYPE=LVCMOS33;
+IOBUF  PORT "fw_sdo"     PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+
+# LEDs: [2:0] sequencer state, [3] loop switch open, [4] power brake asserted, [5] doorbell, [6] SMBus timeout seen,
+# [7] heartbeat
+LOCATE COMP "led[0]" SITE "B2";
+LOCATE COMP "led[1]" SITE "C2";
+LOCATE COMP "led[2]" SITE "C1";
+LOCATE COMP "led[3]" SITE "D2";
+LOCATE COMP "led[4]" SITE "D1";
+LOCATE COMP "led[5]" SITE "E2";
+LOCATE COMP "led[6]" SITE "E1";
+LOCATE COMP "led[7]" SITE "H3";
+IOBUF  PORT "led[0]" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "led[1]" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "led[2]" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "led[3]" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "led[4]" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "led[5]" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "led[6]" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF  PORT "led[7]" PULLMODE=NONE IO_TYPE=LVCMOS33 DRIVE=4;

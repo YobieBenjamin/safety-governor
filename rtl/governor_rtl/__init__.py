@@ -21,6 +21,8 @@ from .meter import Meter
 from .mailbox import Mailbox
 from .alarms import Alarms
 from .top import GovernorCore
+from .smbus import SMBusTarget
+from .smbus_top import GovernorSMBus
 
 __all__ = ["MonotonicCounter", "MeasureReg", "EpochReg", "Lifecycle", "CapTable", "TicketStore", "Heartbeat",
-           "HaltSeq", "LoopIO", "Meter", "Mailbox", "Alarms", "GovernorCore"]
+           "HaltSeq", "LoopIO", "Meter", "Mailbox", "Alarms", "GovernorCore", "SMBusTarget", "GovernorSMBus"]

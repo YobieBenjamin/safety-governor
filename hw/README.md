@@ -37,6 +37,13 @@ silicon plan. The point of hardening the core alone first is to prove the invari
 matter in silicon (no write path into the epoch, the levers follow the state machine, the
 loop opens when it should) before anything else is on the die.
 
+## FPGA bench
+
+`fpga/` puts `governor_core` and its SMBus/I2C management-bus target on a ULX3S (Lattice ECP5 85F) with a fully
+open, pip-installed toolchain: `hw/fpga/build.sh` builds the bitstream and writes `fpga/REPORT.md` (utilisation and
+timing at 50 MHz); `fpga/BENCH.md` is the parts list and wiring; `fpga/host_test.py all` on a Raspberry Pi runs the
+CSR, lever and false-halt soak tests against the real board. `fpga/PLAIN-ENGLISH.md` explains it without jargon.
+
 ## Pinout
 
 `pinout/governor_module.csv` lists every pin of the governor module with its group, direction,
