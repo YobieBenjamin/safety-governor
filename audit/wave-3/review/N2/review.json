@@ -1,0 +1,243 @@
+{
+ "id": "N2",
+ "verdict": "revise",
+ "trusted": true,
+ "verifier_ok": true,
+ "verifier_blocks": 0,
+ "review_blocks": 1,
+ "unsupported_claims": 6,
+ "unsupported_soft": 1,
+ "bad_citations": [],
+ "review_cost_usd": 0.3283213,
+ "review_turns": 8,
+ "review_exit": 0,
+ "review": {
+  "verdict": "revise",
+  "summary": "The arithmetic is reproduced by the tests and the suite and acceptance pass, but the brief's acceptance (\"docs/07 carries the numbers with sources\") is not met.\nThe agent says the rates were not read from IEC 61508/62380, SN 29500 or MIL-HDBK-217F, and the Llama 3 baseline is quoted from memory. 6 of the 9 hard-fault rates are labelled \"assumed\".\nEXPERIMENTS.md marks N2 \"done\" anyway.\nTwo injectors do not model the mode they are named for (readback stuck, firmware hang). The two-sample debounce, the point of the brief, is not in govsim.\nThe doc-number test matches substrings, so it cannot tie each table row to its number.\nQuestion: the 5.6e-13, 2e-21 and \"67 percent\" figures in docs/07 have no test that computes them against the doc text.",
+  "findings": [
+   {
+    "kind": "unsupported_claim",
+    "severity": "block",
+    "file": "docs/07-verification-plan.md",
+    "line": 106,
+    "detail": "The brief's acceptance requires the numbers 'with sources'. This paragraph says the rates were not read out of IEC 61508-6, IEC 62380, SN 29500 or MIL-HDBK-217F. Six of nine hard-fault rows are 'assumed' (the Rate column also marks firmware hang, comparator stuck open and glitch detector false trip). The 200 FIT, 40 FIT and 100 FIT rows carry no committed source; the table cites no passage of any named standard. The honesty is good, but acceptance is not met: either cite checkable sources, or have the brief and EXPERIMENTS.md say 'planning values, sources outstanding'."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "warn",
+    "file": "govsim/faults.py",
+    "line": 56,
+    "detail": "The `source` strings (e.g. 'IEC 62380 / SN 29500 connector class', 'MIL-HDBK-217F connector class', 'IEC 61508-6 software-fault allowance', 'IEC 62380 class') read as citations in the code. The module docstring (line 8) says none was looked up. A reader of the Mode table alone would take them as sourced; label them 'unverified' in the field itself."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "warn",
+    "file": "docs/07-verification-plan.md",
+    "line": 125,
+    "detail": "The disproof threshold rests on 419 interruptions / 54 days / 16384 GPUs, 'quoted from memory; confirm against the paper'. The 'one tenth' is a judgement. The brief asks where the threshold came from. The text says so, but no artifact or source excerpt is committed, so 1.24 and the 67 percent margin are unsupported. The '67 percent' figure is computed nowhere in code or tests."
+   },
+   {
+    "kind": "unsupported_claim",
+    "severity": "warn",
+    "file": "EXPERIMENTS.md",
+    "line": 28,
+    "detail": "The row is set to 'done' and carries 0.830 and 1.24 while the rates are unsourced and the debounce is not in govsim. It states the caveats, but 'done' overstates a result whose acceptance clause on sources is open. 'open (sources outstanding)' would match the evidence."
+   },
+   {
+    "kind": "test_integrity",
+    "severity": "warn",
+    "file": "tests/test_false_halt_model.py",
+    "line": 77,
+    "detail": "test_doc_carries_the_numbers checks `f\"{x:.3f}\" in text` over the whole document. 0.032 and 0.063 each belong to two table rows, '0.001' matches inside '0.00134', and any short token can match elsewhere. A wrong number in one row would pass if another row shows the same value. The table figures 5.6e-13 and 2e-21 and the 67 percent are not checked at all. Parse the table rows, or assert row label next to value."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "govsim/faults.py",
+    "line": 246,
+    "detail": "inject_readback_stuck_open wires the governor around with `rack.loop.jumper(...)` and sets `loop_switch_open = True`. That is the real jumpered-switch hazard (what test_h11 already covers), not a faulty readback on a healthy closed switch, which is the false-halt mode the table row ('Switch readback stuck open', 50 FIT) models. The test at tests/test_false_halt_model.py:145 therefore confirms an existing true-positive path, not the effect of the modelled fault."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "govsim/faults.py",
+    "line": 219,
+    "detail": "inject_firmware_hang calls `governor.restart()`, whose docstring is 'Power loss and return' (govsim/governor.py:154). It is a reboot, not a watchdog reset triggered by a hang, and no watchdog is modelled. The reset reaches HALTED_INITIAL only because boot does. The comment 'the watchdog reset' and the summary claim of 'a real watchdog restart' overstate this. It is also the same effect as the gov_power test."
+   },
+   {
+    "kind": "correctness",
+    "severity": "warn",
+    "file": "govsim/faults.py",
+    "line": 104,
+    "detail": "The 0.084 sense-glitch row and the 12.5 single-sample figure depend on a two-sample debounce that govsim does not implement (the Not-modelled note at docs/07:129 and the comparator docstring at faults.py:209 admit this). The brief asked fault injection to confirm each mode's effect under the loop's debounce; the debounce itself, the largest-sensitivity assumption (exponential 20 us glitches), is checked only against a Monte Carlo (survive_debounce_mc) written with the same assumption, so the test cannot fail on the assumption. It is disclosed, but it is not shown."
+   },
+   {
+    "kind": "test_integrity",
+    "severity": "warn",
+    "file": "tests/test_false_halt_model.py",
+    "line": 104,
+    "detail": "The power-loss and wire-cut tests set the state that opens the loop (`loop_switch_open = True`, `loop.cut()`) and then assert the loop is open. They check that govsim's loop is a series circuit, not the model's rate or scope; the `scope == 'rack'` assertion compares the model's own constant to a string. The summary says so for these two, but the test names ('halts_the_rack') promise more."
+   }
+  ],
+  "claims": [
+   {
+    "claim": "A false-halt model gives 0.830 false halts per rack-year (0.767 rack-wide, 0.063 one slot).",
+    "where": "document",
+    "evidence": "govsim/faults.py rack_year() and tests test_rack_year_is_the_sum_of_its_rows_by_hand and test_doc_carries_the_numbers compute it, given the assumed rates.",
+    "supported": true
+   },
+   {
+    "claim": "The failure rates carry sources (IEC 61508-6, IEC 62380, SN 29500, MIL-HDBK-217F, datasheets).",
+    "where": "document",
+    "evidence": "docs/07:106 says the rates were not read from these tables; no committed source for any rate. Tables not found in the repo.",
+    "supported": false
+   },
+   {
+    "claim": "The switch-off threshold is 1.24 false halts per rack-year (a tenth of the Llama 3 interruption rate of 12.4 per 72-GPU rack-year).",
+    "where": "document",
+    "evidence": "Arithmetic is tested (test_threshold_and_verdict); inputs 419/54/16384 are 'quoted from memory' and the tenth is a judgement, with no artifact.",
+    "supported": false
+   },
+   {
+    "claim": "Without the two-sample debounce the same glitches would give 12.5 rack halts per rack-year.",
+    "where": "document",
+    "evidence": "Computed by rack_year(samples=1) and checked in tests; relies on assumed 1e-4/h and 20 us exponential glitches, and the debounce is not in govsim.",
+    "supported": false
+   },
+   {
+    "claim": "The model's claim fails if N3 measures sense transients above 5.9e-4 per hour or firmware watchdog trips above about 1157 FIT.",
+    "where": "document",
+    "evidence": "sense_glitch_break_even_rate and fw_hang_break_even_fit, with test_break_even_points_cross_the_threshold_exactly.",
+    "supported": true
+   },
+   {
+    "claim": "Each failure mode injected into govsim has the effect the model assumes (rack vs slot scope).",
+    "where": "code",
+    "evidence": "Injector tests pass for power, wire, comparator, fabric port, authority outage; readback-stuck injects a real jumper and firmware hang injects a power-loss restart, so those two do not show the named mode.",
+    "supported": false
+   },
+   {
+    "claim": "The firmware hang is injected as a real watchdog restart.",
+    "where": "summary",
+    "evidence": "faults.py:219 calls governor.restart(), which models power loss and return; no watchdog exists in the diff.",
+    "supported": false
+   },
+   {
+    "claim": "Authority outage is a rack event (0.088 per rack-year).",
+    "where": "code",
+    "evidence": "faults.py:201 and test_inject_authority_outage... (all slots halt, loop closed); rate 1e-5/h is assumed.",
+    "supported": true
+   },
+   {
+    "claim": "Requiring the odd beacon report in two consecutive beacons would remove the transient row but not the stuck row.",
+    "where": "document",
+    "evidence": "beacon_transient_rate_per_h(confirm) tested for 2 vs 1; the stuck-row part follows from the model structure; no govsim test of confirm=2.",
+    "supported": true
+   },
+   {
+    "claim": "The 5.6e-13 per window, 2e-21 and 0.001 values in the table.",
+    "where": "document",
+    "evidence": "Computable from beacon_transient_rate_per_h and heartbeat_loss_rate_per_h (0.001 matches only by substring); 5.6e-13 and 2e-21 are not compared to the doc text by any test.",
+    "supported": false
+   },
+   {
+    "claim": "The existing test test_jumpered_governor_is_caught_by_the_beacon_within_two_heartbeats gives the two-heartbeat latency.",
+    "where": "document",
+    "evidence": "Test exists at tests/test_h11_halt_loop.py:116 in the checkout.",
+    "supported": true
+   },
+   {
+    "claim": "EXPERIMENTS.md N2 is done.",
+    "where": "document",
+    "evidence": "Acceptance clause 'with sources' is not met and the debounce is not in govsim; the row's own caveats say so.",
+    "supported": false
+   }
+  ]
+ },
+ "verify": {
+  "id": "N2",
+  "branch": "exp/n2",
+  "base": "main",
+  "head": "dcb6f68",
+  "commits": 3,
+  "agent_trailers": 3,
+  "files": 4,
+  "added": 460,
+  "removed": 1,
+  "ok": true,
+  "findings": [
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:102: 5.1"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:110: 0.126"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:111: 0.316"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:112: 0.025"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:113: 0.032"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:115: 0.032"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:116: 0.00134"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:116: 0.084"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:119: 0.088"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:123: 0.084"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:123: 12.5"
+   },
+   {
+    "severity": "warn",
+    "finding": "a number added to a document appears in no added code, test, data or result of this branch",
+    "where": "docs/07-verification-plan.md:123: 0.316"
+   }
+  ],
+  "runs": {
+   "suite": {
+    "command": "python3 -m pytest -x tests",
+    "exit": 0,
+    "tail": "........................................................................ [ 29%]\n........................................................................ [ 58%]\n........................................................................ [ 87%]\n...............................                                          [100%]\n247 passed in 3.33s\n"
+   },
+   "acceptance": {
+    "command": "python3 -m pytest -q tests/test_false_halt_model.py",
+    "exit": 0,
+    "tail": "....................                                                     [100%]\n"
+   }
+  }
+ }
+}

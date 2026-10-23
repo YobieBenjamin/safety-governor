@@ -1,0 +1,613 @@
+diff --git a/EXPERIMENTS.md b/EXPERIMENTS.md
+index 660d8e3..94e3f5a 100644
+--- a/EXPERIMENTS.md
++++ b/EXPERIMENTS.md
+@@ -27,3 +27,15 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
+ | N1 | N | Whole-deployment overhead simulation | `govsim/deploy.py` | open | the per-chip model gives 34 percent engine utilisation batched and under 0.1 percent firmware share |
+ | N2 | N | False-halt rate model | `docs/07` FMEA, fault injection | open | |
+ | N3 | N | FPGA beside a real GPU | pre-hardware plan, phase 4 | later | needs a lab with a rack |
++
++## L7: formal proofs on the Verilog (wave 3, issue #7)
++
++Status: written, not yet run. `rtl/formal/` holds SymbiYosys properties for `ticket_store`, `epoch_reg`, `halt_seq`, `cap_table`, `monotonic_counter` and `mailbox` (mapped to P-numbers in `rtl/formal/README.md`), three expected-failure tasks that document RTL gaps, and a gate-level equivalence job.
++
++The one `make formal` run in the authoring environment failed before any solver started:
++
++    python3 rtl/formal/run_formal.py
++    FAIL  tool 'sby' not found on PATH (the program's container has it)
++    make: *** [formal] Error 1
++
++That environment has z3 only; `sby`, `yosys` and `yosys-smtbmc` are absent, and the bundled Amaranth Yosys has no Verilog frontend. So no assertion, induction step or equivalence script has been executed, and the first run in the container may need fixes to property syntax or induction strengthening. Candidate findings from reading the RTL, to be confirmed by the expected-failure tasks: the counter wraps at 2^64-1, the mailbox reads the frame live in VERIFY (no latch), and `running` is not re-checked at dispatch. The netlist check compares against a Yosys-synthesized gate netlist, not a LibreLane netlist (none is checked in).
+diff --git a/Makefile b/Makefile
+index df52f1a..670af84 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,4 +1,4 @@
+-.PHONY: figures docx run test rtl rtl-test sweep demo bench gds loop clean
++.PHONY: formal figures docx run test rtl rtl-test sweep demo bench gds loop clean
+ run:      ; ./run.sh
+ test:     ; python3 -m pytest -q tests
+ rtl-test: ; python3 -m pytest -q rtl/tests
+@@ -13,3 +13,5 @@ loop:     ; python3 hw/loop/run_loop.py
+ proof:    ; python3 proofs/core_invariants.py && python3 proofs/commit_point.py && python3 proofs/no_global_kill_switch.py
+ clean:    ; rm -rf .venv .pytest_cache govsim/__pycache__ tests/__pycache__ rtl/__pycache__ rtl/governor_rtl/__pycache__ rtl/tests/__pycache__ hw/librelane/governor_core/runs
+ archive:  ; python3 tools/archive/build_archive.py --out build/archive --repo . --repo ../hardware-and-silicon && python3 tools/archive/build_project_docs.py --out build/project --governor . --stack ../hardware-and-silicon
++formal: ; python3 rtl/formal/run_formal.py
++formal-%: ; python3 rtl/formal/run_formal.py $*
+diff --git a/rtl/formal/README.md b/rtl/formal/README.md
+new file mode 100644
+index 0000000..8671c18
+--- /dev/null
++++ b/rtl/formal/README.md
+@@ -0,0 +1,69 @@
++# Formal proofs on the generated Verilog (L7)
++
++**Status: written, not yet run in the authoring environment.** `rtl/formal/` holds the property
++files and the job runner; the solver has not run here. `make formal` runs `run_formal.py`: for each
++hard-core block it injects `<block>.svh` in front of the final `endmodule` of `rtl/gen/<block>.v`
++(the checked-in Verilog is never edited), then runs SymbiYosys (`mode prove`, engine `smtbmc z3`): a
++bounded check, then k-induction, which is an unbounded proof when the induction closes.
++`make formal-<block>` runs one block; `make formal-equiv` runs only the netlist equivalence.
++
++`sby`, `yosys` and `z3` are in the program's container; a plain checkout has only `z3`. Where a job's
++tool is absent, `run_formal.py` prints `SKIP` for that job and still exits 0, with a banner saying
++no property was checked. **A `SKIP` is not a `PROVED`**: a green `make formal` in a tool-less checkout
++means "nothing was checked," and the properties are checked for real when `make formal` is run in the
++container. Outcomes print in four classes so a green run is never mistaken for a proof that did not
++run:
++
++    PROVED  <job>     a property held (a `prove` task)
++    GAP OK  <job>     a task marked `expect fail` found its counterexample: the RTL gap it documents
++                     is real. This is a finding, not a PASS.
++    SKIP    <job>     the tool the job needs is absent; it was not run
++    FAIL    <job>     a property that should hold was broken, or an expected counterexample was not found
++
++The first run in the container may need fixes to property syntax or induction strengthening; the
++outcomes below say what each job *asserts*, not what a run reported.
++
++Reset is assumed low (`assume(!rst)`): the properties are about operation, and a power loss is the
++high-water mark's job (`m_P8_hwm_floor`).
++
++## Property map
++
++P-numbers are those of `proofs/core_invariants.py` (the model-level theorems). A label marked
++**analogue** states the same *spirit* on the RTL but is not the model's statement verbatim -- the
++model's P6/P7/P13 are about "nothing executes while halted or heartbeat-lost," whereas the RTL blocks
++below are about the rung and the levers that *enforce* it. "CP" is the commit-point protocol
++(`proofs/commit_point.py`): of it the RTL holds only the hold (the rung does not leave HALT/SAFE
++without `clear`) and the binding of a clearance to its command (the mailbox's check order).
++
++| Block | Assertion prefix | P / CP | What it asserts |
++|---|---|---|---|
++| `ticket_store` | `t_P3_*` | P3 | a burned id stays stored and unchanged; no duplicate ids; a burned id is always `seen` and never burns twice -- the id is a solver-chosen constant, so the claim is for every id; a full store refuses |
++| `epoch_reg` | `e_P9_*`, `e_P10_*` | P9, P10 (analogue) | the register changes only on `commit` with `quorum_ok`, then loads `new_epoch`; the host port has no effect. P10 here is an analogue: the block sees only `quorum_ok`, not the signature count |
++| `monotonic_counter` | `m_P8_*` | P8 | the value never decreases (the one exception is the 2^64 wrap, below); `load_hwm` raises it to at least the fuse mark; `dec_req` changes nothing |
++| `halt_seq` | `h_P5_*` | P5 | the rung never descends without `clear`; HALT and SAFE absorb; boot is the safe bottom with every lever held |
++| | `h_P6_*` | P6 (analogue) | RUN is entered only when armed (no cause, `hb_ok`, `loop_sense`); the loop switch closes only when armed, opens on tamper, loop loss and command halt, and `clear` does not close it |
++| | `h_P7_*`, `h_P13_*` | P7, P13 (analogue) | brake, reset, power and ports follow the rung exactly; every rung but RUN applies the brake and closes the ports -- the levers that keep nothing passing while halted |
++| `cap_table` | `c_P1_*` | P1, P4 | `allow` only against an entry that matches (point, peer, dir), is unexpired, has the current epoch tag and enough budget; an entry appears only by an insert with `mac_ok`; the budget never rises on lookup (no underflow) |
++| `mailbox` | `b_P3_*`, `b_P4_*`, `b_P12_*`, `b_P13_*`, `b_CP_*` | P3, P4, P12, P13, CP | dispatch only on a verified signature over the same command (`b_P12`); sequence above the slot's last (`b_P3`), epoch matched or exempt (`b_P4`); a `needs_run` command not dispatched while the rung is not RUN (`b_P13`, analogue); the checks run in order and the first failure is the status (`b_CP`); a wrong-command or bad-signature frame consumes nothing; the last-seq registers only rise. `b_P13` and the mailbox `b_P3`/`b_P12` default task lean on the front-end contract below |
++
++## Tasks that are expected to fail (findings about the RTL)
++
++Each is a `bmc` task with `expect fail`: the run prints `GAP OK` when the counterexample is found
++(that is the task succeeding -- the documented gap is real), and is not a `PASS`. They say which
++assumption the proofs lean on, and are the disproof of the three candidate RTL gaps.
++
++| Task | Finding |
++|---|---|
++| `monotonic_counter:wrap` | `inc` at 2^64-1 wraps to 0. Unreachable in practice (2^64 microseconds), but the block does not saturate. The `prove` task carries that one step as an escape clause, so P8 asserts as "never decreases except the wrap"; the `wrap` task asserts the strict form and is the counterexample (reached by loading a free `hwm` of 2^64-1, then incrementing -- two steps). A saturating increment would make P8 unconditional. |
++| `mailbox:nolatch` | The mailbox does not latch `frame_seq`, `key_slot` or `cmd` at the doorbell; it reads them live in VERIFY. If they change between doorbell and `sig_done`, a command dispatches with a sequence that is not above the last one (and `last_seq` can move backwards). The default `prove` task assumes the front end holds the frame while the mailbox is in VERIFY; `nolatch` drops that assumption and is the counterexample. Fix: latch the frame at the doorbell. |
++| `mailbox:midhalt` | `running` is checked only at the doorbell. If the rung leaves RUN during VERIFY, a `needs_run` command still dispatches. `midhalt` is the counterexample (a P13 analogue). Fix: re-check `running` at dispatch. |
++
++## Netlist equivalence
++
++`equiv:<block>` synthesizes `rtl/gen/<block>.v` with Yosys (`synth`, `abc -g AND,NAND,OR,NOR,XOR,XNOR,ANDNOT,ORNOT,MUX`) and proves it equivalent to the generated Verilog with `equiv_make`, `equiv_simple` and `equiv_induct` (sequential, matched registers, induction).
++
++This is an in-flow **Yosys** gate netlist, **not** the LibreLane netlist the brief names: `make gds`
++needs Docker and the PDK and no netlist from it is checked in, so the real comparison cannot run here.
++The Yosys check does prove the `abc`-mapped netlist equivalent to the generated Verilog, which is a
++meaningful gate-level equivalence for these blocks. Comparing the real `governor_core` netlist would
++need its standard-cell models; that job is not written.
+diff --git a/rtl/formal/cap_table.svh b/rtl/formal/cap_table.svh
+new file mode 100644
+index 0000000..ade0cf1
+--- /dev/null
++++ b/rtl/formal/cap_table.svh
+@@ -0,0 +1,41 @@
++// Formal properties for cap_table.
++// P1: nothing passes unless a rule allowed it: a lookup is allowed only against an entry with matching
++// (point, peer, dir), enough budget, not expired, and the current epoch tag. P4: the entry carries
++// the epoch (edition) tag, a stale tag is refused. The budget never underflows, and an entry is
++// inserted only with mac_ok.
++reg f_init = 1'b1;
++always @(posedge clk) f_init <= 1'b0;
++always @* assume (!rst);
++
++wire [7:0]   f_v  = {valid7, valid6, valid5, valid4, valid3, valid2, valid1, valid0};
++wire [191:0] f_bud = {budget7, budget6, budget5, budget4, budget3, budget2, budget1, budget0};
++wire [255:0] f_exp = {expiry7, expiry6, expiry5, expiry4, expiry3, expiry2, expiry1, expiry0};
++wire [127:0] f_tag = {etag7, etag6, etag5, etag4, etag3, etag2, etag1, etag0};
++wire [23:0]  f_pt  = {point7, point6, point5, point4, point3, point2, point1, point0};
++wire [127:0] f_peer = {peer7, peer6, peer5, peer4, peer3, peer2, peer1, peer0};
++wire [15:0]  f_dir = {dir7, dir6, dir5, dir4, dir3, dir2, dir1, dir0};
++
++reg [7:0]   p_v;
++reg [191:0] p_bud;
++reg p_ins, p_mac_ok, p_clear_all;
++always @(posedge clk) begin p_v <= f_v; p_bud <= f_bud; p_ins <= ins; p_mac_ok <= mac_ok; p_clear_all <= clear_all; end
++
++wire [7:0] f_ok;
++genvar gi;
++generate for (gi = 0; gi < 8; gi = gi + 1) begin : g_entry
++  assign f_ok[gi] = f_v[gi] && f_pt[gi*3 +: 3] == lk_point && f_peer[gi*16 +: 16] == lk_peer
++                    && (f_dir[gi*2 +: 2] == lk_dir || f_dir[gi*2 +: 2] == 2'd2)
++                    && f_exp[gi*32 +: 32] > now && f_tag[gi*16 +: 16] == epoch_tag
++                    && f_bud[gi*24 +: 24] >= lk_bytes;
++  always @(posedge clk) if (!f_init) begin
++    c_P1_budget_never_rises: assert (!p_v[gi] || f_bud[gi*24 +: 24] <= p_bud[gi*24 +: 24]);
++    c_P1_entry_appears_only_by_insert: assert (!(!p_v[gi] && f_v[gi]) || (p_ins && p_mac_ok && !p_clear_all));
++  end
++end endgenerate
++
++always @* begin
++  c_P1_allow_needs_a_matching_entry: assert (!allow || (lk && (|f_ok)));
++  c_P1_allow_reason_ok: assert (!allow || reason == 3'd0);
++  c_P1_insert_needs_mac: assert (!ins_ok || (ins && mac_ok));
++  c_P1_deny_has_a_reason: assert (allow || !lk || reason != 3'd0);
++end
+diff --git a/rtl/formal/epoch_reg.svh b/rtl/formal/epoch_reg.svh
+new file mode 100644
+index 0000000..4b01058
+--- /dev/null
++++ b/rtl/formal/epoch_reg.svh
+@@ -0,0 +1,25 @@
++// Formal properties for epoch_reg, injected before the final endmodule of rtl/gen/epoch_reg.v.
++// Numbers are the P-numbers of proofs/core_invariants.py (P9: an edition change needs a quorum;
++// P10, analogue: the block sees only the verifier's quorum_ok, not the signature count, so it asserts
++// the gate the count would open -- a change needs commit with quorum_ok).
++reg f_init = 1'b1;
++always @(posedge clk) f_init <= 1'b0;
++always @* assume (!rst);
++
++reg [255:0] p_epoch, p_new_epoch;
++reg p_commit, p_quorum_ok, p_host_wr;
++always @(posedge clk) begin
++  p_epoch <= epoch; p_new_epoch <= new_epoch;
++  p_commit <= commit; p_quorum_ok <= quorum_ok; p_host_wr <= host_wr;
++end
++
++always @(posedge clk) if (!f_init) begin
++  e_P9_change_needs_commit_and_quorum: assert (epoch == p_epoch || (p_commit && p_quorum_ok));
++  e_P9_commit_with_quorum_loads:       assert (!(p_commit && p_quorum_ok) || epoch == p_new_epoch);
++  e_P10_commit_without_quorum_no_op:   assert (!(p_commit && !p_quorum_ok) || epoch == p_epoch);
++  e_P9_host_write_has_no_effect:       assert (!(p_host_wr && !(p_commit && p_quorum_ok)) || epoch == p_epoch);
++end
++always @* begin
++  e_tag_is_low_16_bits: assert (epoch_tag == epoch[15:0]);
++  e_host_write_is_flagged: assert (host_refused == host_wr);
++end
+diff --git a/rtl/formal/halt_seq.svh b/rtl/formal/halt_seq.svh
+new file mode 100644
+index 0000000..79d968f
+--- /dev/null
++++ b/rtl/formal/halt_seq.svh
+@@ -0,0 +1,54 @@
++// Formal properties for halt_seq (the rung and the levers).
++// P5: halt is absorbing without an authorized clear, and boot is the safe bottom. P6 (analogue): the
++// model's "fail closed" is here "the rung reaches RUN only when armed." P7/P13 (analogue): the model's
++// "nothing executes while halted" is here enforced by the levers being applied in every rung but RUN,
++// so nothing passes while halted. The commit-point hold is the same register: the rung does not leave
++// HALT/SAFE except through `clear`, which the mailbox only raises on a signed CLEAR.
++localparam HI = 0, RUN = 1, THR = 2, HLT = 3, SAF = 4;
++localparam C_NONE = 0, C_LOOP = 1, C_LOCAL = 2, C_TAMPER = 3, C_COMMAND = 4;
++
++reg f_init = 1'b1;
++always @(posedge clk) f_init <= 1'b0;
++always @* assume (!rst);
++
++reg [2:0] p_state, p_cause;
++reg p_sw, p_clear, p_tamper, p_loop_lost, p_cmd_halt, p_hb_ok, p_loop_sense;
++always @(posedge clk) begin
++  p_state <= state; p_cause <= cause; p_sw <= switch_open;
++  p_clear <= clear; p_tamper <= tamper; p_loop_lost <= loop_lost; p_cmd_halt <= cmd_halt;
++  p_hb_ok <= hb_ok; p_loop_sense <= loop_sense;
++end
++
++wire p_in_run = (p_state == RUN) || (p_state == THR);
++wire p_cleared = p_clear && (p_state != HI);
++wire p_hard_cause = p_tamper || (p_loop_lost && p_in_run) || (p_cmd_halt && p_state != SAF);
++
++// invariants of the register state
++always @* begin
++  h_inv_state_in_range: assert (state <= SAF);
++  h_inv_cause_in_range: assert (cause <= C_COMMAND);
++  h_P6_inv_open_cause_keeps_switch_open: assert (!(cause == C_LOOP || cause == C_TAMPER || cause == C_COMMAND) || switch_open);
++  h_P6_inv_run_means_armed: assert (state != RUN || (cause == C_NONE && !switch_open));
++  h_P5_boot_safe_bottom: assert (!f_init || (state == HI && switch_open && cause == C_NONE && pwrbrk && perst && !pwr_en && ports_closed));
++  // levers follow the rung exactly, and every rung but RUN applies the brake and closes the ports
++  h_P7_pwrbrk:  assert (pwrbrk == (state != RUN));
++  h_P7_perst:   assert (perst == (state == HI || state == HLT || state == SAF));
++  h_P7_pwr_en:  assert (pwr_en == (state != HI && state != SAF));
++  h_P13_ports:  assert (ports_closed == (state != RUN));
++  h_P13_halted_means_levers: assert (!(state == HLT || state == SAF) || (pwrbrk && perst && ports_closed));
++end
++
++// transitions
++always @(posedge clk) if (!f_init) begin
++  h_P5_no_descent_without_clear: assert (state >= p_state || (p_cleared && state == HI && cause == C_NONE));
++  h_P5_halt_absorbing:  assert (!(p_state == HLT && !p_cleared) || (state == HLT || state == SAF));
++  h_P5_safe_absorbing:  assert (!(p_state == SAF && !p_cleared) || state == SAF);
++  h_P5_throttle_never_relaxes: assert (!(p_state == THR && !p_cleared) || state >= THR);
++  h_P6_enter_run_only_armed: assert (!(state == RUN && p_state != RUN) ||
++                                     (p_state == HI && p_cause == C_NONE && p_hb_ok && p_loop_sense && !p_tamper && !p_cmd_halt));
++  h_P6_hard_cause_opens_loop_and_halts: assert (!(p_hard_cause && !p_cleared) || (state >= HLT && switch_open));
++  h_P6_tamper_is_safe: assert (!(p_tamper && !p_cleared) || (state == SAF && cause == C_TAMPER && switch_open));
++  h_P6_switch_closes_only_armed: assert (!(p_sw && !switch_open) ||
++                                         (p_state == HI && p_cause == C_NONE && p_hb_ok && !p_tamper && !p_cmd_halt));
++  h_P6_clear_does_not_close_switch: assert (!p_cleared || (switch_open == p_sw && state == HI && cause == C_NONE));
++end
+diff --git a/rtl/formal/mailbox.svh b/rtl/formal/mailbox.svh
+new file mode 100644
+index 0000000..0dd6bba
+--- /dev/null
++++ b/rtl/formal/mailbox.svh
+@@ -0,0 +1,77 @@
++// Formal properties for mailbox.
++// P3: no replay, the sequence must be above the slot's last accepted one, and last_seq only rises.
++// P4: the frame's epoch must match the epoch register or the command must be epoch-exempt. P12: a
++// command is dispatched only on a verified signature over that very command (a signature over a
++// heartbeat never dispatches CLEAR), and a failed check consumes nothing. P13 (analogue): a needs_run
++// command must not dispatch while the rung is not RUN. Commit point (CP): the checks run in order and
++// the first failure is what status reports.
++//
++// Interface assumption (default task): while the mailbox is in VERIFY, the frame fields it checked at the
++// doorbell are held (the RTL does not latch them). Tasks that drop an assumption are expected to
++// fail and document the gap:
++//   -D NOLATCH  frame_seq/key_slot/cmd may change during VERIFY: a dispatch with a stale sequence
++//   -D MIDHALT  `running` may fall during VERIFY: a needs_run command dispatches while not running
++reg f_init = 1'b1;
++always @(posedge clk) f_init <= 1'b0;
++always @* assume (!rst);
++
++wire [255:0] lseq = {seq7, seq6, seq5, seq4, seq3, seq2, seq1, seq0};
++wire [31:0] cur_last = lseq[key_slot*32 +: 32];
++wire seq_ok_now = frame_seq > cur_last;
++
++// what the frame looked like in the last cycle outside VERIFY, that is, at the doorbell
++reg [31:0] c_seq; reg [2:0] c_slot; reg [7:0] c_cmd; reg c_epm, c_epe;
++always @(posedge clk) if (!verify_req) begin
++  c_seq <= frame_seq; c_slot <= key_slot; c_cmd <= cmd; c_epm <= epoch_match; c_epe <= epoch_exempt;
++end
++`ifndef NOLATCH
++always @* if (verify_req) assume (frame_seq == c_seq && key_slot == c_slot && cmd == c_cmd
++                                  && epoch_match == c_epm && epoch_exempt == c_epe);
++`endif
++
++reg p_fsm, p_doorbell, p_sig_done, p_sig_ok, p_dispatch, p_seq_ok, p_epm, p_epe, p_nr, p_run;
++reg [31:0] p_seq; reg [2:0] p_slot; reg [7:0] p_cmd, p_signed; reg [255:0] p_lseq;
++always @(posedge clk) begin
++  p_fsm <= fsm_state; p_doorbell <= doorbell; p_sig_done <= sig_done; p_sig_ok <= sig_ok; p_dispatch <= dispatch;
++  p_seq_ok <= seq_ok_now; p_epm <= epoch_match; p_epe <= epoch_exempt; p_nr <= needs_run; p_run <= running;
++  p_seq <= frame_seq; p_slot <= key_slot; p_cmd <= cmd; p_signed <= signed_cmd; p_lseq <= lseq;
++end
++
++`ifdef NOLATCH
++always @* b_P3_dispatch_sequence_above_last: assert (!dispatch || seq_ok_now);
++`elsif MIDHALT
++// P13 (analogue): a needs_run command must not dispatch while the rung is not RUN. The RTL checks
++// running only at the doorbell, so a rung that leaves RUN during VERIFY is the counterexample.
++always @* b_P13_needs_run_rechecked_at_dispatch: assert (!dispatch || !needs_run || running);
++`else
++// P3 strengthening that makes the induction close: a frame in VERIFY passed the doorbell checks,
++// so its captured sequence is above the slot's last and its epoch matched or was exempt.
++always @* b_P3_inv_verify_passed_doorbell: assert (!fsm_state || (c_seq > lseq[c_slot*32 +: 32] && (c_epm || c_epe)));
++
++always @* begin
++  b_P12_dispatch_only_on_signed_same_command: assert (!dispatch || (verify_req && sig_done && sig_ok && signed_cmd == cmd));
++  b_P3_dispatch_sequence_above_last:          assert (!dispatch || seq_ok_now);
++  b_P4_dispatch_epoch_matches_or_exempt:      assert (!dispatch || epoch_match || epoch_exempt);
++  b_CP_no_dispatch_outside_verify:            assert (!dispatch || fsm_state);
++end
++
++genvar gi;
++generate for (gi = 0; gi < 8; gi = gi + 1) begin : g_slot
++  always @(posedge clk) if (!f_init)
++    b_P3_last_seq_only_rises: assert (lseq[gi*32 +: 32] >= p_lseq[gi*32 +: 32]);
++end endgenerate
++
++always @(posedge clk) if (!f_init) begin
++  b_P3_last_seq_changes_only_on_dispatch: assert (lseq == p_lseq || p_dispatch);
++  b_P3_dispatch_consumes_and_reports: assert (!p_dispatch || (status == 3'd2 && cmd_out == p_signed && cmd_out == p_cmd
++                                                          && lseq[p_slot*32 +: 32] == p_seq));
++  // the checks run in order and the first failure is what status reports (the commit-point protocol)
++  b_CP_order_sequence_first: assert (!(!p_fsm && p_doorbell && !p_seq_ok) || (status == 3'd4 && !fsm_state));
++  b_CP_order_epoch_second:   assert (!(!p_fsm && p_doorbell && p_seq_ok && !(p_epm || p_epe)) || (status == 3'd5 && !fsm_state));
++  b_CP_order_running_third:  assert (!(!p_fsm && p_doorbell && p_seq_ok && (p_epm || p_epe) && p_nr && !p_run) || (status == 3'd6 && !fsm_state));
++  b_CP_order_then_verify:    assert (!(!p_fsm && p_doorbell && p_seq_ok && (p_epm || p_epe) && !(p_nr && !p_run)) || (status == 3'd1 && fsm_state));
++  b_P12_wrong_command_consumes_nothing: assert (!(p_fsm && p_sig_done && p_sig_ok && p_signed != p_cmd) ||
++                                            (status == 3'd7 && lseq == p_lseq && !fsm_state));
++  b_P12_bad_signature_consumes_nothing: assert (!(p_fsm && p_sig_done && !p_sig_ok) || (status == 3'd3 && lseq == p_lseq && !fsm_state));
++end
++`endif
+diff --git a/rtl/formal/monotonic_counter.svh b/rtl/formal/monotonic_counter.svh
+new file mode 100644
+index 0000000..8c360ac
+--- /dev/null
++++ b/rtl/formal/monotonic_counter.svh
+@@ -0,0 +1,33 @@
++// Formal properties for monotonic_counter. P8: the edition (here the time and anti-rollback
++// reference) only moves forward. Reset is assumed low: a power loss is the hwm's job (m_P8_hwm_floor).
++//
++// The register's only decreasing step is the wrap of an increment at 2^64-1 (2^64 microseconds,
++// about 584,000 years). The prove task carries that one step as an escape clause, so P8 holds
++// modulo it; the -D WRAP task asserts the strict form with no escape clause and is written to find
++// that step.
++//
++// The wrap is reached without fighting the register's init value (0): a free load_hwm strobe loads
++// the free input hwm -- the solver sets hwm = 2^64-1 -- and the following inc wraps it to 0. The
++// strict property is broken on that second step, at a depth of two. (An initial assume on value would
++// contradict the $initstate and leave no reachable trace, so the task would be vacuous; the load
++// path is the reachable way to 2^64-1.)
++reg f_init = 1'b1;
++always @(posedge clk) f_init <= 1'b0;
++always @* assume (!rst);
++
++reg [63:0] p_value, p_hwm;
++reg p_load, p_inc;
++always @(posedge clk) begin p_value <= value; p_hwm <= hwm; p_load <= load_hwm; p_inc <= inc; end
++
++always @(posedge clk) if (!f_init) begin
++`ifdef WRAP
++  m_P8_never_decreases_strict: assert (value >= p_value);
++`else
++  // the one exception is the wrap of an increment at 2^64-1 (2^64 microseconds, about 584,000 years)
++  m_P8_never_decreases: assert (value >= p_value || (p_inc && !p_load && p_value == 64'hFFFFFFFFFFFFFFFF));
++  m_P8_hwm_floor:       assert (!p_load || (value >= p_hwm && value >= p_value));
++  m_P8_inc_by_one:      assert (!(p_inc && !p_load) || value == p_value + 64'd1);
++  m_P8_dec_req_no_effect: assert (p_load || p_inc || value == p_value);
++`endif
++end
++always @* m_P8_dec_refused_flag: assert (refused == dec_req);
+diff --git a/rtl/formal/run_formal.py b/rtl/formal/run_formal.py
+new file mode 100644
+index 0000000..7b23f2d
+--- /dev/null
++++ b/rtl/formal/run_formal.py
+@@ -0,0 +1,193 @@
++#!/usr/bin/env python3
++"""Formal jobs on the generated Verilog (rtl/gen/*.v). Used by ``make formal``.
++
++    python3 rtl/formal/run_formal.py            # every block, then the netlist equivalence
++    python3 rtl/formal/run_formal.py mailbox    # one block
++    python3 rtl/formal/run_formal.py equiv      # only the netlist equivalence
++
++For each block the properties in ``rtl/formal/<block>.svh`` are injected in front of the last
++``endmodule`` of the generated file (so they can read the block's registers; ``rtl/gen`` is never
++edited), and SymbiYosys runs ``mode prove`` (bounded model check, then k-induction: an unbounded
++proof when the induction closes).
++
++Outcomes are printed in four classes so a green ``make formal`` is never mistaken for a proof that
++did not run, and an expected counterexample is never mistaken for a pass:
++
++    PROVED  <job>     a property held (the ``prove`` task, ``mode prove``)
++    GAP OK  <job>     a task marked ``expect fail`` found its counterexample: the RTL gap it
++                     documents is real, and the task did its job. This is not a PASS.
++    SKIP    <job>     the tool the job needs is not on PATH; it was not run. Skips do not fail
++                     the command, but a SKIP is not a PROVED -- it says nothing was checked.
++    FAIL    <job>     a property that should hold was broken, or an expected counterexample was
++                     not found (the documented gap was not reproduced).
++
++The program's container has ``sby``, ``yosys`` and ``z3``; where they are absent (as in a plain
++checkout) the jobs are skipped and the command still exits 0, with a banner saying so -- the
++properties are checked for real when the command is run in the container.
++"""
++from __future__ import annotations
++
++import os
++import shutil
++import subprocess
++import sys
++
++HERE = os.path.dirname(os.path.abspath(__file__))
++GEN = os.path.join(HERE, "..", "gen")
++BUILD = os.path.join(HERE, "build")
++
++# block -> tasks: name -> (mode, depth, defines, expected).
++# expected is "pass" for a property that must hold, "fail" for a task that documents an RTL gap and
++# is written to produce the counterexample (SymbiYosys ``expect fail``).
++BLOCKS = {
++    "ticket_store": {"prove": ("prove", 6, [], "pass")},
++    "epoch_reg": {"prove": ("prove", 4, [], "pass")},
++    "halt_seq": {"prove": ("prove", 8, [], "pass")},
++    "cap_table": {"prove": ("prove", 5, [], "pass")},
++    "monotonic_counter": {"prove": ("prove", 4, [], "pass"), "wrap": ("bmc", 3, ["WRAP"], "fail")},
++    "mailbox": {"prove": ("prove", 8, [], "pass"),
++                "nolatch": ("bmc", 6, ["NOLATCH"], "fail"),
++                "midhalt": ("bmc", 6, ["MIDHALT"], "fail")},
++}
++# blocks whose gate-level netlist is compared with the generated Verilog
++EQUIV = ["ticket_store", "epoch_reg", "halt_seq", "cap_table", "monotonic_counter", "mailbox"]
++
++# tools each kind of job needs; smtbmc z3 runs under sby, the equivalence runs under yosys
++NEEDS_BLOCK = ("sby", "z3")
++NEEDS_EQUIV = ("yosys",)
++
++
++def inject(block: str, dest: str) -> None:
++    with open(os.path.join(GEN, block + ".v")) as f:
++        lines = f.read().splitlines()
++    with open(os.path.join(HERE, block + ".svh")) as f:
++        props = f.read()
++    last = max(i for i, line in enumerate(lines) if line.startswith("endmodule"))
++    out = lines[:last] + ["// ---- injected by rtl/formal/run_formal.py ----", props] + lines[last:]
++    with open(dest, "w") as f:
++        f.write("\n".join(out) + "\n")
++
++
++def _tail(p: subprocess.CompletedProcess) -> str:
++    return "\n".join((p.stdout + p.stderr).strip().splitlines()[-12:])
++
++
++def run_block(block: str, missing: list[str]) -> list[tuple[str, str, str]]:
++    tasks = BLOCKS[block]
++    if any(t in missing for t in NEEDS_BLOCK):
++        return [(f"{block}:{t}", "skip", f"{', '.join(t for t in NEEDS_BLOCK if t in missing)} not on PATH; not run")
++                for t in tasks]
++    d = os.path.join(BUILD, block)
++    os.makedirs(d, exist_ok=True)
++    inject(block, os.path.join(d, block + ".v"))
++    sby = ["[tasks]"] + list(tasks) + ["", "[options]"]
++    for t, (mode, depth, _defs, expected) in tasks.items():
++        sby += [f"{t}: mode {mode}", f"{t}: depth {depth}"]
++        if expected == "fail":
++            sby.append(f"{t}: expect fail")
++    sby += ["", "[engines]", "smtbmc z3", "", "[script]"]
++    for t, (_m, _d, defs, _e) in tasks.items():
++        flags = "".join(f" -D {x}" for x in defs)
++        sby.append(f"{t}: read_verilog -formal -sv{flags} {block}.v")
++    sby += [f"prep -top {block}", "", "[files]", f"{block}.v", ""]
++    with open(os.path.join(d, block + ".sby"), "w") as f:
++        f.write("\n".join(sby))
++    results = []
++    for t, (_m, _d, _defs, expected) in tasks.items():
++        p = subprocess.run(["sby", "-f", f"{block}.sby", t], cwd=d, capture_output=True, text=True, timeout=3000)
++        held = p.returncode == 0
++        if expected == "fail":
++            # the task is written to find the counterexample; a clean run means the gap is real
++            status = "gap" if held else "fail"
++            note = ("expected counterexample found: " + _tail(p).splitlines()[-1]
++                    if held else
++                    "expected counterexample not found -- the documented gap was not reproduced")
++        else:
++            status = "proved" if held else "fail"
++            note = "" if held else _tail(p)
++        results.append((f"{block}:{t}", status, note))
++    return results
++
++
++def run_equiv(block: str, missing: list[str]) -> tuple[str, str, str]:
++    """rtl/gen/<block>.v against the same design synthesized to a gate netlist (yosys synth + abc).
++
++    This is the in-flow Yosys gate netlist, not the LibreLane netlist: ``make gds`` needs Docker
++    and the PDK and no netlist from it is checked in. It proves the abc-mapped netlist is equivalent
++    to the generated Verilog; comparing the real ``governor_core`` netlist would need its cell models.
++    """
++    if any(t in missing for t in NEEDS_EQUIV):
++        return (f"equiv:{block}", "skip", f"{', '.join(missing)} not on PATH; not run")
++    d = os.path.join(BUILD, "equiv")
++    os.makedirs(d, exist_ok=True)
++    src = os.path.abspath(os.path.join(GEN, block + ".v"))
++    script = f"""
++read_verilog -sv {src}
++hierarchy -top {block}
++proc
++flatten
++dffunmap
++opt_clean
++design -stash gold
++read_verilog -sv {src}
++hierarchy -top {block}
++synth -flatten -top {block}
++dffunmap
++abc -g AND,NAND,OR,NOR,XOR,XNOR,ANDNOT,ORNOT,MUX
++opt_clean
++tee -o {block}.gates.stat stat
++write_verilog -noattr {block}.gates.v
++design -stash gate
++design -copy-from gold -as gold {block}
++design -copy-from gate -as gate {block}
++equiv_make gold gate equiv
++hierarchy -top equiv
++equiv_simple -seq 5
++equiv_induct -seq 5
++equiv_status -assert
++"""
++    path = os.path.join(d, block + ".ys")
++    with open(path, "w") as f:
++        f.write(script)
++    p = subprocess.run(["yosys", "-q", "-l", block + ".log", block + ".ys"], cwd=d, capture_output=True, text=True, timeout=3000)
++    held = p.returncode == 0
++    return (f"equiv:{block}",
++            "proved" if held else "fail",
++            "" if held else _tail(p))
++
++
++def main(argv: list[str]) -> int:
++    missing = [t for t in ("sby", "yosys", "z3") if shutil.which(t) is None]
++    if missing:
++        print(f"SKIP    tooling absent: {', '.join(missing)} not on PATH "
++              f"(the program's container has sby/yosys-smtbmc/z3). No property was checked; "
++              f"run `make formal` in the container to run them.")
++    want = argv or list(BLOCKS) + ["equiv"]
++    results: list[tuple[str, str, str]] = []
++    for w in want:
++        if w == "equiv":
++            results += [run_equiv(b, missing) for b in EQUIV]
++        elif w in BLOCKS:
++            results += run_block(w, missing)
++        else:
++            print(f"unknown job {w}")
++            return 2
++    labels = {"proved": "PROVED  ", "gap": "GAP OK  ", "skip": "SKIP    ", "fail": "FAIL    "}
++    for name, status, note in results:
++        line = labels[status] + name
++        if status in ("gap", "fail") and note:
++            line += "  " + " ".join(note.split())
++        print(line)
++    for name, status, note in results:
++        if status == "fail" and note:
++            print("      " + note.replace("\n", "\n      "))
++    fails = [r for r in results if r[1] == "fail"]
++    skipped = sum(1 for r in results if r[1] == "skip")
++    if skipped:
++        print(f"SKIP    {skipped} job(s) not run (tools absent). A SKIP is not a PROVED; "
++              f"run in the container to check the properties.")
++    return 0 if not fails else 1
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv[1:]))
+diff --git a/rtl/formal/ticket_store.svh b/rtl/formal/ticket_store.svh
+new file mode 100644
+index 0000000..1f8f96b
+--- /dev/null
++++ b/rtl/formal/ticket_store.svh
+@@ -0,0 +1,37 @@
++// Formal properties for ticket_store. P3: no replay, a burned id is never admitted again.
++reg f_init = 1'b1;
++always @(posedge clk) f_init <= 1'b0;
++always @* assume (!rst);
++
++wire [7:0]   f_v  = {v7, v6, v5, v4, v3, v2, v1, v0};
++wire [255:0] f_id = {id7, id6, id5, id4, id3, id2, id1, id0};
++reg  [7:0]   p_v;
++reg  [255:0] p_id;
++always @(posedge clk) begin p_v <= f_v; p_id <= f_id; end
++
++// a witness id chosen by the solver and held fixed: the claim is for every id
++(* anyconst *) wire [31:0] w_id;
++reg w_burned = 1'b0;
++always @(posedge clk) if (burned && id_in == w_id) w_burned <= 1'b1;
++
++wire [7:0] w_hit;
++genvar gi, gj;
++generate for (gi = 0; gi < 8; gi = gi + 1) begin : g_entry
++  assign w_hit[gi] = f_v[gi] && f_id[gi*32 +: 32] == w_id;
++  always @(posedge clk) if (!f_init) begin
++    t_P3_valid_never_clears: assert (!p_v[gi] || f_v[gi]);
++    t_P3_burned_id_never_changes: assert (!p_v[gi] || f_id[gi*32 +: 32] == p_id[gi*32 +: 32]);
++  end
++  for (gj = gi + 1; gj < 8; gj = gj + 1) begin : g_pair
++    always @* t_P3_no_duplicate_ids: assert (!(f_v[gi] && f_v[gj]) || f_id[gi*32 +: 32] != f_id[gj*32 +: 32]);
++  end
++end endgenerate
++
++always @* begin
++  t_P3_burn_only_of_unseen_id: assert (!burned || !seen);
++  t_P3_full_refuses_burn:      assert (!(burned && full));
++  t_P3_full_means_all_valid:   assert (full == (&f_v));
++  t_P3_burned_id_is_seen:      assert (!(w_burned && id_in == w_id) || seen);
++  t_P3_burned_id_is_stored:    assert (!w_burned || (|w_hit));
++  t_P3_no_second_burn:         assert (!(w_burned && id_in == w_id) || !burned);
++end
