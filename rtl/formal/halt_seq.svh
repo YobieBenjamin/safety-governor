@@ -1,7 +1,8 @@
 // Formal properties for halt_seq (the rung and the levers).
-// P5: halt is absorbing without an authorized clear. P6: fail closed, the loop closes and the rung
-// reaches RUN only when armed. P7/P13: the levers are applied in every rung but RUN, so nothing
-// passes while halted. The commit-point hold is the same register: the rung does not leave
+// P5: halt is absorbing without an authorized clear, and boot is the safe bottom. P6 (analogue): the
+// model's "fail closed" is here "the rung reaches RUN only when armed." P7/P13 (analogue): the model's
+// "nothing executes while halted" is here enforced by the levers being applied in every rung but RUN,
+// so nothing passes while halted. The commit-point hold is the same register: the rung does not leave
 // HALT/SAFE except through `clear`, which the mailbox only raises on a signed CLEAR.
 localparam HI = 0, RUN = 1, THR = 2, HLT = 3, SAF = 4;
 localparam C_NONE = 0, C_LOOP = 1, C_LOCAL = 2, C_TAMPER = 3, C_COMMAND = 4;
@@ -28,7 +29,7 @@ always @* begin
   h_inv_cause_in_range: assert (cause <= C_COMMAND);
   h_P6_inv_open_cause_keeps_switch_open: assert (!(cause == C_LOOP || cause == C_TAMPER || cause == C_COMMAND) || switch_open);
   h_P6_inv_run_means_armed: assert (state != RUN || (cause == C_NONE && !switch_open));
-  h_boot_state: assert (!f_init || (state == HI && switch_open && cause == C_NONE && pwrbrk && perst && !pwr_en && ports_closed));
+  h_P5_boot_safe_bottom: assert (!f_init || (state == HI && switch_open && cause == C_NONE && pwrbrk && perst && !pwr_en && ports_closed));
   // levers follow the rung exactly, and every rung but RUN applies the brake and closes the ports
   h_P7_pwrbrk:  assert (pwrbrk == (state != RUN));
   h_P7_perst:   assert (perst == (state == HI || state == HLT || state == SAF));

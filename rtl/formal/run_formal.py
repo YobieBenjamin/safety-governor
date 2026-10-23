@@ -8,8 +8,22 @@
 For each block the properties in ``rtl/formal/<block>.svh`` are injected in front of the last
 ``endmodule`` of the generated file (so they can read the block's registers; ``rtl/gen`` is never
 edited), and SymbiYosys runs ``mode prove`` (bounded model check, then k-induction: an unbounded
-proof when the induction closes). Tasks marked ``fail`` are expected to produce a counterexample;
-they document a gap in the RTL and are reported as findings, not as passes.
+proof when the induction closes).
+
+Outcomes are printed in four classes so a green ``make formal`` is never mistaken for a proof that
+did not run, and an expected counterexample is never mistaken for a pass:
+
+    PROVED  <job>     a property held (the ``prove`` task, ``mode prove``)
+    GAP OK  <job>     a task marked ``expect fail`` found its counterexample: the RTL gap it
+                     documents is real, and the task did its job. This is not a PASS.
+    SKIP    <job>     the tool the job needs is not on PATH; it was not run. Skips do not fail
+                     the command, but a SKIP is not a PROVED -- it says nothing was checked.
+    FAIL    <job>     a property that should hold was broken, or an expected counterexample was
+                     not found (the documented gap was not reproduced).
+
+The program's container has ``sby``, ``yosys`` and ``z3``; where they are absent (as in a plain
+checkout) the jobs are skipped and the command still exits 0, with a banner saying so -- the
+properties are checked for real when the command is run in the container.
 """
 from __future__ import annotations
 
@@ -22,7 +36,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GEN = os.path.join(HERE, "..", "gen")
 BUILD = os.path.join(HERE, "build")
 
-# block -> tasks: name -> (mode, depth, defines, expected)
+# block -> tasks: name -> (mode, depth, defines, expected).
+# expected is "pass" for a property that must hold, "fail" for a task that documents an RTL gap and
+# is written to produce the counterexample (SymbiYosys ``expect fail``).
 BLOCKS = {
     "ticket_store": {"prove": ("prove", 6, [], "pass")},
     "epoch_reg": {"prove": ("prove", 4, [], "pass")},
@@ -36,6 +52,10 @@ BLOCKS = {
 # blocks whose gate-level netlist is compared with the generated Verilog
 EQUIV = ["ticket_store", "epoch_reg", "halt_seq", "cap_table", "monotonic_counter", "mailbox"]
 
+# tools each kind of job needs; smtbmc z3 runs under sby, the equivalence runs under yosys
+NEEDS_BLOCK = ("sby", "z3")
+NEEDS_EQUIV = ("yosys",)
+
 
 def inject(block: str, dest: str) -> None:
     with open(os.path.join(GEN, block + ".v")) as f:
@@ -48,8 +68,15 @@ def inject(block: str, dest: str) -> None:
         f.write("\n".join(out) + "\n")
 
 
-def run_block(block: str) -> list[tuple[str, bool, str]]:
+def _tail(p: subprocess.CompletedProcess) -> str:
+    return "\n".join((p.stdout + p.stderr).strip().splitlines()[-12:])
+
+
+def run_block(block: str, missing: list[str]) -> list[tuple[str, str, str]]:
     tasks = BLOCKS[block]
+    if any(t in missing for t in NEEDS_BLOCK):
+        return [(f"{block}:{t}", "skip", f"{', '.join(t for t in NEEDS_BLOCK if t in missing)} not on PATH; not run")
+                for t in tasks]
     d = os.path.join(BUILD, block)
     os.makedirs(d, exist_ok=True)
     inject(block, os.path.join(d, block + ".v"))
@@ -68,13 +95,29 @@ def run_block(block: str) -> list[tuple[str, bool, str]]:
     results = []
     for t, (_m, _d, _defs, expected) in tasks.items():
         p = subprocess.run(["sby", "-f", f"{block}.sby", t], cwd=d, capture_output=True, text=True, timeout=3000)
-        tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-12:])
-        results.append((f"{block}:{t}", p.returncode == 0, tail if p.returncode else ("expected counterexample found" if expected == "fail" else "proved")))
+        held = p.returncode == 0
+        if expected == "fail":
+            # the task is written to find the counterexample; a clean run means the gap is real
+            status = "gap" if held else "fail"
+            note = ("expected counterexample found: " + _tail(p).splitlines()[-1]
+                    if held else
+                    "expected counterexample not found -- the documented gap was not reproduced")
+        else:
+            status = "proved" if held else "fail"
+            note = "" if held else _tail(p)
+        results.append((f"{block}:{t}", status, note))
     return results
 
 
-def run_equiv(block: str) -> tuple[str, bool, str]:
-    """rtl/gen/<block>.v against the same design synthesized to a gate netlist (yosys synth + abc)."""
+def run_equiv(block: str, missing: list[str]) -> tuple[str, str, str]:
+    """rtl/gen/<block>.v against the same design synthesized to a gate netlist (yosys synth + abc).
+
+    This is the in-flow Yosys gate netlist, not the LibreLane netlist: ``make gds`` needs Docker
+    and the PDK and no netlist from it is checked in. It proves the abc-mapped netlist is equivalent
+    to the generated Verilog; comparing the real ``governor_core`` netlist would need its cell models.
+    """
+    if any(t in missing for t in NEEDS_EQUIV):
+        return (f"equiv:{block}", "skip", f"{', '.join(missing)} not on PATH; not run")
     d = os.path.join(BUILD, "equiv")
     os.makedirs(d, exist_ok=True)
     src = os.path.abspath(os.path.join(GEN, block + ".v"))
@@ -107,30 +150,43 @@ equiv_status -assert
     with open(path, "w") as f:
         f.write(script)
     p = subprocess.run(["yosys", "-q", "-l", block + ".log", block + ".ys"], cwd=d, capture_output=True, text=True, timeout=3000)
-    tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-12:])
-    return (f"equiv:{block}", p.returncode == 0, tail if p.returncode else "gate netlist equivalent to rtl/gen")
+    held = p.returncode == 0
+    return (f"equiv:{block}",
+            "proved" if held else "fail",
+            "" if held else _tail(p))
 
 
 def main(argv: list[str]) -> int:
-    for tool in ("sby", "yosys", "z3"):
-        if shutil.which(tool) is None:
-            print(f"FAIL  tool '{tool}' not found on PATH (the program's container has it)")
-            return 1
+    missing = [t for t in ("sby", "yosys", "z3") if shutil.which(t) is None]
+    if missing:
+        print(f"SKIP    tooling absent: {', '.join(missing)} not on PATH "
+              f"(the program's container has sby/yosys-smtbmc/z3). No property was checked; "
+              f"run `make formal` in the container to run them.")
     want = argv or list(BLOCKS) + ["equiv"]
-    results: list[tuple[str, bool, str]] = []
+    results: list[tuple[str, str, str]] = []
     for w in want:
         if w == "equiv":
-            results += [run_equiv(b) for b in EQUIV]
+            results += [run_equiv(b, missing) for b in EQUIV]
         elif w in BLOCKS:
-            results += run_block(w)
+            results += run_block(w, missing)
         else:
             print(f"unknown job {w}")
             return 2
-    for name, ok, note in results:
-        print(("PASS  " if ok else "FAIL  ") + name + ("  " + note.splitlines()[0] if ok else ""))
-        if not ok:
+    labels = {"proved": "PROVED  ", "gap": "GAP OK  ", "skip": "SKIP    ", "fail": "FAIL    "}
+    for name, status, note in results:
+        line = labels[status] + name
+        if status in ("gap", "fail") and note:
+            line += "  " + " ".join(note.split())
+        print(line)
+    for name, status, note in results:
+        if status == "fail" and note:
             print("      " + note.replace("\n", "\n      "))
-    return 0 if all(ok for _, ok, _ in results) else 1
+    fails = [r for r in results if r[1] == "fail"]
+    skipped = sum(1 for r in results if r[1] == "skip")
+    if skipped:
+        print(f"SKIP    {skipped} job(s) not run (tools absent). A SKIP is not a PROVED; "
+              f"run in the container to check the properties.")
+    return 0 if not fails else 1
 
 
 if __name__ == "__main__":

@@ -29,8 +29,8 @@ end endgenerate
 
 always @* begin
   t_P3_burn_only_of_unseen_id: assert (!burned || !seen);
-  t_full_refuses_burn:         assert (!(burned && full));
-  t_full_means_all_valid:      assert (full == (&f_v));
+  t_P3_full_refuses_burn:      assert (!(burned && full));
+  t_P3_full_means_all_valid:   assert (full == (&f_v));
   t_P3_burned_id_is_seen:      assert (!(w_burned && id_in == w_id) || seen);
   t_P3_burned_id_is_stored:    assert (!w_burned || (|w_hit));
   t_P3_no_second_burn:         assert (!(w_burned && id_in == w_id) || !burned);

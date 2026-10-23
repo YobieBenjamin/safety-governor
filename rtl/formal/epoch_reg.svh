@@ -1,6 +1,7 @@
 // Formal properties for epoch_reg, injected before the final endmodule of rtl/gen/epoch_reg.v.
 // Numbers are the P-numbers of proofs/core_invariants.py (P9: an edition change needs a quorum;
-// P10: whatever the image claims, only the verifier's quorum_ok counts).
+// P10, analogue: the block sees only the verifier's quorum_ok, not the signature count, so it asserts
+// the gate the count would open -- a change needs commit with quorum_ok).
 reg f_init = 1'b1;
 always @(posedge clk) f_init <= 1'b0;
 always @* assume (!rst);

@@ -28,7 +28,7 @@ generate for (gi = 0; gi < 8; gi = gi + 1) begin : g_entry
                     && f_exp[gi*32 +: 32] > now && f_tag[gi*16 +: 16] == epoch_tag
                     && f_bud[gi*24 +: 24] >= lk_bytes;
   always @(posedge clk) if (!f_init) begin
-    c_no_underflow_budget_never_rises: assert (!p_v[gi] || f_bud[gi*24 +: 24] <= p_bud[gi*24 +: 24]);
+    c_P1_budget_never_rises: assert (!p_v[gi] || f_bud[gi*24 +: 24] <= p_bud[gi*24 +: 24]);
     c_P1_entry_appears_only_by_insert: assert (!(!p_v[gi] && f_v[gi]) || (p_ins && p_mac_ok && !p_clear_all));
   end
 end endgenerate
