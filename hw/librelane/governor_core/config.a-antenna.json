@@ -1,0 +1,36 @@
+{
+  "DESIGN_NAME": "governor_core",
+  "VERILOG_FILES": [
+    "dir::../../../rtl/gen/governor_core.v"
+  ],
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 20.0,
+  "PDK": "sky130A",
+  "STD_CELL_LIBRARY": "sky130_fd_sc_hd",
+  "FP_SIZING": "absolute",
+  "DIE_AREA": [
+    0,
+    0,
+    1800,
+    1800
+  ],
+  "FP_CORE_UTIL": 35,
+  "PL_TARGET_DENSITY_PCT": 45,
+  "FP_PDN_MULTILAYER": true,
+  "RUN_CTS": true,
+  "RUN_HEURISTIC_DIODE_INSERTION": true,
+  "DIODE_ON_PORTS": "in",
+  "RUN_MAGIC_DRC": true,
+  "RUN_KLAYOUT_DRC": true,
+  "RUN_LVS": true,
+  "RUN_IRDROP_REPORT": true,
+  "RUN_FILL_INSERTION": true,
+  "SYNTH_STRATEGY": "AREA 0",
+  "MAX_FANOUT_CONSTRAINT": 10,
+  "pdk::sky130*": {
+    "FP_IO_VLENGTH": 2,
+    "FP_IO_HLENGTH": 2
+  },
+  "FP_IO_MIN_DISTANCE": 1.5,
+  "GRT_REPAIR_ANTENNAS": true
+}

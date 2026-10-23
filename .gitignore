@@ -9,3 +9,4 @@ dist/
 .agents/
 .worktrees/
 node_modules/
+hw/librelane/evidence/*/run.log

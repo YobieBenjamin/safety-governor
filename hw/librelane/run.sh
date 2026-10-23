@@ -14,8 +14,8 @@
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
-CFG=$HERE/governor_core/config.json
-EVID=$HERE/evidence
+CFG=${GOV_CONFIG:-$HERE/governor_core/config.json}   # a variant config lives beside it (dir:: paths are relative)
+EVID=${GOV_EVIDENCE:-$HERE/evidence}
 FLOW=${GOV_FLOW:-local}
 TAG=${GOV_RUN_TAG:-signoff}
 PY=${PYTHON:-python3}
