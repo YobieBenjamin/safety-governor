@@ -140,11 +140,15 @@ KEY_UNWRAP_FAILED = "key.unwrap_failed"                # the data key was not se
 KEY_NO_LEASE = "key.no_lease"                          # KEY_RENEW for a model with no live lease on this chip
 KEY_REVOKED = "key.revoked"                            # logged when a new edition drops a model with a live lease
 
+# the customer-confirmation payment rule (docs/18 question 22, issue I1): a wire needs the payer's own signature
+GATE_PAYER_UNCONFIRMED = "gate.payer_unconfirmed"
+
 OK = "ok"
 
 # The 16-bit encoding the RTL and the firmware share. Codes are stable once assigned: the codes first assigned (every
 # name before ADDED) keep their sorted numbering, and names added later take the next numbers in the order added.
 ADDED = [NO_FIRST_HEARTBEAT, EXCLUDED, EXCLUDE_NOT_WAITING,       # 23 October 2026
-         KEY_MODEL_NOT_LOADED, KEY_MODEL_NOT_ALLOWED, KEY_NO_GPU_KEY, KEY_UNWRAP_FAILED, KEY_NO_LEASE, KEY_REVOKED]   # 23 October, origin gate
+         KEY_MODEL_NOT_LOADED, KEY_MODEL_NOT_ALLOWED, KEY_NO_GPU_KEY, KEY_UNWRAP_FAILED, KEY_NO_LEASE, KEY_REVOKED,   # 23 October, origin gate
+         GATE_PAYER_UNCONFIRMED]   # 23 October, I1
 _FIRST = sorted(v for k, v in list(globals().items()) if k.isupper() and isinstance(v, str) and v not in ADDED)
 CODES = {name: i for i, name in enumerate(_FIRST + ADDED, start=1)}

@@ -695,6 +695,12 @@ class Governor:
             ok, why = self._witnessed(rule, rhash, req.get("witnesses", []), now)
             if not ok:
                 return self._deny("request", why, request_hash=rhash)
+        # I1: a rule may require the payer's own confirmation, bound to this request. The agent cannot sign for the
+        # customer: the only key that counts is the one a signed customer registry lists for the paying account.
+        if rule.get("payer_confirm") and req_mode != "human":
+            ok, why = self._payer_confirmed(rule, params, rhash, req.get("witnesses", []), now)
+            if not ok:
+                return self._deny("request", why, request_hash=rhash)
         if rule.get("rate") and not self.ledger.rate_ok(f"rate|{fp}|{action}", rule["rate"]["max"], rule["rate"]["window_s"], now):
             return self._deny("request", reasons.GATE_RATE, request_hash=rhash)
         reservation = None
@@ -808,6 +814,27 @@ class Governor:
                 return False, reasons.GATE_WITNESS_RISK
             return True, reasons.OK
         return False, reasons.GATE_WITNESS_MISSING
+
+    def _payer_confirmed(self, rule: dict, params: dict, rhash: str, witnesses: list[dict], now: float) -> tuple[bool, str]:
+        """I1: a confirmation signed by the key the signed customer registry lists for the paying account, over THIS
+        request, unexpired. No observer key, no other customer, no stale or replayed confirmation counts."""
+        pc = rule["payer_confirm"]
+        reg = self.lists.get(pc["registry"])
+        if reg is None or reg["stale"]:
+            return False, reasons.GATE_PAYER_UNCONFIRMED + ".no_registry"
+        account = params.get(pc["account_param"])
+        entry = next((e for e in reg["entries"] if isinstance(e, dict) and e.get("account") == account), None)
+        if entry is None:
+            return False, reasons.GATE_PAYER_UNCONFIRMED + ".account_not_registered"
+        key = VerifyKey.from_hex(entry["key"])
+        for w in witnesses:
+            if not verify_object(w, key):                 # must be THIS customer's key, no other
+                continue
+            p = w["payload"]
+            if p.get("type") != "payer-confirm" or p.get("request_hash") != rhash or p.get("expires_at", 0) <= now:
+                continue
+            return True, reasons.OK
+        return False, reasons.GATE_PAYER_UNCONFIRMED
 
     def _reserve(self, key: str, amount: float, limit: float, window_s: float, now: float, ttl: float) -> tuple[bool, str | None, str]:
         """Reserve at the key's owner: locally if that is us, over the fabric otherwise. There is no default owner."""

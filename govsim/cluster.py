@@ -68,6 +68,8 @@ class Rack:
                           "message.send.any": [SigningKey.generate() for _ in range(2)], "shipment.order": [SigningKey.generate() for _ in range(2)]}
         self.publisher = SigningKey.generate()
         self.observer = SigningKey.generate()
+        # I1: a couple of customers, each with their own key, as a signed customer registry would hold them
+        self.customers = {"alice-123": SigningKey.generate(), "bob-456": SigningKey.generate()}
         self.evaluator = SigningKey.generate()           # signs that a model passed its evaluations
         self.licensor = SigningKey.generate()            # signs compute licenses
         self.gpu_vendor = SigningKey.generate()
@@ -122,7 +124,8 @@ class Rack:
                           min_legibility: float = 0.0, hazard_budget: dict | None = None, streams_required: list[str] | None = None,
                           audit: dict | None = None, deployment_gate: bool = False, compute_cycles: int | None = None,
                           sandbox: bool = False, extra_refs: list[dict] | None = None,
-                          sealed_models: list[str] | None = None, key_lease_s: float = 60.0) -> dict:
+                          sealed_models: list[str] | None = None, key_lease_s: float = 60.0,
+                          payer_confirm_payments: bool = False) -> dict:
         now = self.clock.now()
         refs = [
             {"device_class": "gpu", "vendor_key": self.gpu_vendor.public.hex, "firmware_digest": GPU_FW, "valid_until": now + 365 * 86400},
@@ -137,6 +140,7 @@ class Rack:
             make_rule("payments.transfer.small", "payments.transfer", constraints={"amount": {"min": 0, "max": 1000}, "currency": {"in": ["USD"]}},
                       budget={"key": "pay-usd-hourly", "param": "amount", "limit": pay_small_limit, "window_s": 3600},
                       rate={"max": 100, "window_s": 60}, endpoint="payment-switch", inputs=["beneficiary-registry"],
+                      payer_confirm=({"registry": "customer-registry", "account_param": "from_account"} if payer_confirm_payments else None),
                       **(human if sandbox else {})),
             make_rule("payments.transfer.large", "payments.transfer", mode="human", approvers_quorum=2,
                       constraints={"amount": {"min": 1000, "max": 1_000_000}}, endpoint="payment-switch", inputs=["beneficiary-registry"]),
@@ -354,6 +358,30 @@ class Rack:
         body = {"request_id": random_id(8), "measurement_token": node.token, "action": action, "params": params, "witnesses": witnesses or []}
         if labels:
             body.update(labels)      # requester-supplied labels; the gate must ignore them (H4)
+        return g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))
+
+    def customer_registry_list(self, expires_in_s: float = 86400.0) -> dict:
+        """I1: the signed account -> customer-key registry the payer-confirm rule names."""
+        entries = [{"account": acct, "key": k.public.hex} for acct, k in self.customers.items()]
+        return self.governance[0].sign({"type": "list", "list_id": "customer-registry", "entries": entries,
+                                        "expires_at": self.clock.now() + expires_in_s})
+
+    def pay(self, node: Node, amount: float, from_account: str, confirm_as: str | None = None,
+            confirm_request_id: str | None = None, confirm_ttl_s: float = 60.0, governor: Governor | None = None) -> dict:
+        """A small USD transfer. confirm_as names whose key signs the payer confirmation (the account's own key for an
+        intended wire; another account, or None, for an unintended one). confirm_request_id lets a test reuse a
+        confirmation signed for a different request (a replay)."""
+        g = governor or node.governor
+        rid = random_id(8)
+        params = {"amount": amount, "currency": "USD", "from_account": from_account, "to": "recipient-a"}
+        rhash = digest([confirm_request_id or rid, node.token["payload"]["fingerprint"], "payments.transfer", params])
+        witnesses = []
+        if confirm_as is not None:
+            signer = self.customers.get(confirm_as) or self.observer    # unknown name falls back to a non-customer key
+            witnesses.append(signer.sign({"type": "payer-confirm", "request_hash": rhash,
+                                          "expires_at": self.clock.now() + confirm_ttl_s}))
+        body = {"request_id": rid, "measurement_token": node.token, "action": "payments.transfer", "params": params,
+                "witnesses": witnesses}
         return g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))
 
     def cap_request(self, node: Node, **fields) -> dict:
