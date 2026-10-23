@@ -1,0 +1,53 @@
+  solvers here: z3, yices, boolector
+  PROVED  halt_seq: bounded to 25 cycles and k-induction: every reachable state (z3, yices, boolector)
+  caught  halt_seq mutant: a commanded halt leaves the loop switch closed
+  caught  halt_seq mutant: tamper does not open the loop
+  caught  halt_seq mutant: HALT never escalates to SAFE
+  caught  halt_seq mutant: the power brake releases in THROTTLE
+  caught  halt_seq mutant: a halt command is ignored once throttled
+  PROVED  heartbeat: bounded to 25 cycles and k-induction: every reachable state (yices, z3, boolector)
+  SIM-OK  heartbeat: 4000 random cycles match the spec model (seed 1)
+  caught  heartbeat mutant: an expired timer revives itself with no heartbeat [simulation: caught it too]
+  caught  heartbeat mutant: the countdown stops at one and never expires [simulation: caught it too]
+  caught  heartbeat mutant: a heartbeat buys twice the window it signed [simulation: caught it too]
+  caught  heartbeat mutant: expiry is hidden on every tick cycle [simulation: caught it too]
+  PROVED  meter: bounded to 6 cycles and k-induction: every reachable state (yices, z3, boolector)
+  SIM-OK  meter: 4000 random cycles match the spec model, saturation exercised (seed 2)
+  caught  meter mutant: the old wrapping add (the bug fixed on 23 October 2026) [simulation: caught it too]
+  caught  meter mutant: the host's read slot steers which slot is charged [simulation: caught it too]
+  caught  meter mutant: a host write zeroes the cycle counter it is reading [simulation: caught it too]
+  caught  meter mutant: a host write is not flagged [simulation: caught it too]
+  caught  meter mutant: bytes out are overwritten instead of added [simulation: caught it too]
+  PROVED  alarms: bounded to 25 cycles and k-induction: every reachable state (yices, z3, boolector)
+  SIM-OK  alarms: 4000 random cycles match the spec model (seed 3)
+  caught  alarms mutant: an alarm clears without authorization [simulation: caught it too]
+  caught  alarms mutant: an authorized clear of one alarm wipes them all [simulation: caught it too]
+  caught  alarms mutant: a clear racing a fresh alarm swallows it [simulation: caught it too]
+  caught  alarms mutant: the summary bit sees only alarm 0 [simulation: caught it too]
+  caught  alarms mutant: an unauthorized clear attempt is not flagged [simulation: caught it too]
+  PROVED  measure_reg: bounded to 25 cycles and k-induction: every reachable state (yices, z3, boolector)
+  SIM-OK  measure_reg: 3000 random cycles, 441 extends, match the spec model (seed 4)
+  caught  measure_reg mutant: an engine answer nobody asked for is latched [simulation: caught it too]
+  caught  measure_reg mutant: extend writes the data straight into the register [simulation: caught it too]
+  caught  measure_reg mutant: the old value drops out of the hash input (no chain) [simulation: caught it too]
+  caught  measure_reg mutant: the register latches the engine bus before the engine answers [simulation: caught it too]
+  caught  measure_reg mutant: a second extend while busy re-requests the engine [simulation: caught it too]
+  PROVED  loop_io: bounded to 25 cycles and k-induction: every reachable state (yices, z3, boolector)
+  SIM-OK  loop_io: 4000 random cycles (557 with loss declared) match the spec model (seed 5)
+  caught  loop_io mutant: the pad opens only while current flows [simulation: caught it too]
+  caught  loop_io mutant: the debounce forgets between samples, so a loss is never declared [simulation: caught it too]
+  caught  loop_io mutant: the threshold is one past where the counter stops: never declared [simulation: caught it too]
+  caught  loop_io mutant: a third low sample clears the loss [simulation: caught it too]
+  caught  loop_io mutant: the debounce counts current instead of its absence [simulation: caught it too]
+  PROVED  governor_core: bounded to 20 cycles and k-induction: every reachable state (yices, z3, boolector); host CSR reads write nothing (full-size netlist): the host's inputs reach 194 netlist objects, no register and no pin but csr_rdata; doorbell reaches only the mailbox (full-size netlist): the host's inputs reach 388 netlist objects, no register outside the mailbox and no pin but csr_rdata, mbox_verify_req, mbox_dispatch, mbox_cmd_out; host CSR reads write nothing (two-copy miter, small build): 84 registers and 29 pins unaffected, induction (yices); doorbell reaches only the mailbox (two-copy miter, small build): 74 registers and 26 pins unaffected, induction (yices)
+  SIM-OK  governor_core: 3000 random cycles match the spec model; rungs visited [0, 1, 2, 3, 4] (seed 6)
+  caught  governor_core mutant: the old millisecond tap on the monotonic counter (the bug fixed on 23 October 2026) [simulation: caught it too]
+  caught  governor_core mutant: reading MBOX_STATUS restarts the millisecond (a CSR read with a side effect) [simulation: missed it]
+  caught  governor_core mutant: the doorbell masks a heartbeat expiry that cycle [simulation: caught it too]
+  caught  governor_core mutant: the brake pad releases whenever the heartbeat is live [simulation: caught it too]
+  caught  governor_core mutant: SAFE closes the loop pad again [simulation: caught it too]
+  caught  governor_core mutant: a loop loss is acted on only once the heartbeat has also expired [simulation: caught it too]
+  caught  governor_core mutant: the host's CSR address selects the meter slot that gets charged [simulation: missed it]
+  FACT  governor_core: lost heartbeat climbs to SAFE with the loop closed: from boot, a heartbeat that runs out reaches SAFE, power off, loop pad closed (trace of 28 cycles found)
+  FACT  governor_core: local cause never opens the loop; HALT to a SAFE chip does not open it: proven: cause LOCAL implies the loop pad is closed; a HALT command to a chip already in SAFE leaves the pad as it was; bounded to 12 cycles and k-induction: every reachable state (yices)
+L7: every property proven on the Verilog, every mutant caught

@@ -32,9 +32,29 @@ Then I tried to break the proof on purpose. Five planted bugs, one line each, th
 
 Commit `eda385f`.
 
-## Workstreams 1 and 2: proving the other twelve blocks (running)
+## Workstreams 1 and 2: proving the other twelve blocks
 
-Two agents, six blocks each. Each block is proven four ways (bounded check, induction, a randomized simulation against a separately written reference model, a second solver if one installs) and then attacked with at least four planted bugs. Plain-English notes with an analogy per block: `rtl/formal/PLAIN-ENGLISH-a.md` and `PLAIN-ENGLISH-b.md`. Results land here when they finish.
+Two agents, six blocks each, every block proven four ways: a bounded check, k-induction, a long randomized simulation against a reference model written separately from the spec (two people doing the same sum on separate sheets of paper), and more than one solver. Then planted bugs, at least four per block.
+
+### Group B (heartbeat, meter, alarms, measurement register, loop, the whole core): done
+
+- All six blocks proven, plus the halt sequencer, in **three independent solvers** (z3, yices, boolector). Three different mathematicians checking the same proof, none of them us.
+- 36 planted bugs, all 36 caught by assertion.
+- **For the whole core,** the rule that the host can't write anything except the mailbox doorbell is proven on the full-size circuit. It's a wiring fact, like showing there is no pipe from the lobby to the sprinkler valves at all. The other core rules (the pins follow the sequencer, the chip boots safe, any halt reaches the pins, no running without CLEAR, the heartbeat can't be stretched, a lost loop is always seen, an open loop stays open until CLEAR) are proven on a small build of the same design, with the argument for why size doesn't matter written in the proof file. Like testing a bridge design on a scale model: it only counts if you can show the physics doesn't change with size, and the argument is on the page for anyone to attack.
+- **Two real bugs, both fixed,** each with a regression test that fails on the old circuit:
+  1. **The meter could wrap around.** One big enough add moved a counter down, so a job could overspend and then read as under budget. An odometer rolling over so an old car looks new. The counters now stick at their maximum. The conformance suite had found the same bug independently (its F-11), so that finding is now closed and its test stays as a guard.
+  2. **The heartbeat timer could be frozen.** The millisecond tick came from the low bits of a counter that one input could hold still. Hold it still and the "no heartbeat, shut down" timer never runs out. Gluing the hands of a dead man's switch. The tick now has its own counter.
+- **Design questions for me** (in `rtl/formal/FINDINGS-b.md`):
+  - A signed HALT to a chip already in SAFE doesn't open the loop to warn its neighbours. That contradicts the fabric spec (`02`). Leaning toward making it open.
+  - At boot, one chip that never gets its first heartbeat holds the whole rack's loop open, so one missing heartbeat stops every machine until it arrives. Safe, maybe more than I want.
+  - Confirmed, now proven rather than observed: a lost heartbeat takes one chip down to SAFE with the loop closed.
+- **Spec mismatches recorded, not changed:** the hardware doesn't clamp the heartbeat window to the policy's expiry (only the software model does); the hardware meter has no END_MODEL freeze.
+- **What didn't work:** a full-size "two copies of the core behave the same" proof ran 26 minutes without finishing on this machine, so the agent switched to the wiring proof plus the small build. Some proofs only finish in one of the three solvers here. The random core simulation caught 5 of 7 core bugs on its own; the proofs caught all 7. That's an argument for proofs, not against simulation.
+- Plain English, one analogy per block, every dead end: `rtl/formal/PLAIN-ENGLISH-b.md`. Full run log: `rtl/formal/last-run-main.txt` (on the merged code: every property proven, every planted bug caught, 324 tests pass).
+
+### Group A (mailbox, permissions table, ticket store, epoch, clock, lifecycle): running
+
+Plain English: `rtl/formal/PLAIN-ENGLISH-a.md` when it lands.
 
 ## Workstream 3: 150 checks against the full-chip RTL (stopped once, then done another way)
 
@@ -103,8 +123,8 @@ An FPGA is a reprogrammable chip: the dress rehearsal before the opening night t
 |---|---|---|
 | 0. Halt sequencer proven on the Verilog | Done; 5 of 5 planted bugs caught after two rounds of fixing my own properties | `rtl/formal/`, `eda385f` |
 | 1. Six blocks proven (mailbox and friends) | Running | `rtl/formal/` |
-| 2. Six blocks proven (heartbeat to the full core) | Running | `rtl/formal/` |
-| 3. 150 checks on the full-chip RTL | Attack-recipe version stopped by a safety check; conformance version done: 250 checks, 27 of 27 planted bugs caught, 15 disagreements (2 high) recorded | `rtl/conformance/` |
+| 2. Six blocks proven (heartbeat to the full core) | Done: 3 solvers, 36 of 36 planted bugs caught, 2 real bugs fixed (meter wrap, frozen heartbeat clock), 2 design questions for me | `rtl/formal/` |
+| 3. 150 checks on the full-chip RTL | Attack-recipe version stopped by a safety check; conformance version done: 250 checks, 27 of 27 planted bugs caught, 15 disagreements found, 1 since closed (meter wrap), 2 high still open | `rtl/conformance/` |
 | 4. sky130 layout and signoff | Running | `hw/librelane/` |
 | 5. FPGA and SMBus | Running | `hw/fpga/` |
 | 6. Public interfaces | Done: 85 pins mapped, SPDM passes DMTF's tester (781 checks), nvtrust matches NVIDIA's verifier, 60-row compliance matrix; PCIe timing bug found and a fixed block written, not wired in yet | `docs/interfaces/`, `hw/pinout/` |

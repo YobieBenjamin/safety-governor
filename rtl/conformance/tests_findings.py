@@ -385,7 +385,8 @@ def test_diff_cap_table_random_against_model_switch():
 
 
 # ================================================================ F-11, F-12: counters that wrap
-@conformance("R-052", finding="F-11")
+# F-11 closed by the L7 group B merge (acce09f): the meter saturates. This test now passes and guards the fix.
+@conformance("R-052")
 def test_finding_meter_counter_wraps_at_48_bits():
     """F-11: meter counters only increment. At the prototype's 48 bits (the spec's register is 64), bytes out
     wraps to a small number after 2^48 bytes, about 281 TB, which a long-lived slot can reach."""

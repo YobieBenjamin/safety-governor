@@ -25,7 +25,7 @@ reachable case), **low** (edge case, unreachable in practice, or a reporting dif
 | F-08 | low | The "millisecond" tick is 1,024 microseconds | RTL vs spec |
 | F-09 | low | A zero-byte lookup passes at zero budget | RTL and model vs spec |
 | F-10 | medium | Capability table holds two entries for one key | RTL vs spec and model |
-| F-11 | medium | Meter counters wrap at 48 bits | RTL vs spec |
+| F-11 | medium, **closed** | Meter counters wrap at 48 bits (fixed: counters saturate, `acce09f`) | RTL vs spec |
 | F-12 | low | Monotonic counter wraps from an all-ones high-water mark | RTL vs spec |
 | F-13 | low | Mailbox does not latch the frame between doorbell and verdict | an RTL interface assumption the spec never states |
 | F-14 | low | Register map's MBOX_STATUS row has no status 7 | spec vs spec |
@@ -200,7 +200,7 @@ every one of 1,280 lookups and every remaining budget, as long as keys never ove
 **Fix:** on insert, overwrite a matching valid entry instead of taking a free slot; on an epoch switch, drop entries
 whose tag no longer matches (or clear the table and re-derive).
 
-## F-11 Meter counters wrap at 48 bits
+## F-11 Meter counters wrap at 48 bits (closed)
 
 docs/07 section 3: meter counters "only increment". The register map gives each counter 64 bits; the prototype core
 uses 48 (docs/04 section 5 says so). A 48-bit bytes-out counter wraps after 2^48 bytes, about 281 TB, which a
@@ -208,6 +208,10 @@ long-lived slot serving a busy model can reach. The wrap looks like the counter 
 
 **Reproducer:** `test_finding_meter_counter_wraps_at_48_bits`. **Fix:** saturate instead of wrapping (and raise an
 alarm), or use 64 bits in the product.
+
+**Closed.** The L7 group B proofs found the same bug independently (one big add could move a counter down) and the
+meter now saturates at its maximum (merge `acce09f`, regression in `rtl/tests/test_l7b_regressions.py`). The
+reproducer above now passes and stays in the suite as a guard. The alarm on saturation is not added yet.
 
 ## F-12 Monotonic counter wraps from an all-ones high-water mark
 

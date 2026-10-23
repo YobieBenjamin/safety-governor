@@ -170,7 +170,9 @@ def main(argv: list[str]) -> int:
           f"disagreement; {len(outcomes) - len(passed) - len(reproduced)} other")
 
     # 3. findings file
-    written = set(re.findall(r"^## (F-\d\d)", findings_text.TEXT, re.M))
+    # a closed finding keeps its section (the record of what was wrong) but has "(closed)" in its heading;
+    # its reproducer has become an ordinary conformance test that guards the fix
+    written = {f for f, rest in re.findall(r"^## (F-\d\d)(.*)$", findings_text.TEXT, re.M) if "(closed)" not in rest}
     named = {t.finding for t in REGISTRY if t.finding}
     for f in sorted(named - written):
         problems.append(f"{f} has reproducer tests but no section in FINDINGS.md")
