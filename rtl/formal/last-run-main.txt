@@ -1,12 +1,22 @@
   solvers here: z3, yices, boolector
-  PROVED  halt_seq: bounded to 25 cycles and k-induction: every reachable state (z3, yices, boolector)
-  caught  halt_seq mutant: a commanded halt leaves the loop switch closed
-  caught  halt_seq mutant: tamper does not open the loop
-  caught  halt_seq mutant: HALT never escalates to SAFE
-  caught  halt_seq mutant: the power brake releases in THROTTLE
-  caught  halt_seq mutant: CLEAR outranks tamper again (F-05)
-  caught  halt_seq mutant: RUN entered on a stale loop_lost (F1)
-  caught  halt_seq mutant: a halt command is ignored once throttled
+  PROVED  halt_seq: bounded to 25 cycles and k-induction: every reachable state (z3, yices, boolector); EXCLUDE changes nothing outside HALTED_INITIAL with no cause (two-copy miter): bounded to 4 cycles and k-induction: every reachable state (yices)
+  SIM-OK  halt_seq: 4000 random cycles over 8 power-ons match the spec model; rungs visited [0, 1, 2, 3, 4], 572 cycles excluded, 1126 with the boot alarm up (seed 11)
+  caught  halt_seq mutant: a commanded halt leaves the loop switch closed [simulation: caught it too]
+  caught  halt_seq mutant: tamper does not open the loop [simulation: caught it too]
+  caught  halt_seq mutant: HALT never escalates to SAFE [simulation: caught it too]
+  caught  halt_seq mutant: the power brake releases in THROTTLE [simulation: caught it too]
+  caught  halt_seq mutant: CLEAR outranks tamper again (F-05) [simulation: missed it]
+  caught  halt_seq mutant: RUN entered on a stale loop_lost (F1) [simulation: caught it too]
+  caught  halt_seq mutant: a halt command is ignored once throttled [simulation: caught it too]
+  caught  halt_seq mutant: a HALT to a chip in SAFE leaves the loop closed (the old behaviour, F-07) [simulation: caught it too]
+  caught  halt_seq mutant: a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old F-07) [simulation: caught it too]
+  caught  halt_seq mutant: EXCLUDE closes the loop of a chip halted by loop loss, a command or tamper [simulation: caught it too]
+  caught  halt_seq mutant: an excluded chip's slot gets power (EXCLUDE moves it to the HALT rung) [simulation: caught it too]
+  caught  halt_seq mutant: an excluded chip runs without a heartbeat [simulation: caught it too]
+  caught  halt_seq mutant: a tamper leaves the exclusion standing [simulation: caught it too]
+  caught  halt_seq mutant: the boot alarm is raised after the chip was armed [simulation: caught it too]
+  caught  halt_seq mutant: the boot window never runs out (the timer does not count) [simulation: caught it too]
+  caught  halt_seq mutant: arming records the first heartbeat only if it also enters RUN (the alarm can fire on an armed chip) [simulation: missed it]
   PROVED  heartbeat: bounded to 25 cycles and k-induction: every reachable state (yices, z3, boolector)
   SIM-OK  heartbeat: 4000 random cycles match the spec model (seed 1)
   caught  heartbeat mutant: an expired timer revives itself with no heartbeat [simulation: caught it too]
@@ -41,17 +51,21 @@
   caught  loop_io mutant: the threshold is one past where the counter stops: never declared [simulation: caught it too]
   caught  loop_io mutant: a third low sample clears the loss [simulation: caught it too]
   caught  loop_io mutant: the debounce counts current instead of its absence [simulation: caught it too]
-  PROVED  governor_core: bounded to 20 cycles and k-induction: every reachable state (yices, z3, boolector); host CSR reads write nothing (full-size netlist): the host's inputs reach 194 netlist objects, no register and no pin but csr_rdata; doorbell reaches only the mailbox (full-size netlist): the host's inputs reach 388 netlist objects, no register outside the mailbox and no pin but csr_rdata, mbox_verify_req, mbox_dispatch, mbox_cmd_out; host CSR reads write nothing (two-copy miter, small build): 85 registers and 29 pins unaffected, induction (yices); doorbell reaches only the mailbox (two-copy miter, small build): 75 registers and 26 pins unaffected, induction (yices)
-  SIM-OK  governor_core: 3000 random cycles match the spec model; rungs visited [0, 1, 2, 3, 4] (seed 6)
+  PROVED  governor_core: bounded to 20 cycles and k-induction: every reachable state (yices, z3, boolector); host CSR reads write nothing (full-size netlist): the host's inputs reach 196 netlist objects, no register and no pin but csr_rdata; doorbell reaches only the mailbox (full-size netlist): the host's inputs reach 388 netlist objects, no register outside the mailbox and no pin but csr_rdata, mbox_verify_req, mbox_dispatch, mbox_cmd_out; host CSR reads write nothing (two-copy miter, small build): 85 registers and 29 pins unaffected, induction (yices); doorbell reaches only the mailbox (two-copy miter, small build): 75 registers and 26 pins unaffected, induction (yices)
+  SIM-OK  governor_core: 3000 random cycles match the spec model; rungs visited [0, 1, 2, 3, 4], 56 cycles excluded (seed 6)
   caught  governor_core mutant: the old millisecond tap on the monotonic counter (the bug fixed on 23 October 2026) [simulation: caught it too]
   caught  governor_core mutant: reading MBOX_STATUS restarts the millisecond (a CSR read with a side effect) [simulation: missed it]
-  caught  governor_core mutant: the doorbell masks a heartbeat expiry that cycle [simulation: caught it too]
+  caught  governor_core mutant: the doorbell masks a heartbeat expiry that cycle [simulation: missed it]
   caught  governor_core mutant: the brake pad releases whenever the heartbeat is live [simulation: caught it too]
   caught  governor_core mutant: SAFE closes the loop pad again [simulation: caught it too]
   caught  governor_core mutant: a loop loss is acted on only once the heartbeat has also expired [simulation: caught it too]
+  caught  governor_core mutant: firmware can raise NO_FIRST_HEARTBEAT and the hardware's raise never lands [simulation: caught it too]
+  caught  governor_core mutant: the boot alarm bit follows the wrong signal (raised once armed) [simulation: caught it too]
+  caught  governor_core mutant: CAUSE hides the wait for the first heartbeat [simulation: missed it]
+  caught  governor_core mutant: an excluded chip's PERST# pad releases [simulation: caught it too]
   caught  governor_core mutant: the host's CSR address selects the meter slot that gets charged [simulation: missed it]
   FACT  governor_core: lost heartbeat climbs to SAFE with the loop closed: from boot, a heartbeat that runs out reaches SAFE, power off, loop pad closed (trace of 28 cycles found)
-  FACT  governor_core: local cause never opens the loop; HALT to a SAFE chip does not open it: proven: cause LOCAL implies the loop pad is closed; a HALT command to a chip already in SAFE leaves the pad as it was; bounded to 12 cycles and k-induction: every reachable state (yices)
+  FACT  governor_core: a local cause never opens the loop: proven: cause LOCAL implies the loop pad is closed (the old fact that a HALT to a chip in SAFE leaves the pad closed is gone: Yobie's call 1, now rule G3); bounded to 12 cycles and k-induction: every reachable state (yices)
   PROVED  smbus: bounded to 25 cycles and k-induction: every reachable state (z3, yices, boolector)
   caught  smbus mutant: the PEC byte is not checked (a corrupted write commits)
   caught  smbus mutant: the command code is not checked (a write to a read-only register is accepted)

@@ -233,7 +233,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_core_epoch_csr_reads_256_bits` | R-008 | pass | 0.1 |
 | `test_lifecycle_never_moves_down_by_advance` | R-010 | pass | 0.0 |
 | `test_lifecycle_lower_fuse_load_cannot_move_down` | R-010 | pass | 0.0 |
-| `test_lifecycle_monotone_under_random_inputs` | R-010 | pass | 0.2 |
+| `test_lifecycle_monotone_under_random_inputs` | R-010 | pass | 0.1 |
 | `test_lifecycle_debug_refused_in_production_and_later` | R-011, R-013 | pass | 0.0 |
 | `test_lifecycle_debug_granted_before_production` | R-011 | pass | 0.0 |
 | `test_core_lifecycle_csr_encoding` | R-012 | pass | 0.1 |
@@ -275,7 +275,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_halt_throttle_escalates_after_t_throttle_ticks` | R-034, R-041 | pass | 0.0 |
 | `test_halt_halt_escalates_after_t_halt_ticks` | R-034, R-041 | pass | 0.0 |
 | `test_core_default_timers_are_30s_and_300s` | R-041 | pass | 0.0 |
-| `test_halt_never_descends_without_clear_random` | R-035 | pass | 0.6 |
+| `test_halt_never_descends_without_clear_random` | R-035 | pass | 0.7 |
 | `test_halt_safe_is_absorbing_without_clear` | R-035 | pass | 0.0 |
 | `test_halt_levers_follow_every_rung` | R-036 | pass | 0.0 |
 | `test_halt_ports_closed_outside_run` | R-036 | pass | 0.0 |
@@ -311,7 +311,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_mbox_refused_when_not_running` | R-061 | pass | 0.0 |
 | `test_mbox_status_codes_match_the_register_map` | R-061 | pass | 0.0 |
 | `test_mbox_failed_frames_do_not_consume_sequence` | R-062, R-054 | pass | 0.0 |
-| `test_mbox_no_dispatch_without_all_checks_random` | R-062 | pass | 0.6 |
+| `test_mbox_no_dispatch_without_all_checks_random` | R-062 | pass | 0.5 |
 | `test_core_mbox_status_and_seq_csrs` | R-060, R-061 | pass | 0.1 |
 | `test_core_has_no_csr_write_port` | R-064, R-065 | pass | 0.0 |
 | `test_core_csr_reads_have_no_side_effects` | R-064, R-065 | pass | 0.1 |
@@ -326,7 +326,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_meter_frozen_slot_stays_put_without_strobes` | R-091, R-052 | pass | 0.0 |
 | `test_core_epoch_switch_kills_every_old_capability` | R-093, R-009, R-087 | pass | 0.1 |
 | `test_mbox_self_authenticating_command_rides_on_the_firmware_verdict` | R-082, R-055 | pass | 0.0 |
-| `test_diff_mailbox_random_frames_only_known_disagreements` | R-058, R-054, R-055, R-056, R-057, R-061, R-063 | pass | 1.7 |
+| `test_diff_mailbox_random_frames_only_known_disagreements` | R-058, R-054, R-055, R-056, R-057, R-061, R-063 | pass | 1.8 |
 | `test_diff_spec_good_halt` | R-058, R-059 | pass | 0.0 |
 | `test_diff_spec_replayed_halt` | R-058, R-054 | pass | 0.0 |
 | `test_diff_spec_halt_with_stale_epoch_is_exempt` | R-058, R-055, R-080 | pass | 0.0 |
@@ -359,7 +359,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_model_tamper_is_safe_and_unclearable` | R-074, R-042 | pass | 0.0 |
 | `test_finding_lifecycle_debug_before_fuse_load` | R-010, R-011 | pass | 0.0 |
 | `test_finding_core_reports_test_lifecycle_before_fuse_load` | R-012, R-011 | reproduces F-06 | 0.1 |
-| `test_lifecycle_after_load_debug_is_dead` | R-011 | pass | 0.1 |
+| `test_lifecycle_after_load_debug_is_dead` | R-011 | pass | 0.0 |
 | `test_finding_cmd_halt_in_safe_opens_the_loop` | R-038, R-144 | pass | 0.0 |
 | `test_model_finding_halt_in_safe_does_not_descend` | R-035, R-036, R-145 | pass | 0.0 |
 | `test_cmd_halt_in_throttle_from_local_cause_opens_loop` | R-038 | pass | 0.0 |
@@ -371,7 +371,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_model_switch_replaces_on_reprogram` | R-014, R-015 | pass | 0.0 |
 | `test_diff_cap_table_random_against_model_switch` | R-014, R-015, R-016, R-017, R-018, R-020, R-021 | pass | 0.4 |
 | `test_finding_meter_counter_wraps_at_48_bits` | R-052 | pass | 0.0 |
-| `test_finding_mono_wraps_from_an_all_ones_high_water_mark` | R-002, R-003 | pass | 0.1 |
+| `test_finding_mono_wraps_from_an_all_ones_high_water_mark` | R-002, R-003 | pass | 0.0 |
 | `test_finding_mailbox_sequence_never_moves_backwards` | R-062, R-054 | reproduces F-13 | 0.0 |
 | `test_finding_spec_status_table_lists_status_7` | R-061, R-063 | reproduces F-14 | 0.0 |
 | `test_diff_levers_per_rung_rtl_equals_model` | R-036 | pass | 0.0 |
