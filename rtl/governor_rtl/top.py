@@ -6,6 +6,13 @@ The CSR bus is read-only by construction: ``csr_rdata`` is a mux over the blocks
 and there is no ``csr_wdata`` port. The only host-writable location is the mailbox doorbell.
 ``tick`` is the 1 us monotonic tick; the heartbeat and the sequencer run on ``tick_ms``, one
 strobe every 2^10 ticks. LOG_HEAD and LOG_SIZE are firmware-mapped and not decoded here.
+
+``tick_ms`` comes from its own prescaler (``ms_div``) counting ``tick``, not from the low bits of the
+monotonic counter. Until 23 October 2026 it tapped ``mono.value[:10]``; ``load_hwm`` has priority over the
+increment and can move the value anywhere upward, so whoever drives ``load_hwm``/``hwm`` could hold the low
+bits off 1023 and stop every millisecond strobe: the heartbeat never expired and the rung timers froze,
+with no valid heartbeat. L7 found it (rtl/formal/governor_core.sv, rule G5; FINDINGS-b.md, F2).
+``ms_shift`` is a parameter only so the proof can run a short millisecond; the chip uses 10.
 """
 from amaranth import Cat, Const, Elaboratable, Module, Mux, Signal
 
@@ -27,7 +34,10 @@ MS_SHIFT = 10            # 2^10 microsecond ticks per millisecond strobe
 
 
 class GovernorCore(Elaboratable):
-    def __init__(self, cap_entries: int = 8, ticket_entries: int = 8, t_throttle_ms: int = 30_000, t_halt_ms: int = 300_000):
+    def __init__(self, cap_entries: int = 8, ticket_entries: int = 8, t_throttle_ms: int = 30_000, t_halt_ms: int = 300_000,
+                 ms_shift: int = MS_SHIFT):
+        self.ms_shift = ms_shift
+        self.ms_div = Signal(ms_shift, name="ms_div")     # microsecond ticks into the current millisecond
         self.mono = MonotonicCounter()
         self.meas0 = MeasureReg()
         self.meas1 = MeasureReg()
@@ -87,7 +97,7 @@ class GovernorCore(Elaboratable):
         # ---- wiring between blocks
         m.d.comb += [
             self.mono.inc.eq(self.tick),
-            self.tick_ms.eq(self.tick & (self.mono.value[:MS_SHIFT] == (1 << MS_SHIFT) - 1)),
+            self.tick_ms.eq(self.tick & (self.ms_div == (1 << self.ms_shift) - 1)),
             self.hb.tick.eq(self.tick_ms),
             self.halt.tick.eq(self.tick_ms),
             self.loop.sample.eq(self.sample),
@@ -104,6 +114,8 @@ class GovernorCore(Elaboratable):
             self.perst_n.eq(~self.halt.perst),
             self.pwr_en.eq(self.halt.pwr_en),
         ]
+        with m.If(self.tick):
+            m.d.sync += self.ms_div.eq(self.ms_div + 1)
         for c in self.caps.values():
             m.d.comb += [c.now.eq(self.mono.value[:32]), c.epoch_tag.eq(self.epoch.epoch_tag), c.clear_all.eq(self.halt.ports_closed)]
 
