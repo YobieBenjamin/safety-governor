@@ -38,6 +38,12 @@ cross-checks the smallest instance by brute force, and asserts the consequences:
       assumption 2 alone, which only promises k disjoint paths per source-target pair.
   K5  Only the irreversible effectors need to be in the separator; reversible ones can be left out
       and audited afterwards, and the separator shrinks to their controllers.
+  K6  The two-hub counterexample: twelve sources reaching ten targets through two shared hubs have
+      two vertex-disjoint paths per pair, yet a two-vertex separator cuts everything. This is why the
+      per-pair connectivity bound (assumption 2) does not by itself bound the whole cut from below,
+      and why Claim 2 and Claim 3 both need the aggregate-connectivity assumption. The corrected
+      Claim 2 excludes this graph: its two sides carry only two disjoint paths, below min(|S|, |T|).
+  K7  A single shared controller does the same with one vertex, the sharpest form of K6.
 
 What this is not: a statement about the real Internet's exact connectivity (it has regional
 chokepoints and it has been switched off in countries; it has never been switched off everywhere,
@@ -195,6 +201,33 @@ def build(n_instances: int, n_effectors: int, core: int, k: int, n_users: int, n
     return adj
 
 
+def build_two_hub(n_sources: int, n_targets: int, n_hubs: int):
+    """A counterexample to a pairwise reading of the cut bound. Each of n_sources is joined to the
+    same n_hubs shared vertices, and each hub is joined to every one of n_targets. Every
+    source-target pair then has n_hubs internally vertex-disjoint paths, one through each hub, so
+    the pairwise connectivity is exactly n_hubs; yet removing the n_hubs shared vertices separates
+    every source from every target at once, a separator of size n_hubs no matter how many machines
+    there are. The sources and targets avoid nothing of their own, so there is no bystander cost to
+    speak of either. With n_hubs == 1 this is a single shared controller, a separator of size one.
+    Returns (adjacency, sources, targets)."""
+    adj: dict[str, set[str]] = {}
+
+    def edge(u, v):
+        adj.setdefault(u, set()).add(v)
+        adj.setdefault(v, set()).add(u)
+
+    sources = {f"m{i}" for i in range(n_sources)}
+    targets = {f"e{j}" for j in range(n_targets)}
+    hubs = [f"h{h}" for h in range(n_hubs)]
+    for i in range(n_sources):
+        for h in hubs:
+            edge(f"m{i}", h)
+    for h in hubs:
+        for j in range(n_targets):
+            edge(h, f"e{j}")
+    return adj, sources, targets
+
+
 def percolation(g: dict[str, set[str]], trials: int = 40, seed: int = 1) -> list[tuple[float, float, float]]:
     """Remove a random fraction of the core and measure what survives: the share of (network) source-to-target
     pairs still connected, and the share of user-to-service pairs still connected. Returns (fraction removed,
@@ -291,6 +324,28 @@ def main() -> int:
     r_flow, r_cut = min_vertex_cut(g, S, irreversible, protected=users | services | computes)
     report("K5", r_flow == len(irreversible) and r_cut == {f"e{a[1:]}" for a in irreversible},
            f"gating only the {len(irreversible)} irreversible effectors needs {r_flow} vertices, their own controllers; the reversible ones are audited instead")
+
+    # K6: the two-hub counterexample. This is why Claim 2 cannot read the per-pair bound as a claim about
+    # the whole cut, and why both Claim 2 and Claim 3 need the aggregate-connectivity assumption, not
+    # pairwise k. Twelve sources reach ten targets through two shared hubs: every pair has two
+    # vertex-disjoint paths (pairwise k = 2), yet two vertices separate everything, far under the
+    # 12 + 10 machines. The corrected Claim 2 excludes this graph because its two whole sides carry
+    # only 2 disjoint paths, below min(|S|, |T|).
+    th, th_S, th_T = build_two_hub(n_sources=12, n_targets=10, n_hubs=2)
+    th_pair, _ = min_vertex_cut(th, {"m0"}, {"e0"}, protected=th_S | th_T)
+    th_agg, th_cut = min_vertex_cut(th, th_S, th_T, protected=th_S | th_T)
+    report("K6", th_pair == 2 and th_agg == 2 and th_cut == {"h0", "h1"} and th_agg < min(len(th_S), len(th_T)),
+           f"two shared hubs: every source-target pair has {th_pair} vertex-disjoint paths, yet {th_agg} vertices (the hubs) separate all "
+           f"{len(th_S)} sources from all {len(th_T)} targets, under min(|S|,|T|)={min(len(th_S), len(th_T))}: the per-pair bound does not imply a large cut, "
+           f"and the corrected Claim 2 excludes this graph because its sides carry only {th_agg} disjoint paths")
+
+    # K7: a single shared controller, the same lesson sharpened to one vertex.
+    sc, sc_S, sc_T = build_two_hub(n_sources=12, n_targets=10, n_hubs=1)
+    sc_pair, _ = min_vertex_cut(sc, {"m0"}, {"e0"}, protected=sc_S | sc_T)
+    sc_agg, sc_cut = min_vertex_cut(sc, sc_S, sc_T, protected=sc_S | sc_T)
+    report("K7", sc_pair == 1 and sc_agg == 1 and sc_cut == {"h0"},
+           f"one shared controller: each pair is joined through {sc_pair} vertex, so {sc_agg} vertex separates all {len(sc_S)} sources from all "
+           f"{len(sc_T)} targets; the per-pair bound is silent about a shared vertex, and the corrected Claim 2 excludes this graph too")
 
     print()
     print("All checks hold." if ok else "A check failed.")
