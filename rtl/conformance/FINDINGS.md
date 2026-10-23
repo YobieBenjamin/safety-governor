@@ -15,7 +15,7 @@ reachable case), **low** (edge case, unreachable in practice, or a reporting dif
 | F-02 | low | Mailbox: sequence number 0 on a key's first frame | RTL vs model; spec silent |
 | F-03 | low | Model's heartbeat path checks the signature first | model vs spec and RTL |
 | F-04 | low | Model's CLEAR handler reports one reason for every failure | model vs spec |
-| F-05 | high | CLEAR and tamper in the same cycle: CLEAR wins, the tamper is lost | RTL vs spec and model (lead a) |
+| F-05 | high, **closed** | CLEAR and tamper in the same cycle: CLEAR wins, the tamper is lost (fixed: tamper outranks CLEAR, branch fix/halt) | RTL vs spec and model (lead a) |
 | F-06 | high | Lifecycle reads TEST and grants debug before the fuse load | RTL vs spec (lead b) |
 | F-07 | medium | A signed HALT to a governor already in SAFE | RTL vs spec; model vs spec, differently |
 | F-08 | low | The "millisecond" tick is 1,024 microseconds | RTL vs spec |
@@ -89,7 +89,7 @@ would still say 4, so the silicon side is fine; the model's reason codes are not
 
 **Reproducer:** `test_model_finding_clear_collapses_reasons`. **Fix:** return `why` from `_check_signed`, or log both.
 
-## F-05 CLEAR and tamper in the same cycle (lead a)
+## F-05 CLEAR and tamper in the same cycle (lead a) (closed)
 
 **What the spec requires.** docs/07 section 4: tamper (mesh cut, glitch injection, temperature excursion) means
 "keys zeroized, state SAFE". docs/07 section 3: the rung "never descends without clear". The FMEA row for a clock
@@ -116,6 +116,8 @@ firmware-owned (R-074), but the hard core could carry it cheaply.
 
 **Suggested fix:** move the `tamper` branch above `clear` in `HaltSeq.elaborate`, make the tamper cause sticky (CLEAR
 does nothing while `cause == C_TAMPER`), and add a formal property for it next to `rtl/formal/halt_seq.sv`.
+
+**Closed** on branch fix/halt (23 October 2026): the tamper branch now comes before the CLEAR branch in `HaltSeq`, both reproducers pass and stay as guards, and the halt proof's "unless cleared that same cycle" exception, which excused this bug, is gone (`rtl/formal/halt_seq.sv`, with a mutant that puts CLEAR first again and is caught).
 
 ## F-06 Lifecycle register between reset and the fuse load (lead b)
 

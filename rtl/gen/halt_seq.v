@@ -15,23 +15,25 @@ module halt_seq(hb_expired, tamper, cmd_halt, cmd_throttle, local_trip, clear, h
   wire \$19 ;
   wire \$2 ;
   wire \$20 ;
-  wire [20:0] \$21 ;
+  wire \$21 ;
   wire \$22 ;
   wire [20:0] \$23 ;
-  wire [20:0] \$24 ;
-  wire \$25 ;
+  wire \$24 ;
+  wire [20:0] \$25 ;
   wire [20:0] \$26 ;
   wire \$27 ;
-  wire \$28 ;
+  wire [20:0] \$28 ;
   wire \$29 ;
   wire \$3 ;
   wire \$30 ;
   wire \$31 ;
   wire \$32 ;
-  reg [2:0] \$33 ;
-  reg [2:0] \$34 ;
-  reg [19:0] \$35 ;
-  reg \$36 ;
+  wire \$33 ;
+  wire \$34 ;
+  reg [2:0] \$35 ;
+  reg [2:0] \$36 ;
+  reg \$37 ;
+  reg [19:0] \$38 ;
   wire \$4 ;
   wire \$5 ;
   wire \$6 ;
@@ -98,126 +100,128 @@ module halt_seq(hb_expired, tamper, cmd_halt, cmd_throttle, local_trip, clear, h
   assign \$18  = tick & \$17 ;
   assign \$19  = state == 2'h3;
   assign \$20  = tick & \$19 ;
-  assign \$21  = timer + 1'h1;
-  assign \$22  = \$21  >= 15'h7530;
+  assign \$21  = ~ loop_lost;
+  assign \$22  = loop_sense & \$21 ;
   assign \$23  = timer + 1'h1;
-  assign \$24  = timer + 1'h1;
-  assign \$25  = \$24  >= 19'h493e0;
+  assign \$24  = \$23  >= 15'h7530;
+  assign \$25  = timer + 1'h1;
   assign \$26  = timer + 1'h1;
+  assign \$27  = \$26  >= 19'h493e0;
+  assign \$28  = timer + 1'h1;
   assign pwrbrk = state != 1'h1;
-  assign \$27  = ! state;
-  assign \$28  = state == 2'h3;
-  assign \$29  = \$27  | \$28 ;
-  assign \$30  = state == 3'h4;
-  assign perst = \$29  | \$30 ;
-  assign \$31  = | state;
-  assign \$32  = state != 3'h4;
-  assign pwr_en = \$31  & \$32 ;
+  assign \$29  = ! state;
+  assign \$30  = state == 2'h3;
+  assign \$31  = \$29  | \$30 ;
+  assign \$32  = state == 3'h4;
+  assign perst = \$31  | \$32 ;
+  assign \$33  = | state;
+  assign \$34  = state != 3'h4;
+  assign pwr_en = \$33  & \$34 ;
   assign ports_closed = state != 1'h1;
   always @(posedge clk)
-    state <= \$33 ;
+    state <= \$35 ;
   always @(posedge clk)
-    cause <= \$34 ;
+    cause <= \$36 ;
   always @(posedge clk)
-    timer <= \$35 ;
+    switch_open <= \$37 ;
   always @(posedge clk)
-    switch_open <= \$36 ;
+    timer <= \$38 ;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$33  = state;
-    if (\$2 ) begin
-      \$33  = 3'h0;
-    end else if (tamper) begin
-      \$33  = 3'h4;
+    \$35  = state;
+    if (tamper) begin
+      \$35  = 3'h4;
+    end else if (\$2 ) begin
+      \$35  = 3'h0;
     end else if (\$6 ) begin
-      \$33  = 3'h3;
+      \$35  = 3'h3;
     end else if (\$8 ) begin
-      \$33  = 3'h3;
+      \$35  = 3'h3;
     end else if (\$12 ) begin
-      \$33  = 3'h2;
+      \$35  = 3'h2;
     end else if (\$16 ) begin
-      if (loop_sense) begin
-        \$33  = 3'h1;
+      if (\$22 ) begin
+        \$35  = 3'h1;
       end
     end else if (\$18 ) begin
-      if (\$22 ) begin
-        \$33  = 3'h3;
+      if (\$24 ) begin
+        \$35  = 3'h3;
       end
     end else if (\$20 ) begin
-      if (\$25 ) begin
-        \$33  = 3'h4;
+      if (\$27 ) begin
+        \$35  = 3'h4;
       end
     end
     if (rst) begin
-      \$33  = 3'h0;
+      \$35  = 3'h0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$34  = cause;
-    if (\$2 ) begin
-      \$34  = 3'h0;
-    end else if (tamper) begin
-      \$34  = 3'h3;
+    \$36  = cause;
+    if (tamper) begin
+      \$36  = 3'h3;
+    end else if (\$2 ) begin
+      \$36  = 3'h0;
     end else if (\$6 ) begin
-      \$34  = 3'h1;
+      \$36  = 3'h1;
     end else if (\$8 ) begin
-      \$34  = 3'h4;
+      \$36  = 3'h4;
     end else if (\$12 ) begin
-      \$34  = 3'h2;
+      \$36  = 3'h2;
     end
     if (rst) begin
-      \$34  = 3'h0;
+      \$36  = 3'h0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$35  = timer;
-    if (\$2 ) begin
-      \$35  = 20'h00000;
-    end else if (tamper) begin
+    \$37  = switch_open;
+    if (tamper) begin
+      \$37  = 1'h1;
+    end else if (\$2 ) begin
     end else if (\$6 ) begin
-      \$35  = 20'h00000;
+      \$37  = 1'h1;
     end else if (\$8 ) begin
-      \$35  = 20'h00000;
+      \$37  = 1'h1;
     end else if (\$12 ) begin
-      \$35  = 20'h00000;
+    end else if (\$16 ) begin
+      \$37  = 1'h0;
+    end
+    if (rst) begin
+      \$37  = 1'h1;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$38  = timer;
+    if (tamper) begin
+    end else if (\$2 ) begin
+      \$38  = 20'h00000;
+    end else if (\$6 ) begin
+      \$38  = 20'h00000;
+    end else if (\$8 ) begin
+      \$38  = 20'h00000;
+    end else if (\$12 ) begin
+      \$38  = 20'h00000;
     end else if (\$16 ) begin
     end else if (\$18 ) begin
       (* full_case = 32'd1 *)
-      if (\$22 ) begin
-        \$35  = 20'h00000;
+      if (\$24 ) begin
+        \$38  = 20'h00000;
       end else begin
-        \$35  = \$23 [19:0];
+        \$38  = \$25 [19:0];
       end
     end else if (\$20 ) begin
       (* full_case = 32'd1 *)
-      if (\$25 ) begin
-        \$35  = 20'h00000;
+      if (\$27 ) begin
+        \$38  = 20'h00000;
       end else begin
-        \$35  = \$26 [19:0];
+        \$38  = \$28 [19:0];
       end
     end
     if (rst) begin
-      \$35  = 20'h00000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$36  = switch_open;
-    if (\$2 ) begin
-    end else if (tamper) begin
-      \$36  = 1'h1;
-    end else if (\$6 ) begin
-      \$36  = 1'h1;
-    end else if (\$8 ) begin
-      \$36  = 1'h1;
-    end else if (\$12 ) begin
-    end else if (\$16 ) begin
-      \$36  = 1'h0;
-    end
-    if (rst) begin
-      \$36  = 1'h1;
+      \$38  = 20'h00000;
     end
   end
 endmodule

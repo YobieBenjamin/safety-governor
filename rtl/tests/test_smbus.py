@@ -348,9 +348,8 @@ def test_csr_addr_reaches_no_state_in_the_core():
 
 # ---- a finding the FPGA top exposed (not an SMBus bug; recorded, not fixed, because halt.py is not this branch's)
 
-@pytest.mark.xfail(strict=True, reason="FINDING F1 (hw/fpga/REPORT.md): with the loop sense strobe running from "
-                   "power-on, LoopIO's debounce saturates while our own switch is open, so the first RUN cycle sees "
-                   "loop_lost and halts with cause LOOP. Remove this marker when halt.py or halt_loop.py is fixed.")
+# FINDING F1 (hw/fpga/REPORT.md) fixed on fix/halt: RUN needs loop_sense & ~loop_lost. This was a strict xfail;
+# it now passes and guards the fix.
 def test_core_reaches_run_and_stays_there_with_the_sense_strobe_running_from_power_on():
     class OneGovernorLoop(GovernorSMBus):
         # a bench with one governor: our own switch closed is the loop current we sense, one cycle later
