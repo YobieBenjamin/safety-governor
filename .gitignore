@@ -9,4 +9,3 @@ dist/
 .agents/
 .worktrees/
 node_modules/
-rtl/formal/build/
