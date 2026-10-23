@@ -103,9 +103,19 @@ Two agents, six blocks each, every block proven four ways: a bounded check, k-in
 
 **Next:** fix F-05 and F-06 in the circuit, use their reproducers as the regression tests, and take the "unless cleared" excuse out of the halt proof.
 
-## Workstream 4: layout and signoff on SkyWater 130 nm (running)
+## Workstream 4: layout and signoff on SkyWater 130 nm (partial, stopped mid-routing)
 
-Turning the circuit into the actual drawing of transistors and wires a foundry prints, then the checks a foundry demands before it'll take your money. Plain-English walk-through with an analogy per step: `hw/librelane/PLAIN-ENGLISH.md`. Toolchain attempts, failures included: `hw/librelane/TOOLCHAIN.md`.
+**What it is.** Turning the circuit into the actual drawing of transistors and wires a foundry prints, then the checks a foundry demands before it will take your money. If the Verilog is the architect's plan, this is the construction drawing with every pipe, wire and bolt placed, and signoff is the building inspector who will not let you pour concrete until every code is met.
+
+**What happened.**
+
+- **Getting the tools was half the job.** Docker couldn't reach any container registry from this machine, Nix couldn't reach a binary cache, and the current LibreLane needs newer tools than any prebuilt version reachable here. The agent found a path that works: OpenLane 2.0.0 (LibreLane's earlier name) with tools from the conda litex-hub channel and the sky130 process kit downloaded straight from GitHub, after fixing four ways the tools refused to start. All of it is repeatable with one command, `hw/librelane/setup_toolchain.sh`, and every dead end is in `hw/librelane/TOOLCHAIN.md`.
+- **The run got through floorplan, placement and the clock tree,** on the Verilog as it stood before the 23 October fixes, and was killed by a container restart in the middle of detailed routing. It was not restarted.
+- **The good news:** the design maps cleanly onto a real foundry library: 117,929 cells, zero latches, 0.52 square millimetres of logic on a 1.8 mm by 1.8 mm die, 16 percent full. At the typical corner (25 C, 1.80 V) it meets timing at 50 MHz with 4.1 ns to spare.
+- **The bad news, on the page:** timing fails at the slow corner (100 C, 1.60 V, -65.7 ns) and, oddly, at the fast one (-40 C, 1.95 V, -42.9 ns). A fast corner failing when the typical one passes is not how physics usually behaves, so that number points at a constraint or path problem to chase, not at a slow chip. And there were 1,037 antenna violations before routing. Antennas are long wires that collect charge during manufacturing and can blow the gate at the end of them, like a lightning rod wired to a light switch; the fix is protection diodes, which is real work.
+- **Not reached:** design rule check, layout versus schematic, fill, power-drop analysis, the final GDS. So no box on the tape-out checklist that needs a finished layout is ticked.
+
+**What finishes it.** Your Mac with Docker: the current LibreLane runs the same config unchanged, in about an hour instead of a day. First point it at the current Verilog, then fix the corner timing and the antennas. Plain English, step by step with an analogy each: `hw/librelane/PLAIN-ENGLISH.md`. Metrics at the last finished step: `hw/librelane/full4-metrics-at-step40.json`.
 
 ## Workstream 5: FPGA and the management bus (done, in software; nothing on real hardware yet)
 
@@ -149,7 +159,7 @@ Turning the circuit into the actual drawing of transistors and wires a foundry p
 | 1. Six blocks proven (mailbox and friends) | Done: 38 of 38 planted bugs caught, 2 real bugs fixed (debug at power-up, counter wrap), 8 open findings | `rtl/formal/` |
 | 2. Six blocks proven (heartbeat to the full core) | Done: 3 solvers, 36 of 36 planted bugs caught, 2 real bugs fixed (meter wrap, frozen heartbeat clock), 2 design questions for me | `rtl/formal/` |
 | 3. 150 checks on the full-chip RTL | Attack-recipe version stopped by a safety check; conformance version done: 250 checks, 27 of 27 planted bugs caught, 15 disagreements found; both high ones fixed, 12 open | `rtl/conformance/` |
-| 4. sky130 layout and signoff | Running | `hw/librelane/` |
+| 4. sky130 layout and signoff | Partial: toolchain found, synthesis to clock tree done (0 latches, typical corner met at 50 MHz); slow and fast corners fail, 1,037 antenna violations; routing interrupted, no DRC/LVS/GDS | `hw/librelane/` |
 | 5. FPGA and SMBus | Done in software: SMBus proven (11 of 11 bugs caught), ULX3S bitstream at 30 MHz (50 MHz not met), bench plan; nothing on real hardware yet | `hw/fpga/` |
 | 6. Public interfaces | Done: 85 pins mapped, SPDM passes DMTF's tester (781 checks), nvtrust matches NVIDIA's verifier, 60-row compliance matrix; PCIe timing bug found and a fixed block written, not wired in yet | `docs/interfaces/`, `hw/pinout/` |
 
