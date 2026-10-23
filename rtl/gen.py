@@ -13,7 +13,7 @@ import sys
 from amaranth.back import verilog
 
 from rtl.governor_rtl import (Alarms, CapTable, EpochReg, GovernorCore, HaltSeq, Heartbeat, Lifecycle, LoopIO, Mailbox,
-                              MeasureReg, Meter, MonotonicCounter, TicketStore)
+                              MeasureReg, Meter, MonotonicCounter, SMBusTarget, TicketStore)
 
 OUT = os.path.join(os.path.dirname(__file__), "gen")
 
@@ -33,6 +33,7 @@ def blocks():
         "meter": (Meter(), None),
         "mailbox": (Mailbox(), None),
         "alarms": (Alarms(), None),
+        "smbus": (SMBusTarget(), None),
         "governor_core": (core, core.ports()),
     }
     return items

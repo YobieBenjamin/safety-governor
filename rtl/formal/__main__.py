@@ -42,6 +42,12 @@ BLOCKS = {
     ]),
 }
 
+try:                                     # blocks added by the FPGA push (the SMBus target); absent on older trees
+    from rtl.formal.blocks_fpga import BLOCKS_FPGA
+except ImportError:
+    BLOCKS_FPGA = {}
+BLOCKS.update(BLOCKS_FPGA)
+
 
 def tool(name: str) -> str:
     here = os.path.join(os.path.dirname(sys.executable), name)
