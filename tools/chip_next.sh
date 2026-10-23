@@ -62,7 +62,7 @@ record() {
 
 $(for r in "${RESULTS[@]}"; do echo "$r"; done)
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01DkQpVYNjMdJtfzj74tR8ZC" && git push -q origin main && echo "recorded and pushed: $(git log --oneline -1)"
 }
 if want layout || want fpga; then ONLY="$ONLY record"; run record "git log" record; fi
