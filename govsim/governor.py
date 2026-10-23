@@ -107,6 +107,7 @@ class Governor:
         self.epoch_history: list[str] = self.store.get("epoch_history", [])   # every epoch accepted, newest last
         self.quoted_nonces: list[str] = self.store.get("quoted_nonces", [])    # nonces already quoted over (replay refused)
         self.responses: dict[str, dict] = self.store.get("responses", {})     # response_id -> presented streams, audit draw
+        self.committed_tickets: dict[str, float] = self.store.get("committed_tickets", {})   # ticket_id -> commit time: central single-use (F11)
         self.licenses: dict[str, int] = self.store.get("licenses", {})        # model digest -> cycles a license allows
         self.policy: dict | None = None
         self._epoch = ""
@@ -998,6 +999,13 @@ class Governor:
              "budget_owner": reservation["owner"] if reservation else None, "governor": self.chip_id,
              "issued_at": self.mono(), "valid_from": now + rule.get("delay_s", 0.0), "expires_at": now + rule.get("delay_s", 0.0) + TICKET_TTL_S}
         ticket = self.key.sign(t)
+        if action == RELEASE_ACTION:
+            # Record the terminal release state against the committed response, so the committed content and
+            # its audit draw are the ones that actually leave and cannot be quietly swapped afterward (F10).
+            rec = self.responses.get(str(params.get("response_id")))
+            if rec is not None:
+                rec["released"] = True
+                self.store.save()
         self.log.append("gate.ticket", {"ticket_id": t["ticket_id"], "request_hash": rhash, "rule": rule["id"], "epoch": self.epoch})
         return ticket
 
@@ -1063,6 +1071,16 @@ class Governor:
             if t["policy_epoch"] != self.epoch:
                 self.log.append("gate.commit_rejected", {"why": reasons.TICKET_STALE_EPOCH})
                 return False
+            tid = t["ticket_id"]
+            # F11: the central single-use record. A ticket authorizes at most one commit, budgeted or not.
+            # The whole method runs under ``self.lock``, so this read and the write below are one atomic
+            # compare-and-set: concurrent callers that both cleared the endpoint's admit cannot both commit.
+            # This is the authoritative at-most-once gate for the effect-dispatch decision and does not
+            # depend on any one endpoint's local consumed flag surviving a crash. An unbudgeted ticket, which
+            # has no reservation to spend, was single-use nowhere before this record existed.
+            if tid in self.committed_tickets:
+                self.log.append("gate.commit_rejected", {"ticket_id": tid, "why": reasons.TICKET_REPLAY})
+                return False
             ok = True
             if t.get("reservation"):
                 owner = t.get("budget_owner") or self.chip_id
@@ -1071,7 +1089,11 @@ class Governor:
                 else:
                     res = self.fabric_send("COMMIT", {"key": t["budget_key"], "rid": t["reservation"]}, to=owner) if self.fabric else []
                     ok = any(isinstance(r, dict) and r.get("ok") for _, r in res)
-            self.log.append("gate.commit" if ok else "gate.commit_rejected", {"ticket_id": t["ticket_id"]})
+            if ok:
+                # Record the single-use commitment in the durable working copy; the trailing log.append
+                # saves it with the same NVM write that records the commit, so no extra save point is added.
+                self.committed_tickets[tid] = self.clock.now()
+            self.log.append("gate.commit" if ok else "gate.commit_rejected", {"ticket_id": tid})
             return ok
 
     # ------------------------------------------------------------------ alarms
@@ -1149,10 +1171,38 @@ class Governor:
         return {"ok": True, "why": reasons.OK, "record": record}
 
     def _record_stream(self, response_id: str, stream: str, h: str, session: str | None) -> None:
-        """Every presented stream hash goes under its response id; the "response" stream also gets the audit draw."""
-        rec = self.responses.setdefault(response_id, {"streams": {}, "session": session, "sampled": None, "verdict": None})
-        rec["streams"][stream] = h
-        rec["session"] = rec.get("session") or session
+        """Every presented stream hash is committed under its response id, immutably, and scoped to this
+        workload instance (fingerprint), epoch and session. A stream hash, once committed under an
+        identity, cannot be overwritten: a different hash under an existing identity is refused, and the
+        same response id reused under a different workload, epoch or session is refused. This closes F10:
+        a released, unsampled response id can no longer be reused to smuggle new bytes past the audit draw,
+        because the draw is bound to the committed content and a retry keeps its commitment's draw while
+        genuinely new content needs a new identity and gets its own fresh draw. The "response" stream also
+        gets the audit draw, once, right after its hash is committed and before any release decision."""
+        fp, ep = self.fingerprint, self.epoch
+        rec = self.responses.get(response_id)
+        if rec is not None:
+            same_identity = (rec.get("fingerprint") == fp and rec.get("epoch") == ep
+                             and (rec.get("session") or session) == session)
+            committed = rec["streams"].get(stream)
+            if committed is not None or not same_identity:
+                # A retry re-presents identical content under the same identity and is idempotent: it keeps
+                # the commitment's draw and any sampled result. Anything else, a different hash for a stream
+                # already committed, or the same response id reused under a different workload, epoch or
+                # session, is a commitment conflict and is refused; the committed hash and the draw are left
+                # untouched, so a terminal release state and its sampled result cannot be erased.
+                if not (same_identity and committed == h):
+                    self.log.append("output.commitment_conflict",
+                                    {"response_id": response_id, "stream": stream,
+                                     "why": reasons.RELEASE_COMMITMENT_CONFLICT})
+                self.store.save()
+                return
+            rec["streams"][stream] = h
+            rec["session"] = rec.get("session") or session
+        else:
+            rec = {"streams": {stream: h}, "session": session, "sampled": None, "verdict": None,
+                   "fingerprint": fp, "epoch": ep, "released": False}
+            self.responses[response_id] = rec
         if stream == "response" and rec["sampled"] is None:
             # The draw comes from the chip's TRNG after the hash exists and is logged before any release
             # decision, so the runtime cannot know in advance which responses are watched.

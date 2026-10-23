@@ -51,6 +51,7 @@ RELEASE_ILLEGIBLE = "release.below_legibility_floor"
 RELEASE_ESCROW_REQUIRED = "release.escrow_receipt_required"
 RELEASE_STREAM_MISSING = "release.required_stream_missing"
 RELEASE_HASH_MISMATCH = "release.response_hash_mismatch"
+RELEASE_COMMITMENT_CONFLICT = "release.response_commitment_conflict"
 SESSION_HAZARD_BUDGET = "release.session_hazard_budget_exceeded"
 
 # deployment and training governance

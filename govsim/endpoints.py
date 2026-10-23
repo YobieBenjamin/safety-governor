@@ -14,6 +14,7 @@ at the moment of action.
 """
 from __future__ import annotations
 
+import threading
 from typing import Any, Callable
 
 from . import reasons
@@ -118,6 +119,10 @@ class ActionEndpoint:
         self.keys = dict(governor_keys)      # key id -> VerifyKey of every governor that may mint for this device
         self.store = store or Store()
         self.consumed = self.store.get("consumed", {})     # ticket_id -> t
+        # Concurrency contract: a single endpoint may be driven by several threads at once (concurrent
+        # dispatch). Admission plus durable consumption is an atomic compare-and-set under this lock, so
+        # for any one ticket exactly one caller becomes the owner and crosses the effect boundary (F11).
+        self._lock = threading.Lock()
         self.epoch = ""
         self.safe_transition = safe_transition
         self.lists = lists or {}            # list id -> {"entries": [...], "stale": bool}
@@ -172,8 +177,15 @@ class ActionEndpoint:
         if not ok:
             return self._refuse(why)
         t = ticket["payload"]
-        self.consumed[t["ticket_id"]] = now
-        self.store.save()                      # burned before anything else happens
+        # The replay check inside admit() above is advisory; the authoritative single-use check is this
+        # compare-and-set, which re-reads the consumed set under the lock and burns the ticket in the same
+        # critical section. Two callers that both cleared admit cannot both burn: the loser sees the burn
+        # the winner just wrote and is refused here, before it can commit or dispatch an effect (F11).
+        with self._lock:
+            if t["ticket_id"] in self.consumed:
+                return self._refuse(reasons.TICKET_REPLAY)
+            self.consumed[t["ticket_id"]] = now
+            self.store.save()                  # burned before anything else happens
         try:
             committed = self.commit(ticket) if self.commit else False
         except ConnectionError:
