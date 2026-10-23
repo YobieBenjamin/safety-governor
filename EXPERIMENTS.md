@@ -27,3 +27,15 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
 | N1 | N | Whole-deployment overhead simulation | `govsim/deploy.py` | open | the per-chip model gives 34 percent engine utilisation batched and under 0.1 percent firmware share |
 | N2 | N | False-halt rate model | `docs/07` FMEA, fault injection | open | |
 | N3 | N | FPGA beside a real GPU | pre-hardware plan, phase 4 | later | needs a lab with a rack |
+
+## L7: formal proofs on the Verilog (wave 3, issue #7)
+
+Status: written, not yet run. `rtl/formal/` holds SymbiYosys properties for `ticket_store`, `epoch_reg`, `halt_seq`, `cap_table`, `monotonic_counter` and `mailbox` (mapped to P-numbers in `rtl/formal/README.md`), three expected-failure tasks that document RTL gaps, and a gate-level equivalence job.
+
+The one `make formal` run in the authoring environment failed before any solver started:
+
+    python3 rtl/formal/run_formal.py
+    FAIL  tool 'sby' not found on PATH (the program's container has it)
+    make: *** [formal] Error 1
+
+That environment has z3 only; `sby`, `yosys` and `yosys-smtbmc` are absent, and the bundled Amaranth Yosys has no Verilog frontend. So no assertion, induction step or equivalence script has been executed, and the first run in the container may need fixes to property syntax or induction strengthening. Candidate findings from reading the RTL, to be confirmed by the expected-failure tasks: the counter wraps at 2^64-1, the mailbox reads the frame live in VERIFY (no latch), and `running` is not re-checked at dispatch. The netlist check compares against a Yosys-synthesized gate netlist, not a LibreLane netlist (none is checked in).

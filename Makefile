@@ -1,4 +1,4 @@
-.PHONY: figures docx run test rtl rtl-test sweep demo bench gds loop clean
+.PHONY: formal figures docx run test rtl rtl-test sweep demo bench gds loop clean
 run:      ; ./run.sh
 test:     ; python3 -m pytest -q tests
 rtl-test: ; python3 -m pytest -q rtl/tests
@@ -13,3 +13,5 @@ loop:     ; python3 hw/loop/run_loop.py
 proof:    ; python3 proofs/core_invariants.py && python3 proofs/commit_point.py && python3 proofs/no_global_kill_switch.py
 clean:    ; rm -rf .venv .pytest_cache govsim/__pycache__ tests/__pycache__ rtl/__pycache__ rtl/governor_rtl/__pycache__ rtl/tests/__pycache__ hw/librelane/governor_core/runs
 archive:  ; python3 tools/archive/build_archive.py --out build/archive --repo . --repo ../hardware-and-silicon && python3 tools/archive/build_project_docs.py --out build/project --governor . --stack ../hardware-and-silicon
+formal: ; python3 rtl/formal/run_formal.py
+formal-%: ; python3 rtl/formal/run_formal.py $*
