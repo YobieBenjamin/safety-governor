@@ -16,13 +16,13 @@ reachable case), **low** (edge case, unreachable in practice, or a reporting dif
 | F-03 | low | Model's heartbeat path checks the signature first | model vs spec and RTL |
 | F-04 | low | Model's CLEAR handler reports one reason for every failure | model vs spec |
 | F-05 | high, **closed** | CLEAR and tamper in the same cycle: CLEAR wins, the tamper is lost (fixed: tamper outranks CLEAR, branch fix/halt) | RTL vs spec and model (lead a) |
-| F-06 | high | Lifecycle reads TEST and grants debug before the fuse load | RTL vs spec (lead b) |
+| F-06 | high, **half closed** | Lifecycle reads TEST and grants debug before the fuse load (debug half fixed by a `loaded` flag, L7 group A; the register still reads TEST until the load) | RTL vs spec (lead b) |
 | F-07 | medium | A signed HALT to a governor already in SAFE | RTL vs spec; model vs spec, differently |
 | F-08 | low | The "millisecond" tick is 1,024 microseconds | RTL vs spec |
 | F-09 | low | A zero-byte lookup passes at zero budget | RTL and model vs spec |
 | F-10 | medium | Capability table holds two entries for one key | RTL vs spec and model |
 | F-11 | medium, **closed** | Meter counters wrap at 48 bits (fixed: counters saturate, `acce09f`) | RTL vs spec |
-| F-12 | low | Monotonic counter wraps from an all-ones high-water mark | RTL vs spec |
+| F-12 | low, **closed** | Monotonic counter wraps from an all-ones high-water mark (fixed: the counter saturates instead of wrapping (L7 group A, F2 there)) | RTL vs spec |
 | F-13 | low | Mailbox does not latch the frame between doorbell and verdict | an RTL interface assumption the spec never states |
 | F-14 | low | Register map's MBOX_STATUS row has no status 7 | spec vs spec |
 | F-15 | low | 07 says switch_open sets on loop_lost; RTL and model only do it in RUN or THROTTLE | spec text vs RTL and model |
@@ -139,6 +139,8 @@ the OTP state has been read and decoded).
 **Suggested fix:** reset `state` to a most-restrictive "not yet loaded" value, or add a `loaded` flag that holds
 `debug_grant` at 0 until the fuse load, and drive the load from a reset sequencer rather than firmware.
 
+**Half closed** (23 October 2026). The dangerous half is fixed: debug needs a fuse load since the last reset (a `loaded` flag, found independently by the L7 proofs as their F1); the block-level reproducer now passes as a guard. The other half is open: until the load, the LIFECYCLE register still reads TEST (0), so software that reads it in that window is told the chip is a test part. Fix: reset the register to the most locked state, or report a distinct NOT_LOADED value. The core-level reproducer `test_finding_core_reports_test_lifecycle_before_fuse_load` still fails, on that half.
+
 ## F-07 A signed HALT to a governor already in SAFE
 
 A governor whose heartbeat lapsed climbs THROTTLE, HALT, SAFE on its timers with its loop switch closed, which is
@@ -211,7 +213,7 @@ alarm), or use 64 bits in the product.
 meter now saturates at its maximum (merge `acce09f`, regression in `rtl/tests/test_l7b_regressions.py`). The
 reproducer above now passes and stays in the suite as a guard. The alarm on saturation is not added yet.
 
-## F-12 Monotonic counter wraps from an all-ones high-water mark
+## F-12 Monotonic counter wraps from an all-ones high-water mark (closed)
 
 The 64-bit counter cannot wrap by counting (that takes 584,000 years). But `load_hwm` accepts any value above the
 current one, and a fuse array that reads all ones (erased or failed) loads 2^64 - 1; the next tick wraps the
@@ -219,6 +221,8 @@ governor's clock to 0, which every expiry check would then misread.
 
 **Reproducer:** `test_finding_mono_wraps_from_an_all_ones_high_water_mark`. **Fix:** saturate at the top, and treat an
 all-ones high-water mark as a fuse read failure (boot refused, as the FMEA row already says for fuse failures).
+
+**Closed** (23 October 2026): the counter saturates instead of wrapping (L7 group A, F2 there). The L7 proofs found the same bug independently. The reproducer above now passes and stays in the suite as a guard.
 
 ## F-13 Mailbox does not latch the frame between doorbell and verdict
 

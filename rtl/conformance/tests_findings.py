@@ -103,7 +103,8 @@ def test_model_tamper_is_safe_and_unclearable():
 
 
 # ================================================================ F-06: lifecycle before the fuse load (lead b)
-@conformance("R-010", "R-011", finding="F-06")
+# F-06 closed by the L7 group A merge: this test passes and guards the fix.
+@conformance("R-010", "R-011")
 def test_finding_lifecycle_debug_before_fuse_load():
     """F-06: a part fused PRODUCTION, between reset and the fuse load: the register holds its reset value 0 (TEST)
     and debug_grant follows debug_req. Required: debug is impossible on production silicon, at every cycle."""
@@ -116,6 +117,8 @@ def test_finding_lifecycle_debug_before_fuse_load():
     sim(dut, tb)
 
 
+# F-06 is only half closed: debug is no longer granted before the fuse load, but the LIFECYCLE register still
+# reads TEST in that window, so this reproducer still fails, on the register half.
 @conformance("R-012", "R-011", finding="F-06")
 def test_finding_core_reports_test_lifecycle_before_fuse_load():
     """F-06 through the core: LIFECYCLE reads 0 (test) and the debug_grant port is high on a production part
@@ -405,7 +408,8 @@ def test_finding_meter_counter_wraps_at_48_bits():
     sim(dut, tb)
 
 
-@conformance("R-002", "R-003", finding="F-12")
+# F-12 closed by the L7 group A merge: this test passes and guards the fix.
+@conformance("R-002", "R-003")
 def test_finding_mono_wraps_from_an_all_ones_high_water_mark():
     """F-12: the counter never decreases. A high-water mark that reads all ones (an erased or failed fuse array)
     loads 2^64 - 1, and the next tick wraps the governor's clock to 0. Low severity: unreachable by counting."""

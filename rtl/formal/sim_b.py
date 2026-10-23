@@ -192,10 +192,10 @@ class CoreRef:
         lost = len(self.samples) == 2 and not any(self.samples)
         s, run_like = self.state, self.state in (RUN, THROTTLE)
         ns, nc, nsw, nt = s, self.cause, self.sw_open, self.timer
-        if i["clear"] and s != HALTED_INITIAL:
-            ns, nc, nt = HALTED_INITIAL, 0, 0                # clear does not touch the switch
-        elif i["tamper"]:
+        if i["tamper"]:                                       # tamper outranks CLEAR (F-05, fixed 23 October)
             ns, nc, nsw = SAFE, 3, True
+        elif i["clear"] and s != HALTED_INITIAL:
+            ns, nc, nt = HALTED_INITIAL, 0, 0                # clear does not touch the switch
         elif lost and run_like:
             ns, nc, nsw, nt = HALT, 1, True, 0
         elif i["cmd_halt"] and s != SAFE:
@@ -204,7 +204,7 @@ class CoreRef:
             ns, nc, nt = THROTTLE, 2, 0
         elif s == HALTED_INITIAL and self.cause == 0 and not expired:
             nsw = False                                       # armed
-            if i["loop_sense"]:
+            if i["loop_sense"] and not lost:                  # RUN needs a clean loop sample (F1, fixed 23 October)
                 ns = RUN
         elif tick_ms and s == THROTTLE:
             ns, nt = (HALT, 0) if self.timer + 1 >= self.tt else (s, self.timer + 1)
