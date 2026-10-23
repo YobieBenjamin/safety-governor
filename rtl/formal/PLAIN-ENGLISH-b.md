@@ -168,7 +168,9 @@ later it stops only one. Whether that is what we want is Yobie's call.
    only, because they take minutes there and much longer in the other two.
 10. **The random simulation missed two core mutants at first.** It never touched the counter's "load a saved value"
    input, so it could not see the frozen-clock bug, and it does not model the meter. I made it pulse that input half
-   the time; it now catches the frozen clock too. It still misses the meter-slot one (the proof catches it). The
+   the time; it now catches the frozen clock too. It still misses two: the meter-slot one, and a status read with a
+   side effect, because a random read lands on that one address only about once in 4096 ticks. The proof catches
+   both. The
    simulation is a second opinion, not the judge, and the run says per mutant whether it agreed.
 
 ## Left at "small build" and why

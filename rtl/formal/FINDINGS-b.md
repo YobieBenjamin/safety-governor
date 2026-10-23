@@ -98,7 +98,8 @@ alone and never opens the loop to its neighbours. What the integrated RTL does, 
   (2 entries per point, 2 tickets, 3 ms and 4 ms timers, a 4-tick millisecond), in yices, z3 and boolector. The
   design facts and the small-build miters run in yices only (minutes each in yices, far longer in the others on this
   shared machine). The randomized core simulation (3000 cycles, every rung visited, `load_hwm` hammered half the
-  time) catches 6 of the 7 core mutants; it does not model the meter, so it misses "the host's CSR address selects
-  the meter slot", which the structural host check catches. The argument for why the small build covers the full
+  time) catches 5 of the 7 core mutants in the recorded run (`last-run-b.txt`). It misses "reading MBOX_STATUS
+  restarts the millisecond" (a random address lands on 0x104 about once in 4096 cycles) and "the host's CSR address
+  selects the meter slot" (it does not model the meter). The proofs catch both. The argument for why the small build covers the full
   size is in the header of `governor_core.sv`. The host rules are proven on the full-size netlist structurally, which
   holds for all time and at any size. Nothing in my set is bounded-only; what is "small build only" is listed here.
