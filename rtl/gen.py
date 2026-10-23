@@ -14,6 +14,7 @@ from amaranth.back import verilog
 
 from rtl.governor_rtl import (Alarms, CapTable, EpochReg, GovernorCore, HaltSeq, Heartbeat, Lifecycle, LoopIO, Mailbox,
                               MeasureReg, Meter, MonotonicCounter, TicketStore)
+from rtl.governor_rtl.cem_sideband import CemSideband
 
 OUT = os.path.join(os.path.dirname(__file__), "gen")
 
@@ -33,6 +34,7 @@ def blocks():
         "meter": (Meter(), None),
         "mailbox": (Mailbox(), None),
         "alarms": (Alarms(), None),
+        "cem_sideband": (CemSideband(), None),     # docs/interfaces/02-pcie-cem-sideband.md; not yet in governor_core
         "governor_core": (core, core.ports()),
     }
     return items

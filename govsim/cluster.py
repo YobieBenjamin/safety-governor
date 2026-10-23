@@ -121,13 +121,13 @@ class Rack:
                           release_mode: str = "observer", on_hazard: str = "refuse", on_illegible: str = "refuse",
                           min_legibility: float = 0.0, hazard_budget: dict | None = None, streams_required: list[str] | None = None,
                           audit: dict | None = None, deployment_gate: bool = False, compute_cycles: int | None = None,
-                          sandbox: bool = False) -> dict:
+                          sandbox: bool = False, extra_refs: list[dict] | None = None) -> dict:
         now = self.clock.now()
         refs = [
             {"device_class": "gpu", "vendor_key": self.gpu_vendor.public.hex, "firmware_digest": GPU_FW, "valid_until": now + 365 * 86400},
             {"device_class": "host", "vendor_key": self.cpu_vendor.public.hex, "firmware_digest": HOST_FW, "valid_until": now + 365 * 86400},
             {"device_class": "governor", "vendor_key": self.gov_vendor.public.hex, "meas1": governor_meas1(), "valid_until": now + 365 * 86400},
-        ]
+        ] + list(extra_refs or [])      # e.g. NVIDIA-format GPU references (govsim/hardware_ref/nvtrust.py)
         human = {"mode": "human", "approvers_quorum": 2}
         rules = [
             make_rule("strike", "strike", mode=strike_mode, observers=[self.observer.key_id], max_risk=0.5, approvers_quorum=2,

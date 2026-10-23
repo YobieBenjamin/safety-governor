@@ -9,6 +9,7 @@ column is the honest part. Nothing here changes the GPU's silicon or CUDA.
 > do through each one, and, in the honest column, what it cannot reach through it.
 > **Plain-English version:** `10-plain-english-walkthrough.md` §2 and §7.
 > **What goes through the plugs, handshake by handshake:** `25-the-rulebook-and-the-board.md` §7.
+> **Against the real public specifications (DC-SCM, PCIe CEM, SPDM, nvtrust):** `interfaces/COMPLIANCE-MATRIX.md`.
 > **Backed by:** model `govsim/endpoints.py` (switches as enforcement points, the endpoint
 > comparator), `govsim/gpu.py` (`EXITS`, `transfer`, the levers, the attestation report);
 > tests `tests/test_h02_enforcement_points.py`, `test_h06_comparator.py`, `test_h16_levers.py`;

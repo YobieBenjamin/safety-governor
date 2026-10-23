@@ -406,6 +406,8 @@ class Governor:
 
     def _cmd_verify_gpu(self, body, env):
         """The GPU's confidential-computing report, verified locally against pinned reference values."""
+        if body.get("format") == "nvidia-spdm-1.1":
+            return self._verify_gpu_nvidia(body, env)
         self.ops["attest"] += 1
         report, cert = body.get("report"), body.get("cert")
         refs = self._reference("gpu")
@@ -434,6 +436,55 @@ class Governor:
         result = self.key.sign({"type": "verify-result", "device": "gpu", "chip_id": p["chip_id"], "firmware": p["firmware_digest"],
                                 "nonce": p["nonce"], "expires_at": now + TOKEN_TTL_S, "governor": self.chip_id})
         return {"ok": True, "why": reasons.OK, "result": result}
+
+    def _verify_gpu_nvidia(self, body, env):
+        """VERIFY_GPU with NVIDIA's real evidence format (SPDM 1.1 GET_MEASUREMENTS request and
+        response plus the driver's PEM chain), through ``govsim/hardware_ref/nvtrust.py``. Same
+        order of checks as the model format: device chain, report signature, revocation, the
+        governor's own nonce, golden values, then the result signed by the governor. What the
+        adapter cannot check (OCSP, dates, debug state, a model manifest) is in its docstring."""
+        from .hardware_ref import nvtrust
+        self.ops["attest"] += 1
+        refs = [r for r in self._reference("gpu") if r.get("format") == nvtrust.FORMAT]
+        if not refs:
+            return self._deny("verify_gpu", reasons.ATTEST_UNKNOWN_DEVICE)
+        try:
+            report_bytes = bytes.fromhex(str(body.get("report", "")))
+            evs = [nvtrust.verify_evidence(report_bytes, str(body.get("cert_chain", "")), r["root_pem"]) for r in refs]
+        except (nvtrust.EvidenceError, ValueError, TypeError, KeyError):
+            return self._deny("verify_gpu", reasons.ATTEST_BAD_SIGNATURE)
+        good = [(e, r) for e, r in zip(evs, refs) if e.checks["chain"][0]]
+        if not good:
+            return self._deny("verify_gpu", reasons.ATTEST_UNKNOWN_DEVICE)
+        good = [(e, r) for e, r in good if e.checks["report_signature"][0] and e.checks["fwid_binding"][0]]
+        if not good:
+            return self._deny("verify_gpu", reasons.ATTEST_BAD_SIGNATURE)
+        ev = good[0][0]
+        if ev.chip_id in set((self.policy or {}).get("revocations", [])):
+            self.verified.pop("gpu", None)
+            return self._deny("verify_gpu", reasons.ATTEST_REVOKED, chip_id=ev.chip_id)
+        nonce = ev.report.nonce.hex()
+        if nonce not in self.nonces:
+            return self._deny("verify_gpu", reasons.ATTEST_BAD_NONCE)
+        self.nonces.discard(nonce)
+        now = self.clock.now()
+        driver = ev.report.opaque.get("DRIVER_VERSION", b"").decode(errors="replace").rstrip("\x00")
+        vbios = nvtrust.vbios_string(ev.report.opaque.get("VBIOS_VERSION", b""))
+        matched = [r for e, r in good if r["valid_until"] > now
+                   and not nvtrust.golden_mismatches(e.report.measurements, {int(k): v for k, v in r["golden"].items()})
+                   and r.get("driver_version") in (None, driver) and r.get("vbios_version") in (None, vbios)]
+        if not matched:
+            return self._deny("verify_gpu", reasons.ATTEST_FIRMWARE_NOT_IN_REFERENCE)
+        if self.tier == "integrated" and self.model_digest:
+            # the NVIDIA report has no model-manifest field (the first ask in docs/03 section 9)
+            return self._deny("verify_gpu", reasons.ATTEST_BAD_SIGNATURE + ".manifest_mismatch")
+        fw = hashlib.sha256(b"".join(ev.report.measurements[i] for i in sorted(ev.report.measurements))).hexdigest()
+        self.verified["gpu"] = {"chip_id": ev.chip_id, "firmware_digest": fw, "expires_at": now + TOKEN_TTL_S}
+        self.log.append("verify.gpu", {"chip_id": ev.chip_id, "firmware": fw, "format": nvtrust.FORMAT, "driver": driver, "vbios": vbios})
+        result = self.key.sign({"type": "verify-result", "device": "gpu", "chip_id": ev.chip_id, "firmware": fw,
+                                "nonce": nonce, "expires_at": now + TOKEN_TTL_S, "governor": self.chip_id})
+        return {"ok": True, "why": reasons.OK, "result": result,
+                "checks": {k: [ok, how] for k, (ok, how) in ev.checks.items()}}
 
     def _cmd_verify_host(self, body, env):
         self.ops["attest"] += 1

@@ -1,0 +1,154 @@
+{
+ "runs": {
+  "A1": {
+   "errors": [],
+   "exit": 0,
+   "no_authority": false,
+   "requests": 20,
+   "server": [
+    "shutdown"
+   ]
+  },
+  "A2": {
+   "errors": [],
+   "exit": 0,
+   "no_authority": false,
+   "requests": 20,
+   "server": [
+    "shutdown"
+   ]
+  },
+  "A3": {
+   "errors": [
+    "ERROR: do_authentication_via_spdm - 80020001"
+   ],
+   "exit": 1,
+   "no_authority": false,
+   "requests": 7,
+   "server": [
+    "shutdown"
+   ]
+  },
+  "A4": {
+   "errors": [
+    "ERROR: do_measurement_via_spdm - 80010004"
+   ],
+   "exit": 1,
+   "no_authority": false,
+   "requests": 266,
+   "server": [
+    "shutdown"
+   ]
+  },
+  "A5": {
+   "errors": [],
+   "exit": 0,
+   "no_authority": true,
+   "requests": 20,
+   "server": [
+    "shutdown"
+   ]
+  },
+  "B": {
+   "exit": 0,
+   "fail": 0,
+   "not_tested": [
+    "12.1 (spdm_test_case_heartbeat_ack_success_11_dhe)",
+    "12.2 (spdm_test_case_heartbeat_ack_version_mismatch)",
+    "12.3 (spdm_test_case_heartbeat_ack_unexpected_request)",
+    "12.4 (spdm_test_case_heartbeat_ack_session_required)",
+    "13.1 (spdm_test_case_key_update_ack_success_11_dhe)",
+    "13.2 (spdm_test_case_key_update_ack_version_mismatch)",
+    "13.3 (spdm_test_case_key_update_ack_invalid_request)",
+    "13.4 (spdm_test_case_key_update_ack_unexpected_request)",
+    "13.5 (spdm_test_case_key_update_ack_session_required)",
+    "16.1 (spdm_test_case_end_session_ack_success_11_dhe)",
+    "16.2 (spdm_test_case_end_session_ack_version_mismatch)",
+    "16.3 (spdm_test_case_end_session_ack_unexpected_request)",
+    "16.4 (spdm_test_case_end_session_ack_session_required)",
+    "2.1 (spdm_test_case_capabilities_success_10)",
+    "2.7 (spdm_test_case_capabilities_success_13)",
+    "2.8 (spdm_test_case_capabilities_success_14)",
+    "3.1 (spdm_test_case_algorithms_success_10)",
+    "3.8 (spdm_test_case_algorithms_success_13)",
+    "3.9 (spdm_test_case_algorithms_success_14)",
+    "4.3 (spdm_test_case_digests_success_13)",
+    "5.7 (spdm_test_case_certificate_large_resp)",
+    "5.8 (spdm_test_case_certificate_no_partial_chain)",
+    "5.9 (spdm_test_case_certificate_no_partial_chain_large)",
+    "7.1 (spdm_test_case_measurements_success_10)",
+    "7.10 (spdm_test_case_measurements_success_12_session)",
+    "7.7 (spdm_test_case_measurements_success_11_session)",
+    "7.8 (spdm_test_case_measurements_unexpected_request_in_session)",
+    "8.1 (spdm_test_case_key_exchange_rsp_success_11)",
+    "8.10 (spdm_test_case_key_exchange_rsp_success_13_hs_clear_multi_key)",
+    "8.2 (spdm_test_case_key_exchange_rsp_success_11_hs_clear)",
+    "8.3 (spdm_test_case_key_exchange_rsp_version_mismatch)",
+    "8.5 (spdm_test_case_key_exchange_rsp_unexpected_request_in_session)",
+    "8.6 (spdm_test_case_key_exchange_rsp_invalid_request)",
+    "8.7 (spdm_test_case_key_exchange_rsp_success_12)",
+    "8.8 (spdm_test_case_key_exchange_rsp_success_12_hs_clear)",
+    "8.9 (spdm_test_case_key_exchange_rsp_success_13_multi_key)",
+    "9.1 (spdm_test_case_finish_rsp_success_11)",
+    "9.10 (spdm_test_case_finish_rsp_success_12_hs_clear)",
+    "9.11 (spdm_test_case_finish_rsp_session_required)",
+    "9.12 (spdm_test_case_finish_rsp_success_13_multi_key)",
+    "9.13 (spdm_test_case_finish_rsp_success_13_hs_clear_multi_key)",
+    "9.2 (spdm_test_case_finish_rsp_success_11_hs_clear)",
+    "9.3 (spdm_test_case_finish_rsp_version_mismatch)",
+    "9.5 (spdm_test_case_finish_rsp_unexpected_request_in_session)",
+    "9.6 (spdm_test_case_finish_rsp_invalid_request)",
+    "9.7 (spdm_test_case_finish_rsp_decrypt_error_invalid_verify_data)",
+    "9.8 (spdm_test_case_finish_rsp_decrypt_error_invalid_verify_data_hs_clear)",
+    "9.9 (spdm_test_case_finish_rsp_success_12)"
+   ],
+   "pass": 781,
+   "requests": 565
+  },
+  "C1": {
+   "chain_certs": 3,
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    16,
+    17,
+    253,
+    254
+   ],
+   "ok": true,
+   "version": "1.1"
+  },
+  "C2": {
+   "chain_certs": 3,
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    16,
+    17,
+    253,
+    254
+   ],
+   "ok": true,
+   "version": "1.2"
+  },
+  "C3": {
+   "error": "chain does not start at the pinned root",
+   "ok": false
+  }
+ },
+ "verdict": {
+  "A1": true,
+  "A2": true,
+  "A3": true,
+  "A4": true,
+  "A5": true,
+  "B": true,
+  "C1": true,
+  "C2": true,
+  "C3": true
+ }
+}
