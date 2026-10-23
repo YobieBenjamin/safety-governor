@@ -9860,11 +9860,15 @@ endmodule
 module \governor_core.life (life_load, life_advance, life_advance_to, life_debug_req, clk, rst, life_debug_grant, life_state, life_fuse_state);
   reg \$auto$verilog_backend.cc:2355:dump_module$10  = 0;
   wire \$1 ;
+  reg [1:0] \$10 ;
   wire \$2 ;
   wire \$3 ;
   wire \$4 ;
   wire \$5 ;
-  reg [1:0] \$6 ;
+  wire \$6 ;
+  wire \$7 ;
+  wire \$8 ;
+  reg \$9 ;
   input clk;
   wire clk;
   input life_advance;
@@ -9881,34 +9885,50 @@ module \governor_core.life (life_load, life_advance, life_advance_to, life_debug
   wire [1:0] life_fuse_state;
   input life_load;
   wire life_load;
+  reg life_loaded = 1'h0;
   output [1:0] life_state;
   reg [1:0] life_state = 2'h0;
   input rst;
   wire rst;
-  assign life_advance_refused = life_advance & \$3 ;
-  assign \$4  = life_state < 2'h2;
-  assign life_debug_grant = life_debug_req & \$4 ;
-  assign \$5  = life_state >= 2'h2;
-  assign life_debug_refused = life_debug_req & \$5 ;
-  always @(posedge clk)
-    life_state <= \$6 ;
   assign \$1  = life_fuse_state > life_state;
   assign \$2  = life_advance_to > life_state;
   assign \$3  = life_advance_to <= life_state;
+  assign life_advance_refused = life_advance & \$3 ;
+  assign \$4  = life_debug_req & life_loaded;
+  assign \$5  = life_state < 2'h2;
+  assign life_debug_grant = \$4  & \$5 ;
+  assign \$6  = life_state < 2'h2;
+  assign \$7  = life_loaded & \$6 ;
+  assign \$8  = ~ \$7 ;
+  assign life_debug_refused = life_debug_req & \$8 ;
+  always @(posedge clk)
+    life_loaded <= \$9 ;
+  always @(posedge clk)
+    life_state <= \$10 ;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$10 ) begin end
-    \$6  = life_state;
+    \$9  = life_loaded;
+    if (life_load) begin
+      \$9  = 1'h1;
+    end
+    if (rst) begin
+      \$9  = 1'h0;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$10 ) begin end
+    \$10  = life_state;
     if (life_load) begin
       if (\$1 ) begin
-        \$6  = life_fuse_state;
+        \$10  = life_fuse_state;
       end
     end else if (life_advance) begin
       if (\$2 ) begin
-        \$6  = life_advance_to;
+        \$10  = life_advance_to;
       end
     end
     if (rst) begin
-      \$6  = 2'h0;
+      \$10  = 2'h0;
     end
   end
 endmodule
@@ -11077,8 +11097,11 @@ endmodule
 module \governor_core.mono (mono_hwm, mono_load_hwm, mono_refused, clk, rst, mono_value, mono_inc);
   reg \$auto$verilog_backend.cc:2355:dump_module$16  = 0;
   wire \$1 ;
-  wire [64:0] \$2 ;
-  reg [63:0] \$3 ;
+  wire \$2 ;
+  wire \$3 ;
+  wire \$4 ;
+  wire [64:0] \$5 ;
+  reg [63:0] \$6 ;
   input clk;
   wire clk;
   wire mono_dec_req;
@@ -11094,22 +11117,25 @@ module \governor_core.mono (mono_hwm, mono_load_hwm, mono_refused, clk, rst, mon
   reg [63:0] mono_value = 64'h0000000000000000;
   input rst;
   wire rst;
-  assign \$1  = mono_hwm > mono_value;
-  assign \$2  = mono_value + 1'h1;
+  assign \$4  = mono_hwm > mono_value;
+  assign \$5  = mono_value + 1'h1;
   always @(posedge clk)
-    mono_value <= \$3 ;
+    mono_value <= \$6 ;
+  assign \$1  = & mono_value;
+  assign \$2  = ~ \$1 ;
+  assign \$3  = mono_inc & \$2 ;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$16 ) begin end
-    \$3  = mono_value;
+    \$6  = mono_value;
     if (mono_load_hwm) begin
-      if (\$1 ) begin
-        \$3  = mono_hwm;
+      if (\$4 ) begin
+        \$6  = mono_hwm;
       end
-    end else if (mono_inc) begin
-      \$3  = \$2 [63:0];
+    end else if (\$3 ) begin
+      \$6  = \$5 [63:0];
     end
     if (rst) begin
-      \$3  = 64'h0000000000000000;
+      \$6  = 64'h0000000000000000;
     end
   end
   assign mono_dec_req = mono_refused;
