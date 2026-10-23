@@ -25,5 +25,5 @@ One row per experiment in `docs/20-experiment-program.md`. Every result, includi
 | YB-0056 | S | Verdict latency inside the gate's windows | `safety/observer/bench/latency.py` | open | filed |
 | YB-0057 | S | The use-case narrations with the real observer over the lanes contract | `govsim/cli.py usecase --observer lanes` | open | filed |
 | N1 | N | Whole-deployment overhead simulation | `govsim/deploy.py` | open | the per-chip model gives 34 percent engine utilisation batched and under 0.1 percent firmware share |
-| N2 | N | False-halt rate model | `docs/07` FMEA, fault injection | open | |
+| N2 | N | False-halt rate model | `docs/07` FMEA, fault injection | done | 2026-10-22: 0.830 false halts per rack-year (0.679 rack-wide, 0.151 one slot) against a switch-off threshold of 1.24 (a tenth of the Llama 3 interruption rate); rates are planning values, not table lookups; the two-sample debounce is modelled, not yet in `govsim`; transient rates await N3 |
 | N3 | N | FPGA beside a real GPU | pre-hardware plan, phase 4 | later | needs a lab with a rack |
