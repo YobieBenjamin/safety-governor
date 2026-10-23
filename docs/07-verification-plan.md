@@ -99,6 +99,35 @@ property is small enough, a formal statement for a bounded model checker:
 | Fabric port failure | Partition | Heartbeat expiry | Safe mode for the cut-off segment |
 | Clock glitch | Counter or FSM corruption | Glitch detector | Zeroize, SAFE |
 
+### 5.1 Expected false halts per rack-year (N2)
+
+A false halt is a halt with no hazard behind it. The model is `govsim/faults.py`; `tests/test_false_halt_model.py` reproduces the arithmetic by hand and injects each mode into `govsim` to confirm the effect. A rack is 72 governors on one loop. Rates are in FIT (failures per 10^9 device-hours).
+
+**Sources, stated plainly.** The rates are planning values chosen to the order of magnitude of the IEC 61508-6 data annex, IEC 62380, SN 29500 and MIL-HDBK-217F (connector class), and of public datasheet classes for regulators, comparators and PHYs. They were not read out of those tables in this run, and none is a measurement of this design. Rows marked "assumed" have no public rate at all. Check each against the cited table before the number is relied on; N3 (FPGA beside a real GPU) measures the transient rows.
+
+| Mode (FMEA row) | Rate per governor | Scope | Debounce or window | Per rack-year |
+|---|---|---|---|---|
+| Governor loses power | 200 FIT | rack (loop opens) | none | 0.126 |
+| Firmware hang, watchdog reset | 500 FIT (assumed) | rack | none | 0.316 |
+| Loop wire or connector opens | 40 FIT | rack | none | 0.025 |
+| Sense comparator stuck open | 50 FIT (assumed) | rack | none | 0.032 |
+| Glitch detector false trip | 100 FIT (assumed) | rack | none | 0.063 |
+| Switch readback stuck open, named by the beacon | 50 FIT (assumed) | rack | judged when the next heartbeat closes the window | 0.032 |
+| Sense transient, 1e-4 per hour, mean 20 us | not a hard fault | rack | two samples at 100 us: 0.00134 survive | 0.084 |
+| Beacon readback transient | same process | rack | live at the report instant: 5.6e-13 per window | 0.001 |
+| Fabric port failure | 100 FIT | one slot | heartbeat expiry | 0.063 |
+| Authority outage longer than the expiry, 1e-5 per hour | not per governor | every slot, loop closed | 5 s expiry | 0.088 |
+| Heartbeat loss, 1e-3 per frame, dual ring | not a hard fault | one slot | 5 beats lost on both paths | 2e-21 |
+| Fuse read failure, NVM corruption | 20, 100 FIT | none at runtime | boot refused | 0 |
+
+**Result.** Rack-wide false halts 0.767 (including the authority outage, which halts every GPU with the loop closed), single-slot false halts 0.063, together **0.830 per rack-year**. The two-sample debounce is what holds the sense transients to 0.084: with a single sample the same glitches would give 12.5 rack halts per rack-year, more than the whole baseline of GPU interruptions. The transient inputs (rate and mean duration) are the least known numbers in the table. Firmware hang is the largest hard-fault row at 0.316; halving it matters more than any hardware row.
+
+**Disproof threshold.** Operators would switch the governor off if it adds visibly to lost work. The reference is the interruption rate of a large training cluster: Meta's Llama 3 report counts 419 unexpected interruptions in 54 days on 16384 GPUs, which scales to 12.4 per 72-GPU rack-year (quoted from memory; confirm against the paper). The threshold here is one tenth of that, **1.24 false halts per rack-year**. The tenth is a judgement, not a measurement from any operator. The model's 0.830 is 67 percent of it, so the margin is real but not large, and the claim fails if N3 measures sense transients above about 5.9e-4 per hour at 20 us mean duration (six times the assumed rate) or firmware watchdog trips above about 1157 FIT.
+
+**Beacon window.** As built the odd report must appear in one beacon's reports and is judged when the next heartbeat closes the window (two heartbeats of latency, `test_jumpered_governor_is_caught_by_the_beacon_within_two_heartbeats`). Requiring it in two consecutive beacons would remove the transient row (0.001) but not the stuck row, and would cost another heartbeat of latency; the model supports it (`confirm=2`).
+
+**Not modelled.** `govsim` senses the loop with one sample; the two-sample debounce exists in the doc and in this model, not yet in the simulator or the RTL claim. Hazard-driven halts, operator halts and planned maintenance are not false halts and are excluded.
+
 ## 6. What the proofs assume
 
 Following seL4's practice, the control firmware's verification will state its assumptions
