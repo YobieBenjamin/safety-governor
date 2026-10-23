@@ -56,7 +56,7 @@ def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_requ
         if i % 20 == 0:
             rack.heartbeat()
     for _ in range(actions):
-        rack.request(node, "payments.transfer", {"amount": 1, "currency": "USD", "destination": "a"})
+        rack.request(node, "payments.transfer", {"amount": 1, "currency": "USD", "destination": "acct-1"})
     ops = dict(node.governor.ops)
     gpu_s = total_tokens * GPU_SECONDS_PER_TOKEN            # the GPU is busy throughout, so this is also wall time
     firmware_s = sum(COST_S.get(k, 0.0) * v for k, v in ops.items() if k != "sign")

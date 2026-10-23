@@ -31,6 +31,7 @@ PROTECTED_SITES = [[34.052, -118.244], [48.857, 2.351], [31.769, 35.216]]   # sc
 MODEL_70B = digest(["model-70b", 1])                                            # the shipped model's manifest digest
 WORKLOAD_70B = digest([GPU_FW, HOST_FW, MODEL_70B])                            # the shipped model's workload measurement
 LISTED_RECIPIENTS = ["recipient-a", "recipient-b"]                              # the signed recipient registry, in the model's world
+LISTED_BENEFICIARIES = ["acct-1", "acct-9", "recipient-a", "recipient-b"]       # the signed beneficiary registry a payee must be on (F04)
 
 
 def governor_meas1(firmware_digest: str = GOV_FW) -> str:
@@ -142,6 +143,7 @@ class Rack:
             make_rule("payments.transfer.small", "payments.transfer", constraints={"amount": {"min": 0, "max": 1000}, "currency": {"in": ["USD"]}},
                       budget={"key": "pay-usd-hourly", "param": "amount", "limit": pay_small_limit, "window_s": 3600},
                       rate={"max": 100, "window_s": 60}, endpoint="payment-switch", inputs=["beneficiary-registry"],
+                      beneficiary={"registry": "beneficiary-registry", "param": "destination"},   # F04: the payee is admitted here, not just declared
                       payer_confirm=({"registry": "customer-registry", "account_param": "from_account"} if payer_confirm_payments else None),
                       **(human if sandbox else {})),
             make_rule("payments.transfer.large", "payments.transfer", mode="human", approvers_quorum=2,
@@ -207,8 +209,9 @@ class Rack:
             sealed_models=sealed_models, key_lease_s=key_lease_s,
         )
 
-    def signed_list(self, list_id: str, entries: list, expires_in_s: float = 86400.0) -> dict:
-        return self.governance[0].sign({"type": "list", "list_id": list_id, "entries": entries, "expires_at": self.clock.now() + expires_in_s})
+    def signed_list(self, list_id: str, entries: list, expires_in_s: float = 86400.0, version: int = 0, signer: SigningKey | None = None) -> dict:
+        return (signer or self.governance[0]).sign({"type": "list", "list_id": list_id, "entries": entries, "version": version,
+                                                    "expires_at": self.clock.now() + expires_in_s})
 
     def _make_endpoints(self) -> None:
         g0 = self.nodes[0].governor
@@ -266,6 +269,7 @@ class Rack:
     def install_lists(self, node: Node) -> None:
         node.governor.install_list("protected-sites", self.signed_list("protected-sites", PROTECTED_SITES))
         node.governor.install_list("recipient-registry", self.signed_list("recipient-registry", LISTED_RECIPIENTS))
+        node.governor.install_list("beneficiary-registry", self.signed_list("beneficiary-registry", LISTED_BENEFICIARIES))
 
     def bring_up(self, job_id: str = "job-1") -> None:
         """Heartbeat, attest every node, load the model, form the roster. The normal start."""
@@ -367,10 +371,10 @@ class Rack:
             body.update(labels)      # requester-supplied labels; the gate must ignore them (H4)
         return g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))
 
-    def customer_registry_list(self, expires_in_s: float = 86400.0) -> dict:
+    def customer_registry_list(self, expires_in_s: float = 86400.0, version: int = 0, entries: list | None = None) -> dict:
         """I1: the signed account -> customer-key registry the payer-confirm rule names."""
-        entries = [{"account": acct, "key": k.public.hex} for acct, k in self.customers.items()]
-        return self.governance[0].sign({"type": "list", "list_id": "customer-registry", "entries": entries,
+        entries = entries if entries is not None else [{"account": acct, "key": k.public.hex} for acct, k in self.customers.items()]
+        return self.governance[0].sign({"type": "list", "list_id": "customer-registry", "entries": entries, "version": version,
                                         "expires_at": self.clock.now() + expires_in_s})
 
     def pay(self, node: Node, amount: float, from_account: str, confirm_as: str | None = None,
@@ -380,7 +384,7 @@ class Rack:
         confirmation signed for a different request (a replay)."""
         g = governor or node.governor
         rid = random_id(8)
-        params = {"amount": amount, "currency": "USD", "from_account": from_account, "to": "recipient-a"}
+        params = {"amount": amount, "currency": "USD", "from_account": from_account, "destination": "recipient-a"}
         rhash = digest([confirm_request_id or rid, node.token["payload"]["fingerprint"], "payments.transfer", params])
         witnesses = []
         if confirm_as is not None:

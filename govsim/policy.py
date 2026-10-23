@@ -45,7 +45,7 @@ def make_rule(rule_id: str, action: str, *, measurement: str = "*", constraints:
               output_budget: dict | None = None, allowed_hazard_classes: list[str] | None = None,
               min_legibility: float = 0.0, on_hazard: str = "refuse", on_illegible: str = "refuse",
               hazard_budget: dict | None = None, streams_required: list[str] | None = None,
-              payer_confirm: dict | None = None) -> dict:
+              payer_confirm: dict | None = None, beneficiary: dict | None = None) -> dict:
     return {
         "id": rule_id, "measurement": measurement, "action": action,
         "constraints": constraints or {},
@@ -56,6 +56,7 @@ def make_rule(rule_id: str, action: str, *, measurement: str = "*", constraints:
                         "min_legibility": min_legibility, "on_hazard": on_hazard, "on_illegible": on_illegible},
         "rate": rate, "budget": budget, "endpoint": endpoint, "delay_s": delay_s,
         "payer_confirm": payer_confirm,   # I1: {"registry": <list id>, "account_param": <param naming the paying account>}
+        "beneficiary": beneficiary,       # F04: {"registry": <list id>, "param": <param naming the payee>}; a payee not on the current signed registry is a hold
         "inputs": inputs or [],              # the register rows this rule relies on
         "output_budget": output_budget,      # {"queries": n, "bytes": n, "window_s": s}
         "hazard_budget": hazard_budget,      # response.release only: {"max": n, "window_s": s} hazard verdicts per session

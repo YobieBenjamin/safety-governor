@@ -83,7 +83,7 @@ def checks():
     # 5. control: with the rule OFF (the reference rulebook), a payment needs no customer confirmation, so nothing
     #    here changes the default behaviour
     r2 = build_rack(1, "rack"); r2.bring_up(); n2 = r2.nodes[0]
-    res = r2.request(n2, "payments.transfer", {"amount": 100, "currency": "USD", "to": "recipient-a"})
+    res = r2.request(n2, "payments.transfer", {"amount": 100, "currency": "USD", "destination": "recipient-a"})
     check("control: the reference rulebook (no payer-confirm) still tickets a small wire with no customer key", res["ok"], res["why"])
 
     return out

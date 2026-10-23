@@ -146,6 +146,13 @@ KEY_WEIGHTS_UNBOUND = "key.weights_not_committed"      # the manifest named a mo
 # the customer-confirmation payment rule (docs/18 question 22, issue I1): a wire needs the payer's own signature
 GATE_PAYER_UNCONFIRMED = "gate.payer_unconfirmed"
 
+# the beneficiary admission rule (external audit F04): a payee must be on a current, signed beneficiary registry
+GATE_BENEFICIARY_UNLISTED = "gate.beneficiary_unlisted"       # an unknown payee: a hold for enrollment, never the auto path
+GATE_BENEFICIARY_NO_REGISTRY = "gate.beneficiary_no_registry"  # the signed beneficiary registry is missing or stale: fail closed
+
+# authority that is validated at use time, not only at install (external audit F06)
+POLICY_EXPIRED_RUNTIME = "halt.policy_expired"                # a running edition passed its own expiry: the declared fail-closed transition
+
 OK = "ok"
 
 # The 16-bit encoding the RTL and the firmware share. Codes are stable once assigned: the codes first assigned (every
@@ -153,6 +160,7 @@ OK = "ok"
 ADDED = [NO_FIRST_HEARTBEAT, EXCLUDED, EXCLUDE_NOT_WAITING,       # 23 October 2026
          KEY_MODEL_NOT_LOADED, KEY_MODEL_NOT_ALLOWED, KEY_NO_GPU_KEY, KEY_UNWRAP_FAILED, KEY_NO_LEASE, KEY_REVOKED,   # 23 October, origin gate
          GATE_PAYER_UNCONFIRMED,   # 23 October, I1
-         KEY_WEIGHTS_UNBOUND]      # 23 October, origin-gate weight-commitment binding (F01)
+         KEY_WEIGHTS_UNBOUND,      # 23 October, origin-gate weight-commitment binding (F01)
+         GATE_BENEFICIARY_UNLISTED, GATE_BENEFICIARY_NO_REGISTRY, POLICY_EXPIRED_RUNTIME]   # 23 October, external audit F04/F06
 _FIRST = sorted(v for k, v in list(globals().items()) if k.isupper() and isinstance(v, str) and v not in ADDED)
 CODES = {name: i for i, name in enumerate(_FIRST + ADDED, start=1)}

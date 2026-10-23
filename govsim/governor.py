@@ -128,6 +128,8 @@ class Governor:
         self.host_key: VerifyKey | None = None
         self.model_digest: str | None = None
         self.lists: dict[str, dict] = {}
+        # durable per-list version floors: an older still-unexpired list can never replace a newer one (F06)
+        self.list_floors: dict[str, int] = self.store.get("list_floors", {})
         self.output_streams: dict[str, Any] = {}
         self.presented_bytes = 0
         self.cap_key = self.root.derive(b"cap")
@@ -288,15 +290,47 @@ class Governor:
         return self.key.sign({"type": "policy-epoch", "epoch": self.epoch, "governor": self.chip_id, "issued_at": self.mono()})
 
     def install_list(self, list_id: str, signed_list: dict) -> bool:
-        """A signed list (protected sites, sanctions) the rules compare against."""
+        """A signed list (protected sites, sanctions, beneficiaries, customers) the rules compare against.
+
+        The authenticated identity is kept with the list: version, expiry and the issuing signer. A list signed by a
+        signer the current edition revokes is refused; so is an older version than one already installed, so a newer
+        list can never be rolled back by an older still-unexpired one. Expiry and issuer revocation are re-checked on
+        every use through ``_live_lists``, never cached from this moment (F06)."""
         if not self.policy:
             return False
-        keys = {VerifyKey.from_hex(h).key_id: VerifyKey.from_hex(h) for h in self.policy["governance_keys"]}
-        if verify_any(signed_list, keys) is None or signed_list["payload"].get("list_id") != list_id:
+        revoked = set(self.policy.get("revocations", []))
+        keys = {}
+        for h in self.policy["governance_keys"]:
+            k = VerifyKey.from_hex(h)
+            if k.key_id not in revoked:          # a revoked governance signer cannot authorize a list (F06)
+                keys[k.key_id] = k
+        signer = verify_any(signed_list, keys)
+        if signer is None or signed_list["payload"].get("list_id") != list_id:
             return False
         p = signed_list["payload"]
-        self.lists[list_id] = {"entries": p["entries"], "stale": p["expires_at"] <= self.clock.now(), "expires_at": p["expires_at"]}
+        version = int(p.get("version", 0))
+        floor = int(self.list_floors.get(list_id, 0))
+        if version < floor:                       # an older signed list never replaces a newer one (F06)
+            self.log.append("list.rollback_refused", {"list_id": list_id, "version": version, "floor": floor})
+            return False
+        self.list_floors[list_id] = max(floor, version)
+        self.store.data["list_floors"] = self.list_floors
+        self.lists[list_id] = {"entries": p["entries"], "expires_at": p["expires_at"],
+                               "version": version, "issuer": signer.key_id, "list_id": list_id}
+        self.store.save()
         return True
+
+    def _live_lists(self) -> dict[str, dict]:
+        """The use-time view of every installed list. Staleness is derived now, against the trusted clock and the
+        current edition's revocations, so a list that was fresh at install but has since expired, or whose signer the
+        current edition revokes, reads as stale on this use (F06). The rules only ever see this view."""
+        now = self.clock.now()
+        revoked = set((self.policy or {}).get("revocations", []))
+        view: dict[str, dict] = {}
+        for lid, meta in self.lists.items():
+            stale = meta["expires_at"] <= now or meta.get("issuer") in revoked
+            view[lid] = {**meta, "stale": stale}
+        return view
 
     # ------------------------------------------------------------------ keys of the parties
     def _keys(self, cls: str, rule_id: str | None = None) -> dict[str, VerifyKey]:
@@ -709,7 +743,8 @@ class Governor:
             return self._deny("request", reasons.GATE_REPLAY)
         if any(code not in SESSION_SCOPED_ALARMS and code not in STATUS_ALARMS for code in self.alarms):
             return self._deny("request", reasons.GATE_ALARM, request_hash=rhash)
-        rule, why = select_rule(self.policy, workload, action, params, self.lists)   # requester labels never reach this call (H4)
+        lists = self._live_lists()          # the use-time view: list staleness is decided now, not at install (F06)
+        rule, why = select_rule(self.policy, workload, action, params, lists)   # requester labels never reach this call (H4)
         if rule is None:
             return self._deny("request", why, request_hash=rhash)
         req_mode = rule["requirement"]["mode"]
@@ -728,10 +763,22 @@ class Governor:
             ok, why = self._witnessed(rule, rhash, req.get("witnesses", []), now)
             if not ok:
                 return self._deny("request", why, request_hash=rhash)
-        # I1: a rule may require the payer's own confirmation, bound to this request. The agent cannot sign for the
-        # customer: the only key that counts is the one a signed customer registry lists for the paying account.
-        if rule.get("payer_confirm") and req_mode != "human":
-            ok, why = self._payer_confirmed(rule, params, rhash, req.get("witnesses", []), now)
+        # F04: the payee must be admitted by a signed, current beneficiary registry. A listed payee takes the rule's
+        # own lane; an unknown payee is parked for enrollment (never the auto path); a missing or stale registry fails
+        # closed. The registry is consulted through the use-time view, so an expired registry stops admitting (F06).
+        if rule.get("beneficiary") and req_mode != "human":
+            verdict_mode, why = self._beneficiary_ok(rule, params, lists)
+            if verdict_mode == "deny":
+                return self._deny("request", why, request_hash=rhash)
+            if verdict_mode == "hold":
+                req_mode, hold_cause = "human", why
+        # I1/F05: the payer's own confirmation is a SEPARATE conjunctive predicate. It is required whatever the rule's
+        # lane, human lanes included, so turning on operator approval can never turn off payer consent. The agent
+        # cannot sign for the customer: the only key that counts is the one the signed customer registry lists for the
+        # paying account. The confirmation commitment is kept with any hold and revalidated at release (_cmd_approve).
+        payer_commit = None
+        if rule.get("payer_confirm"):
+            ok, why, payer_commit = self._payer_confirmed(rule, params, rhash, req.get("witnesses", []), now)
             if not ok:
                 return self._deny("request", why, request_hash=rhash)
         if rule.get("rate") and not self.ledger.rate_ok(f"rate|{fp}|{action}", rule["rate"]["max"], rule["rate"]["window_s"], now):
@@ -750,7 +797,8 @@ class Governor:
         if req_mode == "human":
             hold_id = random_id(8)
             self.holds[hold_id] = {"request_hash": rhash, "action": action, "params": params, "fingerprint": fp, "rule": rule["id"],
-                                   "reservation": reservation, "created_at": now, "epoch": self.epoch, "cause": hold_cause}
+                                   "reservation": reservation, "created_at": now, "epoch": self.epoch, "cause": hold_cause,
+                                   "payer_confirm": payer_commit}
             self.store.save()
             self.log.append("gate.hold", {"hold_id": hold_id, "request_hash": rhash, "rule": rule["id"], "cause": hold_cause})
             return {"ok": False, "why": reasons.GATE_HELD, "hold_id": hold_id, "request_hash": rhash, "cause": hold_cause}
@@ -848,17 +896,19 @@ class Governor:
             return True, reasons.OK
         return False, reasons.GATE_WITNESS_MISSING
 
-    def _payer_confirmed(self, rule: dict, params: dict, rhash: str, witnesses: list[dict], now: float) -> tuple[bool, str]:
-        """I1: a confirmation signed by the key the signed customer registry lists for the paying account, over THIS
-        request, unexpired. No observer key, no other customer, no stale or replayed confirmation counts."""
+    def _payer_confirmed(self, rule: dict, params: dict, rhash: str, witnesses: list[dict], now: float) -> tuple[bool, str, dict | None]:
+        """I1/F05: a confirmation signed by the key the signed customer registry lists for the paying account, over
+        THIS request, unexpired. No observer key, no other customer, no stale or replayed confirmation counts. On
+        success returns the consent commitment, so a human-lane hold can keep it and have it revalidated before the
+        ticket is minted (``_revalidate_payer``). The registry is read through the use-time view (F06)."""
         pc = rule["payer_confirm"]
-        reg = self.lists.get(pc["registry"])
+        reg = self._live_lists().get(pc["registry"])
         if reg is None or reg["stale"]:
-            return False, reasons.GATE_PAYER_UNCONFIRMED + ".no_registry"
+            return False, reasons.GATE_PAYER_UNCONFIRMED + ".no_registry", None
         account = params.get(pc["account_param"])
         entry = next((e for e in reg["entries"] if isinstance(e, dict) and e.get("account") == account), None)
         if entry is None:
-            return False, reasons.GATE_PAYER_UNCONFIRMED + ".account_not_registered"
+            return False, reasons.GATE_PAYER_UNCONFIRMED + ".account_not_registered", None
         key = VerifyKey.from_hex(entry["key"])
         for w in witnesses:
             if not verify_object(w, key):                 # must be THIS customer's key, no other
@@ -866,8 +916,37 @@ class Governor:
             p = w["payload"]
             if p.get("type") != "payer-confirm" or p.get("request_hash") != rhash or p.get("expires_at", 0) <= now:
                 continue
-            return True, reasons.OK
-        return False, reasons.GATE_PAYER_UNCONFIRMED
+            commit = {"registry": pc["registry"], "account_param": pc["account_param"], "account": account,
+                      "key": entry["key"], "request_hash": rhash, "expires_at": float(p["expires_at"])}
+            return True, reasons.OK, commit
+        return False, reasons.GATE_PAYER_UNCONFIRMED, None
+
+    def _revalidate_payer(self, commit: dict, params: dict, now: float) -> tuple[bool, str]:
+        """F05: before a held payment's ticket is minted, the kept consent commitment is revalidated against the
+        CURRENT customer registry and clock. The paying account must still be listed with the same key, and the
+        confirmation must not have expired during the hold. An expired commitment forces reauthorization."""
+        reg = self._live_lists().get(commit["registry"])
+        if reg is None or reg["stale"]:
+            return False, reasons.GATE_PAYER_UNCONFIRMED + ".no_registry"
+        account = params.get(commit["account_param"])
+        entry = next((e for e in reg["entries"] if isinstance(e, dict) and e.get("account") == account), None)
+        if entry is None or entry.get("key") != commit["key"] or account != commit["account"]:
+            return False, reasons.GATE_PAYER_UNCONFIRMED + ".account_not_registered"
+        if commit["expires_at"] <= now:
+            return False, reasons.GATE_PAYER_UNCONFIRMED + ".expired_reauthorize"
+        return True, reasons.OK
+
+    def _beneficiary_ok(self, rule: dict, params: dict, lists: dict[str, dict]) -> tuple[str, str]:
+        """F04: the payee named by the rule's beneficiary field must be on the signed, current beneficiary registry.
+        Returns ("ok" | "hold" | "deny", reason). A listed payee takes the rule's own lane; an unknown payee is a hold
+        for enrollment (the register row's "new beneficiary is a hold"); a missing or stale registry fails closed."""
+        spec = rule["beneficiary"]
+        reg = lists.get(spec["registry"])
+        if reg is None or reg["stale"]:
+            return "deny", reasons.GATE_BENEFICIARY_NO_REGISTRY
+        if params.get(spec["param"]) in reg["entries"]:
+            return "ok", reasons.OK
+        return "hold", reasons.GATE_BENEFICIARY_UNLISTED
 
     def _reserve(self, key: str, amount: float, limit: float, window_s: float, now: float, ttl: float) -> tuple[bool, str | None, str]:
         """Reserve at the key's owner: locally if that is us, over the fabric otherwise. There is no default owner."""
@@ -948,6 +1027,13 @@ class Governor:
         floor = max(10.0, float(self.policy.get("override_floor_s", 60.0)))
         if now < hold["created_at"] + floor:
             return {"ok": False, "why": reasons.APPROVE_TOO_FAST, "earliest": hold["created_at"] + floor}
+        # F05: operator approval and payer consent are conjunctive. If this hold carried a payer confirmation, it is
+        # revalidated against the current registry and clock before the ticket is minted; a confirmation that expired
+        # during the hold forces reauthorization and the operator quorum alone cannot release it.
+        if hold.get("payer_confirm"):
+            ok, why = self._revalidate_payer(hold["payer_confirm"], hold["params"], now)
+            if not ok:
+                return self._deny("approve", why, hold_id=hold_id)
         ticket = self._mint(hold["request_hash"], hold["action"], hold["params"], hold["fingerprint"], rule, hold["reservation"], now)
         self.holds.pop(hold_id)
         self.store.save()
@@ -1347,6 +1433,12 @@ class Governor:
                 self.store.data["counter"] = self.root.counter.value
                 self.store.save()
             self.last_tick_t = now
+            # F06: an installed edition cannot outlive its own expiry. Policy expiry is enforced as a specified
+            # fail-closed transition on every tick, not only at load; a running chip whose edition has expired drops
+            # to HALT even while heartbeats and the loop still hold.
+            if self.state in (RUN, THROTTLE) and self.policy and float(self.policy.get("expires_at", float("inf"))) <= now \
+                    and self.cause != reasons.POLICY_EXPIRED_RUNTIME:
+                self.enter_safe_mode(reasons.POLICY_EXPIRED_RUNTIME, rung=HALT)
             if self.state == RUN and now > self.hb_expiry:
                 stale = self.staged is not None and not self._staged_epoch_live(now)
                 self.enter_safe_mode(reasons.EPOCH_STRAGGLER if stale else reasons.HEARTBEAT_LOST)
