@@ -370,218 +370,224 @@
    "strobe": false
   },
   {
-   "name": "halt_cmd_throttle",
+   "name": "halt_cmd_exclude",
    "offset": 1152,
    "width": 1,
    "strobe": true
   },
   {
-   "name": "halt_local_trip",
+   "name": "halt_cmd_throttle",
    "offset": 1153,
    "width": 1,
    "strobe": true
   },
   {
-   "name": "life_advance",
+   "name": "halt_local_trip",
    "offset": 1154,
    "width": 1,
    "strobe": true
   },
   {
-   "name": "life_advance_to",
+   "name": "life_advance",
    "offset": 1155,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "life_advance_to",
+   "offset": 1156,
    "width": 2,
    "strobe": false
   },
   {
    "name": "life_debug_req",
-   "offset": 1157,
+   "offset": 1158,
    "width": 1,
    "strobe": false
   },
   {
    "name": "life_fuse_state",
-   "offset": 1158,
+   "offset": 1159,
    "width": 2,
    "strobe": false
   },
   {
    "name": "life_load",
-   "offset": 1160,
+   "offset": 1161,
    "width": 1,
    "strobe": true
   },
   {
    "name": "mbox_cmd",
-   "offset": 1161,
+   "offset": 1162,
    "width": 8,
    "strobe": false
   },
   {
    "name": "mbox_epoch_exempt",
-   "offset": 1169,
-   "width": 1,
-   "strobe": false
-  },
-  {
-   "name": "mbox_epoch_match",
    "offset": 1170,
    "width": 1,
    "strobe": false
   },
   {
-   "name": "mbox_frame_seq",
+   "name": "mbox_epoch_match",
    "offset": 1171,
+   "width": 1,
+   "strobe": false
+  },
+  {
+   "name": "mbox_frame_seq",
+   "offset": 1172,
    "width": 32,
    "strobe": false
   },
   {
    "name": "mbox_key_slot",
-   "offset": 1203,
+   "offset": 1204,
    "width": 3,
    "strobe": false
   },
   {
    "name": "mbox_needs_run",
-   "offset": 1206,
+   "offset": 1207,
    "width": 1,
    "strobe": false
   },
   {
    "name": "mbox_sig_done",
-   "offset": 1207,
+   "offset": 1208,
    "width": 1,
    "strobe": true
   },
   {
    "name": "mbox_sig_ok",
-   "offset": 1208,
+   "offset": 1209,
    "width": 1,
    "strobe": false
   },
   {
    "name": "mbox_signed_cmd",
-   "offset": 1209,
+   "offset": 1210,
    "width": 8,
    "strobe": false
   },
   {
    "name": "meas0_data",
-   "offset": 1217,
+   "offset": 1218,
    "width": 256,
    "strobe": false
   },
   {
    "name": "meas0_extend",
-   "offset": 1473,
-   "width": 1,
-   "strobe": true
-  },
-  {
-   "name": "meas0_hash_done",
    "offset": 1474,
    "width": 1,
    "strobe": true
   },
   {
-   "name": "meas0_hash_out",
+   "name": "meas0_hash_done",
    "offset": 1475,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "meas0_hash_out",
+   "offset": 1476,
    "width": 256,
    "strobe": false
   },
   {
    "name": "meas1_data",
-   "offset": 1731,
+   "offset": 1732,
    "width": 256,
    "strobe": false
   },
   {
    "name": "meas1_extend",
-   "offset": 1987,
-   "width": 1,
-   "strobe": true
-  },
-  {
-   "name": "meas1_hash_done",
    "offset": 1988,
    "width": 1,
    "strobe": true
   },
   {
-   "name": "meas1_hash_out",
+   "name": "meas1_hash_done",
    "offset": 1989,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "meas1_hash_out",
+   "offset": 1990,
    "width": 256,
    "strobe": false
   },
   {
    "name": "meter_add_cycles",
-   "offset": 2245,
+   "offset": 2246,
    "width": 48,
    "strobe": false
   },
   {
    "name": "meter_add_in",
-   "offset": 2293,
+   "offset": 2294,
    "width": 48,
    "strobe": false
   },
   {
    "name": "meter_add_out",
-   "offset": 2341,
+   "offset": 2342,
    "width": 48,
    "strobe": false
   },
   {
    "name": "meter_add_tokens",
-   "offset": 2389,
+   "offset": 2390,
    "width": 48,
    "strobe": false
   },
   {
    "name": "meter_slot",
-   "offset": 2437,
+   "offset": 2438,
    "width": 2,
    "strobe": false
   },
   {
    "name": "meter_strobe",
-   "offset": 2439,
-   "width": 1,
-   "strobe": true
-  },
-  {
-   "name": "mono_dec_req",
    "offset": 2440,
    "width": 1,
    "strobe": true
   },
   {
-   "name": "mono_hwm",
+   "name": "mono_dec_req",
    "offset": 2441,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "mono_hwm",
+   "offset": 2442,
    "width": 64,
    "strobe": false
   },
   {
    "name": "mono_load_hwm",
-   "offset": 2505,
-   "width": 1,
-   "strobe": true
-  },
-  {
-   "name": "tickets_burn",
    "offset": 2506,
    "width": 1,
    "strobe": true
   },
   {
-   "name": "tickets_id_in",
+   "name": "tickets_burn",
    "offset": 2507,
+   "width": 1,
+   "strobe": true
+  },
+  {
+   "name": "tickets_id_in",
+   "offset": 2508,
    "width": 32,
    "strobe": false
   },
   {
    "name": "tickets_query",
-   "offset": 2539,
+   "offset": 2540,
    "width": 1,
    "strobe": true
   }

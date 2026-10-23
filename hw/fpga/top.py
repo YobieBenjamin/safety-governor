@@ -42,7 +42,8 @@ NOT_ON_CHAIN = {"clk", "rst", "csr_addr", "csr_rdata", "doorbell", "tick", "samp
                 "hb_window", "halt_clear", "halt_cmd_halt", "halt_tamper", "pwrbrk_n", "perst_n", "pwr_en", "loop_out_open"}
 STROBE_SUFFIXES = ("_ins", "_lk", "_burn", "_query", "_extend", "_hash_done", "_commit", "_host_wr", "_advance", "_load",
                    "_strobe", "_dec_req", "_load_hwm", "_sig_done")
-STROBE_NAMES = {"halt_cmd_throttle", "halt_local_trip", "alarms_set_mask", "alarms_clear_authorized"}
+STROBE_NAMES = {"halt_cmd_throttle", "halt_local_trip", "alarms_set_mask", "alarms_clear_authorized",
+                "halt_cmd_exclude"}    # EXCLUDE (Yobie's call 2): an authorized command, so one pulse, never a held level
 
 
 def core_port_directions() -> dict[str, str]:

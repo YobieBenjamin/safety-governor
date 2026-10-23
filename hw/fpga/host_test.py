@@ -5,6 +5,7 @@
     python3 hw/fpga/host_test.py check               # CSR window, doorbell, malformed traffic (about 10 s)
     python3 hw/fpga/host_test.py levers              # walk the sequencer, read PERST#/PWRBRK#/PWR_EN back as wires
     python3 hw/fpga/host_test.py fwchain             # the firmware stand-in chain reaches the core (meter, alarms, CAUSE)
+    python3 hw/fpga/host_test.py exclude             # no first heartbeat: named alarm; EXCLUDE closes the loop, levers stay on
     python3 hw/fpga/host_test.py soak --hours 168    # the false-halt soak: RUN, heartbeats, count every halt
     python3 hw/fpga/host_test.py all --hours 24      # all of the above in order; exit 0 only if every step passed
 
@@ -34,6 +35,7 @@ I2C_BUS = 1
 DOORBELL_CMD = 0x40
 HB_PERIOD_S = 1.0                    # the authority's heartbeat period (docs/04 section 9)
 HB_WINDOW_MS = 5000                  # what one FW_HB pulse loads (hw/fpga/top.py)
+BOOT_WINDOW_MS = 5000                # governor_core t_boot_ms: no first heartbeat for this long raises NO_FIRST_HEARTBEAT
 
 # docs/04-specification.md section 2: byte offsets; the SMBus command code is offset >> 2
 REG = {"ID": 0x000, "LIFECYCLE": 0x004, "STATE": 0x008, "CAUSE": 0x00C, "MONO_LO": 0x070, "MONO_HI": 0x074,
@@ -344,6 +346,38 @@ def step_fwchain(args) -> bool:
     return record("fwchain", bool(ok), out)
 
 
+def step_exclude(args) -> bool:
+    """Yobie's call 2 on the board: a chip that never gets its first heartbeat holds the loop open, says so by name
+    after the boot window, and an authorized EXCLUDE closes its loop switch while its own levers stay asserted."""
+    link, pins, ch = Link(), Pins(), Chain()
+    pins.reset_board()
+    out, ok = {}, True
+    pins.out["TAMPER_N"].on()
+    time.sleep(0.2)
+    out["before_window"] = {"alarms": link.read("ALARMS"), "cause": link.read("CAUSE"), "loop_closed": pins.level("LOOP_CLOSED")}
+    ok &= not (out["before_window"]["alarms"] >> 31) & 1            # not yet: the window has not passed
+    ok &= out["before_window"]["loop_closed"] == 0                  # our switch is open: the rack is held
+    time.sleep(BOOT_WINDOW_MS / 1000 + 0.5)                         # no heartbeat for the whole boot window
+    a, c = link.read("ALARMS"), link.read("CAUSE")
+    out["after_window"] = {"alarms": a, "cause": c, "boot_wait_ms": link.read(0x088), "loop_closed": pins.level("LOOP_CLOSED"),
+                           "pwr_en": pins.level("PWR_EN")}
+    ok &= (a >> 31) & 1 == 1 and (c >> 3) & 1 == 1                  # NO_FIRST_HEARTBEAT: named, sticky, live
+    ok &= out["after_window"]["loop_closed"] == 0
+    ch.apply(halt_cmd_exclude=1)                                    # the authorized EXCLUDE, as the firmware would strobe it
+    time.sleep(0.01)
+    a, c = link.read("ALARMS"), link.read("CAUSE")
+    out["after_exclude"] = {"alarms": a, "cause": c, "loop_closed": pins.level("LOOP_CLOSED"), "pwr_en": pins.level("PWR_EN"),
+                            "perst_n": pins.level("PERST_N"), "pwrbrk_n": pins.level("PWRBRK_N"), "state": link.read("STATE")}
+    ok &= out["after_exclude"]["loop_closed"] == 1                  # the rest of the rack can run
+    ok &= (a >> 30) & 1 == 1 and (c >> 4) & 1 == 1                  # EXCLUDED: named
+    ok &= out["after_exclude"]["state"] == 0 and out["after_exclude"]["pwr_en"] == 0 \
+        and out["after_exclude"]["perst_n"] == 0 and out["after_exclude"]["pwrbrk_n"] == 0   # this chip's own GPU stays off
+    pins.pulse("FW_HB")                                             # a valid heartbeat arms it the normal way
+    out["after_heartbeat_state"] = STATES.get(link.read("STATE"))
+    ok &= wait_state(link, 1, 1.0)[0]
+    return record("exclude", bool(ok), out)
+
+
 def step_soak(args) -> bool:
     link, pins = Link(), Pins()
     pins.reset_board()
@@ -388,12 +422,12 @@ def step_soak(args) -> bool:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("step", choices=["selftest", "check", "levers", "fwchain", "soak", "all"])
+    ap.add_argument("step", choices=["selftest", "check", "levers", "fwchain", "exclude", "soak", "all"])
     ap.add_argument("--hours", type=float, default=24.0, help="soak duration (default 24)")
     args = ap.parse_args(argv)
     steps = {"selftest": step_selftest, "check": step_check, "levers": step_levers, "fwchain": step_fwchain,
-             "soak": step_soak}
-    order = ["selftest", "check", "levers", "fwchain", "soak"] if args.step == "all" else [args.step]
+             "exclude": step_exclude, "soak": step_soak}
+    order = ["selftest", "check", "levers", "fwchain", "exclude", "soak"] if args.step == "all" else [args.step]
     ok = True
     for s in order:
         ok &= bool(steps[s](args))

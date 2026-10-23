@@ -6,7 +6,7 @@ has to do with their hands is marked **HANDS**. Everything else is a script.
 ```
 hw/fpga/build.sh                                   # on any machine: builds the bitstream, writes REPORT.md
 openFPGALoader -b ulx3s hw/fpga/build/30mhz/governor_ulx3s_85f_30mhz.bit   # HANDS: board on USB; add -f for flash
-python3 hw/fpga/host_test.py all --hours 168       # on the Pi: CSR checks, levers, firmware chain, one-week soak
+python3 hw/fpga/host_test.py all --hours 168       # on the Pi: CSR checks, levers, firmware chain, EXCLUDE, one-week soak
 ```
 
 Results land in `hw/fpga/results/*.json` (and a CSV for the soak), pass or fail, with the numbers.
@@ -99,6 +99,7 @@ What each step proves on hardware:
 | `check` | reads ID, STATE, LEVERS, MBOX_STATUS and every static CSR with PEC; sends 23 malformed writes; rings the doorbell | malformed writes change no register, the doorbell reaches the mailbox (status 4: no firmware behind it), CSR read time recorded |
 | `levers` | reset, heartbeat to RUN, halt command, clear, tamper, injected loop break, heartbeat expiry | every rung shows up in STATE, and PERST#, PWRBRK#, PWR_EN as wires agree with the LEVERS register every time |
 | `fwchain` | meter increment, CAUSE firmware code, alarm bit, ticket burn and replay | the chain reaches the core and SMBus reads the result |
+| `exclude` | reset with no heartbeat: the loop stays open and, after the 5 s boot window, ALARMS bit 31 and CAUSE bit 3 name it (NO_FIRST_HEARTBEAT); an EXCLUDE strobe on the firmware chain then closes the loop switch while PERST#, PWRBRK# and PWR_EN stay asserted (ALARMS bit 30, CAUSE bit 4); a heartbeat then arms it to RUN | each of those reads true on the pins and in the registers (Yobie's call 2, docs/26; added 23 October 2026) |
 | `soak` | heartbeats at 1 Hz, STATE/CAUSE/LOOP/LEVERS/ALARMS polled 5 times a second for `--hours` | zero halts and zero SMBus errors; every halt is logged with time and cause and counted |
 
 N3 (docs/20) asks for three cost numbers and the false-halt rate. This bench measures the false-halt rate of the
