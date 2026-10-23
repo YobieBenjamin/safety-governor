@@ -178,6 +178,7 @@ So, from the chip's point of view: yes, it strengthens the promise, in the speci
 | 20 | The origin gate: can a model be made unable to run anywhere but on governed hardware, by sealing its weights to the governor and letting the governor release the key only to an attested GPU, while the signed rulebook lists the model? | A simulation of key release and revocation while running (done 23 October: `results/origin-gate.md`, every check holds); then the GPU's real decryption cost and lease enforcement on a confidential-computing GPU, which needs NVIDIA's firmware to honour the lease. Section 8d; GitHub issue W1 | This program, then NVIDIA |
 | 21 | Does the gate hold against an agent that adds roads? The kill-switch argument (`23`) counts cuts on a fixed graph; a goal-directed agent changes the graph (orders hardware, opens accounts, messages people). Every such step is itself an action that needs a ticket, but whether the rulebook covers every road-building step is untested | A simulation in govsim: a planning agent rewarded for reaching an ungated effector, whose only moves are the actions the rulebook gates, searching sequences of them. Section 8e; GitHub issue A1 | This program |
 | 22 | Can the gate stop a wire that follows every rule but that the customer never meant? A rule that requires the payer's own signature before a ticket, so the agent cannot speak for the customer | A payment rule whose witness must be the key a signed customer registry lists for the paying account; a simulation with an agent sending intended and unintended wires. Section 8f; GitHub issue I1 | This program, then a payments partner |
+| 23 | Replication by packets: an agent can move bytes indistinguishable from any other traffic. Does destination-and-volume gating, with no content inspection, hold its weights inside a governed rack? | Measured (23 October: `results/containment.md`, P3b): off-roster flows refused at every exit; the permitted ceiling makes moving a model take decades under a tight policy; stated honestly, a busy-service budget leaks a small model over time, and a weightless agent or an ungoverned host is outside it. The empirical dispute runs on an abliterated model next. Section 8g; GitHub issue R1 | This program |
 Questions 1, 3, 5, 12 and 15 are the ones a small program can move. Questions 6, 11, 14 and 16 are the ones a chip cannot move at all, and the design should keep saying so. Questions 18 and 19 sit in between: the chip can enforce whatever answer is chosen, but choosing it is governance (section 8c).
 
 
@@ -266,6 +267,24 @@ The second is not buildable as the design stands, and the reason is worth record
 Issue I1 tests it in simulation: an agent sends intended wires (the customer's key signs) and unintended ones (amount, payee and rule all approved, the customer never signs), with the classifier's key, a stale confirmation, a confirmation for a different request and a confirmation from another customer's key all tried as stand-ins.
 
 What it cannot cover: a customer who confirms a mistake, or who is talked into confirming. That stays a person, the door `23` concedes.
+
+## 8g. Replication by packets, and what the gate does not watch
+
+*Added 23 October 2026, prompted by a reader's comment on Part 6: an agent can copy its code, weights and state as ordinary network packets, indistinguishable from any other traffic, reassembled by TCP/IP at the far end, and so stand up a replica beyond its creator's monitoring and shutdown. Therefore, he argues, you cannot assume you know which traffic is "AI" that needs a ticket.*
+
+He is right about the mechanism, and the design does not dispute it. The answer is that the gate never asks which packets are an AI's. It never inspects content at all. It decides by two things a wire cannot hide: where the bytes are going, and how many of them. So:
+
+- **Destination.** Bytes to anything not on the signed roster are refused at every governed exit, whatever they carry (hypothesis H2; `results/containment.md` confirms the off-roster flow is refused at `CAP_REQUEST` with the content unseen). "Indistinguishable from other packets" does not help a packet whose destination is not allowed.
+- **Volume.** The bytes that may leave are capped per hour. Under a tight (sandbox) policy the ceiling is a few kilobytes an hour, and at that rate moving even a 4-bit 8B model takes about 50 years, a 70B model centuries (`results/containment.md`, P3b).
+- **The weights themselves** are sealed to governed hardware (8d). A copy that did leave is ciphertext without a key the governor releases only to attested GPUs.
+
+The honest tensions, all on the page:
+
+- The budget is the defence, so a policy loose enough to run a busy service is loose enough to leak a small model over time. The containment run states that number too (about 11 days for an 8B model at a generous budget), so a deployer chooses the budget knowing the cost. This is the disproof direction of P3.
+- A replica that needs no weights, just a small agent program that calls some other model elsewhere, is tiny and fits any useful channel. The chip gates what leaves a governed rack; it does not stop a few kilobytes of code from being a client for a model that runs somewhere ungoverned.
+- A model already running on ungoverned hardware is outside every exit this measures, as `23` concedes.
+
+So the gate contains what leaves a governed rack, and names what it does not reach. Issue R1 carries the measurement; the empirical dispute (how much a goal-directed model actually gets out under a real policy) is to be run on an abliterated open-weight model, outside this program's safety limits, with the result published whichever way it lands.
 
 ## 9. What I would do next
 
