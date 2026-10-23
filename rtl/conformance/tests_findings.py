@@ -33,7 +33,8 @@ async def _halted_by_command(ctx, dut):
     assert ctx.get(dut.state) == HALT
 
 
-@conformance("R-042", "R-035", finding="F-05")
+# F-05 closed on fix/halt: tamper now outranks CLEAR. This test passes and guards the fix.
+@conformance("R-042", "R-035")
 def test_finding_clear_and_tamper_pulse_same_cycle_ends_safe():
     """F-05: the spec says tamper means SAFE. A one-cycle tamper strobe (a glitch detector) in the same cycle as
     an authorized CLEAR: the RTL takes the CLEAR branch first, lands in HALTED_INITIAL with cause none, and the
@@ -54,7 +55,8 @@ def test_finding_clear_and_tamper_pulse_same_cycle_ends_safe():
     sim(dut, tb)
 
 
-@conformance("R-042", "R-035", finding="F-05")
+# F-05 closed on fix/halt: tamper now outranks CLEAR. This test passes and guards the fix.
+@conformance("R-042", "R-035")
 def test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung():
     """F-05, the one-cycle view: even with tamper held high (a mesh cut), the cycle after CLEAR plus tamper must
     show SAFE; the RTL shows HALTED_INITIAL for one cycle, then SAFE."""

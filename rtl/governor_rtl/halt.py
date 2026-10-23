@@ -1,5 +1,5 @@
 """Safe-mode sequencer and the levers. Invariants: the levers assert on any cause and never
-release without an authorized ``clear``; causes that open the loop open it; rungs escalate on
+release without an authorized ``clear``; tamper outranks clear; causes that open the loop open it; rungs escalate on
 the policy timers and never descend on their own; the loop switch is open at reset, closes only
 when armed (no cause, a valid heartbeat), and once opened by a cause never closes without clear.
 
@@ -42,11 +42,13 @@ class HaltSeq(Elaboratable):
         m = Module()
         in_run = (self.state == RUN) | (self.state == THROTTLE)
 
-        with m.If(self.clear & (self.state != HALTED_INITIAL)):
+        # tamper outranks everything, CLEAR included: a tamper strobe in the same cycle as an authorized CLEAR still
+        # lands in SAFE (conformance finding F-05, 23 October 2026; before this the CLEAR won and the strobe was lost)
+        with m.If(self.tamper):
+            m.d.sync += [self.state.eq(SAFE), self.cause.eq(C_TAMPER), self.switch_open.eq(1)]
+        with m.Elif(self.clear & (self.state != HALTED_INITIAL)):
             # clear: back to the boot state; the switch closes again only when armed
             m.d.sync += [self.state.eq(HALTED_INITIAL), self.cause.eq(C_NONE), self.timer.eq(0)]
-        with m.Elif(self.tamper):
-            m.d.sync += [self.state.eq(SAFE), self.cause.eq(C_TAMPER), self.switch_open.eq(1)]
         with m.Elif(self.loop_lost & in_run):
             m.d.sync += [self.state.eq(HALT), self.cause.eq(C_LOOP), self.switch_open.eq(1), self.timer.eq(0)]
         with m.Elif(self.cmd_halt & (self.state != SAFE)):
@@ -55,7 +57,10 @@ class HaltSeq(Elaboratable):
             m.d.sync += [self.state.eq(THROTTLE), self.cause.eq(C_LOCAL), self.timer.eq(0)]
         with m.Elif((self.state == HALTED_INITIAL) & (self.cause == C_NONE) & self.hb_ok):
             m.d.sync += self.switch_open.eq(0)                      # armed
-            with m.If(self.loop_sense):
+            # RUN needs a clean loop sample: current present AND the debounce no longer saying lost. Without the
+            # second term an armed core entered RUN with a stale loop_lost and halted itself a cycle later (FPGA
+            # finding F1, 23 October 2026)
+            with m.If(self.loop_sense & ~self.loop_lost):
                 m.d.sync += self.state.eq(RUN)
         with m.Elif(self.tick & (self.state == THROTTLE)):
             with m.If(self.timer + 1 >= self.t_throttle):

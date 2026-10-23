@@ -28,8 +28,11 @@ module halt_seq_props(input clk, input rst, input hb_expired, tamper, cmd_halt, 
   always @(posedge clk) if (!init && !$past(init) && !$past(rst)) begin
     // P: a halted chip (HALT or SAFE) never returns to running without an authorized clear
     if (($past(state) == 3 || $past(state) == 4) && !$past(clear)) assert(state == 3 || state == 4);
-    // P: tamper always lands in SAFE unless cleared that same cycle
-    if ($past(tamper) && !$past(clear)) assert(state == 4);
+    // P: tamper always lands in SAFE, CLEAR or no CLEAR. The first version of this line said "unless cleared that
+    // same cycle", which wrote the bug's excuse into the proof (conformance finding F-05); the excuse is gone
+    if ($past(tamper)) assert(state == 4 && cause == 3);
+    // P: the chip enters RUN only on a clean loop sample (FPGA finding F1)
+    if (state == 1 && $past(state) != 1) assert($past(loop_sense) && !$past(loop_lost));
     // P: from SAFE nothing but clear moves the state
     if ($past(state) == 4 && !$past(clear)) assert(state == 4);
     // P: a halt command is obeyed from every rung but SAFE (unless clear or tamper wins that cycle)

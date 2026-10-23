@@ -9627,23 +9627,25 @@ module \governor_core.halt (halt_tamper, halt_cmd_halt, halt_cmd_throttle, halt_
   wire \$19 ;
   wire \$2 ;
   wire \$20 ;
-  wire [20:0] \$21 ;
+  wire \$21 ;
   wire \$22 ;
   wire [20:0] \$23 ;
-  wire [20:0] \$24 ;
-  wire \$25 ;
+  wire \$24 ;
+  wire [20:0] \$25 ;
   wire [20:0] \$26 ;
   wire \$27 ;
-  wire \$28 ;
+  wire [20:0] \$28 ;
   wire \$29 ;
   wire \$3 ;
   wire \$30 ;
   wire \$31 ;
   wire \$32 ;
-  reg [2:0] \$33 ;
-  reg [2:0] \$34 ;
-  reg [19:0] \$35 ;
-  reg \$36 ;
+  wire \$33 ;
+  wire \$34 ;
+  reg [2:0] \$35 ;
+  reg [2:0] \$36 ;
+  reg \$37 ;
+  reg [19:0] \$38 ;
   wire \$4 ;
   wire \$5 ;
   wire \$6 ;
@@ -9709,126 +9711,128 @@ module \governor_core.halt (halt_tamper, halt_cmd_halt, halt_cmd_throttle, halt_
   assign \$18  = halt_tick & \$17 ;
   assign \$19  = halt_state == 2'h3;
   assign \$20  = halt_tick & \$19 ;
-  assign \$21  = halt_timer + 1'h1;
-  assign \$22  = \$21  >= 15'h7530;
+  assign \$21  = ~ halt_loop_lost;
+  assign \$22  = halt_loop_sense & \$21 ;
   assign \$23  = halt_timer + 1'h1;
-  assign \$24  = halt_timer + 1'h1;
-  assign \$25  = \$24  >= 19'h493e0;
+  assign \$24  = \$23  >= 15'h7530;
+  assign \$25  = halt_timer + 1'h1;
   assign \$26  = halt_timer + 1'h1;
+  assign \$27  = \$26  >= 19'h493e0;
+  assign \$28  = halt_timer + 1'h1;
   assign halt_pwrbrk = halt_state != 1'h1;
-  assign \$27  = ! halt_state;
-  assign \$28  = halt_state == 2'h3;
-  assign \$29  = \$27  | \$28 ;
-  assign \$30  = halt_state == 3'h4;
-  assign halt_perst = \$29  | \$30 ;
-  assign \$31  = | halt_state;
-  assign \$32  = halt_state != 3'h4;
-  assign halt_pwr_en = \$31  & \$32 ;
+  assign \$29  = ! halt_state;
+  assign \$30  = halt_state == 2'h3;
+  assign \$31  = \$29  | \$30 ;
+  assign \$32  = halt_state == 3'h4;
+  assign halt_perst = \$31  | \$32 ;
+  assign \$33  = | halt_state;
+  assign \$34  = halt_state != 3'h4;
+  assign halt_pwr_en = \$33  & \$34 ;
   assign halt_ports_closed = halt_state != 1'h1;
   always @(posedge clk)
-    halt_state <= \$33 ;
+    halt_state <= \$35 ;
   always @(posedge clk)
-    halt_cause <= \$34 ;
+    halt_cause <= \$36 ;
   always @(posedge clk)
-    halt_timer <= \$35 ;
+    halt_switch_open <= \$37 ;
   always @(posedge clk)
-    halt_switch_open <= \$36 ;
+    halt_timer <= \$38 ;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
-    \$33  = halt_state;
-    if (\$2 ) begin
-      \$33  = 3'h0;
-    end else if (halt_tamper) begin
-      \$33  = 3'h4;
+    \$35  = halt_state;
+    if (halt_tamper) begin
+      \$35  = 3'h4;
+    end else if (\$2 ) begin
+      \$35  = 3'h0;
     end else if (\$6 ) begin
-      \$33  = 3'h3;
+      \$35  = 3'h3;
     end else if (\$8 ) begin
-      \$33  = 3'h3;
+      \$35  = 3'h3;
     end else if (\$12 ) begin
-      \$33  = 3'h2;
+      \$35  = 3'h2;
     end else if (\$16 ) begin
-      if (halt_loop_sense) begin
-        \$33  = 3'h1;
+      if (\$22 ) begin
+        \$35  = 3'h1;
       end
     end else if (\$18 ) begin
-      if (\$22 ) begin
-        \$33  = 3'h3;
+      if (\$24 ) begin
+        \$35  = 3'h3;
       end
     end else if (\$20 ) begin
-      if (\$25 ) begin
-        \$33  = 3'h4;
+      if (\$27 ) begin
+        \$35  = 3'h4;
       end
     end
     if (rst) begin
-      \$33  = 3'h0;
+      \$35  = 3'h0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
-    \$34  = halt_cause;
-    if (\$2 ) begin
-      \$34  = 3'h0;
-    end else if (halt_tamper) begin
-      \$34  = 3'h3;
+    \$36  = halt_cause;
+    if (halt_tamper) begin
+      \$36  = 3'h3;
+    end else if (\$2 ) begin
+      \$36  = 3'h0;
     end else if (\$6 ) begin
-      \$34  = 3'h1;
+      \$36  = 3'h1;
     end else if (\$8 ) begin
-      \$34  = 3'h4;
+      \$36  = 3'h4;
     end else if (\$12 ) begin
-      \$34  = 3'h2;
+      \$36  = 3'h2;
     end
     if (rst) begin
-      \$34  = 3'h0;
+      \$36  = 3'h0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
-    \$35  = halt_timer;
-    if (\$2 ) begin
-      \$35  = 20'h00000;
-    end else if (halt_tamper) begin
+    \$37  = halt_switch_open;
+    if (halt_tamper) begin
+      \$37  = 1'h1;
+    end else if (\$2 ) begin
     end else if (\$6 ) begin
-      \$35  = 20'h00000;
+      \$37  = 1'h1;
     end else if (\$8 ) begin
-      \$35  = 20'h00000;
+      \$37  = 1'h1;
     end else if (\$12 ) begin
-      \$35  = 20'h00000;
+    end else if (\$16 ) begin
+      \$37  = 1'h0;
+    end
+    if (rst) begin
+      \$37  = 1'h1;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
+    \$38  = halt_timer;
+    if (halt_tamper) begin
+    end else if (\$2 ) begin
+      \$38  = 20'h00000;
+    end else if (\$6 ) begin
+      \$38  = 20'h00000;
+    end else if (\$8 ) begin
+      \$38  = 20'h00000;
+    end else if (\$12 ) begin
+      \$38  = 20'h00000;
     end else if (\$16 ) begin
     end else if (\$18 ) begin
       (* full_case = 32'd1 *)
-      if (\$22 ) begin
-        \$35  = 20'h00000;
+      if (\$24 ) begin
+        \$38  = 20'h00000;
       end else begin
-        \$35  = \$23 [19:0];
+        \$38  = \$25 [19:0];
       end
     end else if (\$20 ) begin
       (* full_case = 32'd1 *)
-      if (\$25 ) begin
-        \$35  = 20'h00000;
+      if (\$27 ) begin
+        \$38  = 20'h00000;
       end else begin
-        \$35  = \$26 [19:0];
+        \$38  = \$28 [19:0];
       end
     end
     if (rst) begin
-      \$35  = 20'h00000;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$8 ) begin end
-    \$36  = halt_switch_open;
-    if (\$2 ) begin
-    end else if (halt_tamper) begin
-      \$36  = 1'h1;
-    end else if (\$6 ) begin
-      \$36  = 1'h1;
-    end else if (\$8 ) begin
-      \$36  = 1'h1;
-    end else if (\$12 ) begin
-    end else if (\$16 ) begin
-      \$36  = 1'h0;
-    end
-    if (rst) begin
-      \$36  = 1'h1;
+      \$38  = 20'h00000;
     end
   end
 endmodule
