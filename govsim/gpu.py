@@ -28,6 +28,17 @@ class GPU:
         self.chip_id = "gpu-" + digest(name)[:12]
         self.firmware_digest = firmware_digest
         self.device_key = SigningKey.generate()
+        # confidential-computing key: weights are released sealed to its public half, which the signed report carries
+        from .sealing import public_hex
+        from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+        self.cc_key = X25519PrivateKey.generate()
+        self.cc_pub = public_hex(self.cc_key)
+        self.governor_key = None                  # the governor's signing key, set when it attaches (verifies leases)
+        self.sealed = False                       # the loaded job's weights are sealed: no lease, no tokens
+        self.dek = None                           # the model's data key, in protected memory only while a lease holds
+        self.lease: dict | None = None
+        self.weights_plain: bytes | None = None   # decrypted weights, in protected memory
+        self.key_events: list[dict] = []         # what happened to the key, for the experiment's record
         self.device_cert = vendor_key.sign({"type": "gpu-device-cert", "chip_id": self.chip_id, "pub": self.device_key.public.hex})
         self.levers_available = levers or {"pwrbrk": True, "perst": True, "pwr_en": True}
         self.direct_nvlink = direct_nvlink        # a board with no NVSwitch: peer traffic bypasses every switch
@@ -56,7 +67,7 @@ class GPU:
     # --- attestation ------------------------------------------------------------
     def attestation_report(self, nonce: str, tier: str) -> dict:
         payload = {"type": "gpu-report", "chip_id": self.chip_id, "firmware_digest": self.firmware_digest,
-                   "nonce": nonce, "open_paths": list(self.open_paths)}
+                   "nonce": nonce, "open_paths": list(self.open_paths), "cc_pub": self.cc_pub}
         if tier == "integrated":
             payload["manifest_digest"] = self.manifest_digest
             payload["policy_epoch"] = self.policy_epoch_reported
@@ -81,9 +92,11 @@ class GPU:
     def _apply(self) -> None:
         if not self.pwr_en:
             self.power, self.clock_state, self.job = "OFF", "OFF", None
+            self.zeroize("power off")             # protected memory does not survive power loss
             return
         if self.perst:
             self.power, self.clock_state, self.job = "RESET", "OFF", None
+            self.zeroize("reset")
             return
         self.power = "ON"
         self.clock_state = "BRAKED" if self.pwrbrk else "FULL"
@@ -105,9 +118,56 @@ class GPU:
             self.job = model_digest
             self.manifest_digest = model_digest
 
+    # --- sealed weights: the origin gate (docs/18 question 20) --------------------------------
+    def _lease_ok(self, lease: dict | None) -> bool:
+        from .crypto import verify_object
+        return bool(lease and self.governor_key is not None and verify_object(lease, self.governor_key)
+                    and lease["payload"].get("gpu") == self.chip_id and lease["payload"].get("type") == "key-lease")
+
+    def install_key(self, key_box: dict, lease: dict) -> bool:
+        """KEY_RELEASE's answer: the data key sealed to this GPU, and a governor-signed lease."""
+        from .sealing import open_sealed
+        if not self._lease_ok(lease):
+            return False
+        dek = open_sealed(self.cc_key, key_box, b"dek-to-gpu|" + lease["payload"]["model"].encode())
+        if dek is None:
+            return False
+        self.dek, self.lease = dek, lease
+        self.key_events.append({"t": self.clock.now(), "event": "key installed", "until": lease["payload"]["expires_at"]})
+        return True
+
+    def renew(self, lease: dict) -> bool:
+        if not self._lease_ok(lease) or self.dek is None or lease["payload"]["model"] != (self.lease or {}).get("payload", {}).get("model"):
+            return False
+        self.lease = lease
+        return True
+
+    def load_sealed(self, sealed: dict) -> bool:
+        """Decrypt the sealed weights into protected memory; needs the key."""
+        from .sealing import decrypt_weights
+        if self.dek is None or self.power != "ON":
+            return False
+        plain = decrypt_weights(sealed, self.dek)
+        if plain is None:
+            return False
+        self.weights_plain, self.sealed, self.job = plain, True, sealed["model_digest"]
+        self.manifest_digest = sealed["model_digest"]
+        return True
+
+    def zeroize(self, why: str) -> None:
+        if self.dek is not None or self.weights_plain is not None:
+            self.key_events.append({"t": self.clock.now(), "event": "zeroized", "why": why})
+        self.dek, self.lease, self.weights_plain = None, None, None
+
     def run_tokens(self, n: int, cycles_per_token: int = 1000) -> int:
         if not self.running:
             return 0
+        if self.sealed:
+            # no key or an expired lease: the weights are wiped, nothing runs. The GPU enforces its own lease, so a
+            # governor that goes silent (cut off, powered down, halted) stops the model within one lease period
+            if self.dek is None or not self.lease or self.clock.now() >= self.lease["payload"]["expires_at"]:
+                self.zeroize("lease expired" if self.lease else "no key")
+                return 0
         self.tokens += n
         self.cycles += n * cycles_per_token
         return n

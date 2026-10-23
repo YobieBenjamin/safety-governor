@@ -175,6 +175,7 @@ So, from the chip's point of view: yes, it strengthens the promise, in the speci
 
 | 18 | Who outside the signers can read the log, and on what terms? The signed checkpoints are readable by anyone (`LOG_CHECKPOINT`, `04` section 3), so anyone can check the log was not rewritten; who can read its contents is not designed | A read-access policy for log contents, written as part of the signed rulebook, with the checkpoints staying public; a simulation of an outside auditor checking a sample against the public checkpoints. Section 8c; GitHub issue G1 | This program, operator, regulator |
 | 19 | How does a party affected by a gated action contest a ticket, or reopen the rules? Today only insiders can: the quorum override (H8) and the hold for named approvers | A contest lane: a signed objection that holds the ticket for a separate quorum, with its own reason code and timer; a simulation showing it closes the gap without becoming a denial-of-service lever. Section 8c; GitHub issue G2 | This program, operator, regulator |
+| 20 | The origin gate: can a model be made unable to run anywhere but on governed hardware, by sealing its weights to the governor and letting the governor release the key only to an attested GPU, while the signed rulebook lists the model? | A simulation of key release and revocation while running (done 23 October: `results/origin-gate.md`, every check holds); then the GPU's real decryption cost and lease enforcement on a confidential-computing GPU, which needs NVIDIA's firmware to honour the lease. Section 8d; GitHub issue W1 | This program, then NVIDIA |
 Questions 1, 3, 5, 12 and 15 are the ones a small program can move. Questions 6, 11, 14 and 16 are the ones a chip cannot move at all, and the design should keep saying so. Questions 18 and 19 sit in between: the chip can enforce whatever answer is chosen, but choosing it is governance (section 8c).
 
 
@@ -210,6 +211,32 @@ Where each of his four questions stands:
 | Can the affected contest a ticket, or reopen the rules? | **Not designed.** The override and the hold are both for insiders. Question 19, issue G2 | `tests/test_h08_override.py`, `25` |
 
 The two open ones are hypotheses until an experiment says otherwise. Each issue states what would settle it and what would count as failure. In both cases the chip already has the parts: a signed rulebook field, a quorum, a reason code, a timer, the log. The missing piece is the governance decision of who holds which key, written down and then rehearsed in simulation, with the result published whichever way it goes.
+
+## 8d. The origin gate: no key, no model
+
+*Added 23 October 2026, prompted by a reader's question on Part 6: why not a weight in each model, 1 for allow and 0 for deny, a gateway at the origin as well as at the destination?*
+
+The instinct is right and the place is wrong. A switch inside the model lives in memory the operator controls: anyone holding the weights can set it back, "no intermediate values" cannot be enforced from inside, a little fine-tuning routes around one parameter, and open weights make it moot. That is this program's thesis turned on itself: the model would be policing itself.
+
+The version that can work puts the switch in the chip. The publisher seals the weights (AES-256-GCM, chunk by chunk, each chunk bound to the model and its position) under a data key that only the governor can open. The governor re-seals that key to one GPU whose confidential-computing report it has verified, and only while the signed rulebook lists the model (`sealed_models`). The key comes out with a lease; the GPU wipes key and weights when the lease ends unless the governor renews it, and the governor renews only while it is running, the GPU is not revoked and the current edition still lists the model. A true binary: the key comes out, or it does not.
+
+So the design gets a gate at both ends of the network the kill-switch argument (`23`) says cannot be cut in the middle: at the origin, no key, no model; at the destination, no ticket, no action.
+
+**First experiment, run 23 October** (`python -m govsim.origin_gate`, `results/origin-gate.md`, 21 of 21 checks hold):
+
+| Route to revocation while the model runs | What happened (30 s lease) |
+|---|---|
+| A new edition drops the model | stopped at once (the governor reaches the GPU and wipes the key) |
+| A new edition revokes the GPU | stopped at once |
+| The governor halts | stopped at once: the levers take the power, the key goes with it |
+| The governor goes silent, no renewals | stopped by itself at 29 s, inside one lease |
+| The revocation push switched off | stopped at 29 s by the refused renewal alone: the push is a fast path, the lease is the guarantee |
+| Control: renewed, nothing revoked | ran through all four leases |
+| Planted bug: renewal ignores the rulebook | kept running: the checks can see a breach |
+
+Cost, measured on this 2-core machine: about a millisecond for the governor to release a key, under a millisecond to renew one (75 ms of governor time per hour at a 30 s lease). The real cost is decrypting the weights at load, and in software on one core here that is 0.19 GB/s, about 12 minutes for a 70B model in fp16. That number stands in for a GPU decrypting in its own hardware as the weights stream in; the GPU's real number needs a GPU, and it goes here when it is measured.
+
+**What this does not show.** The simulated GPU honours its own lease; a real one would do that in NVIDIA's firmware, which makes "the GPU stops by itself" an ask of NVIDIA, not something this design can force. It protects weights that stay sealed; open weights already in the world are outside its reach, and outside anyone's. And it moves the trust question to whoever controls key release, which is section 8c.
 
 ## 9. What I would do next
 

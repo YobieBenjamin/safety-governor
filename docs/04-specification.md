@@ -119,6 +119,8 @@ image) are accepted without a frame signature and say so below.
 | 0x14 | `ALARM_RAISE` | anyone | cause, request hash, evidence digest | Raises a sticky alarm (any party may) |
 | 0x15 | `ALARM_CLEAR` | the policy's alarm approver key | cause | Clears an alarm; logged |
 | 0x16 | `EXCLUDE` | an authority key (never the heartbeat key); the same class and checks as `CLEAR`: this chip's id and an expiry in the payload, epoch-exempt | none | Only for a chip waiting for its first heartbeat: close its loop switch, keep its own levers asserted (see below); logged with the signer |
+| 0x17 | `KEY_RELEASE` | host (signed, typed), RUN, GPU and host attested | the model's data key, sealed to this governor | The origin gate (`18` §8d): for a model that BEGIN_MODEL presented and the rulebook's `sealed_models` lists, unseal the data key and re-seal it to the attested GPU's confidential-computing key, with a signed lease of `key_lease_s`; logged. Refusals: `key.model_not_loaded`, `key.model_not_in_rulebook`, `key.no_attested_gpu_key`, `key.unwrap_failed` |
+| 0x18 | `KEY_RENEW` | host (signed, typed), RUN, GPU attested | none | Extend a live lease while the edition still lists the model and the GPU is not revoked; otherwise the key is revoked (`key.revoked` in the log) and the GPU wipes it when the lease ends. A new edition that drops the model or revokes the GPU revokes at once |
 
 **Two design calls (decided by Yobie, 23 October 2026).** "Silently failing is a bullshit
 feature. Operators should have some verbose warning / signal / notice."

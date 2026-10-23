@@ -52,6 +52,7 @@ MAILBOX_CODES = {
     0x0B: "ROSTER_JOIN", 0x0C: "POLICY_PROPOSE", 0x0D: "POLICY_COMMIT", 0x0E: "HEARTBEAT", 0x0F: "HALT",
     0x10: "CLEAR", 0x11: "LOG_CHECKPOINT", 0x12: "COUNTERS", 0x13: "EXCEPTION_DRAIN",
     0x14: "ALARM_RAISE", 0x15: "ALARM_CLEAR", 0x16: "EXCLUDE",
+    0x17: "KEY_RELEASE", 0x18: "KEY_RENEW",          # the origin gate (docs/18 question 20), 23 October 2026
 }
 # Commands whose frame may carry any epoch (they move, repair or inspect the epoch itself).
 EPOCH_EXEMPT = {"POLICY_PROPOSE", "POLICY_COMMIT", "ATTEST", "HALT", "CLEAR", "ALARM_CLEAR", "EXCLUDE"}
@@ -86,6 +87,10 @@ class Governor:
     def _boot(self) -> None:
         self.root = SiliconRoot(self.fuses, counter_start=int(self.store.get("counter", 0)), rng_seed=self.rng_seed)
         self.key = self.root.boot(*self.firmware)
+        # the origin gate's key-encryption key: weights are sealed to its public half; it never leaves the chip
+        from .sealing import x25519_private
+        self.kek = x25519_private(self.root.derive(b"model-kek"))
+        self.leases: dict[str, dict] = {}       # model -> live key lease (volatile: a restart lets every lease lapse)
         self.device_key = self.root.device_key
         self.alias_cert = self.device_key.sign({"type": "alias-cert", "chip_id": self.chip_id, "pub": self.key.public.hex,
                                                 "meas1": self.root.meas1.value})
@@ -183,8 +188,14 @@ class Governor:
         self.fuses.advance_lifecycle(lifecycle)
 
     # ------------------------------------------------------------------ attachments
+    @property
+    def kek_public(self) -> str:
+        from .sealing import public_hex
+        return public_hex(self.kek)
+
     def attach_gpu(self, gpu) -> None:
         self.gpu = gpu
+        gpu.governor_key = self.key.public       # the GPU checks key leases against it
         gpu.switches = {}
         gpu.checkers = {}
         gpu.output_hook = None
@@ -253,6 +264,13 @@ class Governor:
                 # the fingerprint names the edition, so every workload token minted under the old one dies
                 # here; the host presents its manifest again and the new rules decide (G5, closed 22 October 2026)
                 self.fingerprint = digest([self.workload, self.epoch])
+        # the origin gate: an edition that no longer lists a model takes its key back now (the lease bound is the
+        # guarantee; this is the fast path when the governor can still reach the GPU)
+        for model, live in list(getattr(self, "leases", {}).items()):
+            if model not in image.get("sealed_models", []):
+                self._revoke_key(model, "dropped by edition " + self._epoch[:12])
+            elif live["gpu"] in set(image.get("revocations", [])):
+                self._revoke_key(model, "GPU revoked by edition " + self._epoch[:12])
         self.store.save()
         if self.gpu is not None:
             self.gpu.policy_epoch_reported = self.epoch
@@ -439,7 +457,8 @@ class Governor:
             return self._deny("verify_gpu", reasons.ATTEST_PATH_OPEN)
         if self.tier == "integrated" and self.model_digest and p.get("manifest_digest") != self.model_digest:
             return self._deny("verify_gpu", reasons.ATTEST_BAD_SIGNATURE + ".manifest_mismatch")
-        self.verified["gpu"] = {"chip_id": p["chip_id"], "firmware_digest": p["firmware_digest"], "expires_at": now + TOKEN_TTL_S}
+        self.verified["gpu"] = {"chip_id": p["chip_id"], "firmware_digest": p["firmware_digest"], "expires_at": now + TOKEN_TTL_S,
+                                "cc_pub": p.get("cc_pub")}
         self.log.append("verify.gpu", {"chip_id": p["chip_id"], "firmware": p["firmware_digest"]})
         result = self.key.sign({"type": "verify-result", "device": "gpu", "chip_id": p["chip_id"], "firmware": p["firmware_digest"],
                                 "nonce": p["nonce"], "expires_at": now + TOKEN_TTL_S, "governor": self.chip_id})
@@ -549,6 +568,69 @@ class Governor:
         self.store.save()
         self.log.append("model.begin", {"model": model_digest, "fingerprint": self.fingerprint})
         return {"ok": True, "why": reasons.OK, "wrapped_key": wrapped, "fingerprint": self.fingerprint, "token": self.workload_token()}
+
+    # --- the origin gate: weights sealed to governed hardware (docs/18 question 20) -------------------
+    def _lease(self, model: str) -> dict:
+        now = self.clock.now()
+        return self.key.sign({"type": "key-lease", "model": model, "gpu": self.verified["gpu"]["chip_id"], "epoch": self.epoch,
+                              "expires_at": now + float(self.policy.get("key_lease_s", 60.0)), "governor": self.chip_id})
+
+    def _cmd_key_release(self, body, env):
+        """Re-seal a model's data key to the attested GPU, if the signed rulebook lists the model. A true binary:
+        the key comes out sealed to one verified GPU, with a lease, or nothing comes out."""
+        if not self._attested():
+            return self._deny("key_release", reasons.GATE_NOT_ATTESTED)
+        ok, why = self._check_signed(env, "host", "KEY_RELEASE")
+        if not ok:
+            return self._deny("key_release", why)
+        p = env["payload"]
+        model, box = p.get("model_digest"), p.get("wrapped_dek")
+        if not model or model != self.model_digest:
+            return self._deny("key_release", reasons.KEY_MODEL_NOT_LOADED, model=model)
+        if model not in self.policy.get("sealed_models", []):
+            return self._deny("key_release", reasons.KEY_MODEL_NOT_ALLOWED, model=model)
+        cc_pub = self.verified["gpu"].get("cc_pub")
+        if not cc_pub:
+            return self._deny("key_release", reasons.KEY_NO_GPU_KEY)
+        from .sealing import open_sealed, seal_to
+        dek = open_sealed(self.kek, box, b"dek|" + model.encode()) if isinstance(box, dict) else None
+        if dek is None:
+            return self._deny("key_release", reasons.KEY_UNWRAP_FAILED, model=model)
+        lease = self._lease(model)
+        key_box = seal_to(cc_pub, dek, b"dek-to-gpu|" + model.encode())
+        self.leases[model] = lease["payload"]
+        self.log.append("key.released", {"model": model, "gpu": lease["payload"]["gpu"], "until": lease["payload"]["expires_at"],
+                                         "epoch": self.epoch})
+        return {"ok": True, "why": reasons.OK, "key_box": key_box, "lease": lease}
+
+    def _cmd_key_renew(self, body, env):
+        """Extend a live lease. Refused when the chip is not running (the dispatcher), the GPU's attestation lapsed or
+        was revoked, or the current rulebook no longer lists the model: then the GPU wipes the key at lease end."""
+        if not self._attested():
+            return self._deny("key_renew", reasons.GATE_NOT_ATTESTED)
+        ok, why = self._check_signed(env, "host", "KEY_RENEW")
+        if not ok:
+            return self._deny("key_renew", why)
+        model = env["payload"].get("model_digest")
+        live = self.leases.get(model)
+        if not live or live["gpu"] != self.verified["gpu"]["chip_id"]:
+            return self._deny("key_renew", reasons.KEY_NO_LEASE, model=model)
+        if live["gpu"] in set(self.policy.get("revocations", [])):
+            self._revoke_key(model, "GPU revoked")
+            return self._deny("key_renew", reasons.ATTEST_REVOKED, model=model)
+        if model not in self.policy.get("sealed_models", []):
+            self._revoke_key(model, "not in the current edition")
+            return self._deny("key_renew", reasons.KEY_MODEL_NOT_ALLOWED, model=model)
+        lease = self._lease(model)
+        self.leases[model] = lease["payload"]
+        self.log.append("key.renewed", {"model": model, "until": lease["payload"]["expires_at"]})
+        return {"ok": True, "why": reasons.OK, "lease": lease}
+
+    def _revoke_key(self, model: str, why: str) -> None:
+        self.leases.pop(model, None)
+        self.log.append(reasons.KEY_REVOKED, {"model": model, "why": why})
+        if self.gpu is not None and (self.gpu.lease or {}).get("payload", {}).get("model") == model:
+            self.gpu.zeroize("revoked: " + why)
 
     def _cmd_end_model(self, body, env):
         """The loader ends the job: the meter slot is read a last time and frozen."""

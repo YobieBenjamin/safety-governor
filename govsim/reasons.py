@@ -132,10 +132,19 @@ NO_FIRST_HEARTBEAT = "boot.no_first_heartbeat"
 EXCLUDED = "boot.excluded"
 EXCLUDE_NOT_WAITING = "exclude.not_waiting_for_first_heartbeat"   # EXCLUDE outside HALTED_INITIAL with no cause and no live heartbeat
 
+# the origin gate: weights sealed to governed hardware, the key released by the governor (docs/18 question 20)
+KEY_MODEL_NOT_LOADED = "key.model_not_loaded"          # KEY_RELEASE for a model no BEGIN_MODEL presented (manifest, eval gate)
+KEY_MODEL_NOT_ALLOWED = "key.model_not_in_rulebook"    # the signed rulebook's sealed_models does not list it (or no longer does)
+KEY_NO_GPU_KEY = "key.no_attested_gpu_key"             # the verified GPU report carried no confidential-computing key
+KEY_UNWRAP_FAILED = "key.unwrap_failed"                # the data key was not sealed to this governor, or was altered
+KEY_NO_LEASE = "key.no_lease"                          # KEY_RENEW for a model with no live lease on this chip
+KEY_REVOKED = "key.revoked"                            # logged when a new edition drops a model with a live lease
+
 OK = "ok"
 
 # The 16-bit encoding the RTL and the firmware share. Codes are stable once assigned: the codes first assigned (every
 # name before ADDED) keep their sorted numbering, and names added later take the next numbers in the order added.
-ADDED = [NO_FIRST_HEARTBEAT, EXCLUDED, EXCLUDE_NOT_WAITING]       # 23 October 2026
+ADDED = [NO_FIRST_HEARTBEAT, EXCLUDED, EXCLUDE_NOT_WAITING,       # 23 October 2026
+         KEY_MODEL_NOT_LOADED, KEY_MODEL_NOT_ALLOWED, KEY_NO_GPU_KEY, KEY_UNWRAP_FAILED, KEY_NO_LEASE, KEY_REVOKED]   # 23 October, origin gate
 _FIRST = sorted(v for k, v in list(globals().items()) if k.isupper() and isinstance(v, str) and v not in ADDED)
 CODES = {name: i for i, name in enumerate(_FIRST + ADDED, start=1)}

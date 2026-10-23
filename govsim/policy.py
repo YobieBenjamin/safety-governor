@@ -73,7 +73,8 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
                 buffer_classes: list[str] | None = None, buffer_policy: dict[str, str] | None = None,
                 audit: dict | None = None, streams_required: list[str] | None = None,
                 eval_keys: list[VerifyKey] | None = None, deployment_gate: bool = False,
-                compute_budget: dict | None = None, sandbox: bool = False, authority_keys: list[VerifyKey] | None = None) -> dict:
+                compute_budget: dict | None = None, sandbox: bool = False, authority_keys: list[VerifyKey] | None = None,
+                sealed_models: list[str] | None = None, key_lease_s: float = 60.0) -> dict:
     return {
         "version": version, "issued_at": issued_at, "expires_at": expires_at,
         "governance_keys": [k.hex for k in governance_keys], "threshold": threshold,
@@ -97,6 +98,8 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
         "deployment_gate": bool(deployment_gate),                          # BEGIN_MODEL needs an eval attestation
         "compute_budget": dict(compute_budget if compute_budget is not None else {"cycles": None, "license_keys": []}),
         "sandbox": bool(sandbox),                                          # model organisms: no network flows
+        "sealed_models": list(sealed_models or []),                        # the origin gate: models whose key this chip may release
+        "key_lease_s": float(key_lease_s),                                 # a released key lives this long unless renewed
         "safe_mode": safe_mode or {"default_rung": "THROTTLE", "T_throttle_s": 30.0, "T_halt_s": 300.0,
                                    "causes": {reasons.LOOP_OPEN: "HALT", reasons.LOOP_BROKEN: "HALT", reasons.LOOP_JUMPERED: "HALT",
                                               reasons.TAMPER: "SAFE", reasons.HEARTBEAT_LOST: "THROTTLE",

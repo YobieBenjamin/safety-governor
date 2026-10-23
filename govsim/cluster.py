@@ -121,7 +121,8 @@ class Rack:
                           release_mode: str = "observer", on_hazard: str = "refuse", on_illegible: str = "refuse",
                           min_legibility: float = 0.0, hazard_budget: dict | None = None, streams_required: list[str] | None = None,
                           audit: dict | None = None, deployment_gate: bool = False, compute_cycles: int | None = None,
-                          sandbox: bool = False, extra_refs: list[dict] | None = None) -> dict:
+                          sandbox: bool = False, extra_refs: list[dict] | None = None,
+                          sealed_models: list[str] | None = None, key_lease_s: float = 60.0) -> dict:
         now = self.clock.now()
         refs = [
             {"device_class": "gpu", "vendor_key": self.gpu_vendor.public.hex, "firmware_digest": GPU_FW, "valid_until": now + 365 * 86400},
@@ -197,6 +198,7 @@ class Rack:
             buffer_classes=buffer_classes, buffer_policy=buffer_policy,      # None: the defaults in govsim/policy.py
             audit=audit, streams_required=streams_required, eval_keys=[self.evaluator.public], deployment_gate=deployment_gate,
             compute_budget={"cycles": compute_cycles, "license_keys": [self.licensor.public.hex]}, sandbox=sandbox,
+            sealed_models=sealed_models, key_lease_s=key_lease_s,
         )
 
     def signed_list(self, list_id: str, entries: list, expires_in_s: float = 86400.0) -> dict:
