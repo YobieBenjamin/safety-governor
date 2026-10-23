@@ -3,8 +3,11 @@
 module monotonic_counter(load_hwm, inc, dec_req, clk, rst, value, refused, hwm);
   reg \$auto$verilog_backend.cc:2355:dump_module$1  = 0;
   wire \$1 ;
-  wire [64:0] \$2 ;
-  reg [63:0] \$3 ;
+  wire \$2 ;
+  wire \$3 ;
+  wire \$4 ;
+  wire [64:0] \$5 ;
+  reg [63:0] \$6 ;
   input clk;
   wire clk;
   input dec_req;
@@ -21,22 +24,25 @@ module monotonic_counter(load_hwm, inc, dec_req, clk, rst, value, refused, hwm);
   wire rst;
   output [63:0] value;
   reg [63:0] value = 64'h0000000000000000;
-  assign \$1  = hwm > value;
-  assign \$2  = value + 1'h1;
+  assign \$4  = hwm > value;
+  assign \$5  = value + 1'h1;
   always @(posedge clk)
-    value <= \$3 ;
+    value <= \$6 ;
+  assign \$1  = & value;
+  assign \$2  = ~ \$1 ;
+  assign \$3  = inc & \$2 ;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$3  = value;
+    \$6  = value;
     if (load_hwm) begin
-      if (\$1 ) begin
-        \$3  = hwm;
+      if (\$4 ) begin
+        \$6  = hwm;
       end
-    end else if (inc) begin
-      \$3  = \$2 [63:0];
+    end else if (\$3 ) begin
+      \$6  = \$5 [63:0];
     end
     if (rst) begin
-      \$3  = 64'h0000000000000000;
+      \$6  = 64'h0000000000000000;
     end
   end
   assign refused = dec_req;

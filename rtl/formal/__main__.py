@@ -1,7 +1,7 @@
 """L7: prove the chip's properties on the generated Verilog, then prove the proofs can fail.
 
     python -m rtl.formal          # every block that has a property file; exit 1 on anything that does not hold
-    python -m rtl.formal meter    # only the blocks named
+    python -m rtl.formal meter    # only the blocks named (any number)
 
 For each block: yosys reads rtl/gen/<block>.v and rtl/formal/<block>.sv, a bounded check runs to DEPTH cycles,
 then k-induction at the same depth, which, when it passes, makes every assertion hold in every reachable state.
@@ -68,6 +68,15 @@ except ImportError:
     BLOCKS_FPGA = {}
 BLOCKS.update(BLOCKS_FPGA)
 
+# the second set of blocks (mailbox, cap_table, ticket_store, epoch_reg, monotonic_counter, lifecycle) lives in its own
+# file so two people can extend L7 at once; CHECKS_A are its extra, independent checks (a second solver, a random
+# simulation against a reference model). Missing file, missing blocks: the halt sequencer still runs.
+try:
+    from .blocks_a import BLOCKS_A, CHECKS_A, DEPTH_A
+except ImportError:
+    BLOCKS_A, CHECKS_A, DEPTH_A = {}, [], {}
+BLOCKS = {**BLOCKS, **BLOCKS_A}
+
 
 def tool(name: str) -> str:
     here = os.path.join(os.path.dirname(sys.executable), name)
@@ -101,12 +110,34 @@ def solvers() -> list:
     return _SOLVERS
 
 
+SPLICE = "// L7-SPLICE"
+
+
 def smt(work: str, top: str, yosys_extra: str = "") -> str | None:
-    """yosys: dut.v + props.sv in work -> design.smt2. Returns an error text, or None."""
+    """yosys: dut.v + props.sv in work -> design.smt2. Returns an error text, or None.
+
+    A props file that starts with SPLICE is pasted into the block's own module, just before endmodule, so its
+    assertions can name the block's internal registers (yosys has no hierarchical references); the block's logic is
+    untouched. Any yosys warning is refused: a misspelt signal name becomes a free wire, a variable driven from two
+    blocks becomes a conflict, and an assertion over either proves nothing (found by the L7 group A work)."""
+    text = open(os.path.join(work, "props.sv"), encoding="utf-8").read()
+    if text.startswith(SPLICE):
+        dut = open(os.path.join(work, "dut.v"), encoding="utf-8").read()
+        top = dut.split("module ", 1)[1].split("(", 1)[0].strip()
+        at = dut.rfind("endmodule")
+        with open(os.path.join(work, "props.sv"), "w", encoding="utf-8") as f:
+            f.write(dut[:at] + text + "\n" + dut[at:])
+        read = "read_verilog -formal -sv props.sv;"
+    else:
+        read = "read_verilog -sv dut.v; read_verilog -formal -sv props.sv;"
     y = subprocess.run([tool("yowasp-yosys"), "-q", "-p",
-                        f"read_verilog -sv dut.v; read_verilog -formal -sv props.sv; {yosys_extra} prep -top {top}; "
+                        f"{read} {yosys_extra} prep -top {top}; "
                         f"async2sync; dffunmap; write_smt2 -wires design.smt2"], capture_output=True, text=True, cwd=work)
-    return ("TOOL ERROR (yosys): " + (y.stderr or y.stdout)[-800:]) if y.returncode else None
+    if y.returncode:
+        return "TOOL ERROR (yosys): " + (y.stderr or y.stdout)[-800:]
+    if "Warning:" in y.stderr:
+        return "TOOL ERROR (yosys warning): " + y.stderr.strip()[:600]
+    return None
 
 
 def bmc_and_induction(work: str, depth: int, solver: str, smt2: str = "design.smt2") -> tuple[bool, str]:
@@ -175,7 +206,9 @@ def check_block(block: str, src_file: str, cls: str, work: str, mutant: tuple | 
         mutant_verilog(src_file, cls, mutant[1], mutant[2], mv, block)
         src_v = mv
     props_text = opt["props_text"](open(src_v, encoding="utf-8").read()) if "props_text" in opt else None
-    ok, why = prove(src_v, props, work, depth=opt.get("depth", DEPTH), all_solvers=all_solvers,
+    # group A's blocks run one solver here; their second solver is one of CHECKS_A, which says NOT RUN where it times out
+    ok, why = prove(src_v, props, work, depth=opt.get("depth", DEPTH_A.get(block, DEPTH)),
+                    all_solvers=all_solvers and block not in BLOCKS_A,
                     yosys_extra=opt.get("yosys_extra", ""), props_text=props_text, solver=opt.get("solver", "z3"))
     notes = [why]
     for label, fn in opt.get("checks", []):
@@ -209,8 +242,14 @@ def main(argv: list) -> int:
             for desc, old, new in mutants:
                 with tempfile.TemporaryDirectory() as mwork:
                     passed, why = check_block(block, src_file, cls, mwork, (desc, old, new), all_solvers=False)
-                # a mutant counts as caught only when an assertion fails; a tool error proves nothing
-                caught = not passed and "TOOL ERROR" not in why
+                # a mutant counts as caught only when an assertion fails; a tool error proves nothing. For group A's
+                # blocks the rule is stricter: the bounded check must fail, on a concrete trace from reset, because an
+                # induction failure alone may start from a state the mutant can never reach. halt_seq keeps the old
+                # rule: its "never escalates to SAFE" mutant needs 300,000 ticks, which only induction reaches.
+                if block in BLOCKS_A:
+                    caught = why.startswith("bounded check failed")
+                else:
+                    caught = not passed and "TOOL ERROR" not in why
                 extra = ""
                 if "sim_mutant" in opt:                      # information only: does the simulation see it too?
                     try:
@@ -224,6 +263,10 @@ def main(argv: list) -> int:
             f_ok, f_why = fn()
             print(f"  {'FACT' if f_ok else 'FACT-FAILED'}  {block}: {label}: {f_why}")
             bad += not f_ok
+    for check in CHECKS_A:
+        for ok, line in check(prove, names):
+            print(f"  {line}")
+            bad += not ok
     print("L7: every property proven on the Verilog, every mutant caught" if not bad else f"L7: {bad} problem(s)")
     return 1 if bad else 0
 
