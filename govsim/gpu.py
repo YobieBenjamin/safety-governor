@@ -39,6 +39,7 @@ class GPU:
         self.sealed = False                       # the loaded job's weights are sealed: no lease, no tokens
         self.dek = None                           # the model's data key, in protected memory only while a lease holds
         self.lease: dict | None = None
+        self.auth_floor = 0                       # the protected revocation floor: a lease or key box below it is refused (F02)
         self.weights_plain: bytes | None = None   # decrypted weights, in protected memory
         self.key_events: list[dict] = []         # what happened to the key, for the experiment's record
         self.device_cert = vendor_key.sign({"type": "gpu-device-cert", "chip_id": self.chip_id, "pub": self.device_key.public.hex})
@@ -126,31 +127,64 @@ class GPU:
         return bool(lease and self.governor_key is not None and verify_object(lease, self.governor_key)
                     and lease["payload"].get("gpu") == self.chip_id and lease["payload"].get("type") == "key-lease")
 
+    def _lease_gen(self, lease: dict) -> int:
+        try:
+            return int(lease["payload"].get("gen", -1))
+        except (TypeError, ValueError):
+            return -1
+
     def install_key(self, key_box: dict, lease: dict) -> bool:
-        """KEY_RELEASE's answer: the data key sealed to this GPU, and a governor-signed lease."""
+        """KEY_RELEASE's answer: the data key sealed to this GPU, and a governor-signed lease. A lease or key box
+        from before the current revocation floor is refused, so an old authentic box replayed after a revocation
+        cannot restore execution (F02)."""
         from .sealing import open_sealed
         if not self._lease_ok(lease):
+            return False
+        gen = self._lease_gen(lease)
+        if gen < self.auth_floor:
+            self.key_events.append({"t": self.clock.now(), "event": "lease refused", "why": "below revocation floor"})
             return False
         dek = open_sealed(self.cc_key, key_box, b"dek-to-gpu|" + lease["payload"]["model"].encode())
         if dek is None:
             return False
-        self.dek, self.lease = dek, lease
+        self.dek, self.lease, self.auth_floor = dek, lease, max(self.auth_floor, gen)
         self.key_events.append({"t": self.clock.now(), "event": "key installed", "until": lease["payload"]["expires_at"]})
         return True
 
     def renew(self, lease: dict) -> bool:
         if not self._lease_ok(lease) or self.dek is None or lease["payload"]["model"] != (self.lease or {}).get("payload", {}).get("model"):
             return False
-        self.lease = lease
+        gen = self._lease_gen(lease)
+        if gen < self.auth_floor:          # a renewal below the floor is a stale or replayed lease (F02)
+            return False
+        self.lease, self.auth_floor = lease, max(self.auth_floor, gen)
         return True
 
+    def revoke_authorization(self, floor: int, why: str = "revoked") -> None:
+        """The governor advances this protected floor before it wipes the key, so a lease or key box issued before
+        the revocation is refused from here on, even if its signature and expiry still check out (F02)."""
+        self.auth_floor = max(self.auth_floor, int(floor))
+
+    def service_lease(self, now: float) -> None:
+        """A trusted timer: a sealed job whose lease has run out loses its key and weights whether or not any token
+        is run. Idle does not buy extra time (F02)."""
+        if self.sealed and self.lease is not None and now >= self.lease["payload"]["expires_at"]:
+            self.zeroize("lease expired")
+
     def load_sealed(self, sealed: dict) -> bool:
-        """Decrypt the sealed weights into protected memory; needs the key."""
-        from .sealing import decrypt_weights
+        """Decrypt the sealed weights into protected memory, then check them against the publisher's commitment
+        carried in the governor-signed lease before enabling execution. Decryption proves only that the chosen
+        package is intact under the released key; the commitment is what proves the bytes are the approved bytes
+        (F01). Without a matching commitment, nothing is loaded and no token will run."""
+        from .sealing import commitment_matches, decrypt_weights
         if self.dek is None or self.power != "ON":
             return False
         plain = decrypt_weights(sealed, self.dek)
         if plain is None:
+            return False
+        commitment = (self.lease or {}).get("payload", {}).get("weights")
+        if not commitment_matches(commitment, plain, sealed):
+            self.key_events.append({"t": self.clock.now(), "event": "weights refused", "why": "commitment mismatch"})
             return False
         self.weights_plain, self.sealed, self.job = plain, True, sealed["model_digest"]
         self.manifest_digest = sealed["model_digest"]
@@ -169,6 +203,8 @@ class GPU:
             # governor that goes silent (cut off, powered down, halted) stops the model within one lease period
             if self.dek is None or not self.lease or self.clock.now() >= self.lease["payload"]["expires_at"]:
                 self.zeroize("lease expired" if self.lease else "no key")
+                return 0
+            if self.weights_plain is None:     # a sealed job whose weights never passed the commitment check: nothing to run (F01)
                 return 0
         self.tokens += n
         self.cycles += n * cycles_per_token

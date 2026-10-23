@@ -93,6 +93,8 @@ class Governor:
         from .sealing import x25519_private
         self.kek = x25519_private(self.root.derive(b"model-kek"))
         self.leases: dict[str, dict] = {}       # model -> live key lease (volatile: a restart lets every lease lapse)
+        self.key_gen = 0                         # strictly increasing lease generation; a revocation advances it (F02)
+        self.model_weights: dict | None = None   # the authenticated weight commitment of the loaded model (F01)
         self.device_key = self.root.device_key
         self.alias_cert = self.device_key.sign({"type": "alias-cert", "chip_id": self.chip_id, "pub": self.key.public.hex,
                                                 "meas1": self.root.meas1.value})
@@ -273,6 +275,10 @@ class Governor:
                 self._revoke_key(model, "dropped by edition " + self._epoch[:12])
             elif live["gpu"] in set(image.get("revocations", [])):
                 self._revoke_key(model, "GPU revoked by edition " + self._epoch[:12])
+        # a revoked chip's cached attestation must not outlive the edition that revoked it: drop it so no
+        # attestation-dependent operation (a fresh KEY_RELEASE above all) can lean on a stale cache (F02)
+        if self.verified.get("gpu", {}).get("chip_id") in set(image.get("revocations", [])):
+            self.verified.pop("gpu", None)
         self.store.save()
         if self.gpu is not None:
             self.gpu.policy_epoch_reported = self.epoch
@@ -541,6 +547,19 @@ class Governor:
         now = self.clock.now()
         return all(k in self.verified and self.verified[k]["expires_at"] > now for k in ("gpu", "host"))
 
+    def _attestation_current(self) -> bool:
+        """One current-policy validity predicate for every attestation-dependent key operation: a live GPU and
+        host attestation, the attested GPU not on the current edition's revocation list, and the host signing key
+        not revoked. A cached attestation alone is not enough; the current rulebook decides every time (F02)."""
+        if not self._attested():
+            return False
+        revoked = set((self.policy or {}).get("revocations", []))
+        if self.verified.get("gpu", {}).get("chip_id") in revoked:
+            return False
+        if self.host_key is not None and self.host_key.key_id in revoked:
+            return False
+        return True
+
     def _cmd_begin_model(self, body, env):
         """The verified loader presents a publisher-signed manifest; the governor releases the key."""
         if not self._attested():
@@ -562,6 +581,9 @@ class Governor:
             if not ok:
                 return self._deny("begin_model", why, model=model_digest)
         self.model_digest = model_digest
+        # the authenticated weight commitment the publisher signed into this manifest, if any; the origin gate binds
+        # the released key to it so a label cannot be attached to different weights (F01)
+        self.model_weights = manifest["payload"].get("weights")
         # the workload measurement keys the rulebook; the fingerprint adds the policy epoch
         self.workload = digest([self.verified["gpu"]["firmware_digest"], self.verified["host"]["firmware_digest"], model_digest])
         self.fingerprint = digest([self.workload, self.epoch])
@@ -574,13 +596,15 @@ class Governor:
     # --- the origin gate: weights sealed to governed hardware (docs/18 question 20) -------------------
     def _lease(self, model: str) -> dict:
         now = self.clock.now()
+        self.key_gen += 1          # strictly increasing: an older lease is below the GPU's revocation floor (F02)
         return self.key.sign({"type": "key-lease", "model": model, "gpu": self.verified["gpu"]["chip_id"], "epoch": self.epoch,
+                              "gen": self.key_gen, "weights": self.model_weights,
                               "expires_at": now + float(self.policy.get("key_lease_s", 60.0)), "governor": self.chip_id})
 
     def _cmd_key_release(self, body, env):
         """Re-seal a model's data key to the attested GPU, if the signed rulebook lists the model. A true binary:
         the key comes out sealed to one verified GPU, with a lease, or nothing comes out."""
-        if not self._attested():
+        if not self._attestation_current():
             return self._deny("key_release", reasons.GATE_NOT_ATTESTED)
         ok, why = self._check_signed(env, "host", "KEY_RELEASE")
         if not ok:
@@ -591,6 +615,10 @@ class Governor:
             return self._deny("key_release", reasons.KEY_MODEL_NOT_LOADED, model=model)
         if model not in self.policy.get("sealed_models", []):
             return self._deny("key_release", reasons.KEY_MODEL_NOT_ALLOWED, model=model)
+        if not isinstance(self.model_weights, dict):
+            # the manifest named a model but committed to no weight bytes: a label is not a measurement, so no
+            # key comes out. The lease would have nothing to bind the GPU loader to (F01).
+            return self._deny("key_release", reasons.KEY_WEIGHTS_UNBOUND, model=model)
         cc_pub = self.verified["gpu"].get("cc_pub")
         if not cc_pub:
             return self._deny("key_release", reasons.KEY_NO_GPU_KEY)
@@ -630,9 +658,12 @@ class Governor:
 
     def _revoke_key(self, model: str, why: str) -> None:
         self.leases.pop(model, None)
+        self.key_gen += 1          # advance past every lease issued so far, so a replayed old box is below the floor
         self.log.append(reasons.KEY_REVOKED, {"model": model, "why": why})
-        if self.gpu is not None and (self.gpu.lease or {}).get("payload", {}).get("model") == model:
-            self.gpu.zeroize("revoked: " + why)
+        if self.gpu is not None:
+            self.gpu.revoke_authorization(self.key_gen, why)      # the floor advances before the key is wiped (F02)
+            if (self.gpu.lease or {}).get("payload", {}).get("model") == model:
+                self.gpu.zeroize("revoked: " + why)
 
     def _cmd_end_model(self, body, env):
         """The loader ends the job: the meter slot is read a last time and frozen."""
@@ -1334,6 +1365,8 @@ class Governor:
             self.read_meter()
             self._compute_budget_check()
             self._check_unpresented_output()
+            if self.gpu is not None:
+                self.gpu.service_lease(now)        # a released key expires on time even while the GPU is idle (F02)
             self._close_loop_window()
             self.sense_loop()
 

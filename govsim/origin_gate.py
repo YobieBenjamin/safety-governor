@@ -52,8 +52,9 @@ def _renew(r, node, model: str):
 
 
 def _start(r, node, sealed: dict) -> dict:
-    """BEGIN_MODEL, KEY_RELEASE, install, decrypt. Returns the release answer."""
-    assert r.load_model(node)["ok"]
+    """BEGIN_MODEL, KEY_RELEASE, install, decrypt. Returns the release answer. The manifest commits to the exact
+    weight bytes of this package (F01): the governor binds the released key to that commitment."""
+    assert r.load_model(node, manifest=r.manifest(weights=sealed["weights"]))["ok"]
     node.gpu.sealed = True              # the weights arrive as ciphertext: without the key the GPU has nothing to run
     rel = _release(r, node, sealed)
     if rel["ok"]:
@@ -223,7 +224,7 @@ def costs(mib: int) -> dict:
     r, node, model = _rack()
     g = node.governor
     t = time.perf_counter(); sealed = seal_weights(weights, model, g.kek_public); seal_s = time.perf_counter() - t
-    assert r.load_model(node)["ok"]
+    assert r.load_model(node, manifest=r.manifest(weights=sealed["weights"]))["ok"]
     n = 50
     t = time.perf_counter()
     for _ in range(n):

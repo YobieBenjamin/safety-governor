@@ -302,8 +302,13 @@ class Rack:
         r2 = g.command("VERIFY_HOST", {"report": host_report, "cert": node.host_cert})
         return {"gpu": r1, "host": r2}
 
-    def manifest(self, model_name: str = "model-70b", version: int = 1) -> dict:
-        return self.publisher.sign({"type": "manifest", "model_digest": digest([model_name, version]), "name": model_name})
+    def manifest(self, model_name: str = "model-70b", version: int = 1, weights: dict | None = None) -> dict:
+        """The publisher's signed manifest. For a sealed model it commits to the exact weight bytes through
+        ``weights`` (a ``sealing.weights_commitment`` descriptor); the origin gate binds the released key to it (F01)."""
+        payload = {"type": "manifest", "model_digest": digest([model_name, version]), "name": model_name}
+        if weights is not None:
+            payload["weights"] = weights
+        return self.publisher.sign(payload)
 
     def load_model(self, node: Node, manifest: dict | None = None, eval_attestation: dict | None = None, license: dict | None = None) -> dict:
         g = node.governor
