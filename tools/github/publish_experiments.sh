@@ -96,12 +96,14 @@ for i in json.load(open(sys.argv[1]))['issues']:
 import json, sys
 issues = json.load(open(sys.argv[1])); title, ident = sys.argv[2], sys.argv[3]
 exact = [i for i in issues if i['title'] == title]
-pref = sorted([i for i in issues if i['title'].startswith(ident + ' \u00b7 ') and i.get('state', 'OPEN') == 'OPEN'], key=lambda i: i['number'])
+# a closed issue still counts as the issue (closing #7 by hand must not make the next run open a new L7);
+# only open ones are ever closed as duplicates
+pref = sorted([i for i in issues if i['title'].startswith(ident + ' \u00b7 ')], key=lambda i: i['number'])
 cands = sorted({i['number']: i for i in exact + pref}.values(), key=lambda i: i['number'])
 keep = cands[0] if cands else None   # the oldest issue is the issue: pull requests and comments point at it
-dupes = [i['number'] for i in pref if keep and i['number'] != keep['number']]
-print((str(keep['number']) if keep else '') + '|' + ' '.join(map(str, dupes)) + '|' + ('retitle' if keep and keep['title'] != title else ''))" "$have" "$title" "$ident")
-    existing="${match%%|*}"; rest="${match#*|}"; dupes="${rest%%|*}"; retitle="${rest#*|}"
+dupes = [i['number'] for i in pref if keep and i['number'] != keep['number'] and i.get('state', 'OPEN') == 'OPEN']
+print((str(keep['number']) if keep else '') + '|' + ' '.join(map(str, dupes)) + '|' + ('retitle' if keep and keep['title'] != title else '') + '|' + (keep.get('state', 'OPEN') if keep else ''))" "$have" "$title" "$ident")
+    existing="${match%%|*}"; rest="${match#*|}"; dupes="${rest%%|*}"; rest="${rest#*|}"; retitle="${rest%%|*}"; state="${rest#*|}"
     if [ -n "$existing" ] && [ "$retitle" = retitle ]; then
       printf '== %s #%s: title updated to match the corrected brief\n' "$repo" "$existing"
       run gh issue edit "$existing" --repo "$OWNER/$repo" --title "$title" >/dev/null 2>&1 || echo "   could not retitle #$existing"
@@ -113,6 +115,14 @@ print((str(keep['number']) if keep else '') + '|' + ' '.join(map(str, dupes)) + 
     if [ -n "$existing" ]; then
       printf '== %s #%s (update): %s\n' "$repo" "$existing" "$title"
       out=$(run gh issue edit "$existing" --repo "$OWNER/$repo" --body-file "$body" --add-label "$labels" 2>&1) && echo "   $out" || { echo "   FAILED: $out"; echo fail >> "$have.failed"; }
+      # a finished experiment: --add-label never removes, so drop status:open, and close the issue if it is open
+      case ",$labels," in *,status:done,*)
+        run gh issue edit "$existing" --repo "$OWNER/$repo" --remove-label "status:open" >/dev/null 2>&1 || true
+        if [ "$state" = OPEN ]; then
+          printf '== %s #%s: closed, the experiment is done (see its body)\n' "$repo" "$existing"
+          run gh issue close "$existing" --repo "$OWNER/$repo" --comment "Done: the result is in the issue body." >/dev/null 2>&1 || echo "   could not close #$existing"
+        fi ;;
+      esac
     else
       printf '== %s (create): %s\n' "$repo" "$title"
       out=$(run gh issue create --repo "$OWNER/$repo" --title "$title" --body-file "$body" --label "$labels" 2>&1) && echo "   $out" || { echo "   FAILED: $out"; echo fail >> "$have.failed"; }

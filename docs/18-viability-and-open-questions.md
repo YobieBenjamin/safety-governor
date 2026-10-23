@@ -173,7 +173,10 @@ So, from the chip's point of view: yes, it strengthens the promise, in the speci
 | 16 | Should the governance root be multilateral, with the k of n keys held by parties who do not share a jurisdiction or an employer? | A key-holding arrangement written down and rehearsed (question 6 says who; this says how far apart they must be); the policy loader already accepts any k of n, so this is governance, not silicon; borrowed from the flexHEG report, §8b | Operator, regulator, this program for the rehearsal |
 | 17 | Across sites: how do governors in different data centers share one rulebook, bounded time and one root? The loop is per site by design (`23`); the heartbeat, editions and partitions carry over any link; but editions, reservations and expiries need the sites' clocks within a known bound, which a per-chip monotonic counter cannot give across sites | A hierarchy written down and simulated: a global root (question 16) signs a per-site authority; each site runs its own heartbeat with local latency; cross-site tickets name both editions; the fabric between site supervisors runs over a dedicated or tunnelled link with the same signing and sequencing. Settled by a two-site run of `govsim` with a modelled wide-area delay and a per-site authority, as a new experiment; Part 7 of the blog carries the argument | This program, then an operator with two sites |
 
-Questions 1, 3, 5, 12 and 15 are the ones a small program can move. Questions 6, 11, 14 and 16 are the ones a chip cannot move at all, and the design should keep saying so.
+| 18 | Who outside the signers can read the log, and on what terms? The signed checkpoints are readable by anyone (`LOG_CHECKPOINT`, `04` section 3), so anyone can check the log was not rewritten; who can read its contents is not designed | A read-access policy for log contents, written as part of the signed rulebook, with the checkpoints staying public; a simulation of an outside auditor checking a sample against the public checkpoints. Section 8c; GitHub issue G1 | This program, operator, regulator |
+| 19 | How does a party affected by a gated action contest a ticket, or reopen the rules? Today only insiders can: the quorum override (H8) and the hold for named approvers | A contest lane: a signed objection that holds the ticket for a separate quorum, with its own reason code and timer; a simulation showing it closes the gap without becoming a denial-of-service lever. Section 8c; GitHub issue G2 | This program, operator, regulator |
+Questions 1, 3, 5, 12 and 15 are the ones a small program can move. Questions 6, 11, 14 and 16 are the ones a chip cannot move at all, and the design should keep saying so. Questions 18 and 19 sit in between: the chip can enforce whatever answer is chosen, but choosing it is governance (section 8c).
+
 
 ## 8b. Prior art: where this sits next to the hardware-governance literature
 
@@ -190,6 +193,23 @@ Where this design differs, and the difference is the point:
 - **It is built and being tested.** Two hundred model tests, twenty RTL tests, two machine-checked proofs, an attack catalogue, and a public program with disproof conditions. The reports above are proposals; this is a repository.
 
 What this design should borrow from them, and has not yet: the treatment of the supply chain and the enclosure as a condition of trust, and the multilateral governance root, where the k of n keys are held by parties who do not share a jurisdiction. Both are now rows 15 and 16 of the open-questions table in §8, each with what would settle it.
+
+## 8c. Who holds the key, who reads the log, who can object
+
+*Added 23 October 2026, prompted by Steven Hertzberg's questions on the Part 6 post: who signs the rulebook, who keeps the log, who outside the signers can read it, and can the people a gated action affects contest it.*
+
+The chip does not make the people who sign the rulebook trustworthy. It makes them visible, countable and replaceable. The gate carries out the signers' decisions, so the signers are the real controllers, and the arrangement around them is part of the design, not an afterthought. In his words: the lock goes at the ends, and the key has to be held in the open. Agreed.
+
+Where each of his four questions stands:
+
+| Question | Status | Where |
+|---|---|---|
+| Who signs the rulebook? | **Mechanism built and tested; the people are open.** A new rulebook needs k of n governance signatures, the minimum k is fused at manufacture, editions only go up. Until the 22 October review a rulebook could lower its own quorum; found, fixed, regression-tested. Who holds the keys is question 6; whether they must sit in different jurisdictions and employers is question 16 | `govsim/policy.py`, `tests/test_h19_authorization.py`, `audit/external-2026-10-22/STATUS.md` |
+| Who keeps the log of tickets issued and refused? | **Built.** Every governor keeps a hash-chained log and publishes signed checkpoints carrying its neighbours' latest heads, so rewriting one chip's history means rewriting its neighbours', outward through the rack. Machines watching each other on a record none of them controls | `02` section "Cross-linked logs", `govsim/log.py` |
+| Who outside the signers can read it? | **Half built.** Anyone can read the signed checkpoints and check integrity. Who reads the contents, and on what terms, is not designed. Question 18, issue G1 | `04` section 3 (`LOG_CHECKPOINT`) |
+| Can the affected contest a ticket, or reopen the rules? | **Not designed.** The override and the hold are both for insiders. Question 19, issue G2 | `tests/test_h08_override.py`, `25` |
+
+The two open ones are hypotheses until an experiment says otherwise. Each issue states what would settle it and what would count as failure. In both cases the chip already has the parts: a signed rulebook field, a quorum, a reason code, a timer, the log. The missing piece is the governance decision of who holds which key, written down and then rehearsed in simulation, with the result published whichever way it goes.
 
 ## 9. What I would do next
 
