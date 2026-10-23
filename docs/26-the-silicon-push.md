@@ -52,9 +52,23 @@ Two agents, six blocks each, every block proven four ways: a bounded check, k-in
 - **What didn't work:** a full-size "two copies of the core behave the same" proof ran 26 minutes without finishing on this machine, so the agent switched to the wiring proof plus the small build. Some proofs only finish in one of the three solvers here. The random core simulation caught 5 of 7 core bugs on its own; the proofs caught all 7. That's an argument for proofs, not against simulation.
 - Plain English, one analogy per block, every dead end: `rtl/formal/PLAIN-ENGLISH-b.md`. Full run log: `rtl/formal/last-run-main.txt` (on the merged code: every property proven, every planted bug caught, 324 tests pass).
 
-### Group A (mailbox, permissions table, ticket store, epoch, clock, lifecycle): running
+### Group A (mailbox, permissions table, ticket store, epoch, clock counter, lifecycle): done
 
-Plain English: `rtl/formal/PLAIN-ENGLISH-a.md` when it lands.
+- All six proven on the Verilog; five of them re-proven by a second solver. The ticket store is the exception: the second solver ran 15 minutes without finishing, and the run prints NOT RUN for it rather than pretending. It has one solver plus a 20,000-cycle random simulation.
+- 38 planted bugs, all 38 caught on a real trace from reset (a stricter rule than before: a bug only counts as caught if the short, concrete check fails, not just the induction).
+- **Two real bugs, fixed,** each with a regression test that fails on the old circuit:
+  1. **The debug door stood open after every restart.** A chip whose fuses said "production" granted debug access from reset until firmware loaded the fuses. A bank vault that powers up with the door open and locks once the manager checks the logbook. Now debug needs a fuse load since the last reset. This is the dangerous half of conformance finding F-06; the other half (the lifecycle register reads "test" in that window, so software reading it is told the wrong thing) is still open.
+  2. **The clock counter could roll over to zero,** reachable in two cycles by loading an all-ones value from the fuses. Every expiry check would then misread time. It now stops at the top. Conformance F-12, closed.
+- **Eight open findings** in `rtl/formal/FINDINGS-a.md`, each with a check that must keep failing until it's fixed. The pattern worth knowing: three of them (the clock, the used-ticket store, the mailbox sequence numbers) are the circuit forgetting on restart what the spec says firmware and non-volatile memory must remember. A bouncer who forgets every face when the lights flicker. The memory belongs to firmware that isn't written yet; the tests that will hold it to account already exist. Also open: an old rulebook edition can be committed again in hardware (the firmware is supposed to stop that), expired permissions come back when the 32-bit clock wraps every 71.6 minutes, and the mailbox doesn't hold a message still while its signature is checked.
+- **What didn't work** (full list in `rtl/formal/PLAIN-ENGLISH-a.md`): yosys silently turned references to a block's internal signals into free inputs, which would have made any proof using them worthless, so the runner now refuses every yosys warning. The agent was also blocked from writing its two report files and handed the text back; I committed it.
+
+### The two serious conformance bugs: both fixed
+
+- **Tamper now beats CLEAR** (F-05). Fixed in the halt sequencer, and the "unless cleared that same cycle" excuse is out of my own proof.
+- **No debug at power-up** (F-06, the dangerous half), fixed by group A.
+- Also fixed on the way: the FPGA work found a real board could never stay running, because the chip halted itself one cycle after starting on a stale loop reading. Running now needs a clean loop sample.
+
+**The combined run** (every block, every fix, on one branch): 346 tests pass; every property proven on the Verilog, 13 core blocks plus SMBus, most in three solvers; every planted bug caught; conformance PASS with 12 open disagreements. Full log: `rtl/formal/last-run-main.txt`.
 
 ## Workstream 3: 150 checks against the full-chip RTL (stopped once, then done another way)
 
@@ -93,9 +107,19 @@ Plain English: `rtl/formal/PLAIN-ENGLISH-a.md` when it lands.
 
 Turning the circuit into the actual drawing of transistors and wires a foundry prints, then the checks a foundry demands before it'll take your money. Plain-English walk-through with an analogy per step: `hw/librelane/PLAIN-ENGLISH.md`. Toolchain attempts, failures included: `hw/librelane/TOOLCHAIN.md`.
 
-## Workstream 5: FPGA and the management bus (running)
+## Workstream 5: FPGA and the management bus (done, in software; nothing on real hardware yet)
 
-An FPGA is a reprogrammable chip: the dress rehearsal before the opening night that costs a mask set. SMBus is the server's management intercom, the wire the governor listens and answers on. Plain-English notes: `hw/fpga/PLAIN-ENGLISH.md`. The real bench needs my hands and a parts order; the plan lists exactly what.
+**What it is.** An FPGA is a reprogrammable chip: the dress rehearsal before opening night, where opening night costs a mask set. SMBus is the server's management intercom, the wire the governor listens and answers on.
+
+**What happened.**
+
+- **The intercom, proven.** A new SMBus block (`rtl/governor_rtl/smbus.py`) answers reads of the chip's status registers and accepts exactly one kind of write: the mailbox doorbell, with a correct checksum, committed on STOP. A proof on the Verilog shows that for any waveform anyone can put on those two wires, nothing else in the chip changes. A guest can ring the front desk; the intercom has no button that unlocks the vault. 11 planted bugs, all caught.
+- **The bitstream builds.** On a ULX3S board (Lattice ECP5 85F, open tools only): 21 percent of the logic, 15 percent of the flip-flops. One command: `hw/fpga/build.sh` (26 minutes here).
+- **It does not reach 50 MHz.** Best is 37.9 MHz, so the bench build runs at 30 MHz. The slow path is the permissions-table lookup, which checks every entry in one cycle. That says nothing about the real chip on sky130, but it's a number, and it goes on the page.
+- **The bench is one command.** `hw/fpga/BENCH.md` has the parts list (the board is US$275 from Crowd Supply, read on the day; the other prices weren't reachable), the wiring, and a Raspberry Pi script, `hw/fpga/host_test.py all --hours N`, that checks the registers and runs the overnight false-halt soak.
+- **It found a real bug** (F1): with the loop sensor running from power-on, the chip halted itself one cycle after reaching RUN, so a real bench could never stay running. Fixed (above).
+
+**What it can't do yet.** There is no processor or crypto engine on the FPGA, so the firmware-cost numbers aren't measured; the bench measures the hardware halt path and the false-halt rate. The PCIe adapter to a real GPU isn't designed. Nothing has run on a real board. Plain English, with the full "what didn't work" list: `hw/fpga/PLAIN-ENGLISH.md`.
 
 ## Workstream 6: the public NVIDIA-side interfaces (done)
 
@@ -122,11 +146,11 @@ An FPGA is a reprogrammable chip: the dress rehearsal before the opening night t
 | Workstream | Status | Where |
 |---|---|---|
 | 0. Halt sequencer proven on the Verilog | Done; 5 of 5 planted bugs caught after two rounds of fixing my own properties | `rtl/formal/`, `eda385f` |
-| 1. Six blocks proven (mailbox and friends) | Running | `rtl/formal/` |
+| 1. Six blocks proven (mailbox and friends) | Done: 38 of 38 planted bugs caught, 2 real bugs fixed (debug at power-up, counter wrap), 8 open findings | `rtl/formal/` |
 | 2. Six blocks proven (heartbeat to the full core) | Done: 3 solvers, 36 of 36 planted bugs caught, 2 real bugs fixed (meter wrap, frozen heartbeat clock), 2 design questions for me | `rtl/formal/` |
-| 3. 150 checks on the full-chip RTL | Attack-recipe version stopped by a safety check; conformance version done: 250 checks, 27 of 27 planted bugs caught, 15 disagreements found, 1 since closed (meter wrap), 2 high still open | `rtl/conformance/` |
+| 3. 150 checks on the full-chip RTL | Attack-recipe version stopped by a safety check; conformance version done: 250 checks, 27 of 27 planted bugs caught, 15 disagreements found; both high ones fixed, 12 open | `rtl/conformance/` |
 | 4. sky130 layout and signoff | Running | `hw/librelane/` |
-| 5. FPGA and SMBus | Running | `hw/fpga/` |
+| 5. FPGA and SMBus | Done in software: SMBus proven (11 of 11 bugs caught), ULX3S bitstream at 30 MHz (50 MHz not met), bench plan; nothing on real hardware yet | `hw/fpga/` |
 | 6. Public interfaces | Done: 85 pins mapped, SPDM passes DMTF's tester (781 checks), nvtrust matches NVIDIA's verifier, 60-row compliance matrix; PCIe timing bug found and a fixed block written, not wired in yet | `docs/interfaces/`, `hw/pinout/` |
 
 This page gets updated as each one finishes, with the bad news in the same font as the good.

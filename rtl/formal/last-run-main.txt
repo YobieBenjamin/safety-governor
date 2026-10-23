@@ -4,6 +4,8 @@
   caught  halt_seq mutant: tamper does not open the loop
   caught  halt_seq mutant: HALT never escalates to SAFE
   caught  halt_seq mutant: the power brake releases in THROTTLE
+  caught  halt_seq mutant: CLEAR outranks tamper again (F-05)
+  caught  halt_seq mutant: RUN entered on a stale loop_lost (F1)
   caught  halt_seq mutant: a halt command is ignored once throttled
   PROVED  heartbeat: bounded to 25 cycles and k-induction: every reachable state (yices, z3, boolector)
   SIM-OK  heartbeat: 4000 random cycles match the spec model (seed 1)
@@ -39,7 +41,7 @@
   caught  loop_io mutant: the threshold is one past where the counter stops: never declared [simulation: caught it too]
   caught  loop_io mutant: a third low sample clears the loss [simulation: caught it too]
   caught  loop_io mutant: the debounce counts current instead of its absence [simulation: caught it too]
-  PROVED  governor_core: bounded to 20 cycles and k-induction: every reachable state (yices, z3, boolector); host CSR reads write nothing (full-size netlist): the host's inputs reach 194 netlist objects, no register and no pin but csr_rdata; doorbell reaches only the mailbox (full-size netlist): the host's inputs reach 388 netlist objects, no register outside the mailbox and no pin but csr_rdata, mbox_verify_req, mbox_dispatch, mbox_cmd_out; host CSR reads write nothing (two-copy miter, small build): 84 registers and 29 pins unaffected, induction (yices); doorbell reaches only the mailbox (two-copy miter, small build): 74 registers and 26 pins unaffected, induction (yices)
+  PROVED  governor_core: bounded to 20 cycles and k-induction: every reachable state (yices, z3, boolector); host CSR reads write nothing (full-size netlist): the host's inputs reach 194 netlist objects, no register and no pin but csr_rdata; doorbell reaches only the mailbox (full-size netlist): the host's inputs reach 388 netlist objects, no register outside the mailbox and no pin but csr_rdata, mbox_verify_req, mbox_dispatch, mbox_cmd_out; host CSR reads write nothing (two-copy miter, small build): 85 registers and 29 pins unaffected, induction (yices); doorbell reaches only the mailbox (two-copy miter, small build): 75 registers and 26 pins unaffected, induction (yices)
   SIM-OK  governor_core: 3000 random cycles match the spec model; rungs visited [0, 1, 2, 3, 4] (seed 6)
   caught  governor_core mutant: the old millisecond tap on the monotonic counter (the bug fixed on 23 October 2026) [simulation: caught it too]
   caught  governor_core mutant: reading MBOX_STATUS restarts the millisecond (a CSR read with a side effect) [simulation: missed it]
@@ -50,4 +52,86 @@
   caught  governor_core mutant: the host's CSR address selects the meter slot that gets charged [simulation: missed it]
   FACT  governor_core: lost heartbeat climbs to SAFE with the loop closed: from boot, a heartbeat that runs out reaches SAFE, power off, loop pad closed (trace of 28 cycles found)
   FACT  governor_core: local cause never opens the loop; HALT to a SAFE chip does not open it: proven: cause LOCAL implies the loop pad is closed; a HALT command to a chip already in SAFE leaves the pad as it was; bounded to 12 cycles and k-induction: every reachable state (yices)
+  PROVED  smbus: bounded to 25 cycles and k-induction: every reachable state (z3, yices, boolector)
+  caught  smbus mutant: the PEC byte is not checked (a corrupted write commits)
+  caught  smbus mutant: the command code is not checked (a write to a read-only register is accepted)
+  caught  smbus mutant: the byte count is not checked
+  caught  smbus mutant: the target answers any address
+  caught  smbus mutant: a write after a repeated start is accepted
+  caught  smbus mutant: a repeated start does not disarm a pending write
+  caught  smbus mutant: clock bits after the PEC do not disarm the write (a truncated extra byte commits)
+  caught  smbus mutant: the PEC is not reset at a fresh START (it carries over from the last transaction)
+  caught  smbus mutant: the doorbell value is assembled big-endian
+  caught  smbus mutant: the SMBus timeout never fires
+  caught  smbus mutant: the target stretches the clock while it transmits
+  PROVED  lifecycle: bounded to 25 cycles and k-induction: every reachable state (z3)
+  caught  lifecycle mutant: debug granted before the fuses are read (the code before 23 October 2026, F1)
+  caught  lifecycle mutant: debug granted in PRODUCTION
+  caught  lifecycle mutant: a fuse load can move the state down
+  caught  lifecycle mutant: an advance can move the state down (back to TEST)
+  caught  lifecycle mutant: a refused debug request is not flagged
+  PROVED  monotonic_counter: bounded to 25 cycles and k-induction: every reachable state (z3)
+  caught  monotonic_counter mutant: the counter wraps to zero at the top (the code before 23 October 2026, F2)
+  caught  monotonic_counter mutant: a lower high-water mark pulls the counter down
+  caught  monotonic_counter mutant: a decrement path exists
+  caught  monotonic_counter mutant: the fuse high-water mark is not restored at boot
+  caught  monotonic_counter mutant: a decrement attempt is not reported
+  PROVED  epoch_reg: bounded to 25 cycles and k-induction: every reachable state (z3)
+  caught  epoch_reg mutant: commit without a quorum
+  caught  epoch_reg mutant: the host write port reaches the register
+  caught  epoch_reg mutant: commit latches the host's data, not the verified epoch
+  caught  epoch_reg mutant: the epoch tag comes from the wrong bits
+  caught  epoch_reg mutant: a host write is not flagged
+  PROVED  ticket_store: bounded to 25 cycles and k-induction: every reachable state (z3)
+  caught  ticket_store mutant: a seen id can be burned again (double admit)
+  caught  ticket_store mutant: a full store evicts slot 0 to make room (a burned id comes back)
+  caught  ticket_store mutant: a burn pulses but does not stick
+  caught  ticket_store mutant: the last slot is never compared (its id can be replayed)
+  caught  ticket_store mutant: full is never raised
+  PROVED  cap_table: bounded to 5 cycles and k-induction: every reachable state (z3)
+  caught  cap_table mutant: an insert without a MAC is accepted (grant without authorization)
+  caught  cap_table mutant: a capability is still good at its expiry tick
+  caught  cap_table mutant: the epoch tag is not checked
+  caught  cap_table mutant: a lookup one byte over the budget is allowed (underflow)
+  caught  cap_table mutant: an allowed lookup does not spend the budget (unlimited reuse)
+  caught  cap_table mutant: clear_all leaves the ports open
+  caught  cap_table mutant: a lookup asking for both directions matches a one-way capability
+  caught  cap_table mutant: the peer is not compared
+  caught  cap_table mutant: an expired entry is not dropped
+  PROVED  mailbox: bounded to 25 cycles and k-induction: every reachable state (z3)
+  caught  mailbox mutant: type binding removed: a heartbeat's signature dispatches as CLEAR (the 22 October bug)
+  caught  mailbox mutant: a wrong-command frame consumes the sequence number
+  caught  mailbox mutant: the same sequence number is accepted twice (replay)
+  caught  mailbox mutant: the epoch check is skipped
+  caught  mailbox mutant: the epoch failure is reported before the sequence failure (order)
+  caught  mailbox mutant: a run-only command is accepted while halted
+  caught  mailbox mutant: a sig_done strobe with no doorbell starts a dispatch (a second way in)
+  caught  mailbox mutant: a forged signature reports ok
+  caught  mailbox mutant: the accepted sequence is recorded in the wrong key slot
+  PROVED  lifecycle (second solver): bounded to 25 cycles and k-induction: every reachable state (yices)
+  PROVED  monotonic_counter (second solver): bounded to 25 cycles and k-induction: every reachable state (yices)
+  PROVED  epoch_reg (second solver): bounded to 25 cycles and k-induction: every reachable state (yices)
+  NOT RUN  ticket_store (second solver): yices did not finish in 15 minutes even at 2-induction (23 October 2026); z3 and the random simulation are this block's checks
+  PROVED  cap_table (second solver): bounded to 5 cycles and k-induction: every reachable state (yices)
+  PROVED  mailbox (second solver): bounded to 25 cycles and k-induction: every reachable state (yices)
+  AGREES  lifecycle random sim: 20000 random cycles of the Python source match the spec model
+           lifecycle random sim also tells apart 5 of 5 mutants
+  AGREES  monotonic_counter random sim: 20000 random cycles of the Python source match the spec model
+           monotonic_counter random sim also tells apart 5 of 5 mutants
+  AGREES  epoch_reg random sim: 20000 random cycles of the Python source match the spec model
+           epoch_reg random sim also tells apart 5 of 5 mutants
+  AGREES  ticket_store random sim: 20000 random cycles of the Python source match the spec model
+           ticket_store random sim also tells apart 5 of 5 mutants
+  AGREES  cap_table random sim: 20000 random cycles of the Python source match the spec model
+           cap_table random sim also tells apart 9 of 9 mutants
+  AGREES  mailbox random sim: 20000 random cycles of the Python source match the spec model
+           mailbox random sim also tells apart 9 of 9 mutants
+  reproduced  finding cap_table_expiry_comes_back: bounded check failed (z3): cap_table: props.sv:2196.55-2196.64 ($assert$props.sv:2196$602)
+  reproduced  finding cap_table_zero_budget: bounded check failed (z3): cap_table: props.sv:2189.26-2189.63 ($assert$props.sv:2189$588)
+  reproduced  finding epoch_reg_old_epoch_returns: bounded check failed (z3): epoch_reg: props.sv:55.28-55.50 ($assert$props.sv:55$18)
+  reproduced  finding mailbox_halt_during_verify: bounded check failed (z3): mailbox: props.sv:462.30-462.59 ($assert$props.sv:462$116)
+  reproduced  finding mailbox_reset_replay: bounded check failed (z3): mailbox: props.sv:462.55-462.79 ($assert$props.sv:462$126)
+  reproduced  finding mailbox_unlatched_frame: bounded check failed (z3): mailbox: props.sv:464.30-464.74 ($assert$props.sv:464$116)
+  reproduced  finding monotonic_counter_reset_rollback: bounded check failed (z3): monotonic_counter: props.sv:65.47-65.69 ($assert$props.sv:65$29)
+  reproduced  finding ticket_store_reset_replay: bounded check failed (z3): ticket_store: props.sv:542.46-542.61 ($assert$props.sv:542$142)
 L7: every property proven on the Verilog, every mutant caught
