@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """A1 (govsim/road_reachability.py): a rulebook reachability audit. Every road-opening action must be non-auto;
 the one open-auto road in the reference rulebook (finding A1-a, model.export.70b) is pinned so a change is noticed."""
 from govsim import road_reachability

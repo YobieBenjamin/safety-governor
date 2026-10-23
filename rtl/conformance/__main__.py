@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """python -m rtl.conformance: run the spec conformance suite and say honestly what conforms and what does not.
 
 Steps, each self-checking:

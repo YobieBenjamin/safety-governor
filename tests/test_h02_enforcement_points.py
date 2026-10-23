@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H2: every enumerated boundary crossing passes a governed switch. Link-level containment
 (no bytes to a non-roster peer, nothing while the heartbeat is dead, unchecked paths bricked)
 must hold at the rack tier. Descriptor-level containment between two roster members is the

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Test-suite sensitivity: one-line mutants of the Amaranth source, each of which must make the conformance test
 for its requirement FAIL BY ASSERTION. A mutant that the test survives means the test does not really check that
 line. A mutant that crashes the harness (an import, elaboration or tool error) is not a catch and is reported as

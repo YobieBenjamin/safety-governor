@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H13: shared budgets cannot be overspent across governors. One ledger owns a budget key;
 every other governor reserves at the owner over the fabric. Falsified if concurrent
 reservations exceed the limit."""

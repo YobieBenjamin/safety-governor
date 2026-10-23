@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """OCP DC-SCM 2.x, DC-SCI and LTPI (docs/interfaces/01-dcscm-dcsci-ltpi.md).
 
 The mapping checker must pass on the committed CSV, and each planted fault must trip exactly the

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # Builds the sky130 toolchain that worked on the shared container (see TOOLCHAIN.md) under $GOV_TOOLS
 # (default /tmp/exp-layout). Idempotent: skips what is already there. Needs only GitHub, PyPI and
 # conda.anaconda.org. Prints the tool versions at the end and fails if any tool does not start.

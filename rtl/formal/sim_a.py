@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The independent second look for the L7 second set: random cycles of the Amaranth Python source in amaranth.sim,
 compared every cycle against a small reference model written from the spec (not from the RTL), outputs before the
 clock edge and state after it. Run on the real block (must agree on every cycle) and on every mutant in BLOCKS_A

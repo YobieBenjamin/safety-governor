@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # Where the clones live. Sourced by every script under tools/; setup_and_publish.sh carries the
 # same three lines itself, because it runs before any clone exists.
 #

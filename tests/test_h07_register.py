@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H7: the assumptions register is complete for the deployment. Falsified if a policy whose
 rules rely on an input with no register row loads."""
 from govsim import reasons

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # One command: Amaranth -> Verilog -> Yosys -> nextpnr-ecp5 -> ecppack, for the ULX3S (ECP5 LFE5U-85F, -6, CABGA381).
 #
 #   hw/fpga/build.sh                  # build at 50 MHz (the ASIC flow's clock); if timing fails there, also build

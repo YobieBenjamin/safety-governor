@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Yobie's two design calls of 23 October 2026, as simulation tests on the RTL ("silently failing is a bullshit
 feature. Operators should have some verbose warning / signal / notice.").
 

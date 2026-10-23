@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Where a kill switch can live: the minimum cuts of a model-to-world graph, checked by max-flow.
 
     python3 proofs/no_global_kill_switch.py

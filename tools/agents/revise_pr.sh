@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # One revision round for an agent's branch: the gate's findings (verifier and reviewer) go back to the
 # agent that built it, in its own session so it keeps its context, inside the same worktree and the
 # same tool rules. Then the acceptance command, a commit of anything left over, a push (the pull

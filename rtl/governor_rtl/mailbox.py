@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Signed mailbox FSM. Invariant: no command is dispatched unless the sequence number is
 greater than the last accepted one for that signer key, the frame's epoch matches the epoch
 register or the command is epoch-exempt, the signature verified (``sig_ok`` from the

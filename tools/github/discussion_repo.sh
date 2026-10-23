@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # The discussion forum, kept apart from the product: a separate public repository with GitHub Discussions on, its own
 # license (CC BY 4.0, contributors keep their copyright), and a pinned first post explaining what goes where.
 # Idempotent: run it again and it updates the files, creates nothing twice.

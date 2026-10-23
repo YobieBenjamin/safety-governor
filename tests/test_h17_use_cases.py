@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H17: no governed action initiates without a ticket, and no governed response leaves the rack
 without a release ticket. A response leaving the rack is the action ``response.release``: the
 runtime presents it, the gate decides the lane, the egress at the DPU holds the bytes until a

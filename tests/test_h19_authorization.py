@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H19: a signature authorizes exactly what was signed, and a policy cannot set its own quorum.
 
 Two defects found on 22 October 2026 by testing against the code: an image with threshold 0 and no

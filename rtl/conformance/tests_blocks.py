@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Conformance tests, block by block: each one checks a sentence of the spec against the Amaranth RTL.
 
 These are the inspector's checks with the code book open: one rule, one room, one observation. Every test

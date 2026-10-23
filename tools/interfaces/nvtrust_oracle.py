@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Run NVIDIA's own nvtrust local-verifier classes on NVIDIA's public Hopper sample and record what
 they conclude, so govsim/hardware_ref/nvtrust.py can be compared against an independent
 implementation (tests/test_if_nvtrust.py reads the output).

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """One-time-programmable fuses and the lifecycle state.
 
 Requirements R1, R3, R4. The unique device secret is readable only through ``derive``; there

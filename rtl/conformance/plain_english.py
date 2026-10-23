@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The plain-English page. ``python -m rtl.conformance --write`` renders it to PLAIN-ENGLISH.md."""
 
 TEXT = """# Conformance testing, in plain English

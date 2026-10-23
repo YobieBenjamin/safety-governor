@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # Sourced by run_wave.sh and revise_pr.sh: the tool rules every build agent runs under.
 # What an agent may run without asking, and what it may never run. Everything else is denied and
 # the agent is told not to retry it (no prompt can be answered in an unattended run).

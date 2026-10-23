@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The sweep: one probe per hypothesis, run against every tier, written to results/report.md.
 
 A probe returns ``"pass"`` when the hypothesis held, ``"gap"`` when it failed in the way the

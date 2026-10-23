@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The SMBus/I2C target, driven by a bit-banged SMBus host in amaranth.sim (rtl/tests/smbus_host.py).
 
 Two layers:

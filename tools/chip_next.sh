@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # The chip-side next steps, in order, in one command on the Mac mini:
 #
 #   bash ~/Downloads/chip_next.sh               # everything below, in order

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # One script for a Mac that has nothing set up yet. In order: make sure gh is installed, log in to
 # GitHub in the browser if needed, move the clones to the external drive if they still sit in the
 # home directory, clone the four repositories where they are missing, bring each clone up to date,

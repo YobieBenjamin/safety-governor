@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """governor_core behind the SMBus target: the host's management-bus view of the chip.
 
 The SMBus target reads the core's CSR window through ``csr_addr``/``csr_rdata`` (a read mux, no

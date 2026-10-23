@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The compliance matrix (docs/interfaces/COMPLIANCE-MATRIX.md): every row sourced, every evidence
 file real, the Markdown in sync with the CSV. Planted faults must each be caught."""
 import copy

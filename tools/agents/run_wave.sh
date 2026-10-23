@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # Run one wave of the experiment program as unattended coding agents: one agent per issue, each in
 # its own git worktree and branch, on the mid-tier model, with a turn cap and a spend cap, no
 # permission prompts, a watchdog, and a pause-and-resume when the subscription window runs out.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Heartbeat timer. Invariant: ``expired`` asserts within one tick of the window running out
 and the timer reloads only on ``hb_valid`` (the crypto core's verdict on the authority's
 token), never on anything the host writes. ``tick`` is one millisecond; ``window`` is in ms.

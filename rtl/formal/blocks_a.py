@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """L7, second set: mailbox, cap_table, ticket_store, epoch_reg, monotonic_counter, lifecycle.
 
 BLOCKS_A has the same shape as BLOCKS in __main__.py: block -> (Amaranth source file, class name, mutants), each

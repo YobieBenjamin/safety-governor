@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H0: within the boundary, no protected operation executes without a fresh authorization
 bound to that exact operation. Falsified if any forged, altered, expired, replayed or
 unauthorized ticket is accepted by an endpoint, or if a committed reservation is lost."""

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The bench bitstream's logic: governor_core behind the SMBus target, plus the bench harness that stands in for
 the firmware the FPGA does not have.
 

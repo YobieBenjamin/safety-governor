@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # Review one agent branch: the deterministic verifier first (free), then a second reader on the local
 # model when there is one (free), then one bounded cloud review that must answer in a fixed JSON
 # shape with a file and line for every finding. The three results are posted on the pull request.

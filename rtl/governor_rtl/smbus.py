@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """SMBus/I2C target for the host management bus: the read-only CSR window of
 ``docs/04-specification.md`` section 2 plus the mailbox doorbell, and nothing else.
 

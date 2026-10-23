@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """A simulated rack: GPUs, governors, the host enclaves, the switches, the loop, the fabric,
 the action endpoints, and the keys of the parties outside the rack (governance root,
 approvers, heartbeat authority, publishers, observers, vendors).

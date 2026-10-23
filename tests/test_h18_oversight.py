@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H18: oversight survives a model smarter than its monitors. The observer is always invoked and
 cannot be impersonated; audit sampling comes from the chip's TRNG after the response hash exists,
 so the runtime cannot know which responses are watched, and a sampled or hazard-class response is

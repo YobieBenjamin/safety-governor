@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The findings write-up. ``python -m rtl.conformance --write`` renders it to FINDINGS.md; the default run fails if
 FINDINGS.md is stale, if a finding here has no reproducer test, or if a reproducer names a finding not written here.
 """

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """OCP DC-SCM 2.x: the DC-SCI pin mapping checker and a model of LTPI link loss.
 
 ``check_mapping`` validates ``hw/pinout/dcscm_mapping.csv`` against the governor pinout

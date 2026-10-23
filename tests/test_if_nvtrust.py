@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """NVIDIA GPU attestation evidence (nvtrust) into VERIFY_GPU (docs/interfaces/04-nvtrust.md).
 
 All NVIDIA data here is NVIDIA's own public sample from github.com/NVIDIA/nvtrust (BSD-3-Clause,

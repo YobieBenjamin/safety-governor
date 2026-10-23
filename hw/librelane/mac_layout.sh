@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # The sky130 layout on a Mac (or any Linux box), on the current Verilog, with the antenna and timing fixes tried in
 # order until the signoff gate passes. One command, nothing to type in between:
 #

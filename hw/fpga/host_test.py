@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Bench host for the governor FPGA: run on a Raspberry Pi wired as in hw/fpga/BENCH.md.
 
     python3 hw/fpga/host_test.py selftest            # no hardware: the frame and PEC code against known vectors

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Every testable "must" in docs/04-specification.md (S) and docs/07-verification-plan.md (V).
 
 Each row: id, source (doc and section), the spec's own words (checked verbatim against the doc by the runner,

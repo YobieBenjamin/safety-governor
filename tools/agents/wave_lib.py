@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Helpers for tools/agents/run_wave.sh: the bits that are easier in Python than in bash 3.2.
 
     wave_lib.py issues SPEC WAVE REPO [ID]   the wave's issues for one repository, as TSV: id, title, accept command, backend

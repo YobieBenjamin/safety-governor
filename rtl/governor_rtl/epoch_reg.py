@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Epoch register. Invariant: the register changes only on ``commit`` with ``quorum_ok``
 asserted by the policy verifier; the host write port exists on the bus and has no effect.
 """

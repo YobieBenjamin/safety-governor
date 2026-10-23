@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Conformance tests for Yobie's two design calls of 23 October 2026 (requirements R-144 to R-152, quoting the
 sentences added to docs/04 sections 2 and 3 that day). The halt-in-SAFE reproducers of F-07 live on in
 tests_findings.py as ordinary guards; these cover the rest, on the RTL blocks and on the model beside them.

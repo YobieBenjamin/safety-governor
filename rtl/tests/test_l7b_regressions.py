@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Regressions for the two RTL bugs L7 (work stream b) found; each test fails by assertion on the old code.
 
 F1 meter: the counters wrapped, so one large add moved a counter down (rtl/formal/meter.sv, E1).

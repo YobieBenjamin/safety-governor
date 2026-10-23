@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The origin gate's cryptography: weights sealed to governed hardware (docs/18 question 20, issue W1).
 
 A publisher encrypts the weights once, chunk by chunk, with a random data key (AES-256-GCM, each chunk bound

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Meter. Invariant: counters only increment, and the host port can read but not write.
 
 Four counters per slot (tokens, cycles, bytes in, bytes out); a slot is one model digest.

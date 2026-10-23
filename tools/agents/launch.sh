@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # One command for one wave: the Claude CLI (installed and logged in), a Python environment with the
 # dependencies in each repository, the preflight, then the wave in every repository that has issues
 # in it, detached, so the terminal can be closed.

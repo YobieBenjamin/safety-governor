@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The silicon root of trust: measured boot, extend-only registers, DICE key derivation, the
 quote engine and the monotonic counter. Requirement R2.
 

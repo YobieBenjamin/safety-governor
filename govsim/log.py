@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The log engine: a hash chain in the governor's NVM, signed checkpoints, and the heads of
 fabric neighbors folded into each checkpoint (requirement R27)."""
 from __future__ import annotations

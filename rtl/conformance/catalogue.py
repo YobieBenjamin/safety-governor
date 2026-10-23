@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The 75-attack / 12-baseline catalogue of the reference stack (hardware-and-silicon, ``hardware_ref``), mapped to
 the requirement ids each row exercises and to the layer of the governor design that would decide it.
 

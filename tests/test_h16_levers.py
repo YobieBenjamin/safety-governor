@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H16: the physical levers work without the GPU's cooperation. Falsified if a GPU that
 ignores every software command keeps running after the governor asserts its levers, or if
 a GPU keeps talking through the switches after the governor closes them."""

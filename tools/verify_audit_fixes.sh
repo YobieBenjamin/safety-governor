@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # One command: does every fix from the 22 October audit hold, and was every finding real?
 #
 #   bash tools/verify_audit_fixes.sh            (from safety-governor; hardware-and-silicon beside it)

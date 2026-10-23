@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Yobie's two design calls of 23 October 2026 in the functional model ("silently failing is a bullshit feature").
 
 1. A signed HALT to a governor already in SAFE opens its loop switch; the governor stays in SAFE with slot power off

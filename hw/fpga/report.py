@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Read FPGA build directories and say what happened. Called by hw/fpga/build.sh.
 
     python3 hw/fpga/report.py --met DIR                    # exit 0 if DIR's bitstream exists and timing met

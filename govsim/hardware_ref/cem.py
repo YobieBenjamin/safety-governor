@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """PCIe CEM sideband timing, checked against the RTL halt sequencer.
 
 The numbers. The PCI Express CEM specification is members-only; we have not read it. Every

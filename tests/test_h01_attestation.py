@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H1: attestation binds permissions to firmware, model manifest and policy. Falsified if a
 change in any of them leaves the fingerprint or the epoch unchanged, or a permission carries
 over."""

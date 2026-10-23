@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H5: alarms are monotone. Any party may raise one; it is cleared only by a rule the chip
 can check or by an approver key. Falsified if an alarm is cleared without a rule or key."""
 from govsim import reasons

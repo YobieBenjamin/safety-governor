@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """NVIDIA GPU attestation evidence (the nvtrust format) turned into the governor's VERIFY_GPU input.
 
 What the evidence is (read from NVIDIA's public nvtrust repo, commit pinned in

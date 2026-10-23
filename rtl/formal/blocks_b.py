@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """L7, work stream b: heartbeat, meter, alarms, measure_reg, loop_io, governor_core.
 
 Merged into rtl/formal/__main__.py's BLOCKS by a guarded import; same shape:

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H4: the broker cannot choose its rule or lane. Falsified if a requester-supplied label
 changes a decision."""
 from govsim import reasons

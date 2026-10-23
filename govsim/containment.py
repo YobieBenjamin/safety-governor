@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Experiment P3b: the containment rate. How little can leave a governed rack under the tightest serviceable policy.
 
     python -m govsim.containment            # the ceiling, measured, and what it means for exfiltration

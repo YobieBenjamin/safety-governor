@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Finding reproducers for the hard-core blocks, and cross-checks of the RTL against the functional model.
 
 A test marked ``finding=`` asserts what the spec requires; on today's RTL it fails by assertion, and the

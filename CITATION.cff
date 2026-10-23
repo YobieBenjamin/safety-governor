@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this work, in whole or in part, please cite it as below. Attribution is required (see NOTICE)."
+type: software
+title: "safety-governor: a hardware safety governor that enforces AI action rules from outside the model"
+authors:
+  - family-names: Benjamin
+    given-names: Yobie
+version: "0.1.0"
+date-released: "2026-10-23"
+repository-code: "https://github.com/YobieBenjamin/safety-governor"
+url: "https://github.com/YobieBenjamin/safety-governor"
+license: PolyForm-Noncommercial-1.0.0
+license-url: "https://github.com/YobieBenjamin/autonomic-graph-regulation/blob/main/LICENSE.md"
+keywords:
+  - "AI safety"
+  - "hardware root of trust"
+  - "reference monitor"
+abstract: "Part of a layered AI-safety architecture. Software is licensed under PolyForm Noncommercial 1.0.0; documentation, data and figures under CC BY-NC 4.0. Attribution is required; commercial use requires a separate license (see LICENSING.md)."

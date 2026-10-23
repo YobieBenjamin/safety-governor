@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Experiment W1: the origin gate. Weights sealed to governed hardware, the key released by the governor.
 
     python -m govsim.origin_gate                # full run: checks plus cost measured with 256 MiB of weights

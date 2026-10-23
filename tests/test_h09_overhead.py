@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H9: zero governor work per token, one lookup per transfer, one signature per response.
 The firmware's share of GPU time is the overhead that matters for an action path; the
 signing engine runs beside the GPU and only has to keep up. The silicon measurement

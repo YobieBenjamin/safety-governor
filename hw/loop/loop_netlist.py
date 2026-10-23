@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Netlist generator for the halt loop: N governors on one supervised series current loop.
 
 Writes an ngspice deck (and optionally runs it) for N governors threaded on the loop

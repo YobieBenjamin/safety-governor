@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """SPDM interoperability against DMTF's own tools (libspdm via spdm-emu, and the
 SPDM-Responder-Validator), with negative controls so a pass means something.
 

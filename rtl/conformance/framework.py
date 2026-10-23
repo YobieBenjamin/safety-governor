@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The small test framework the conformance suite runs on.
 
 Every test is a plain function registered with ``@conformance("R-0xx", ...)``: it names the requirement ids

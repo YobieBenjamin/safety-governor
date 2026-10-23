@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Differential conformance: the same mailbox frames into the RTL and into the functional model.
 
 The RTL side is ``rtl.governor_rtl.mailbox.Mailbox`` under amaranth.sim. The model side is the real

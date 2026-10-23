@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """H8: human override is slow and fully logged. Falsified if an override succeeds below the
 quorum, below the latency floor, without a reason, or without a log entry."""
 from govsim import reasons

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """governor_core: the hard-core blocks wired together with the read-only CSR window from
 ``docs/04-specification.md`` section 2. The firmware side (Ibex, the crypto engines, the fabric
 MAC) attaches to the strobes exposed as ports.

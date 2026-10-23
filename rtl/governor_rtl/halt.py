@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Safe-mode sequencer and the levers. Invariants: the levers assert on any cause and never
 release without an authorized ``clear``; tamper outranks clear; causes that open the loop open it; rungs escalate on
 the policy timers and never descend on their own; the loop switch is open at reset, closes only

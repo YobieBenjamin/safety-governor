@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Deterministic checks on an agent's branch before any model is asked about it. No judgment here:
 everything is a rule a script can apply, and a failed rule names the file and line.
 

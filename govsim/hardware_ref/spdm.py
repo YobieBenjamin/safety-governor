@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The governor as an SPDM responder (DMTF DSP0274, public), bound to its own measurement
 registers and DICE identity, plus a requester that checks everything it is told.
 

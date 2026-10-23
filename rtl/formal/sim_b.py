@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """L7 check (c): each block driven with random inputs in amaranth.sim for thousands of cycles and compared, every
 cycle, with a small reference model written from the spec (docs/07 section 3, docs/04 sections 2 and 9, docs/02),
 not from the RTL. This is independent of the solvers and of yosys: a different simulator, a different description.

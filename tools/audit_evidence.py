@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Does each audit regression fail for the intended security reason?
 
     python3 tools/audit_evidence.py [--hs ../hardware-and-silicon] [--out audit/external-2026-10-22/EVIDENCE.md]
