@@ -31,8 +31,14 @@ ln -sfn ../share/yosys "$T/mamba/envs/ys/bin/share"
 
 if [ ! -x "$T/olvenv/bin/openlane" ]; then
   "$T/mamba/envs/eda/bin/python3" -m venv "$T/olvenv"
-  nice -n 10 "$T/olvenv/bin/pip" install -q openlane==2.0.0
+  nice -n 10 "$T/olvenv/bin/pip" install -q openlane==2.0.0 "click==8.1.8"
 fi
+# OpenROAD's embedded Python 3.10 runs OpenLane's odbpy scripts, which import click and friends.
+# OpenLane overwrites PYTHONPATH for those steps, so point the interpreter at the venv with a .pth.
+echo "$T/olvenv/lib/python3.10/site-packages" > "$T/mamba/envs/eda/lib/python3.10/site-packages/zz-openlane.pth"
+# KLayout's embedded Python ignores PYTHONPATH too; same fix.
+mkdir -p "$T/mamba/envs/kl/lib/python3.10/site-packages"
+echo "$T/olvenv/lib/python3.10/site-packages" > "$T/mamba/envs/kl/lib/python3.10/site-packages/zz-openlane.pth"
 
 D=$T/pdk/volare/sky130/versions/$PDK_REV
 for lib in common sky130_fd_sc_hd sky130_fd_io; do
