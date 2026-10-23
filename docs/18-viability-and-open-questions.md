@@ -177,6 +177,7 @@ So, from the chip's point of view: yes, it strengthens the promise, in the speci
 | 19 | How does a party affected by a gated action contest a ticket, or reopen the rules? Today only insiders can: the quorum override (H8) and the hold for named approvers | A contest lane: a signed objection that holds the ticket for a separate quorum, with its own reason code and timer; a simulation showing it closes the gap without becoming a denial-of-service lever. Section 8c; GitHub issue G2 | This program, operator, regulator |
 | 20 | The origin gate: can a model be made unable to run anywhere but on governed hardware, by sealing its weights to the governor and letting the governor release the key only to an attested GPU, while the signed rulebook lists the model? | A simulation of key release and revocation while running (done 23 October: `results/origin-gate.md`, every check holds); then the GPU's real decryption cost and lease enforcement on a confidential-computing GPU, which needs NVIDIA's firmware to honour the lease. Section 8d; GitHub issue W1 | This program, then NVIDIA |
 | 21 | Does the gate hold against an agent that adds roads? The kill-switch argument (`23`) counts cuts on a fixed graph; a goal-directed agent changes the graph (orders hardware, opens accounts, messages people). Every such step is itself an action that needs a ticket, but whether the rulebook covers every road-building step is untested | A simulation in govsim: a planning agent rewarded for reaching an ungated effector, whose only moves are the actions the rulebook gates, searching sequences of them. Section 8e; GitHub issue A1 | This program |
+| 22 | Can the gate stop a wire that follows every rule but that the customer never meant? A rule that requires the payer's own signature before a ticket, so the agent cannot speak for the customer | A payment rule whose witness must be the key a signed customer registry lists for the paying account; a simulation with an agent sending intended and unintended wires. Section 8f; GitHub issue I1 | This program, then a payments partner |
 Questions 1, 3, 5, 12 and 15 are the ones a small program can move. Questions 6, 11, 14 and 16 are the ones a chip cannot move at all, and the design should keep saying so. Questions 18 and 19 sit in between: the chip can enforce whatever answer is chosen, but choosing it is governance (section 8c).
 
 
@@ -250,6 +251,21 @@ That is an argument, not a result. The test (issue A1): give a simulated agent a
 What would settle it: every route the search finds to the ungated effector passes through at least one step the rulebook holds for humans or refuses, and every attempt is in the log. What would count as failure: a route of individually auto-approved steps that ends at the effector, which would mean the rulebook has a gap a planner can find. A failure is a finding about the rulebook, and it goes on the page like the others.
 
 On the reader's second layer, corrigibility trained into the weights: it belongs in the stack, at the rank this design gives classifiers. What is inside the weights cannot be verified and can be fine-tuned out, so it is a witness that lowers the pressure on the gaps, never the lock. The lock where a cut is small and complete, a disposition that lowers pressure where it is not, a log that shows every attempt at the gaps.
+
+## 8f. The wire the customer never meant
+
+*Added 23 October 2026, prompted by a reader's comment on Part 6: a gate on the device end stops the wire that breaks the rules, but it will also ticket a wire for an approved amount to an approved payee that the customer never meant to send. Testing the agent before it goes live and a chip that enforces the rules are two halves of one answer.*
+
+He is right: the gate checks the form, not the intent behind it. Two things the chip can do about the other half without pretending to judge intent:
+
+- **Make the pre-launch test a condition of running.** The deployment gate already exists: BEGIN_MODEL needs an evaluator's signed attestation that this exact build passed its evaluations, and the origin gate (8d) releases no key without it. A changed weight is a different digest, so the attestation no longer matches.
+- **Ask the person who would be wronged.** The agent cannot sign for the customer. A payment rule could require, as its witness, a signature from the payer's own key (the customer's phone or banking app confirming "yes, I meant this payment", the way banks already confirm transfers), over this exact request.
+
+The second is not buildable as the design stands, and the reason is worth recording. A rule in observer mode today accepts a verdict from **any** key in the rulebook's `observer_keys` (`_witnessed` in `govsim/governor.py`); the rule's own `observers` list only feeds the assumptions register. So the lab's classifier could stand in for the customer. The rule needs a witness bound to the request: the key that a signed customer registry lists for the account named in the request's parameters, and no other.
+
+Issue I1 tests it in simulation: an agent sends intended wires (the customer's key signs) and unintended ones (amount, payee and rule all approved, the customer never signs), with the classifier's key, a stale confirmation, a confirmation for a different request and a confirmation from another customer's key all tried as stand-ins.
+
+What it cannot cover: a customer who confirms a mistake, or who is talked into confirming. That stays a person, the door `23` concedes.
 
 ## 9. What I would do next
 
