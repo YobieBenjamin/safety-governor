@@ -77,6 +77,16 @@ REQUIREMENTS: list[tuple[str, str, str, str, str, str]] = [
     ("R-045", "V", "3", "the core boots on the HALTED_INITIAL rung with all three levers in the safe state and the loop switch open", "top", RTL),
     ("R-046", "V", "5", "Watchdog resets the governor into HALTED_INITIAL; loop opens", "top (reset)", RTL),
     ("R-047", "S", "3", "close the loop switch if no cause remains", "halt (clear strobe)", RTL),
+    # Yobie's two design calls, 23 October 2026 (docs/04 sections 2 and 3, docs/07 section 3)
+    ("R-144", "S", "3", "A HALT opens the loop switch on every rung, SAFE included", "halt", RTL),
+    ("R-145", "S", "3", "a HALT to a chip already in SAFE leaves it in SAFE with power off", "halt; model enter_safe_mode", RTL),
+    ("R-146", "S", "2", "ALARMS bit 31 is NO_FIRST_HEARTBEAT, set by the hardware when the chip has sat in HALTED_INITIAL with no cause and no valid heartbeat for longer than the boot window", "halt, top (ALARMS, CAUSE, BOOT_WAIT)", RTL),
+    ("R-147", "S", "2", "It is never set once the chip has been armed since reset", "halt, top", RTL),
+    ("R-148", "S", "2", "only the sequencer raises them and firmware cannot raise them", "top, alarms (hw_mask)", RTL),
+    ("R-149", "S", "3", "EXCLUDE has no effect in any state but HALTED_INITIAL with no cause", "halt", RTL),
+    ("R-150", "S", "3", "the excluded chip closes its own loop switch so the rest of the rack can run, while its own levers stay asserted", "halt, top", RTL),
+    ("R-151", "S", "3", "It leaves exclusion when a valid heartbeat arms it normally, on a reset, or when a HALT or a tamper moves it to a halted rung with its loop open", "halt", RTL),
+    ("R-152", "S", "3", "every EXCLUDE is logged with who signed it", "model (_cmd_exclude); firmware", FW),
     # ---------------------------------------------------------------- loop
     ("R-048", "V", "3", "loop_out_open follows switch_open", "halt_loop", RTL),
     ("R-049", "V", "3", "loop_sense low for two samples drives loop_lost (debounce)", "halt_loop", RTL),
@@ -100,7 +110,7 @@ REQUIREMENTS: list[tuple[str, str, str, str, str, str]] = [
     ("R-064", "S", "2", "There is no writable register other than the doorbell.", "top", RTL),
     ("R-065", "V", "3", "No CSR write port but the doorbell", "top", RTL),
     ("R-066", "S", "2", "Silicon id and revision", "top (ID)", RTL),
-    ("R-067", "S", "2", "Bits 2:0 the sequencer's own summary (0 none, 1 loop, 2 local, 3 tamper, 4 command); bits 15:8 the firmware's reason code", "top (CAUSE)", RTL),
+    ("R-067", "S", "2", "Bits 2:0 the sequencer's own summary (0 none, 1 loop, 2 local, 3 tamper, 4 command); bit 3 waiting for the first heartbeat, boot window passed; bit 4 excluded; bits 15:8 the firmware's reason code", "top (CAUSE)", RTL),
     ("R-068", "S", "2", "firmware-mapped: the log engine is firmware over NVM, so the RTL core does not decode it", "top (LOG_HEAD)", FW_ONLY),
     # ---------------------------------------------------------------- alarms
     ("R-069", "V", "3", "Bits set by any source through set_mask", "alarms", RTL),
@@ -111,7 +121,7 @@ REQUIREMENTS: list[tuple[str, str, str, str, str, str]] = [
     ("R-073", "V", "5", "Boot refused; the sequencer never leaves HALTED_INITIAL", "halt (hb_ok gate); firmware (boot)", RTL),
     ("R-074", "V", "5", "Zeroize, SAFE", "halt (tamper strobe); key manager (zeroize)", FW),
     # ---------------------------------------------------------------- firmware-owned, with an RTL strobe
-    ("R-080", "S", "3", "POLICY_PROPOSE, POLICY_COMMIT, ATTEST, HALT, CLEAR and ALARM_CLEAR", "mailbox (epoch_exempt input)", FW),
+    ("R-080", "S", "3", "POLICY_PROPOSE, POLICY_COMMIT, ATTEST, HALT, CLEAR, ALARM_CLEAR and EXCLUDE", "mailbox (epoch_exempt input)", FW),
     ("R-081", "S", "3", "a HALT or CLEAR also names the chip it is for and carries an expiry no more than 60 s ahead that has not passed", "mailbox (signed_cmd input)", FW),
     ("R-082", "S", "3", "Commands that carry their own authentication in the body (an attestation report, a k-of-n signed policy image) are accepted without a frame signature", "mailbox (sig_ok input)", FW),
     ("R-083", "S", "3", "Reloads the heartbeat timer", "heartbeat (hb_valid strobe)", FW),

@@ -7,7 +7,7 @@
 See PLAIN-ENGLISH.md for what this is, REQUIREMENTS.md for the table, FINDINGS.md for what disagreed.
 """
 
-TEST_MODULES = ("tests_blocks", "tests_differential", "tests_findings")
+TEST_MODULES = ("tests_blocks", "tests_differential", "tests_findings", "tests_calls")
 
 
 def load_tests() -> None:

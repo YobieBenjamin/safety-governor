@@ -41,7 +41,7 @@ MONO_LO still counts every microsecond). `ms_shift` became a constructor paramet
 a short millisecond. docs/04 ("derived from the microsecond counter") still reads true in spirit: the strobe is
 derived from the microsecond tick, no longer from the counter's value.
 
-## F3. The open question: a lost heartbeat climbs to SAFE on one chip and the loop stays closed
+## F3. The open question: a lost heartbeat climbs to SAFE on one chip and the loop stays closed (decided 23 October 2026)
 
 The question recorded with the halt_seq proof: a lost heartbeat climbs THROTTLE, HALT, SAFE (power off) on this chip
 alone and never opens the loop to its neighbours. What the integrated RTL does, seen from loop_io and governor_core:
@@ -55,7 +55,18 @@ alone and never opens the loop to its neighbours. What the integrated RTL does, 
    trip and a throttle command all write LOCAL. This matches docs/01 and docs/02 ("local causes throttle and halt that
    governor's own slot without opening the loop"). The neighbours keep loop current and keep running; they learn of
    it only through the fabric and the log, never through the loop.
-3. **New: a signed HALT to a chip that is already in SAFE does not open the loop either.** The sequencer obeys
+3. **HALT to a chip already in SAFE does not open the loop (closed).** The text below is the record of what was
+   wrong. **Closed** on branch feat/yobie-calls (23 October 2026) by Yobie's decision, written into docs/04 section
+   3: "A HALT opens the loop switch on every rung, SAFE included". In SAFE, `cmd_halt` now sets `switch_open` and
+   makes the command the cause (tamper keeps its cause); the state stays SAFE. The design fact F-b that recorded the
+   old behaviour is removed from `governor_core_facts.sv`. In its place, proven by k-induction: halt_seq.sv, H rules
+   ("a halt command opens the loop in every state, SAFE included, unless an authorized CLEAR took that cycle", and
+   in SAFE "it stays SAFE, power off, cause command unless tamper"); governor_core.sv, G3, the same at the pins. The
+   old behaviour is a planted mutant ("a HALT to a chip in SAFE leaves the loop closed") and is caught; the
+   reproducer `test_finding_cmd_halt_in_safe_opens_the_loop` (conformance F-07, also closed) and
+   `rtl/tests/test_yobie_calls.py::test_halt_to_a_chip_in_safe_opens_its_loop_and_stays_safe` are guards, and both
+   fail by assertion on the old sequencer. Was: a signed HALT to a chip that is already in SAFE does not open the
+   loop either. The sequencer obeys
    `cmd_halt` only when `state != SAFE`. Send HALT to a chip that lost its heartbeat and has climbed to SAFE and the
    cause stays LOCAL and the switch stays closed. The same facts file proves it (rule F-b). docs/02 says "Any
    governor opens its switch on a loop-opening cause: a signed HALT"; for a chip in SAFE the RTL disagrees. HALT
@@ -66,7 +77,15 @@ alone and never opens the loop to its neighbours. What the integrated RTL does, 
    heartbeat). A governor that never receives its first heartbeat holds the whole loop open, and nobody in the domain
    reaches RUN (they need loop current). A governor that loses its heartbeat after arming stops only itself. Proven
    pieces: G2 (boots open), G7 (the switch closes only through arming), F-a. So before the first heartbeat a missing
-   heartbeat is a domain stop; after it, a local one.
+   heartbeat is a domain stop; after it, a local one. **Decided** (23 October 2026, Yobie): it stays a domain stop (fail
+   closed), but loud, named and with a deliberate way out. The sequencer counts the milliseconds it waits for its
+   first heartbeat (`boot_timer`, `BOOT_WAIT` at 0x088); past `t_boot_ms` (5000 on the chip, 3 in the small build)
+   it raises `no_first_hb`, which the core makes the hardware-owned sticky ALARMS bit 31 NO_FIRST_HEARTBEAT and the
+   live CAUSE bit 3. An authorized EXCLUDE (`cmd_exclude`) closes that chip's switch while it stays in HALTED_INITIAL
+   with every lever asserted; ALARMS bit 30 and CAUSE bit 4 say so. Proven: halt_seq.sv, the X and N rules, plus a
+   two-copy miter showing EXCLUDE changes no register outside HALTED_INITIAL with no cause; governor_core.sv, G7
+   (now "closes by a heartbeat or an EXCLUDE, and never for a chip halted by loop loss, command or tamper"), G8, G9.
+   Nine planted bugs in halt.py and four in top.py for these rules, all caught by assertion.
 5. **loop_io is not where the stickiness lives.** `loop_lost` falls on the first sample that sees current again (L4
    proves it falls only then). What is sticky is the sequencer's switch (G7: once opened by a cause, it closes only
    through clear and re-arming). A current loss shorter than two samples never reaches the sequencer; a longer one is

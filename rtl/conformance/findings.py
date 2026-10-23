@@ -21,7 +21,7 @@ reachable case), **low** (edge case, unreachable in practice, or a reporting dif
 | F-04 | low | Model's CLEAR handler reports one reason for every failure | model vs spec |
 | F-05 | high, **closed** | CLEAR and tamper in the same cycle: CLEAR wins, the tamper is lost (fixed: tamper outranks CLEAR, branch fix/halt) | RTL vs spec and model (lead a) |
 | F-06 | high, **half closed** | Lifecycle reads TEST and grants debug before the fuse load (debug half fixed by a `loaded` flag, L7 group A; the register still reads TEST until the load) | RTL vs spec (lead b) |
-| F-07 | medium | A signed HALT to a governor already in SAFE | RTL vs spec; model vs spec, differently |
+| F-07 | medium, **closed** | A signed HALT to a governor already in SAFE (fixed: a HALT opens the loop on every rung and SAFE stays SAFE, Yobie's call of 23 October 2026, branch feat/yobie-calls) | RTL vs spec; model vs spec, differently |
 | F-08 | low | The "millisecond" tick is 1,024 microseconds | RTL vs spec |
 | F-09 | low | A zero-byte lookup passes at zero budget | RTL and model vs spec |
 | F-10 | medium | Capability table holds two entries for one key | RTL vs spec and model |
@@ -145,7 +145,7 @@ the OTP state has been read and decoded).
 
 **Half closed** (23 October 2026). The dangerous half is fixed: debug needs a fuse load since the last reset (a `loaded` flag, found independently by the L7 proofs as their F1); the block-level reproducer now passes as a guard. The other half is open: until the load, the LIFECYCLE register still reads TEST (0), so software that reads it in that window is told the chip is a test part. Fix: reset the register to the most locked state, or report a distinct NOT_LOADED value. The core-level reproducer `test_finding_core_reports_test_lifecycle_before_fuse_load` still fails, on that half.
 
-## F-07 A signed HALT to a governor already in SAFE
+## F-07 A signed HALT to a governor already in SAFE (closed)
 
 A governor whose heartbeat lapsed climbs THROTTLE, HALT, SAFE on its timers with its loop switch closed, which is
 right: local causes do not stop the rack. Now the authority sends that governor a signed HALT, a loop-opening cause
@@ -163,6 +163,8 @@ Each gets half of it right. The spec wants both: stay in SAFE, and open the loop
 **Suggested fix (RTL):** let `cmd_halt` set `switch_open` and the cause in every state, and change the state only if
 the new rung is higher. **(Model):** in `enter_safe_mode`, never apply a rung lower than the current one; open the
 loop separately.
+
+**Closed** on branch feat/yobie-calls (23 October 2026), by Yobie's decision ("silently failing is a bullshit feature"), now written into docs/04 section 3: "A HALT opens the loop switch on every rung, SAFE included" and "a HALT to a chip already in SAFE leaves it in SAFE with power off". RTL: in SAFE, `cmd_halt` sets `switch_open` and makes the command the cause (tamper keeps its cause); the state stays SAFE. Model: `enter_safe_mode` never applies a lower rung than the current one, so the HALT opens the loop and leaves SAFE and its power-off levers alone. Both reproducers pass and stay as guards (R-144, R-145), and the L7 design fact that recorded the old behaviour is gone, replaced by proven rules (rtl/formal/halt_seq.sv, the H rules; governor_core.sv, G3) with the old behaviour planted as a mutant that is caught.
 
 ## F-08 The "millisecond" tick is 1,024 microseconds
 

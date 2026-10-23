@@ -435,7 +435,7 @@ def test_model_finding_clear_collapses_reasons():
 # ---------------------------------------------------------------- firmware-owned rules the model carries
 @conformance("R-080")
 def test_fw_epoch_exempt_list_matches_spec():
-    """The model's epoch-exempt set (what the firmware feeds epoch_exempt from) is exactly the six commands the spec lists."""
+    """The model's epoch-exempt set (what the firmware feeds epoch_exempt from) is exactly the commands the spec lists (seven since EXCLUDE, 23 October 2026)."""
     import os
     import re
     here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

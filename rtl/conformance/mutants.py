@@ -73,6 +73,13 @@ MUTANTS: list[tuple[str, str, str, str, str]] = [
     ("R-070", "alarms.py",
      "m.d.comb += cleared.eq(self.alarms & ~(self.clear_mask & self.clear_authorized.replicate(len(self.alarms))))",
      "m.d.comb += cleared.eq(self.alarms & ~self.clear_mask)", "test_alarm_clear_needs_authorization"),
+    # Yobie's calls, 23 October 2026
+    ("R-144", "halt.py", "            m.d.sync += self.switch_open.eq(1)\n        with m.Elif(self.cmd_halt):",
+     "            pass\n        with m.Elif(self.cmd_halt):", "test_calls_halt_opens_loop_from_every_rung"),
+    ("R-149", "halt.py", "with m.Elif(self.cmd_exclude & (self.state == HALTED_INITIAL) & (self.cause == C_NONE)):",
+     "with m.Elif(self.cmd_exclude):", "test_calls_exclude_does_nothing_outside_waiting_for_first_heartbeat"),
+    ("R-148", "top.py", "HW_ALARMS = (1 << ALARM_NO_FIRST_HEARTBEAT) | (1 << ALARM_EXCLUDED)", "HW_ALARMS = (1 << ALARM_EXCLUDED)",
+     "test_calls_firmware_cannot_raise_the_hardware_alarm_bits"),
 ]
 
 HERE = os.path.dirname(os.path.abspath(__file__))

@@ -134,6 +134,15 @@ is already in SAFE does not open the loop either, so it cannot stop the rack thr
 never gets its first heartbeat holds the whole loop open, so at boot one missing heartbeat stops everyone, while
 later it stops only one. Whether that is what we want is Yobie's call.
 
+**Yobie's call, 23 October 2026.** "Silently failing is a bullshit feature." Both are now decided and proven. A
+HALT to a chip in SAFE opens its loop (pulling the fire alarm rings on every floor, even one whose sprinklers already
+went off); the chip stays in SAFE with its power off. A chip that never gets its first heartbeat still holds the rack,
+but after five seconds its hardware raises a named alarm, NO_FIRST_HEARTBEAT, that anyone can read over the
+management bus, and the authority can sign an EXCLUDE that closes that one chip's loop switch while its own GPUs stay
+braked, in reset and unpowered (bypassing one faulty smoke detector needs the building manager's signature, and the
+bypass is logged). The old "fact" that HALT in SAFE does nothing is gone; in its place are proven rules and planted
+bugs that put the old behaviour back and get caught.
+
 ## What didn't work (every dead end, in order)
 
 1. **Second solvers.** `yowasp-yices`, `yowasp-bitwuzla` and `pybitwuzla` do not exist on pip. The `bitwuzla` and

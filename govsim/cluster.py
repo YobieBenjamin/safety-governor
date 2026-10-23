@@ -440,6 +440,10 @@ class Rack:
     def clear(self, governor: Governor) -> dict:
         return governor.command("CLEAR", {}, self._authority_env({"type": "clear"}, governor))
 
+    def exclude(self, governor: Governor) -> dict:
+        """EXCLUDE (docs/04 section 3): the authority's signed, logged way past a chip that never got its first heartbeat."""
+        return governor.command("EXCLUDE", {}, self._authority_env({"type": "exclude"}, governor))
+
     def halt(self, governor: Governor, rung: str = "HALT") -> dict:
         return governor.command("HALT", {}, self._authority_env({"type": "halt", "rung": rung}, governor))
 

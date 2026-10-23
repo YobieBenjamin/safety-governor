@@ -125,7 +125,17 @@ HEARTBEAT_LOST = "halt.heartbeat_lost"
 EPOCH_STRAGGLER = "halt.epoch_straggler"
 TAMPER = "halt.tamper"
 
+# boot: the first heartbeat (Yobie's call 2, 23 October 2026). A chip that never gets its first heartbeat keeps
+# holding the rack, loudly: the hardware raises NO_FIRST_HEARTBEAT past the boot window (ALARMS bit 31, CAUSE bit 3 in
+# silicon). An authorized EXCLUDE closes its loop switch while its own levers stay on (ALARMS bit 30, CAUSE bit 4).
+NO_FIRST_HEARTBEAT = "boot.no_first_heartbeat"
+EXCLUDED = "boot.excluded"
+EXCLUDE_NOT_WAITING = "exclude.not_waiting_for_first_heartbeat"   # EXCLUDE outside HALTED_INITIAL with no cause and no live heartbeat
+
 OK = "ok"
 
-# The 16-bit encoding the RTL and the firmware share. Codes are stable once assigned.
-CODES = {name: i for i, name in enumerate(sorted(v for k, v in globals().items() if k.isupper() and isinstance(v, str)), start=1)}
+# The 16-bit encoding the RTL and the firmware share. Codes are stable once assigned: the codes first assigned (every
+# name before ADDED) keep their sorted numbering, and names added later take the next numbers in the order added.
+ADDED = [NO_FIRST_HEARTBEAT, EXCLUDED, EXCLUDE_NOT_WAITING]       # 23 October 2026
+_FIRST = sorted(v for k, v in list(globals().items()) if k.isupper() and isinstance(v, str) and v not in ADDED)
+CODES = {name: i for i, name in enumerate(_FIRST + ADDED, start=1)}

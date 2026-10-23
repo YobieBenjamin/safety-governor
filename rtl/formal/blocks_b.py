@@ -55,7 +55,7 @@ BLOCKS_B = {
          "~(self.clear_mask & self.clear_authorized.replicate(len(self.alarms)))",
          "~self.clear_authorized.replicate(len(self.alarms))"),
         ("a clear racing a fresh alarm swallows it",
-         "m.d.sync += self.alarms.eq(cleared | self.set_mask)", "m.d.sync += self.alarms.eq(cleared | (self.set_mask & ~self.clear_mask))"),
+         "m.d.sync += self.alarms.eq(cleared | raise_)", "m.d.sync += self.alarms.eq(cleared | (raise_ & ~self.clear_mask))"),
         ("the summary bit sees only alarm 0",
          "self.any.eq(self.alarms != 0)", "self.any.eq(self.alarms[0])"),
         ("an unauthorized clear attempt is not flagged",
@@ -107,6 +107,15 @@ BLOCKS_B = {
          "self.loop.switch_open.eq(self.halt.switch_open),", "self.loop.switch_open.eq(self.halt.switch_open & (self.halt.state != 4)),"),
         ("a loop loss is acted on only once the heartbeat has also expired",
          "self.halt.loop_lost.eq(self.loop.loop_lost),", "self.halt.loop_lost.eq(self.loop.loop_lost & self.hb.expired),"),
+        # Yobie's calls, 23 October 2026: the operator signals
+        ("firmware can raise NO_FIRST_HEARTBEAT and the hardware's raise never lands",
+         "HW_ALARMS = (1 << ALARM_NO_FIRST_HEARTBEAT) | (1 << ALARM_EXCLUDED)", "HW_ALARMS = (1 << ALARM_EXCLUDED)"),
+        ("the boot alarm bit follows the wrong signal (raised once armed)",
+         "(self.halt.no_first_hb << ALARM_NO_FIRST_HEARTBEAT)", "(self.halt.hb_seen << ALARM_NO_FIRST_HEARTBEAT)"),
+        ("CAUSE hides the wait for the first heartbeat",
+         "Cat(self.halt.cause, self.halt.no_first_hb, self.halt.excluded,", "Cat(self.halt.cause, Const(0, 1), self.halt.excluded,"),
+        ("an excluded chip's PERST# pad releases",
+         "self.perst_n.eq(~self.halt.perst),", "self.perst_n.eq(~self.halt.perst | self.halt.excluded),"),
         ("the host's CSR address selects the meter slot that gets charged",
          "m.d.comb += self.meter.rd_slot.eq(meter_off[5:7])",
          "m.d.comb += [self.meter.rd_slot.eq(meter_off[5:7]), self.meter.slot.eq(meter_off[5:7])]"),
@@ -114,7 +123,7 @@ BLOCKS_B = {
 }
 
 # ------------------------------------------------------------------------------------------------ helpers
-SMALL = dict(cap_entries=2, ticket_entries=2, t_throttle_ms=3, t_halt_ms=4, ms_shift=2)
+SMALL = dict(cap_entries=2, ticket_entries=2, t_throttle_ms=3, t_halt_ms=4, ms_shift=2, t_boot_ms=3)
 
 
 def _tool(name: str) -> str:
@@ -135,7 +144,8 @@ def _probes(core) -> list:
     for attr in ("loop_lost", "count"):
         getattr(core.loop, attr).name = "loop_" + attr
     return [core.halt.state, core.halt.cause, core.halt.switch_open, core.halt.timer, core.hb.remaining,
-            core.hb.expired, core.loop.loop_lost, core.loop.count, core.ms_div]
+            core.hb.expired, core.loop.loop_lost, core.loop.count, core.ms_div,
+            core.halt.excluded, core.halt.hb_seen, core.halt.boot_timer, core.halt.no_first_hb, core.alarms.alarms]
 
 
 def core_verilog(out: str, mutant=None, kwargs=None, probes: bool = True) -> None:
@@ -351,10 +361,24 @@ def _assert_fact(props_file: str, depth: int, want: str) -> tuple[bool, str]:
 FACTS = [
     ("lost heartbeat climbs to SAFE with the loop closed", lambda: _cover_fact(
         "governor_core_cover.sv", 60, "from boot, a heartbeat that runs out reaches SAFE, power off, loop pad closed")),
-    ("local cause never opens the loop; HALT to a SAFE chip does not open it", lambda: _assert_fact(
-        "governor_core_facts.sv", 12, "proven: cause LOCAL implies the loop pad is closed; a HALT command to a chip "
-        "already in SAFE leaves the pad as it was")),
+    ("a local cause never opens the loop", lambda: _assert_fact(
+        "governor_core_facts.sv", 12, "proven: cause LOCAL implies the loop pad is closed (the old fact that a HALT "
+        "to a chip in SAFE leaves the pad closed is gone: Yobie's call 1, now rule G3)")),
 ]
+
+
+# ------------------------------------------------------------------------------------------------ halt_seq extras
+def _exclude_miter(work, mutant, all_solvers):
+    """Two copies of halt_seq, one that never sees cmd_exclude: outside HALTED_INITIAL with no cause they never
+    differ (rtl/formal/halt_seq_exclude_miter.sv). Runs on the checked-in Verilog or on the mutant."""
+    from .__main__ import GEN, mutant_verilog, prove
+    v = os.path.join(work, "dut.v")
+    if mutant is None:
+        shutil.copy(os.path.join(GEN, "halt_seq.v"), v)
+    else:
+        mutant_verilog("halt.py", "HaltSeq", mutant[1], mutant[2], v, "halt_seq")
+    ok, why = prove(v, os.path.join(HERE, "halt_seq_exclude_miter.sv"), work, depth=4, solver="yices")
+    return ok, why
 
 
 # ------------------------------------------------------------------------------------------------ options
@@ -363,6 +387,8 @@ def _sims(name):
 
 
 OPTIONS_B = {
+    "halt_seq": {"checks": [("EXCLUDE changes nothing outside HALTED_INITIAL with no cause (two-copy miter)", _exclude_miter)],
+                 **_sims("halt_seq")},
     "heartbeat": {**_sims("heartbeat"), "depth": 25, "solver": "yices"},
     "meter": {**_sims("meter"), "depth": 6, "solver": "yices"},
     "alarms": {**_sims("alarms"), "depth": 25, "solver": "yices"},

@@ -45,10 +45,10 @@ Findings (F-nn) are the tests that reproduce a disagreement; see `FINDINGS.md`.
 | R-032 | S §9 | the RTL sequencer and heartbeat timers run on a millisecond tick derived from the microsecond counter | top | RTL | `test_core_timers_ignore_the_raw_microsecond_tick`<br>`test_finding_heartbeat_expires_on_time` (F-08)<br>`test_core_ms_strobe_is_derived_from_the_counter` |  |
 | R-033 | S §9 | the governor clamps any signed window to it | heartbeat (window input) | FW | `test_fw_heartbeat_window_is_clamped_to_policy_expiry` |  |
 | R-034 | V §3 | The rung (state) climbs on any of loop_lost, hb_expired, tamper, cmd_halt, cmd_throttle, local_trip and on the timers | halt | RTL | `test_halt_loop_lost_from_run`<br>`test_halt_loop_lost_from_throttle`<br>`test_halt_hb_expired_throttles`<br>`test_halt_local_trip_throttles`<br>`test_halt_cmd_throttle_throttles`<br>`test_halt_cmd_halt_from_run`<br>`test_halt_cmd_halt_from_throttle`<br>`test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_halt_throttle_escalates_after_t_throttle_ticks`<br>`test_halt_halt_escalates_after_t_halt_ticks` |  |
-| R-035 | V §3 | never descends without clear | halt | RTL | `test_halt_never_descends_without_clear_random`<br>`test_halt_safe_is_absorbing_without_clear`<br>`test_finding_clear_and_tamper_pulse_same_cycle_ends_safe`<br>`test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung`<br>`test_model_finding_halt_in_safe_does_not_descend` (F-07) |  |
-| R-036 | V §3 | the levers pwrbrk, perst, pwr_en follow the rung exactly | halt | RTL | `test_halt_levers_follow_every_rung`<br>`test_halt_ports_closed_outside_run`<br>`test_model_finding_halt_in_safe_does_not_descend` (F-07)<br>`test_diff_levers_per_rung_rtl_equals_model` |  |
+| R-035 | V §3 | never descends without clear | halt | RTL | `test_halt_never_descends_without_clear_random`<br>`test_halt_safe_is_absorbing_without_clear`<br>`test_finding_clear_and_tamper_pulse_same_cycle_ends_safe`<br>`test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung`<br>`test_model_finding_halt_in_safe_does_not_descend`<br>`test_calls_model_halt_in_safe_stays_safe_and_opens_loop` |  |
+| R-036 | V §3 | the levers pwrbrk, perst, pwr_en follow the rung exactly | halt | RTL | `test_halt_levers_follow_every_rung`<br>`test_halt_ports_closed_outside_run`<br>`test_model_finding_halt_in_safe_does_not_descend`<br>`test_diff_levers_per_rung_rtl_equals_model` |  |
 | R-037 | V §3 | switch_open starts set, clears only when armed (no cause, hb_ok) | halt | RTL | `test_halt_switch_open_at_reset`<br>`test_halt_no_arming_without_heartbeat`<br>`test_halt_arms_before_loop_current`<br>`test_halt_heartbeat_alone_never_recloses_after_a_loop_cause`<br>`test_diff_boot_rung_rtl_equals_model` |  |
-| R-038 | V §3 | sets on loop_lost, tamper or cmd_halt | halt | RTL | `test_halt_loop_lost_from_run`<br>`test_halt_loop_lost_from_throttle`<br>`test_halt_cmd_halt_from_run`<br>`test_halt_cmd_halt_from_throttle`<br>`test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_finding_cmd_halt_in_safe_opens_the_loop` (F-07)<br>`test_cmd_halt_in_throttle_from_local_cause_opens_loop`<br>`test_finding_loop_lost_in_halt_sets_switch_open` (F-15) |  |
+| R-038 | V §3 | sets on loop_lost, tamper or cmd_halt | halt | RTL | `test_halt_loop_lost_from_run`<br>`test_halt_loop_lost_from_throttle`<br>`test_halt_cmd_halt_from_run`<br>`test_halt_cmd_halt_from_throttle`<br>`test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_finding_cmd_halt_in_safe_opens_the_loop`<br>`test_cmd_halt_in_throttle_from_local_cause_opens_loop`<br>`test_finding_loop_lost_in_halt_sets_switch_open` (F-15) |  |
 | R-039 | V §3 | and clear does not reset it | halt | RTL | `test_halt_heartbeat_alone_never_recloses_after_a_loop_cause`<br>`test_halt_clear_does_not_close_the_switch_until_armed` |  |
 | R-040 | V §3 | cause bits 2:0 name the summary | halt | RTL | `test_halt_cause_codes_match_the_spec`<br>`test_halt_escalation_keeps_the_cause` |  |
 | R-041 | S §9 | 30 s / 300 s | halt, top | RTL | `test_halt_throttle_escalates_after_t_throttle_ticks`<br>`test_halt_halt_escalates_after_t_halt_ticks`<br>`test_core_default_timers_are_30s_and_300s` |  |
@@ -58,6 +58,15 @@ Findings (F-nn) are the tests that reproduce a disagreement; see `FINDINGS.md`.
 | R-045 | V §3 | the core boots on the HALTED_INITIAL rung with all three levers in the safe state and the loop switch open | top | RTL | `test_core_boot_state_levers_and_switch` |  |
 | R-046 | V §5 | Watchdog resets the governor into HALTED_INITIAL; loop opens | top (reset) | RTL | `test_core_reset_from_run_returns_to_boot_rung` |  |
 | R-047 | S §3 | close the loop switch if no cause remains | halt (clear strobe) | RTL | `test_halt_clear_does_not_close_the_switch_until_armed`<br>`test_halt_clear_in_boot_rung_is_a_no_op` |  |
+| R-144 | S §3 | A HALT opens the loop switch on every rung, SAFE included | halt | RTL | `test_finding_cmd_halt_in_safe_opens_the_loop`<br>`test_calls_halt_in_safe_from_local_cause_opens_loop_keeps_safe`<br>`test_calls_halt_opens_loop_from_every_rung` |  |
+| R-145 | S §3 | a HALT to a chip already in SAFE leaves it in SAFE with power off | halt; model enter_safe_mode | RTL | `test_model_finding_halt_in_safe_does_not_descend`<br>`test_calls_halt_in_safe_from_local_cause_opens_loop_keeps_safe`<br>`test_calls_model_halt_in_safe_stays_safe_and_opens_loop` |  |
+| R-146 | S §2 | ALARMS bit 31 is NO_FIRST_HEARTBEAT, set by the hardware when the chip has sat in HALTED_INITIAL with no cause and no valid heartbeat for longer than the boot window | halt, top (ALARMS, CAUSE, BOOT_WAIT) | RTL | `test_calls_core_names_the_chip_waiting_for_its_first_heartbeat` |  |
+| R-147 | S §2 | It is never set once the chip has been armed since reset | halt, top | RTL | `test_calls_core_never_raises_no_first_heartbeat_once_armed` |  |
+| R-148 | S §2 | only the sequencer raises them and firmware cannot raise them | top, alarms (hw_mask) | RTL | `test_calls_firmware_cannot_raise_the_hardware_alarm_bits` |  |
+| R-149 | S §3 | EXCLUDE has no effect in any state but HALTED_INITIAL with no cause | halt | RTL | `test_calls_exclude_does_nothing_outside_waiting_for_first_heartbeat` |  |
+| R-150 | S §3 | the excluded chip closes its own loop switch so the rest of the rack can run, while its own levers stay asserted | halt, top | RTL | `test_calls_exclude_closes_the_pad_and_keeps_every_lever` |  |
+| R-151 | S §3 | It leaves exclusion when a valid heartbeat arms it normally, on a reset, or when a HALT or a tamper moves it to a halted rung with its loop open | halt | RTL | `test_calls_exclusion_ends_by_heartbeat_halt_or_tamper_only` |  |
+| R-152 | S §3 | every EXCLUDE is logged with who signed it | model (_cmd_exclude); firmware | FW | `test_calls_model_logs_every_exclude_with_its_signer` |  |
 | R-048 | V §3 | loop_out_open follows switch_open | halt_loop | RTL | `test_loop_pad_follows_switch_request` |  |
 | R-049 | V §3 | loop_sense low for two samples drives loop_lost (debounce) | halt_loop | RTL | `test_loop_one_noisy_sample_is_not_a_loss`<br>`test_loop_two_low_samples_declare_loss`<br>`test_loop_counts_only_on_sample_strobes` |  |
 | R-050 | S §2 | bit 0 loop current sensed, bit 1 own switch open | top (LOOP) | RTL | `test_core_loop_csr_bits` |  |
@@ -77,7 +86,7 @@ Findings (F-nn) are the tests that reproduce a disagreement; see `FINDINGS.md`.
 | R-064 | S §2 | There is no writable register other than the doorbell. | top | RTL | `test_core_has_no_csr_write_port`<br>`test_core_csr_reads_have_no_side_effects` |  |
 | R-065 | V §3 | No CSR write port but the doorbell | top | RTL | `test_core_has_no_csr_write_port`<br>`test_core_csr_reads_have_no_side_effects` |  |
 | R-066 | S §2 | Silicon id and revision | top (ID) | RTL | `test_core_id_register` |  |
-| R-067 | S §2 | Bits 2:0 the sequencer's own summary (0 none, 1 loop, 2 local, 3 tamper, 4 command); bits 15:8 the firmware's reason code | top (CAUSE) | RTL | `test_core_state_and_cause_csrs` |  |
+| R-067 | S §2 | Bits 2:0 the sequencer's own summary (0 none, 1 loop, 2 local, 3 tamper, 4 command); bit 3 waiting for the first heartbeat, boot window passed; bit 4 excluded; bits 15:8 the firmware's reason code | top (CAUSE) | RTL | `test_core_state_and_cause_csrs` |  |
 | R-068 | S §2 | firmware-mapped: the log engine is firmware over NVM, so the RTL core does not decode it | top (LOG_HEAD) | FW-ONLY | `test_core_log_window_is_not_decoded` |  |
 | R-069 | V §3 | Bits set by any source through set_mask | alarms | RTL | `test_alarm_any_source_sets` |  |
 | R-070 | V §3 | cleared only through clear_mask gated by clear_authorized | alarms | RTL | `test_alarm_clear_needs_authorization`<br>`test_alarm_set_beats_clear_in_the_same_cycle` |  |
@@ -85,7 +94,7 @@ Findings (F-nn) are the tests that reproduce a disagreement; see `FINDINGS.md`.
 | R-072 | V §1 | Alarms are monotone | alarms | RTL | `test_alarm_any_source_sets`<br>`test_alarm_set_beats_clear_in_the_same_cycle`<br>`test_alarm_monotone_without_authorization_random` |  |
 | R-073 | V §5 | Boot refused; the sequencer never leaves HALTED_INITIAL | halt (hb_ok gate); firmware (boot) | RTL | `test_halt_no_arming_without_heartbeat`<br>`test_diff_boot_rung_rtl_equals_model` |  |
 | R-074 | V §5 | Zeroize, SAFE | halt (tamper strobe); key manager (zeroize) | FW | `test_model_tamper_is_safe_and_unclearable` |  |
-| R-080 | S §3 | POLICY_PROPOSE, POLICY_COMMIT, ATTEST, HALT, CLEAR and ALARM_CLEAR | mailbox (epoch_exempt input) | FW | `test_diff_spec_halt_with_stale_epoch_is_exempt`<br>`test_fw_epoch_exempt_list_matches_spec` |  |
+| R-080 | S §3 | POLICY_PROPOSE, POLICY_COMMIT, ATTEST, HALT, CLEAR, ALARM_CLEAR and EXCLUDE | mailbox (epoch_exempt input) | FW | `test_diff_spec_halt_with_stale_epoch_is_exempt`<br>`test_fw_epoch_exempt_list_matches_spec` |  |
 | R-081 | S §3 | a HALT or CLEAR also names the chip it is for and carries an expiry no more than 60 s ahead that has not passed | mailbox (signed_cmd input) | FW | `test_diff_spec_clear_for_another_chip`<br>`test_diff_spec_expired_clear`<br>`test_fw_authority_expiry_ceiling_is_60s` |  |
 | R-082 | S §3 | Commands that carry their own authentication in the body (an attestation report, a k-of-n signed policy image) are accepted without a frame signature | mailbox (sig_ok input) | FW | `test_mbox_self_authenticating_command_rides_on_the_firmware_verdict` |  |
 | R-083 | S §3 | Reloads the heartbeat timer | heartbeat (hb_valid strobe) | FW | `test_diff_spec_good_heartbeat`<br>`test_fw_heartbeat_window_is_clamped_to_policy_expiry` |  |
@@ -236,8 +245,8 @@ reference gate. The owner column says which layer of the governor would decide t
 ## The count
 
 Catalogue rows: 87 (69 firmware, 4 hard core, 14 reference gate).
-Conformance tests in `rtl/conformance`: 163, each tied to at least one requirement id.
-Total: 250 (target 150).
+Conformance tests in `rtl/conformance`: 173, each tied to at least one requirement id.
+Total: 260 (target 150).
 
 Be clear about what the two halves are. The catalogue rows exercise the reference software stack, not
 the RTL; they count toward the total because the brief counts them, not because they test the chip.

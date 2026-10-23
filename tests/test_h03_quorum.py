@@ -84,7 +84,7 @@ def test_every_mailbox_code_has_a_handler_and_nothing_else_is_reachable():
     from govsim.governor import Governor, MAILBOX_CODES
     handlers = {m[5:].upper() for m in dir(Governor) if m.startswith("_cmd_")}
     assert set(MAILBOX_CODES.values()) == handlers
-    assert sorted(MAILBOX_CODES) == list(range(0x01, 0x16))
+    assert sorted(MAILBOX_CODES) == list(range(0x01, 0x17))      # 0x16 EXCLUDE added 23 October 2026
 
 
 def test_signed_frame_from_the_previous_epoch_is_refused(rack1):

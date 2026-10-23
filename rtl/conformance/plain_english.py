@@ -35,14 +35,14 @@ mistake in place was not really testing anything.
 One command, `python -m rtl.conformance`. It:
 
 - checks that every rule quoted in the table really appears, word for word, in docs/04 or docs/07 (125 rules);
-- runs 163 conformance tests against the chip design, block by block (counter, measurement registers, epoch,
+- runs 173 conformance tests against the chip design, block by block (counter, measurement registers, epoch,
   lifecycle, capability table, ticket store, heartbeat, the halt sequencer, the loop, the meter, the mailbox, the
   alarm register, and the whole core wired together);
 - sends 4,000 random mailbox messages, plus fourteen hand-written ones taken straight from the spec, into both the
   chip design and the software model and compares every answer;
 - does the same for the capability table (1,280 random lookups);
 - maps every row of the existing 87-row attack and baseline catalogue to the rules it exercises;
-- plants 27 one-line mistakes in the design, one per rule, and confirms each is caught;
+- plants 30 one-line mistakes in the design, one per rule, and confirms each is caught;
 - writes the report to `results/rtl-conformance.md`.
 
 ## What passed
@@ -52,7 +52,7 @@ loop sense and the read-only register window all do what the spec says. The halt
 the spec lists, never comes back down on its own across 5,000 random cycles, and drives the three levers exactly as
 the spec and the model both say. The chip boots stopped, with the loop open. On the mailbox, the chip design and the
 model agree on all fourteen spec examples, including the 22 October case where a heartbeat was presented as a CLEAR.
-Every one of the 27 planted mistakes was caught by a failing check.
+Every one of the 30 planted mistakes was caught by a failing check.
 
 ## What disagreed
 
@@ -66,15 +66,16 @@ Fifteen findings, all written up with a test that reproduces each one. The two t
   and only reads the fuses when the firmware tells it to. Until then, a production chip will grant a debug request.
   The spec says production silicon has no debug path, ever. Real designs start in the most locked-down state.
 
-The others are smaller: a signed HALT to a governor already in SAFE does not open the loop (and the software model
-gets the same case wrong in a different way), the "millisecond" timer tick is really 1.024 ms, the capability table
+The others are smaller: a signed HALT to a governor already in SAFE did not open the loop (and the software model
+got the same case wrong in a different way; closed on 23 October 2026 when Yobie decided a HALT opens the loop on
+every rung), the "millisecond" timer tick is really 1.024 ms, the capability table
 can hold two entries for the same port, the usage meter wraps at 48 bits, the mailbox reports a different reason
 than the model in a few double-fault cases, and the spec contradicts itself in one table. None of them was fixed
 here; fixing is the next job, with each reproducer becoming the regression test.
 
 The catalogue mapping says something worth saying out loud: all 87 catalogue rows run against the reference
-software stack, not the chip. They count toward the 150 the brief asked for (87 + 163 = 250), but they are not
-evidence about the hardware. The 163 conformance tests are.
+software stack, not the chip. They count toward the 150 the brief asked for (87 + 173 = 260), but they are not
+evidence about the hardware. The 173 conformance tests are.
 
 ## What didn't work
 
