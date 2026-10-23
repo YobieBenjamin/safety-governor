@@ -1,0 +1,154 @@
+{
+  "verdict": 1,
+  "results": [
+    {
+      "name": "CONTROL: a fully authorized payment proceeds",
+      "finding": "control",
+      "repelled": true,
+      "detail": {
+        "request_ok": true,
+        "why": "ok",
+        "effects": 1
+      }
+    },
+    {
+      "name": "no-ticket (the floor)",
+      "finding": "reference-monitor",
+      "repelled": true,
+      "detail": {
+        "endpoint": [
+          false,
+          "ticket.missing"
+        ]
+      }
+    },
+    {
+      "name": "forged ticket (non-governor key)",
+      "finding": "reference-monitor",
+      "repelled": true,
+      "detail": {
+        "endpoint": [
+          false,
+          "ticket.bad_signature"
+        ]
+      }
+    },
+    {
+      "name": "unlisted beneficiary",
+      "finding": "F04",
+      "repelled": true,
+      "detail": {
+        "request_ok": false,
+        "why": "gate.held_for_human",
+        "cause": "gate.beneficiary_unlisted"
+      }
+    },
+    {
+      "name": "no payer consent",
+      "finding": "F05",
+      "repelled": true,
+      "detail": {
+        "request_ok": false,
+        "why": "gate.payer_unconfirmed"
+      }
+    },
+    {
+      "name": "non-customer key as payer consent",
+      "finding": "I1",
+      "repelled": true,
+      "detail": {
+        "request_ok": false,
+        "why": "gate.payer_unconfirmed"
+      }
+    },
+    {
+      "name": "another customer's consent",
+      "finding": "I1",
+      "repelled": true,
+      "detail": {
+        "request_ok": false,
+        "why": "gate.payer_unconfirmed"
+      }
+    },
+    {
+      "name": "NaN amount",
+      "finding": "F03",
+      "repelled": true,
+      "detail": {
+        "rejected_at": "serialization",
+        "error": "Out of range float values are not JSON compliant: nan"
+      }
+    },
+    {
+      "name": "over-budget via small rule",
+      "finding": "budget",
+      "repelled": true,
+      "detail": {
+        "request_ok": false,
+        "why": "gate.held_for_human"
+      }
+    },
+    {
+      "name": "parameter tamper after mint",
+      "finding": "binding",
+      "repelled": true,
+      "detail": {
+        "endpoint": [
+          false,
+          "ticket.params_mismatch"
+        ]
+      }
+    },
+    {
+      "name": "ticket replay (twice)",
+      "finding": "F11",
+      "repelled": true,
+      "detail": {
+        "effects": 1,
+        "second": [
+          false,
+          "ticket.replay"
+        ]
+      }
+    },
+    {
+      "name": "concurrent double dispatch",
+      "finding": "F11",
+      "repelled": true,
+      "detail": {
+        "effects": 1
+      }
+    },
+    {
+      "name": "stale-epoch ticket",
+      "finding": "epoch",
+      "repelled": true,
+      "detail": {
+        "endpoint": [
+          false,
+          "ticket.stale_epoch"
+        ]
+      }
+    },
+    {
+      "name": "expired beneficiary registry",
+      "finding": "F06",
+      "repelled": true,
+      "detail": {
+        "request_ok": false,
+        "why": "gate.beneficiary_no_registry",
+        "cause": null
+      }
+    },
+    {
+      "name": "rolled-back beneficiary registry",
+      "finding": "F06",
+      "repelled": true,
+      "detail": {
+        "rollback_accepted": false,
+        "request_ok": false,
+        "why": "gate.held_for_human"
+      }
+    }
+  ]
+}
