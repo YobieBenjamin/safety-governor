@@ -90,7 +90,7 @@ echo "account: $OWNER"
 # 3. The move: a clone still in $HOME goes to WORK. The program, if it is running from the old
 #    place with agents in flight, is left to finish them first (its ten-minute tick says how many
 #    are running); then it is stopped, the clones move, and it is started again from WORK.
-program_pids() { pgrep -f "tools/agents/run_program.sh" 2>/dev/null | while read -r p; do [ "$p" = "$$" ] || ps -o command= -p "$p" 2>/dev/null | grep -q -- "--mirror-job" || echo "$p"; done; }
+program_pids() { { pgrep -f "tools/agents/run_program.sh" 2>/dev/null || true; } | while read -r p; do [ "$p" = "$$" ] || ps -o command= -p "$p" 2>/dev/null | grep -q -- "--mirror-job" || echo "$p"; done; }
 kill_tree() { local c; for c in $(pgrep -P "$1" 2>/dev/null || true); do kill_tree "$c"; done; kill -TERM "$1" 2>/dev/null || true; }
 # An agent is a claude process the launchers started with --add-dir <clone>/.agents/wave-N; nothing a
 # person runs by hand carries that. The watchdog before 22 October signalled the shell around the
