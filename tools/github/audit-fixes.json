@@ -1,0 +1,512 @@
+{
+  "labels": [
+    {
+      "name": "audit-fix",
+      "color": "b60205",
+      "description": "Fix for an external-audit finding (2026-10-23)"
+    },
+    {
+      "name": "severity:high",
+      "color": "d93f0b",
+      "description": "Audit severity high"
+    },
+    {
+      "name": "severity:medium",
+      "color": "fbca04",
+      "description": "Audit severity medium"
+    },
+    {
+      "name": "wave:1",
+      "color": "0e8a16",
+      "description": "Authority contract"
+    },
+    {
+      "name": "wave:2",
+      "color": "0e8a16",
+      "description": "Honest experiments and claims"
+    },
+    {
+      "name": "wave:3",
+      "color": "0e8a16",
+      "description": "Persistence and hardware contracts"
+    },
+    {
+      "name": "wave:4",
+      "color": "0e8a16",
+      "description": "Build evidence and governance"
+    },
+    {
+      "name": "status:open",
+      "color": "ededed",
+      "description": "Not yet fixed"
+    }
+  ],
+  "issues": [
+    {
+      "id": "F01",
+      "title": "F01 - bind a sealed weight package to a publisher-signed manifest digest",
+      "body": "**Claim.** An approved model label must not be attachable to different sealed weights.\n\n**Read first.** `govsim/sealing.py:60-81`, `govsim/governor.py:549-566` and `:586-604`, `govsim/gpu.py:145-155`, `govsim/cluster.py:303-304`, `govsim/origin_gate.py:99-109`.\n\n**Concrete failure.** With model M already in `sealed_models`, keep a genuine publisher manifest and evaluator statement for M. Choose different weight bytes W', make a new DEK, encrypt W', label the package M and set its `plain_sha256` to hash(W'). Seal the new DEK to the governor's public KEK (anyone with the public key can). BEGIN_MODEL approves the authentic M manifest; KEY_RELEASE approves M and unwraps the supplied DEK; the GPU checks W' against the hash supplied in that same substituted package and runs W' as M. AES-GCM proves integrity of the chosen package under the chosen key; it does not prove those bytes were approved.\n\n**Fix.** Define one canonical publisher-signed manifest that commits to the exact weight bytes (commitment, total length, chunk ordering, format, execution-relevant config). Bind the evaluator statement, policy entry, DEK envelope and lease to that manifest digest. The protected GPU loader must verify the decrypted content against the authenticated commitment before enabling execution. A manifest that commits only to a name or version is insufficient.\n\n**Discriminating test** (`tests/test_f01_weight_manifest_binding.py`). With one valid signed/evaluated manifest, replace ciphertext, DEK and plaintext hash together while preserving the approved label; execution must stay disabled. A genuine package must succeed. A package for another valid manifest, relabelled, must fail. Cover truncation, chunk duplication and config substitution as separate mutations of the same authenticated object.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f01_weight_manifest_binding.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f01_weight_manifest_binding.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F02",
+      "title": "F02 - one current-policy validity predicate for release, renewal and commit",
+      "body": "**Claim.** A revoked GPU must not obtain a fresh key release, and a replayed lease must not revive execution.\n\n**Read first.** `govsim/governor.py:269-273`, `:538-540`, `:578-633`; `govsim/gpu.py:122-173`; `govsim/origin_gate.py:63-76` and `:126-147`.\n\n**Concrete failure.** Attest GPU A, begin M, get a 30s lease. Commit a valid new policy that keeps M but revokes A. The governor zeroizes the key but keeps A's cached attestation. A fresh host-signed KEY_RELEASE under the new epoch is accepted: `_attested()` checks only cache existence and expiry, and KEY_RELEASE checks the model allowlist but not current GPU revocations, so it issues a new lease. Releasing repeatedly can extend operation through the one-hour attestation cache. Separately, replaying an old authentic key box and lease before its original expiry restores execution, because `install_key()` has no epoch/revocation floor.\n\n**Fix.** One current-policy validity predicate for every attestation-dependent operation: check current chip and signing-key revocations, reference validity and model authorization on release, renewal and relevant commits; invalidate affected caches on policy change. At the GPU, keep a protected authorization generation or revocation floor, advance it before zeroization, and reject older leases and key boxes. Bind each box to its lease/session and enforce expiry through a trusted timer, including while idle.\n\n**Discriminating test** (`tests/test_f02_revoke_release.py`). Revoke A while M stays allowed: a fresh release with a new sequence, current epoch, authentic envelope and still-live cache must be denied with no key material; a replayed old box/lease after revocation must be denied; a non-revoked control still works; an idle lease expires without calling run_tokens().\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f02_revoke_release.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f02_revoke_release.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F03",
+      "title": "F03 - reject NaN/infinity/bool before any budget reservation [fixed in container]",
+      "body": "**Status: fixed in the container bundle; this issue is to verify and, if already closed in source, confirm.** NaN < min, NaN > max, NaN < 0 and total + NaN > limit are all False, so an unguarded ledger reserves NaN and the aggregate stops rejecting overspend.\n\n**Fix applied.** `crypto.canonical` uses `allow_nan=False`; a shared `crypto.finite_number` rejects bool, NaN and infinity; the ledger (`reserve`), the typed constraint check (`policy.check_constraints`, min/max) and the governor budget branch all use it.\n\n**Acceptance.** `tests/test_f03_nan_budget.py` must pass. If the source already carries the fix, confirm the test is present and passing and record that; do not duplicate it.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f03_nan_budget.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f03_nan_budget.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F04",
+      "title": "F04 - enforce the beneficiary registry on the small-payment path",
+      "body": "**Claim.** A new beneficiary must not receive automatic payment authority; the rulebook's declared 'new beneficiary is a hold' must actually hold.\n\n**Read first.** `govsim/cluster.py:140-175` and `:218-225`, `govsim/policy.py:218-260`, `govsim/endpoints.py:129` and `:142-186`, `govsim/road_reachability.py:32-59`, `results/road-reachability.md:15-37`.\n\n**Concrete failure.** `payments.transfer.small` checks amount and currency, not the payee; its `inputs=[\"beneficiary-registry\"]` declaration performs no lookup, and the payment endpoint's device-check list is empty. A 100 USD transfer to an unlisted account gets a ticket and executes.\n\n**Fix.** Enforce beneficiary admission at the governor and endpoint using a signed, current registry: a listed beneficiary takes the auto path; an unknown beneficiary enters an explicit enrollment/approval path (a hold) or is denied. Give the action an explicit destination field. (The A1 audit classification part of this finding is F04-audit, wave 2.)\n\n**Discriminating test** (`tests/test_f04_beneficiary.py`). A 100 USD payment to a new beneficiary is held or denied, while a listed beneficiary still works. An unlisted beneficiary never takes the auto path.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f04_beneficiary.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f04_beneficiary.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F05",
+      "title": "F05 - payer consent and operator approval are separate conjunctive predicates",
+      "body": "**Claim.** Turning on human approval must not silently turn off the payer's own confirmation.\n\n**Read first.** `govsim/cluster.py:135-144`, `govsim/governor.py:698-723` and `:892-922`, `govsim/customer_confirm.py:26-85`, `results/customer-confirm.md:23-25`.\n\n**Concrete failure.** Enable both `payer_confirm_payments=True` and `sandbox=True`. The small-payment rule keeps its payer-confirmation requirement but becomes a human-mode rule, and the request handler explicitly skips `_payer_confirmed()` in human mode (`... and req_mode != \"human\"`). A hold is created without the payer's signature; the operator quorum approves; `_cmd_approve()` mints the ticket without checking payer consent.\n\n**Fix.** Represent payer consent and operator approval as separate conjunctive predicates. Retain the consent commitment and expiry with the hold and revalidate it against the current registry before release/commit. If an emergency role may override payer consent, make that a separate, logged permission. Reject unsupported combinations at policy load.\n\n**Discriminating test** (`tests/test_f05_payer_consent.py`). All four combinations of sandbox and payer-confirm. With both on, operator quorum alone must not mint a ticket; adding the payer's current request-bound confirmation permits it; an expired confirmation during the hold forces the specified reauthorization.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f05_payer_consent.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f05_payer_consent.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F06",
+      "title": "F06 - validate registries and policy expiry against trusted time on every use",
+      "body": "**Claim.** Installed authority must not outlive its freshness rules.\n\n**Read first.** `govsim/governor.py:282-291`, `:821-836`, `:1306-1336`, `:244-245`; `govsim/policy.py:248-258`; `docs/25-the-rulebook-and-the-board.md:229-231`; `tests/test_h07_register.py:25-30`.\n\n**Concrete failure.** Install a genuinely signed recipient registry for A expiring at t+1. Installation computes `stale=False`. At t+2 a message to A still takes the auto path, because the rule consults the cached boolean, not the clock. The customer registry has the same defect. `install_list()` has no per-list version/high-water check, so an older still-unexpired list can replace a newer one. An installed policy can run past its own expiry while other liveness holds.\n\n**Fix.** Store authenticated list identity, version, expiry and issuer; compare expiry with trusted time on every relevant use; keep durable per-list version floors; filter revoked signers. Bind held decisions to their authority versions. Enforce policy expiry as a specified fail-closed transition, not an undocumented continued-running exception.\n\n**Discriminating test** (`tests/test_f06_registry_aging.py`). Success before a 1s list expiry, hold/denial afterward without reinstalling; same for payer registries and held approvals; replacing a newer list with an older signed list is refused; a revoked signer is rejected; heartbeats alive across policy expiry force the declared safe transition before another effect.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f06_registry_aging.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f06_registry_aging.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F10",
+      "title": "F10 - response commitments are immutable and scoped to one identity",
+      "body": "**Claim.** One unsampled response ID must not suppress all later random audit draws.\n\n**Read first.** `govsim/governor.py:1032-1044`, `:674-676`, `:732-738`, `:769-773`; `govsim/cluster.py:420-424` and `:450-455`; `tests/test_h18_oversight.py:22-65`.\n\n**Concrete failure.** Find a response ID that released without an escrow receipt. Submit different response bytes under that same ID: `_record_stream()` overwrites hashes but keeps the earlier `sampled=False` (it uses `setdefault()` and only draws when unset), so no receipt is required and there is never another draw for that identifier.\n\n**Fix.** Make each response commitment immutable and scoped to workload instance, epoch, authenticated session and response ID. A different hash under an existing identity is rejected. Record terminal release state. A retry keeps its commitment's draw; new content gets a new commitment and a new draw.\n\n**Discriminating test** (`tests/test_f10_response_commitment.py`). With a deterministic RNG that returns unsampled once then sampled: release the first response, replace its bytes under the same ID, require rejection or a fresh sample tied to a new identity; a legitimate retry cannot change the committed hash or erase a sampled result.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f10_response_commitment.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f10_response_commitment.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F11",
+      "title": "F11 - atomic admit-and-consume at the endpoint",
+      "body": "**Claim.** At-most-once endpoint execution must not depend on an unstated single-thread assumption.\n\n**Read first.** `govsim/endpoints.py:160-186`, `govsim/governor.py:932-956`, `hardware_ref` has the locked pattern at `endpoints.py:96-117` (reference).\n\n**Concrete failure.** For one valid unbudgeted messaging ticket, callers A and B both complete `admit()` before either writes the consumed set; both persist the same consumed entry and both append an effect, because this ticket has no reservation to consume and no central single-use record.\n\n**Fix.** Specify the endpoint concurrency contract and make admission plus durable consumption atomic through a lock, a transactional compare-and-set, or an equivalent. Preserve atomic ownership through the effect-dispatch decision. For an external provider, map the ticket to a provider-enforced idempotency key and define crash reconciliation; a local consumed flag cannot make an arbitrary remote side effect transactional.\n\n**Discriminating test** (`tests/test_f11_atomic_consume.py`). Force two calls to pause right after successful admission, release both; exactly one crosses the effect boundary. Use a ticket with no budget reservation. Test recovery after consumption but before the outcome is known.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f11_atomic_consume.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f11_atomic_consume.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F07",
+      "title": "F07 - the attestation token must bind an ephemeral request-signing key",
+      "body": "**Claim.** An attested workload's later requests must not be forgeable by anyone holding a copy of its token (it must not be a bearer credential).\n\n**Read first.** `hardware_ref/attest.py:272-292`, `hardware_ref/gate.py:167-180`, `hardware_ref/system.py:174-181` and `:89-95`, `hardware_ref/attacks.py:697-703`.\n\n**Concrete failure.** Copy an authentic token and its public measurement string; from another process submit a permitted automatic http.post with a fresh request ID. The gate verifies the token signature, expiry and measurement-string equality (supplied by the caller) but requires no signature from a key bound to the attested workload.\n\n**Fix.** Include an attested ephemeral request-signing key (or authenticated channel binding) in the token, with a gate audience and session identity. Require a signature over the canonical action, parameters, sequence, audience and policy context. Define how revocation and reference changes invalidate the session. Reuse SG's host-signed-command pattern rather than keeping two origin guarantees.\n\n**Discriminating test** (`tests/test_f07_token_binding.py`). An adversarial process with only the public token and measurement fails; a request signed by the attested session key succeeds; cross-gate, cross-session and replay all fail.\n\n*(A container bundle may already carry this fix; if so, confirm the test exists and passes.)*\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f07_token_binding.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "hardware-and-silicon",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f07_token_binding.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F08",
+      "title": "F08 - persist the revocation high-water mark across verifier restart",
+      "body": "**Claim.** A reconstructed verifier must not accept hardware that was revoked before it restarted.\n\n**Read first.** `hardware_ref/attest.py:35-46`, `:98-140`, `:61-74`, `:223-224`, `:242-293`; `tests/test_audit_2026_10_22.py:142-161`; `hardware_ref/system.py:139-166`.\n\n**Concrete failure.** Verifier V installs L2 revoking device D, then is destroyed. V2 is built with the same pinned roots and reloads the older authentic R1/L1; `_high_water` initializes empty, so V2 accepts the old documents and then accepts D on a fresh challenge.\n\n**Fix.** Persist each active configuration with its authenticated version/digest high-water mark and restore atomically before any appraisal. A new install needs an authenticated minimum version, a retained checkpoint, or a bootstrap protocol. Block issuance if recovery cannot establish freshness.\n\n**Discriminating test** (`tests/test_f08_cold_verifier.py`). Revoke an instantiated device, persist, destroy and reconstruct the verifier, supply the old authentic documents: appraisal stays blocked or rejects D; current documents and an unrevoked device succeed; include same-version conflicting documents and a power interruption between the two persistence steps.\n\n*(A container bundle may already carry this fix; if so, confirm the test exists and passes.)*\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f08_cold_verifier.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "hardware-and-silicon",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f08_cold_verifier.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F22",
+      "title": "F22 - the audit verifier needs a pinned key and a retained checkpoint",
+      "body": "**Claim.** An authenticated audit verdict must not be forgeable with the export's own trust anchor, nor satisfiable by a stripped authentic prefix.\n\n**Read first.** `hardware_ref/audit.py:211-212` and `:225-269`, `hardware_ref/cli.py:152-175`, `hardware_ref/attacks.py:557-595`, `tests/test_audit.py:32-65`, `docs/THREAT_MODEL.md:84-91`.\n\n**Concrete failure.** (1) Replace the whole export with records signed by an attacker key and put that key in `doc[\"pub\"]`; `verify_export()` trusts the key from the same file it verifies, so it prints OK. (2) Keep the real key and a genuine prefix, delete the tail and all checkpoints; the chain verifier accepts the prefix and the checkpoint loop runs zero times, so it prints OK.\n\n**Fix.** Authenticated verification takes an independently pinned gate key and log identity plus a retained authenticated minimum checkpoint, and verifies consistency with it. Keep a self-consistency mode but label its result explicitly as internal consistency, not authenticated history. A pinned key alone still permits prefix rollback.\n\n**Discriminating test** (`tests/test_f22_audit_verifier.py`). Under a real pinned key and retained checkpoint, reject the attacker-key replacement, the stripped-prefix export and an older authentic export; accept the current history and a valid append-only extension; test self-consistency mode separately.\n\n*(A container bundle may already carry this fix; if so, confirm the test exists and passes.)*\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f22_audit_verifier.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:1",
+        "status:open"
+      ],
+      "repo": "hardware-and-silicon",
+      "wave": 1,
+      "accept": "python3 -m pytest -q tests/test_f22_audit_verifier.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F12",
+      "title": "F12 - account every permitted channel against the containment ceiling",
+      "body": "**Claim.** A finite-byte containment ceiling must account for every externally observable channel, including message bodies and other permitted parameters.\n\n**Read first.** `govsim/containment.py:43-64`, `govsim/cluster.py:162-164` and `:219-225`, `govsim/governor.py:704-725`, `audit/wave-2/P3.revise-2.comment.md:9-18`, `results/containment.md:35-40`.\n\n**Concrete failure.** While RUN, consume the output allowance, then send `message.send` to a listed recipient with an arbitrary string in an unconstrained body. The auto rule bounds the recipient but not length/bytes/rate, and the endpoint adds no check, so the model has no finite byte ceiling on this channel. P3b measures neither this path nor information in other parameters, adds a one-time unpresented allowance to a per-hour rate, and describes a rack ceiling from a single governor.\n\n**Fix.** Maintain a complete inventory of observable channels (typed actions and downstream relays); define schemas, payload bounds and destination semantics; count all applicable bytes against a shared accounting scope; an unbounded channel must make the finite-ceiling assertion fail. Report burst allowance and sustained rate separately.\n\n**Discriminating test** (`tests/test_f12_containment_channels.py`). Consume the output allowance, then deliver messaging tickets while counting bytes at the receiving endpoint; across all governors and approved forwarders the finite-ceiling assertion must fail until the body channel is bounded, and hold once it is.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f12_containment_channels.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:2",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 2,
+      "accept": "python3 -m pytest -q tests/test_f12_containment_channels.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F13",
+      "title": "F13 - P3b must install the policies it names and measure delivered bytes",
+      "body": "**Claim.** The containment experiment must measure the policies it claims and bytes actually released, not signing calls under the default policy.\n\n**Read first.** `govsim/containment.py:32-64` and `:91-110`, `govsim/cluster.py:89-104`, `:268-277`, `:420-468`, `results/containment.md:11-33`, `tests/test_p3b_containment.py:6-15`.\n\n**Concrete failure.** `egress_ceiling()` builds the rack (whose constructor already signed and loaded a policy), then changes `r.policy_kw` and calls `bring_up()`, which does not replace the policy, so both the supposed sandbox and busy-service cases run the reference policy. The recorded 6,135 and 26,200 bytes are exactly the loop and default-policy values. `sign_output()` records a provenance signature; it does not release bytes through egress.\n\n**Fix.** Supply policy parameters at construction, or sign/commit/reload after changing them, and assert the installed policy identity and each limit. Measure deliveries at the enforced boundary through the complete release path. Attempt every claimed prohibited action. Retract the 50-year/centuries/11-day interpretations pending corrected measurement.\n\n**Discriminating test** (`tests/test_f13_p3b_policy_and_egress.py`). Three deliberately distinct policies, with the live policy identity and limits asserted; the 4,096-byte case never exceeds its signed allowance; an actual sandbox peer request is attempted; a signature with no egress release contributes zero delivered bytes.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f13_p3b_policy_and_egress.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:2",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 2,
+      "accept": "python3 -m pytest -q tests/test_f13_p3b_policy_and_egress.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F23",
+      "title": "F23 - price the per-response-release signature on the complete path",
+      "body": "**Claim.** The engine-budget figure must include the signature on every response-release ticket, not only the batched record signatures.\n\n**Read first.** `govsim/bench.py:21-36` and `:48-72`, `govsim/governor.py:880-889` and `:992-994`, `govsim/cluster.py:445-468`, `docs/04-specification.md:296-299`, `blog/08-the-chip-that-says-no-7-scaling-no.md:23` (HS), `tests/test_h09_overhead.py:1-20`.\n\n**Concrete failure.** The benchmark calls `sign_output()` and prices batched record signatures, but never follows the response-release path, which requests a ticket for every response and signs every ticket (counted as `ops[\"ticket\"]`, not `ops[\"sign\"]`). Including those tickets, the modelled load is well over one engine at 100 tokens/response, versus the advertised ~34 percent.\n\n**Fix.** Instrument every cryptographic operation on the full request-to-effect path and price the actual engine. If capacity fails, specify faster hardware, independently verifiable batch authorization with atomic per-item consumption, or a keyed endpoint MAC. Include hashing, verification, durable state, queues and overload behavior; a signature that arrives after release cannot authorize it.\n\n**Discriminating test** (`tests/test_f23_response_signature_cost.py`). Run the full response API at 100 and 500 tokens/response across all slots; independently count tickets, signatures, verifications and releases and reconcile with the model; the reported utilization must include the release-ticket signatures.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f23_response_signature_cost.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:2",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 2,
+      "accept": "python3 -m pytest -q tests/test_f23_response_signature_cost.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F04-audit",
+      "title": "F04-audit - A1 must not call an enum a destination boundary",
+      "body": "**Claim.** The reachability audit must not classify a rule as confined because a currency enum contains `in`, and its fixpoint must model external effects.\n\n**Read first.** `govsim/road_reachability.py:47-59`, `:75-79`, `:117-127`, `results/road-reachability.md:15-37`.\n\n**Concrete failure.** `classify()` calls a rule confined if any field has `in`/`in_list`/`not_in_list`; a `currency in [USD]` enum qualifies, so the unbounded-beneficiary payment rule is labelled confined. The supposed fixpoint calls `attempt()`, which only requests a ticket, then repeats without executing effects or modelling new accounts/routes.\n\n**Fix.** Confinement requires a destination allowlist of the parties that may receive the effect, not any enum and not the complement of a denylist. Unknown effect semantics and unrelated enums are unconfined. A reachability claim requires state transitions representing the external effects of allowed actions (depends on F04's registry enforcement).\n\n**Discriminating test** (`tests/test_f04_audit_reachability.py`). A rule with only a currency/product/munition enum stays unconfined; a sequence where an approved service creates a credential or forwards to another service is detected as new reachable authority.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f04_audit_reachability.py\n```\n\n**Depends on.** F04 (merged first).",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:2",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 2,
+      "accept": "python3 -m pytest -q tests/test_f04_audit_reachability.py",
+      "backend": "cloud+local",
+      "deps": [
+        "F04"
+      ]
+    },
+    {
+      "id": "F09",
+      "title": "F09 - the observer must hydrate policy context from authoritative sources",
+      "body": "**Claim.** A signed risk verdict must not be computable from facts the requester supplies about itself.\n\n**Read first.** `observer/safety_observer/observer.py:26-46`, `observer/safety_observer/signals.py:136-165`, `observer/safety_observer/scoring.py:25-62`, `observer/safety_observer/main.py:28-32`.\n\n**Concrete failure.** For a 900 USD payment, an authoritative limit of 1,000 gives risk ~0.356 (above the 0.3 threshold); but a caller declaring a limit of one billion, payee_known=true and zero recent actions makes the observer sign risk zero. Context is excluded from the subject hash, so the gate sees a genuine signature over the unchanged request core and a low score.\n\n**Fix.** Hydrate policy limits, registries and history from authenticated authoritative services inside the observer trust boundary; treat caller context as untrusted hints; bind the result to the request, policy epoch, authoritative context digest/version and scoring configuration.\n\n**Discriminating test** (`observer/tests/test_f09_context_trust.py`). Hold the request constant and vary every caller context field: caller assertions must not reduce certified risk; changing authoritative context through its real interface yields an auditable new version; the old verdict after a context change is denied or forces reappraisal.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q observer/tests/test_f09_context_trust.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:2",
+        "status:open"
+      ],
+      "repo": "safety",
+      "wave": 2,
+      "accept": "python3 -m pytest -q observer/tests/test_f09_context_trust.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F24",
+      "title": "F24 - separate structural, observer-accuracy and harm-reduction claims",
+      "body": "**Claim.** A structurally valid action can still be harmful; the three claims (structural enforcement, observer accuracy, end-to-end harm reduction) must be stated with separate evidence, and the public text must not conflate them.\n\n**Read first.** `EXPERIMENTS.md:21-28`, `docs/24-the-ladder.md:125`, `docs/19-how-solid-is-the-theory.md`, `audit/external-2026-10-22/STATUS.md:63-69`.\n\n**Concrete failure.** A harmful action can satisfy schema, budget, signatures and destination, and two honest witnesses can make the same semantic mistake and approve it. Claims that defeating dual witnesses requires compromising both keys, or that failures appear only as holds and halts rather than misses, overstate what the structure guarantees.\n\n**Fix.** In the docs and EXPERIMENTS.md, separate the three claims explicitly, each scoped to its evidence; mark the structural guarantee as enforcement-of-a-verdict, not verdict-truth. Add a short machine-checkable statement of the three-claim split that a test can assert exists.\n\n**Discriminating test** (`tests/test_f24_claims_separation.py`). Assert the docs carry the three separated claims and that no doc states the dual-witness or holds-not-misses claim without the harm-residual caveat.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f24_claims_separation.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:2",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 2,
+      "accept": "python3 -m pytest -q tests/test_f24_claims_separation.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F25",
+      "title": "F25 - correct min-cut Claim 2 to require aggregate disjoint paths",
+      "body": "**Claim.** Pairwise connectivity does not prove a large aggregate separator; Claim 2 must match the already-corrected Claim 3.\n\n**Read first.** `docs/23-there-is-no-kill-switch.md:44-48`, `proofs/no_global_kill_switch.py:141-193` and `:244-290`.\n\n**Concrete failure.** 12 sources, each to two shared hubs, each hub to all 10 effectors: every source-effector pair has two vertex-disjoint paths, yet removing the two hubs disconnects everything. A size-two separator beats the pairwise bound, and bystanders avoid the hubs so collateral is not implied.\n\n**Fix.** State and justify the required aggregate-connectivity assumption, or restrict Claim 2 to the tested graph family; bring it into agreement with the corrected Claim 3; add the two-hub graph and shared-controller topologies as a program counterexample.\n\n**Discriminating test** (`tests/test_f25_mincut.py`). The two-hub graph is admitted as a counterexample to the old universal Claim 2; the corrected statement holds or explicitly excludes it by a justified assumption; the corrected Claim 3 wording is preserved.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f25_mincut.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:medium",
+        "wave:2",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 2,
+      "accept": "python3 -m pytest -q tests/test_f25_mincut.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F27",
+      "title": "F27 - fix the watermark prose and the attribution metric",
+      "body": "**Claim.** Public claims must match the measured result, and attribution must be separated from mere detector firing.\n\n**Read first.** `README.md:113-127`, `textgrain_ref/harness.py:208-211` and `:272`; the HS blog line `blog/06-...:45` ('paraphrasing beat the watermark every time').\n\n**Concrete failure.** The blog says paraphrasing beat the watermark every time; the README reports 57 percent detection on the hardened real-model paraphrase case over 40 samples. `stack_attributed` counts success when a detector fires OR retrieval identifies a source OR a registry reports status, so a detector firing is counted as correct source attribution, and retrieval over the generated positive corpus does not establish open-world precision.\n\n**Fix.** Tie every public claim to its exact experiment, technique, sample count and uncertainty; separate watermark detection, source-candidate retrieval and cryptographic verification; freeze thresholds; add a large unrelated corpus and hard negatives; allow abstention; add a prose consistency check that flags 'every time' when the cited result is nonzero.\n\n**Discriminating test** (`tests/test_f27_attribution.py`). Detection and correct attribution are measured separately on positives, unrelated text and adversarial paraphrases with blinded sources; false attribution stays low at the intended corpus size; the consistency check flags the overstated prose.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f27_attribution.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:medium",
+        "wave:2",
+        "status:open"
+      ],
+      "repo": "Watermark",
+      "wave": 2,
+      "accept": "python3 -m pytest -q tests/test_f27_attribution.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F14",
+      "title": "F14 - invalidate all capabilities on a full epoch change, not a 16-bit tag",
+      "body": "**Claim.** A correctly authorized policy change must not leave a withdrawn capability usable because only the low 16 epoch bits are compared.\n\n**Read first.** `rtl/governor_rtl/epoch_reg.py:15-23`, `rtl/governor_rtl/cap_table.py:74-90`, `rtl/governor_rtl/top.py:129-132`, `docs/04-specification.md:220-228`, `rtl/formal/cap_table.sv:48-70`, `rtl/conformance/tests_blocks.py:1730-1757`.\n\n**Concrete failure.** In RUN, install a capability under full epoch 0x1234; commit quorum-authorized full epoch 0x100001234 (same low 16 bits). The table is not cleared, its tag still matches, and the old lookup returns allow=1.\n\n**Fix.** Atomically invalidate all capabilities on any full epoch change and deny grants during the transition; or store a protected generation that cannot repeat while an old entry exists, with mandatory invalidation before rollover. Define insertion/lookup priority at the commit edge.\n\n**Discriminating test.** Add a formal mutant / conformance case: install under epoch A, commit a different B with equal low 16 bits, require denial at every enforcement point; a newly authorized B entry still succeeds; revocation proven against the full generation, not the tag. The new mutant must fail against the old RTL and hold against the fix.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m rtl.conformance && python3 -m rtl.formal\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:3",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 3,
+      "accept": "python3 -m rtl.conformance && python3 -m rtl.formal",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F15",
+      "title": "F15 - a boot recovery barrier for replay and expiry state",
+      "body": "**Claim.** Reset persistence and expiry rollover must not move freshness state backward.\n\n**Read first.** `rtl/governor_rtl/monotonic.py:3-6` and `:18-31`, `rtl/governor_rtl/ticket_store.py:13-40`, `rtl/governor_rtl/top.py:129-132`, `rtl/governor_rtl/cap_table.py:81-90`, `rtl/formal/FINDINGS-a.md:21-39`.\n\n**Concrete failure.** A durable counter mark of 80 with a live counter of 100, reset to 80, moves time back; an expiry at 90 becomes fresh again; a burned ticket 0x55 burns again after reset (valid bits are volatile); a mailbox sequence passes again; an unqueried expired capability allows again after the low-32-bit microsecond clock wraps (~71.6 min).\n\n**Fix.** Enforce a boot recovery barrier: persist replay protection before releasing effects, or bind credentials to a durable boot generation; reserve future counter ranges before use; use wider expiry comparisons or a proven modular lifetime; specify torn-write and stale-storage recovery; include arbitrary resets in the proofs once the mechanism exists.\n\n**Discriminating test.** Interrupt power at each validation/durable-update/effect/ack boundary and replay old credentials and old authenticated snapshots; keep an expired unqueried capability through the time rollover; the formal run must reproduce the counterexamples against old RTL and hold against the fix (do not end on a success banner while live counterexamples remain).\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m rtl.conformance && python3 -m rtl.formal\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:3",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 3,
+      "accept": "python3 -m rtl.conformance && python3 -m rtl.formal",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F16",
+      "title": "F16 - latch mailbox context and recheck RUN at dispatch",
+      "body": "**Claim.** Mailbox completion must use the authorized context and current RUN, not mutable live fields or the RUN value captured at the doorbell.\n\n**Read first.** `rtl/governor_rtl/mailbox.py:41-59`, `rtl/formal/mailbox.sv:18-28` and `:33-51`, `rtl/formal/FINDINGS-a.md:40-44`, `rtl/formal/last-run-main.txt:146-148`.\n\n**Concrete failure.** Ring the doorbell in RUN with a valid sequence/epoch and needs_run=1; while VERIFY waits, halt the core; supply sig_done/sig_ok/signed_cmd and the mailbox still dispatches (it uses f_runok captured at the doorbell). Independently, changing frame_seq or key_slot during VERIFY is recorded at completion.\n\n**Fix.** Latch signer, sequence, command, payload digest, epoch and command-class at accept; bind verification request and response to that immutable context; recheck current RUN, epoch and revocations at dispatch; update replay state atomically with acceptance.\n\n**Discriminating test.** Vary every frame field while verification is pending, and independently force HALT or an epoch change: completion must use the original authorized context or refuse. Remove the field-stability assumption from the proof; the mutant fails on old RTL, holds on the fix.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m rtl.conformance && python3 -m rtl.formal\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:3",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 3,
+      "accept": "python3 -m rtl.conformance && python3 -m rtl.formal",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F17",
+      "title": "F17 - deny capability grants in the first HALT cycle",
+      "body": "**Claim.** No table may grant permission once the core leaves RUN, including the first HALT cycle.\n\n**Read first.** `rtl/governor_rtl/halt.py:118-123`, `rtl/governor_rtl/top.py:129-132`, `rtl/governor_rtl/cap_table.py:63-90`, `rtl/conformance/tests_blocks.py:619-629`, `rtl/formal/cap_table.sv:48-63`.\n\n**Concrete failure.** In RUN with a funded capability, assert cmd_halt; at the edge entering HALT the table samples the previous clear_all=0 and keeps its valid entry, so a matching lookup asserts allow=1 for that cycle; only the next edge clears it.\n\n**Fix.** Qualify grants immediately with !clear_all or an explicit current-RUN signal; keep synchronous erasure as cleanup; define which in-flight transactions may complete.\n\n**Discriminating test.** Hold a valid lookup across RUN-to-THROTTLE/HALT/SAFE and assert state != RUN implies !allow on every table including the first cycle; exercise command, heartbeat, loop and tamper causes with concurrent insertion.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m rtl.conformance && python3 -m rtl.formal\n```",
+      "labels": [
+        "audit-fix",
+        "severity:medium",
+        "wave:3",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 3,
+      "accept": "python3 -m rtl.conformance && python3 -m rtl.formal",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F18",
+      "title": "F18 - the CEM shaper must capture subcycle asynchronous faults",
+      "body": "**Claim.** The power-good shaper must restart qualification and hold PERST even for a fault entirely between clock edges.\n\n**Read first.** `rtl/governor_rtl/cem_sideband.py:11-21` and `:47-66`, `govsim/hardware_ref/cem.py:171-199`, `:215-224`, `:232-278`.\n\n**Concrete failure.** With power good and PERST released, pulse power-good low then high within one clock period (for example 5 ns at 50 MHz): PERST asserts combinationally during the pulse, no edge captures it, and PERST releases immediately when power-good returns, violating the minimum assertion and fresh-qualification claims.\n\n**Fix.** Use characterized asynchronous fault capture with sticky assertion and a synchronized timed release; a detected fault restarts power-good qualification and the minimum reset interval; specify the minimum detectable pulse width and clock-loss behavior; integrate the slot path.\n\n**Discriminating test** (`tests/test_f18_cem_async.py`). Sweep pulse width and phase including pulses wholly between edges and faults while the clock stops; observe PERST duration and continuous power-good time independently.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f18_cem_async.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:medium",
+        "wave:3",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 3,
+      "accept": "python3 -m pytest -q tests/test_f18_cem_async.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F19",
+      "title": "F19 - model execution events so the proof forbids replay",
+      "body": "**Claim.** The no-replay proof must observe a repeated execution, not just a post-hoc spent flag.\n\n**Read first.** `proofs/core_invariants.py:73-74`, `:131-136`, `:160-169`, `:238-258`, `docs/19-how-solid-is-the-theory.md:31-35`.\n\n**Concrete failure.** Removing `Not(s.used[a])` from the execute guard leaves P3 (executed => used) satisfied after one execution, because a second execution just rewrites the same Booleans; the encoding cannot tell a second external effect from a stutter.\n\n**Fix.** Model an execution event or per-ticket count and prove a consumed ticket cannot produce another event; distinguish ticket instances from logical action identities so legitimate repeats stay expressible.\n\n**Discriminating test** (`tests/test_f19_replay_event.py`). A guard-removal mutant makes the trace issue(T), execute(T), execute(T) falsify an at-most-once property; the unchanged implementation proves it; unrelated guard or syntax failures do not count as detection.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f19_replay_event.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:medium",
+        "wave:3",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 3,
+      "accept": "python3 -m pytest -q tests/test_f19_replay_event.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F20",
+      "title": "F20 - specify the exclusive physical path and HPM fail-safe obligation",
+      "body": "**Claim.** Block proofs do not establish a complete deployed reference monitor; the exclusive physical-control and truthful-receipt obligations must be written as explicit, testable obligations.\n\n**Read first.** `rtl/governor_rtl/top.py:192-210`, `rtl/conformance/REQUIREMENTS.md:112-139`, `docs/interfaces/01-dcscm-dcsci-ltpi.md:54-64`, `docs/research/board-lever-register.md:24-40` and `:58-59`, `proofs/commit_point.py:22-25` and `:94-118`, `docs/11-loop-timing.md:173-185`.\n\n**Concrete failure.** The LTPI path holds its last outputs when the link fails; if the governor dies with brake/reset released and power enabled, those settings can persist unless independent HPM logic forces a safe state, and the proposed HPM requirement is not enforced. The board register records grouped GPU controls and alternate switch-management interfaces.\n\n**Fix.** Write a single-deployment obligation spec (one server SKU, board revision, firmware set): name every brake/reset/power signal, its owner, its safe state, every alternate writer, and the governor-absent behavior; require HPM-local fail-safe; govern or remove every alternate management path; define what each receipt attests and its crash-recovery semantics. This wave closes the obligation as a written, referenced spec and a conformance stub, not silicon.\n\n**Discriminating test** (`tests/test_f20_obligation_recorded.py`). Assert REQUIREMENTS.md now carries the named-signal ownership table and the HPM fail-safe obligation, and that the loop and commit docs cross-reference the measurement that would discharge it.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f20_obligation_recorded.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:3",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 3,
+      "accept": "python3 -m pytest -q tests/test_f20_obligation_recorded.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F21",
+      "title": "F21 - fail-closed builds with a source-bound manifest",
+      "body": "**Claim.** A reported build success must identify a successful build of the current inputs, with no stale-output promotion.\n\n**Read first.** `hw/fpga/build.sh:35-68`, `hw/fpga/report.py:23-36` and `:70-84`, `hw/fpga/REPORT.md:3-34`, `docs/26-the-silicon-push.md:113-118` and `:127-132`.\n\n**Concrete failure.** Build dirs are reused; several stages lack explicit failure returns; callers invoke build_at in conditional command lists, suppressing errexit; a later stage can consume an old artifact and the success check only tests a bitstream's existence and timing. The committed REPORT and docs/26 disagree about whether a 30 MHz bitstream builds.\n\n**Fix.** Use fresh build dirs or remove outputs before starting; return failure after every tool error; emit an atomic manifest of source/config hashes, tools, successful stages, report hash and bitstream hash; generate status from that manifest; keep dated historical results; reconcile docs/26 with the current REPORT.\n\n**Discriminating test** (`tests/test_f21_build_manifest.py`). Seed old successful artifacts then force each stage to fail separately: every run fails without promoting old outputs; a successful manifest binds the emitted bitstream to the intended source revision.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f21_build_manifest.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:medium",
+        "wave:4",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 4,
+      "accept": "python3 -m pytest -q tests/test_f21_build_manifest.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F26",
+      "title": "F26 - governance: independence and recourse as explicit obligations",
+      "body": "**Claim.** Counting quorum keys does not establish independent interests or recourse; the public guarantee must be constrained accordingly.\n\n**Read first.** `govsim/fuses.py:69-84`, `docs/05-threat-model.md:69-72`, `docs/18-viability-and-open-questions.md:154-181` and `:201-216`, `govsim/log.py:26-48`.\n\n**Concrete failure.** One organization holding three of five keys signs a policy that loosens a protected rule and assigns convenient observer keys; the chip accepts three valid signatures. Or the operator withholds logs and controls all checkpoints, so an affected party cannot contest.\n\n**Fix (docs + a quorum-across-classes option).** Specify principal classes and custody; where independence is required, enforce a quorum across enrolled classes, not a key count; define emergency authority, rotation, compromise recovery; give security-weakening updates a challengeable, delayed process; define authenticated log access, independent checkpoint retention and a contest process. Record these as obligations that constrain the public claim.\n\n**Discriminating test** (`tests/test_f26_governance_recorded.py`). A policy change using several keys from one principal is rejected where cross-principal approval is mandatory (the quorum-across-classes option); the docs carry the independence and recourse obligations.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f26_governance_recorded.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:high",
+        "wave:4",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 4,
+      "accept": "python3 -m pytest -q tests/test_f26_governance_recorded.py",
+      "backend": "cloud+local",
+      "deps": []
+    },
+    {
+      "id": "F28",
+      "title": "F28 - write the false-halt and review economics as an acceptance envelope",
+      "body": "**Claim.** The false-halt and human-review economics have no demonstrated operating envelope; the claims must say so and define budgets.\n\n**Read first.** `docs/18-viability-and-open-questions.md:126-133` and `:158-165`, `docs/11-loop-timing.md:173-185`.\n\n**Concrete failure.** A shared 72-GPU halt domain turns one local false alarm into 72 GPUs of downtime; lost GPU-time grows roughly as the square of the domain for a fixed recovery; a million benign decisions/day at a 1 percent false-hold rate is ~167 staff-hours/day. None of this is measured.\n\n**Fix (docs).** Set separate acceptance budgets for false holds, false halts, legitimate denials, recovery time and lost useful work; define the smallest safe failure domain and the recovery process; name the measurements (rack trial, staffed gateway pilot) that would discharge them; state that a zero-observed result is only a Poisson upper bound.\n\n**Discriminating test** (`tests/test_f28_economics_recorded.py`). Assert docs/18 now carries the acceptance-budget table and the measurement plan, and that no doc states a false-halt or overhead figure as measured.\n\n**How to work this finding.** Defensive hardening of our own code only; never write offensive tooling. Reproduce the gap as a NEW test that FAILS on current source and PASSES after your fix, at the acceptance path named below. Do not weaken, skip or delete any existing test. Keep the change surgical and in the files named. No em dashes. Commit as Yobie with a message that names the finding id. If the fix needs a bigger interface change than is safe to make surgically, implement the smallest correct version and record precisely what remains in EXPERIMENTS.md with the failing output.\n\n**Acceptance command (the launcher runs this after you finish).**\n```\npython3 -m pytest -q tests/test_f28_economics_recorded.py\n```",
+      "labels": [
+        "audit-fix",
+        "severity:medium",
+        "wave:4",
+        "status:open"
+      ],
+      "repo": "safety-governor",
+      "wave": 4,
+      "accept": "python3 -m pytest -q tests/test_f28_economics_recorded.py",
+      "backend": "cloud+local",
+      "deps": []
+    }
+  ]
+}

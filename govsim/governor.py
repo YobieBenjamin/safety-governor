@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The Safety Governor: one instance per GPU slot.
 
 Everything in ``docs/01-architecture.md`` "Blocks" is here or in a module this one owns.
@@ -19,7 +21,7 @@ from collections import Counter
 from typing import Any
 
 from . import reasons
-from .crypto import SigningKey, VerifyKey, canonical, digest, hmac_sha256, random_id, verify_any, verify_object
+from .crypto import SigningKey, VerifyKey, canonical, digest, finite_number, hmac_sha256, random_id, verify_any, verify_object
 from .endpoints import BRICKED, DescriptorChecker, INTEGRATED_POINTS, RACK_POINTS, Switch
 from .fuses import Fuses, PRODUCTION
 from .ledger import Ledger
@@ -707,7 +709,7 @@ class Governor:
         if rule.get("budget"):
             b = rule["budget"]
             amount = params.get(b["param"])
-            if not isinstance(amount, (int, float)) or amount < 0:
+            if not finite_number(amount) or amount < 0:   # reject bool, NaN and infinity before reserving (F03)
                 return self._deny("request", reasons.GATE_BUDGET + ".amount_invalid", request_hash=rhash)
             ok, rid, why = self._reserve(b["key"], amount, b["limit"], b["window_s"], now, TICKET_TTL_S + rule.get("delay_s", 0.0))
             if not ok:

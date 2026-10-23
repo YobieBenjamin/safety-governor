@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Hashing, signing and key derivation for the model.
 
 Ed25519 everywhere, the same choice as the reference stack. Production silicon uses ECDSA
@@ -16,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import secrets
 from typing import Any, Mapping
 
@@ -30,7 +33,16 @@ class SignatureError(Exception):
 
 
 def canonical(obj: Any) -> bytes:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    # allow_nan=False: NaN and +/-Infinity are not valid JSON and must never be signed or hashed.
+    # A payload carrying a non-finite number raises here, so it cannot be turned into a signed
+    # object; the governor re-canonicalizes on verification, so such a request fails to verify (F03).
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
+
+
+def finite_number(v: Any) -> bool:
+    """True only for a real, finite int or float. Rejects bool (a bool is an int in Python), NaN and
+    the infinities, which otherwise slip past ordinary ``<`` / ``>`` budget and constraint checks (F03)."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def sha256(data: bytes) -> str:

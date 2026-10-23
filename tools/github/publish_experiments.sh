@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # Publish the chip program's experiments to GitHub: labels and one issue per experiment, in the
 # repository each experiment belongs to, from tools/github/experiments.json. Idempotent: labels
 # are created or updated, and an issue whose title already exists is updated, not duplicated.
@@ -11,7 +13,7 @@
 # Needs: gh (logged in as YobieBenjamin), python3, git. Run from any directory.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; . "$HERE/../agents/paths.sh"   # WORK: where the clones live
-SPEC="$HERE/experiments.json"
+SPEC="${EXPERIMENTS_SPEC:-$HERE/experiments.json}"   # override to publish a different spec, e.g. audit-fixes.json
 OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 DRY=0; BUNDLES=""
 while [ $# -gt 0 ]; do

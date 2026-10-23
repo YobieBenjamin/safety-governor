@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The policy image: rules, keys, reference values, the assumptions register, k-of-n
 signatures and the epoch. ``docs/04-specification.md`` section 4.
 
@@ -12,7 +14,7 @@ import copy
 from typing import Any, Iterable
 
 from . import reasons
-from .crypto import SigningKey, VerifyKey, digest, verify_object
+from .crypto import SigningKey, VerifyKey, digest, finite_number, verify_object
 
 # Buffer classes at the integrated tier, and where each class may go through the copy engines
 # and the peer MMU. Scopes: "none" (never leaves the GPU), "roster" (roster peers only), "host"
@@ -239,6 +241,8 @@ def check_constraints(rule: dict, params: dict, lists: dict[str, Any]) -> tuple[
         if name not in params:
             return False, f"{reasons.GATE_CONSTRAINT}.{name}.missing"
         v = params[name]
+        if ("min" in c or "max" in c) and not finite_number(v):   # NaN/inf/bool pass every < / > test otherwise (F03)
+            return False, f"{reasons.GATE_CONSTRAINT}.{name}.not_a_finite_number"
         if "min" in c and v < c["min"]:
             return False, f"{reasons.GATE_CONSTRAINT}.{name}.below_min"
         if "max" in c and v > c["max"]:

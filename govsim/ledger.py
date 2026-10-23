@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Budgets, reservations, rate windows and the replay store, all durable.
 
 Requirements R11 and R12. ``reserve`` is the check-and-reserve half of the transaction;
@@ -7,7 +9,7 @@ from __future__ import annotations
 
 import threading
 
-from .crypto import random_id
+from .crypto import finite_number, random_id
 from .store import Store
 
 
@@ -34,7 +36,7 @@ class Ledger:
     def reserve(self, key: str, amount: float, limit: float, window_s: float, now: float, ttl: float) -> str | None:
         """committed + reserved + amount <= limit, else None. One critical section."""
         with self.lock:
-            if amount < 0:
+            if not finite_number(amount) or amount < 0:   # a NaN or infinity would pass every < / > check and poison the aggregate (F03)
                 return None
             committed, reserved = self.usage(key, window_s, now)
             if committed + reserved + amount > limit:
