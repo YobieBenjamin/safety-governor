@@ -77,9 +77,25 @@ Turning the circuit into the actual drawing of transistors and wires a foundry p
 
 An FPGA is a reprogrammable chip: the dress rehearsal before the opening night that costs a mask set. SMBus is the server's management intercom, the wire the governor listens and answers on. Plain-English notes: `hw/fpga/PLAIN-ENGLISH.md`. The real bench needs my hands and a parts order; the plan lists exactly what.
 
-## Workstream 6: the public NVIDIA-side interfaces (running)
+## Workstream 6: the public NVIDIA-side interfaces (done)
 
-The plugs and protocols the chip must speak to live in an NVIDIA server: the DC-SCM management module standard, the PCIe reset and power-brake wires, SMBus, SPDM attestation, NVIDIA's open nvtrust tools. Anything only in NVIDIA's NDA design guide stays marked NDA. Plain-English notes: `docs/interfaces/PLAIN-ENGLISH.md`; the compliance matrix: `docs/interfaces/COMPLIANCE-MATRIX.md`.
+**What it is.** A chip that's going to live in an NVIDIA server has to speak that server's languages and fit its sockets, the way an appliance has to fit the outlet and run on the local voltage. The public languages: the DC-SCM management module standard (the socket), the PCIe reset and power-brake wires (the off switch and the dimmer), SMBus (the building intercom), SPDM (a bouncer who checks your ID and then asks a question only the real you could answer) and NVIDIA's open nvtrust tools (NVIDIA's own ID checker for its GPUs). Anything only in NVIDIA's NDA design guide stays marked NDA. I don't claim compliance with a document I haven't read.
+
+**What happened.** One command, `python -m govsim.hardware_ref`, runs seven checks and printed PASS when I re-ran it after the agent.
+
+- **The socket.** All 85 governor pins mapped to the DC-SCM connector, with a public source per row (`hw/pinout/dcscm_mapping.csv`). A checker validates it, and it caught all 18 mistakes planted in it. Four pins have no public home and are marked open, not guessed.
+- **The off switch: a real finding.** The existing halt circuit breaks three of the PCIe standard's timing rules for power-up and reset. Like a car that releases the parking brake before the engine has started. A new block (`rtl/governor_rtl/cem_sideband.py`) meets all three, and its checks caught five broken versions of it. The brake gets to the pin in 336 microseconds, inside the 1 ms bound. Honest limit: there is no public number for how fast a GPU actually slows down once the brake is pulled, so the bound is proven at the pin, not inside the GPU.
+- **The bouncer: the first test against somebody else's code.** Until now the chip was only ever checked against its own models, which is grading your own homework. This time the governor's SPDM attestation was run against DMTF's reference implementation, libspdm, in both directions, at versions 1.1 and 1.2. DMTF's own conformance tester found a real bug on the first run (five failures; the log is kept). After the fix: 781 checks, zero failures. Corrupted signatures were refused by libspdm, so the pass means something.
+- **NVIDIA's ID checker.** On NVIDIA's public Hopper sample report, our adapter reaches the same answers as NVIDIA's own verifier, including on a tampered copy.
+- **The compliance matrix** (`docs/interfaces/COMPLIANCE-MATRIX.md`): 60 requirements, each with its source. 27 tested, 9 designed, 19 open, 1 members-only, 4 NDA. This is the document to hand an NVIDIA partner engineer.
+
+**What it found that I don't like.**
+
+- If the governor dies, the management link (LTPI) holds every signal in its last state, so a dead governor leaves its GPUs running. A guard who faints holding the door open. The agent wrote requirement REQ-LTPI-FS-1: the motherboard must pull the brakes itself when the link drops. That's a rule for server makers; our chip can't enforce it alone.
+- The docs say PCIe reset is released after slot power is good; the circuit releases it on the same clock edge it turns the power on.
+- The pinout is missing three kinds of pins this design needs (a reset input for the governor's own PCIe link, a power-good input per slot, the second LTPI link). Proposed, not added yet.
+
+**What didn't work.** NVIDIA's revocation check needs a network connection this machine doesn't have, and the signing certificate on NVIDIA's test reference files had expired, so NVIDIA's own code rejects them offline. SPDM's transport layer and encrypted sessions aren't modelled. The new off-switch block isn't wired into the chip yet, on purpose, so it doesn't pull the rug out from under the proofs still running. Plain-English write-up with a "what didn't work" table: `docs/interfaces/PLAIN-ENGLISH.md`.
 
 ## The scoreboard
 
@@ -91,6 +107,6 @@ The plugs and protocols the chip must speak to live in an NVIDIA server: the DC-
 | 3. 150 checks on the full-chip RTL | Attack-recipe version stopped by a safety check; conformance version done: 250 checks, 27 of 27 planted bugs caught, 15 disagreements (2 high) recorded | `rtl/conformance/` |
 | 4. sky130 layout and signoff | Running | `hw/librelane/` |
 | 5. FPGA and SMBus | Running | `hw/fpga/` |
-| 6. Public interfaces | Running | `docs/interfaces/` |
+| 6. Public interfaces | Done: 85 pins mapped, SPDM passes DMTF's tester (781 checks), nvtrust matches NVIDIA's verifier, 60-row compliance matrix; PCIe timing bug found and a fixed block written, not wired in yet | `docs/interfaces/`, `hw/pinout/` |
 
 This page gets updated as each one finishes, with the bad news in the same font as the good.
