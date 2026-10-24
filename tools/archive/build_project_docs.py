@@ -126,7 +126,7 @@ def build(repo: str, repo_name: str, github: str, specs: list, out: str, archive
                  + (f"Code, tests, figures, the Word files and the full git history are in the archive artifact: {archive_url}. " if archive_url else "")
                  + f"The originals are on GitHub: {github}. Figures, where present, are served from the archive.\n\n")
         text = head + "\n\n---\n\n".join(bodies) + "\n"
-        dashes = text.count("—") + text.count("–")
+        dashes = text.count("\u2014") + text.count("\u2013")
         if dashes:
             print(f"  note: {path} carries {dashes} dash(es) from its sources (older reference-stack text)", file=sys.stderr)
         full = os.path.join(out, path)

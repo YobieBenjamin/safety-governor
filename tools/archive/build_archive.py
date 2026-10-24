@@ -359,7 +359,7 @@ def main() -> None:
               f"{', '.join(os.path.basename(b['path']) + ' ' + human(b['bytes']) for b in info['bundles'])}, zip {human(info['zip']['bytes'])}")
     built = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     page = render(out, repos, args.console_url, built)
-    assert "—" not in page and "–" not in page, "no dashes of that kind in the page"
+    assert "\u2014" not in page and "\u2013" not in page, "no dashes of that kind in the page"
     with open(os.path.join(out, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(page)
     publish = [{"path": "index.html"}]
