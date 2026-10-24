@@ -267,6 +267,7 @@ class ActionEndpoint:
     def restart(self) -> None:
         """Power loss and return: the used-ticket set comes back from the store."""
         self.store.power_loss()
+        self.store.check_epoch_marks()       # F34: refuses to start when the two epoch-mark copies disagree
         self.consumed = self.store.get("consumed", {})
         self.burned = self.store.get("burned", {})
         self.state = "ARMED"

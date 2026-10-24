@@ -208,6 +208,7 @@ class Governor:
         """Power loss and return. Durable state survives; everything else is rebuilt."""
         gpu, loop, fabric, endpoints, cert = self.gpu, self.loop, self.fabric, self.endpoints, self.device_cert
         self.store.power_loss()
+        self.store.check_epoch_marks()      # F34: refuses to start when the two epoch-mark copies disagree
         self._boot()
         self.gpu, self.loop, self.fabric, self.endpoints, self.device_cert = gpu, loop, fabric, endpoints, cert
         if gpu is not None:

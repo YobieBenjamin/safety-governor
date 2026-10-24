@@ -84,6 +84,7 @@ def test_central_single_use_blocks_a_second_commit_after_a_lost_burn():
     # burn (the consumed write had not reached NVM), and re-presents the ticket. A local consumed flag can
     # no longer be the only guard; the governor's central single-use record refuses the second commit.
     ep.consumed.clear()
+    ep.burned.clear()        # F33: the endpoint's second record is lost as well, so only the central record is left
     ok2, why2 = ep.execute(ticket, "message.send", PARAMS)
     assert not ok2 and why2 == reasons.COMMIT_REJECTED
     assert len([e for e in ep.executed if e["ticket"] == TID]) == 1   # still exactly one effect
