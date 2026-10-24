@@ -207,11 +207,11 @@ over again.
 
 | # | Gap | Where it shows | What closes it |
 |---|---|---|---|
-| G1 | `revocations` is stored and never read: a revoked observer key or chip id is still honoured | `policy.py:85`; docs/25 §2 | A check in `_keys` and `_witnessed`; a test that revokes a key mid-session and expects `gate.witness_revoked` |
-| G2 | `CAP_REQUEST` ignores `sandbox`: a sandboxed roster peer can still be granted a flow | `governor.py` `_cmd_cap_request`; docs/25 §2 | The sandbox check in `_cmd_cap_request`; a test beside `test_h17::test_sandbox_organism` |
-| G3 | The hazard budget is per governor, so a session spread across two chips gets two budgets | `governor.py` `_release_gate`; docs/25 §0.1 | Either own it over the fabric like the payment budget (H13's `_reserve`) or state per-governor as the design |
-| G4 | Tokens are read from the GPU's counter, not from the streams presented for signing | `read_meter`; docs/25 §7.1 | Derive the meter's tokens from `_cmd_sign_output`, or keep the counter and say so in docs/04 |
-| G5 | A workload token's fingerprint survives an edition change, so an old token is accepted under the new edition | `governor.py` `_cmd_begin_model`, `_cmd_request`; docs/25 §2.1 | Refresh the fingerprint on commit, or require `BEGIN_MODEL` again; `test_h01::test_fingerprint_names_policy_epoch` extended |
+| GAP-REVOCATIONS-UNENFORCED | `revocations` is stored and never read: a revoked observer key or chip id is still honoured | `policy.py:85`; docs/25 §2 | A check in `_keys` and `_witnessed`; a test that revokes a key mid-session and expects `gate.witness_revoked` |
+| GAP-SANDBOX-FLAG-IGNORED | `CAP_REQUEST` ignores `sandbox`: a sandboxed roster peer can still be granted a flow | `governor.py` `_cmd_cap_request`; docs/25 §2 | The sandbox check in `_cmd_cap_request`; a test beside `test_h17::test_sandbox_organism` |
+| GAP-HAZARD-BUDGET-PER-GOVERNOR | The hazard budget is per governor, so a session spread across two chips gets two budgets | `governor.py` `_release_gate`; docs/25 §0.1 | Either own it over the fabric like the payment budget (H13's `_reserve`) or state per-governor as the design |
+| GAP-TOKENS-FROM-STREAMS | Tokens are read from the GPU's counter, not from the streams presented for signing | `read_meter`; docs/25 §7.1 | Derive the meter's tokens from `_cmd_sign_output`, or keep the counter and say so in docs/04 |
+| GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE | A workload token's fingerprint survives an edition change, so an old token is accepted under the new edition | `governor.py` `_cmd_begin_model`, `_cmd_request`; docs/25 §2.1 | Refresh the fingerprint on commit, or require `BEGIN_MODEL` again; `test_h01::test_fingerprint_names_policy_epoch` extended |
 | G6 | The L4 replayer re-encodes the guards and does not drive the Z3 machine; its heartbeat check cannot fail | `audit/wave-1/review/L4`; experiment L4 | The revision L4 is in: install z3 in the agent's environment and drive `core_invariants.py` for real |
 | G7 | K1a is near-vacuous on a 60-node core (three deep nodes) | `proofs/no_global_kill_switch.py`; docs/23 §4; Part 6 | Rebuild with a core large enough that "deep" means something (a few hundred nodes), rerun, and restate the numbers everywhere they appear |
 | G8 | Claim 3 needs set-to-set connectivity; K4c checks it on the instance, the prose assumption is strengthened | docs/23 §3a; Part 6 | Done in the documents; the stronger assumption belongs in the proof script's docstring too (it is) |
@@ -267,12 +267,12 @@ was checked by putting the old code back and watching its test fail.
 | 5c | (found while fixing 5) an older revocation list un-revokes a device | Yes | Same versioning at the attestation verifier | same file |
 | 6 | The abstract machine lets a ticket issued before a halt execute during it | Yes: the old `execute` step did not require RUN; the code's commit always did | `execute` requires RUN; P13 proved; the file checks that P13 fails on the old machine; H19 pins the code | `make proof`, H19 |
 
-He also called out four gaps this record had already listed (G1, G2, G3, G5) as failures of
+He also called out four gaps this record had already listed (GAP-REVOCATIONS-UNENFORCED, GAP-SANDBOX-FLAG-IGNORED, GAP-HAZARD-BUDGET-PER-GOVERNOR, GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE) as failures of
 controls someone could reasonably expect the fields to provide. Agreed, and closed: revoked keys
-count for nothing in any role and a revoked GPU fails attestation (G1); a sandboxed governor refuses
-peer capabilities on request (G2); a session's hazard budget is counted at one named owner across
-the rack, failing closed when the owner is unreachable (G3); a workload token dies with its
-edition (G5). `tests/test_h20_closed_gaps.py`, eight tests, each mutation caught. G4 (tokens read
+count for nothing in any role and a revoked GPU fails attestation (GAP-REVOCATIONS-UNENFORCED); a sandboxed governor refuses
+peer capabilities on request (GAP-SANDBOX-FLAG-IGNORED); a session's hazard budget is counted at one named owner across
+the rack, failing closed when the owner is unreachable (GAP-HAZARD-BUDGET-PER-GOVERNOR); a workload token dies with its
+edition (GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE). `tests/test_h20_closed_gaps.py`, eight tests, each mutation caught. GAP-TOKENS-FROM-STREAMS (tokens read
 from the GPU's counter) stays open: it is a modelling simplification, not a hole an attacker uses.
 
 **The research objections, recomputed from the committed YB-0051 scores** (script in the review
