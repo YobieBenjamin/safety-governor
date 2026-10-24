@@ -156,6 +156,7 @@ class ActionEndpoint:
         # for any one ticket exactly one caller becomes the owner and crosses the effect boundary (F11).
         self._lock = threading.Lock()
         self.epoch = ""
+        self.policy_expires_at = None       # F30: the edition's expiry, checked against this endpoint's clock on every admit
         self.safe_transition = safe_transition
         self.lists = lists or {}            # list id -> {"entries": [...], "stale": bool}
         self.sensors = sensors or {}        # the device's own inputs at the moment of action
@@ -174,6 +175,7 @@ class ActionEndpoint:
         if verify_any(signed_epoch, self.keys) is None or signed_epoch["payload"].get("type") != "policy-epoch":
             return False
         self.epoch = signed_epoch["payload"]["epoch"]
+        self.policy_expires_at = signed_epoch["payload"].get("expires_at")     # F30: None when the edition names no expiry
         return True
 
     def heartbeat(self, now: float) -> None:
@@ -201,6 +203,8 @@ class ActionEndpoint:
             return False, reasons.TICKET_UNBOUND
         if t["endpoint"] != self.name:
             return False, reasons.TICKET_WRONG_ENDPOINT
+        if self.policy_expires_at is not None and now >= self.policy_expires_at:
+            return False, reasons.POLICY_EXPIRED     # F30: the edition has expired, whatever the governor's tick has or has not done
         if t["policy_epoch"] != self.epoch:
             return False, reasons.TICKET_STALE_EPOCH
         if now < t.get("valid_from", 0.0):

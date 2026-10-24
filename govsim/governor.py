@@ -344,7 +344,15 @@ class Governor:
     def signed_epoch(self) -> dict:
         """A governor-signed statement of the epoch this governor runs under. Endpoints use it to learn the
         current epoch."""
-        return self.key.sign({"type": "policy-epoch", "epoch": self.epoch, "governor": self.chip_id, "issued_at": self.mono()})
+        # F30: the statement also carries the edition's expiry, so an endpoint can refuse an expired edition on
+        # its own clock. None when the installed image names no expiry.
+        expires = self.policy.get("expires_at") if self.policy else None
+        return self.key.sign({"type": "policy-epoch", "epoch": self.epoch, "governor": self.chip_id, "issued_at": self.mono(),
+                              "expires_at": expires})
+
+    def _policy_expired(self, now: float) -> bool:
+        """F30: True when the installed edition has reached its own expiry at ``now``. Checked per request, not only at tick."""
+        return bool(self.policy) and float(self.policy.get("expires_at", float("inf"))) <= now
 
     def install_list(self, list_id: str, signed_list: dict) -> bool:
         """A signed list (protected sites, sanctions, beneficiaries, customers) the rules compare against.
@@ -808,6 +816,12 @@ class Governor:
         ok, why = self._check_signed(env, "host", "REQUEST")
         if not ok:
             return self._deny("request", why)
+        if self._policy_expired(now):
+            # F30: an edition past its expiry admits nothing, even when no tick has run yet. The running chip also
+            # takes the declared fail-closed transition, the same one tick() makes.
+            if self.state in (RUN, THROTTLE):
+                self.enter_safe_mode(reasons.POLICY_EXPIRED_RUNTIME, rung=HALT)
+            return self._deny("request", reasons.POLICY_EXPIRED)
         if not self._attested():
             return self._deny("request", reasons.GATE_NOT_ATTESTED)
         req = env["payload"]
