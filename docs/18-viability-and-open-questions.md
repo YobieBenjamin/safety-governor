@@ -255,6 +255,24 @@ These are the governance obligations that constrain the public claim. The silico
 
 Until these are written down, held and rehearsed, the independence and recourse the design talks about are obligations, not guarantees. The chip makes the signers visible, countable and replaceable; it does not make them independent, and it does not, on its own, give the affected a way in.
 
+## F34: rollback of both durable memory images
+
+**Stated limit. F34 is open.** This section records a limit of the software model. It does not close the finding.
+
+**What is not defended.** The software model does not defend against a party that can write the governor's durable memory and the action endpoint's durable memory at the same time, beyond the host and the baseboard controller. Such a party can restore a complete earlier copy of both memories. The endpoint then acts again on a ticket it has already acted on, once for each restore. VEC-0083 shows this: after the restore, the same ticket executes a second time. The same gap sits behind the burned-ticket record added for F33 (VEC-0082), because that record is also held in memory the party can restore.
+
+**Why software cannot defend it.** The record of which tickets are spent sits in the same memory the party writes. The governor keeps one record and the endpoint keeps another, and both come back in the restored copy. A complete older copy passes every check the software can make, because each check reads the restored records and finds them consistent. The restart check on two matching epoch marks catches a partial or torn write to one copy. It does not catch a restore of the whole image, since both copies come back equal. Nothing inside the software can tell that the copy is old.
+
+**What would defend it.** A value that the party cannot write, and that the endpoint reads before it acts. Any one of these would do it:
+
+- a hardware monotonic counter or fuse that steps on each commit, with enough steps for the number of tickets;
+- a TPM counter, placed so that the party cannot reach it;
+- a signed checkpoint held outside the rack, which the endpoint checks before each action.
+
+Each of these works only if the endpoint refuses to act without it. An anchor that the party can also write does not help. None of them is in the model today. The fuse block holds 256 one-time bits, which covers each edition or firmware generation, but not each ticket.
+
+**Who accepts the residual risk.** The operator who controls physical access to the rack accepts it, together with the governance signers who approve a deployment without an anchor. Any party that relies on the single-use claim, such as a regulator or an insurer, should be told that the claim is weaker against this party than against a host that cannot write memory.
+
 ## 8d. The origin gate: no key, no model
 
 *Added 23 October 2026, prompted by a reader's question on Part 6: why not a weight in each model, 1 for allow and 0 for deny, a gateway at the origin as well as at the destination?*
