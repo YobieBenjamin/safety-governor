@@ -76,6 +76,7 @@ TICKET_NOT_YET_VALID = "ticket.not_yet_valid"
 TICKET_REPLAY = "ticket.replay"
 TICKET_STALE_EPOCH = "ticket.stale_epoch"
 TICKET_WRONG_ENDPOINT = "ticket.wrong_endpoint"
+TICKET_UNBOUND = "ticket.unbound"          # the ticket names no endpoint; no endpoint accepts or commits it (F29)
 TICKET_MISSING = "ticket.missing"
 COMMIT_UNREACHABLE = "commit.unreachable"
 COMMIT_REJECTED = "commit.rejected"

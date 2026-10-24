@@ -195,10 +195,14 @@ class ActionEndpoint:
             return False, reasons.TICKET_ACTION_MISMATCH
         if t["params_digest"] != digest(params):
             return False, reasons.TICKET_PARAMS_MISMATCH
+        # F29: every ticket names exactly one endpoint. An unbound ticket is refused, and so is a ticket
+        # that names another endpoint. The check does not depend on the ticket carrying a truthy field.
+        if not t.get("endpoint"):
+            return False, reasons.TICKET_UNBOUND
+        if t["endpoint"] != self.name:
+            return False, reasons.TICKET_WRONG_ENDPOINT
         if t["policy_epoch"] != self.epoch:
             return False, reasons.TICKET_STALE_EPOCH
-        if t.get("endpoint") and t["endpoint"] != self.name:
-            return False, reasons.TICKET_WRONG_ENDPOINT
         if now < t.get("valid_from", 0.0):
             return False, reasons.TICKET_NOT_YET_VALID
         if now >= t["expires_at"]:

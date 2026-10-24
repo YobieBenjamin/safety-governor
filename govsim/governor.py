@@ -1132,10 +1132,17 @@ class Governor:
         return {"ok": True, "why": reasons.OK, "ticket": ticket}
 
     def _cmd_commit(self, body, env):
-        """The endpoint's COMMIT through the mailbox, signed by the endpoint's key."""
+        """The endpoint's COMMIT through the mailbox, signed by the endpoint's key. F29: the signing key must be
+        the key of the endpoint the ticket names, so one endpoint cannot commit a ticket bound to another."""
         ok, why = self._check_signed(env, "endpoint", "COMMIT")
         if not ok:
             return self._deny("commit", why)
+        ticket = env["payload"].get("ticket") or {}
+        named = (ticket.get("payload") or {}).get("endpoint")
+        signer = self._keys("endpoint").get(env.get("signer"))
+        bound = next((e for e in self.policy.get("endpoints", []) if named and e["name"] == named), None)
+        if bound is None or signer is None or signer.raw != bytes.fromhex(bound["pubkey"]):
+            return self._deny("commit", reasons.TICKET_WRONG_ENDPOINT)
         committed = self.commit_from_endpoint(env["payload"].get("ticket") or {})
         return {"ok": committed, "why": reasons.OK if committed else reasons.COMMIT_REJECTED}
 
@@ -1151,6 +1158,10 @@ class Governor:
                 self.log.append("gate.commit_rejected", {"why": reasons.TICKET_BAD_SIGNATURE})
                 return False
             t = ticket["payload"]
+            # F29: a commit needs a ticket bound to a named endpoint of the current policy.
+            if not t.get("endpoint") or t["endpoint"] not in {e["name"] for e in self.policy.get("endpoints", [])}:
+                self.log.append("gate.commit_rejected", {"why": reasons.TICKET_UNBOUND})
+                return False
             if t["policy_epoch"] != self.epoch:
                 self.log.append("gate.commit_rejected", {"why": reasons.TICKET_STALE_EPOCH})
                 return False
