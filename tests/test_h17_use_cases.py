@@ -182,8 +182,11 @@ def test_weights_go_to_the_models_own_storage_and_nowhere_else_without_a_human_t
     r = build_rack(2, "rack")
     r.bring_up()
     node = r.nodes[0]
-    own = r.request(node, "weights.write", {"model_digest": MODEL_70B, "destination": MODEL_70B})
+    own = r.request(node, "weights.write", {"model_digest": MODEL_70B, "destination": MODEL_70B, "bytes": MB})
     assert own["ok"] and own["ticket"]["payload"]["rule"] == "weights.write.own"
+    # F31: the export to the model's own storage needs the single-use grant for these bytes, not a standing entry
+    assert node.gpu.transfer("storage", MODEL_70B, "out", MB, buffer_class="weights") == (False, reasons.EP_NO_CAPABILITY)
+    assert node.governor.grant_storage_export(own["ticket"], MB) == (True, reasons.OK)
     assert node.gpu.transfer("storage", MODEL_70B, "out", MB, buffer_class="weights") == (True, reasons.OK)
     for dest in ("bucket-x", r.nodes[1].gpu.chip_id, "host"):
         req = r.request(node, "weights.write", {"model_digest": MODEL_70B, "destination": dest})

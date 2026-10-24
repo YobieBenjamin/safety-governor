@@ -140,6 +140,7 @@ class Governor:
         self.quoted_nonces: list[str] = self.store.get("quoted_nonces", [])    # nonces already quoted over (replay refused)
         self.responses: dict[str, dict] = self.store.get("responses", {})     # response_id -> presented streams, audit draw
         self.committed_tickets: dict[str, float] = self.store.get("committed_tickets", {})   # ticket_id -> commit time: central single-use (F11)
+        self.exported_tickets: dict[str, float] = self.store.get("exported_tickets", {})     # F31: storage export tickets already spent
         self.licenses: dict[str, int] = self.store.get("licenses", {})        # model digest -> cycles a license allows
         self.policy: dict | None = None
         self._epoch = ""
@@ -1374,11 +1375,15 @@ class Governor:
         return {"ok": True, "why": reasons.OK, "refusals": drained}
 
     # ------------------------------------------------------------------ capabilities and switches
-    def _capability(self, point: str, peer: str, direction: str, budget: int, expiry: float, buffer_class: str | None = None) -> dict:
+    def _capability(self, point: str, peer: str, direction: str, budget: int, expiry: float, buffer_class: str | None = None,
+                    single_use: bool = False) -> dict:
         """A table entry under this governor's cap key. ``buffer_class`` is None at a switch, which cannot
-        see one, and a class name at a descriptor checker, where it is part of the key."""
+        see one, and a class name at a descriptor checker, where it is part of the key. ``single_use`` marks a
+        one-transfer grant (F31); the flag is inside the MAC, so it cannot be added afterwards."""
         cap = {"point": point, "peer": peer, "direction": direction, "budget": budget, "expiry": expiry, "epoch_tag": self.epoch[:8],
                "buffer_class": buffer_class}
+        if single_use:
+            cap["single_use"] = True
         cap["mac"] = hmac_sha256(self.cap_key, canonical(cap))
         return cap
 
@@ -1406,8 +1411,10 @@ class Governor:
                 for peer in host + peers:
                     n += sw.program(self._capability(kind, peer, "both", budget, expiry))
             elif kind == "storage":
-                if self.model_digest:                     # the model's own storage flow, to load from and to write its weights to
-                    n += sw.program(self._capability(kind, self.model_digest, "both", budget, expiry))
+                # F31: the model's own storage flow is open for loading only. Nothing leaves storage on a standing
+                # entry: an export needs its own single-use grant (grant_storage_export).
+                if self.model_digest:
+                    n += sw.program(self._capability(kind, self.model_digest, "in", budget, expiry))
         for kind, ck in self.checkers.items():
             ck.close_all()
             targets = peers if kind == "peer_mmu" else host + peers      # the peer MMU maps peers, never the host
@@ -1417,6 +1424,44 @@ class Governor:
                         n += ck.program(self._capability(kind, peer, "both", budget, expiry, buffer_class=cls))
         self.ops["switch_program"] += n
         return n
+
+    def grant_storage_export(self, ticket: dict | None, nbytes: int) -> tuple[bool, str]:
+        """F31: open the storage exit for one export of exactly ``nbytes`` of this model's weights, once.
+
+        The ticket must be a weights.write ticket that this governor signed for these bytes: its params digest
+        covers {destination, model_digest, bytes} for this model, it is inside its validity window, it names the current edition, and it has
+        not been spent. The grant is a single-use entry on the storage switch. It moves the granted bytes in one
+        transfer, and it is removed when it is spent. A transfer with no grant is refused by the switch."""
+        now = self.clock.now()
+        with self.lock:
+            if self.state != RUN or self.model_digest is None or self.switches.get("storage") is None:
+                return False, reasons.MBOX_NOT_RUNNING
+            if ticket is None or not verify_object(ticket, self.key.public) or ticket["payload"].get("type") != "ticket":
+                return False, reasons.TICKET_BAD_SIGNATURE
+            t = ticket["payload"]
+            if t["action"] != "weights.write":
+                return False, reasons.TICKET_ACTION_MISMATCH
+            # the request names the export in this exact shape: destination, model digest and byte count
+            export_params = {"destination": self.model_digest, "model_digest": self.model_digest, "bytes": int(nbytes)}
+            if t["params_digest"] != digest(export_params):
+                return False, reasons.TICKET_PARAMS_MISMATCH
+            if t["policy_epoch"] != self.epoch:
+                return False, reasons.TICKET_STALE_EPOCH
+            if self._policy_expired(now):
+                return False, reasons.POLICY_EXPIRED
+            if now < t["valid_from"] or now >= t["expires_at"]:
+                return False, reasons.TICKET_EXPIRED
+            tid = t["ticket_id"]
+            if tid in self.exported_tickets:
+                return False, reasons.TICKET_REPLAY
+            cap = self._capability("storage", self.model_digest, "out", int(nbytes), t["expires_at"], single_use=True)
+            if not self.switches["storage"].program(cap):
+                return False, reasons.EP_NO_CAPABILITY
+            self.exported_tickets[tid] = now
+            self.store.data["exported_tickets"] = self.exported_tickets
+            self.store.save()
+            self.log.append("storage.export_granted", {"ticket_id": tid, "bytes": int(nbytes)})
+            return True, reasons.OK
 
     def close_ports(self) -> None:
         """Close every switch and every descriptor checker, so that no port or flow is open. Called on every rung

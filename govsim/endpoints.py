@@ -107,8 +107,13 @@ class Switch:
             return self._refuse(peer, direction, nbytes, reasons.EP_STALE_EPOCH, **extra)
         if cap["budget"] < nbytes:
             return self._refuse(peer, direction, nbytes, reasons.EP_BUDGET_EXHAUSTED, **extra)
+        if cap.get("single_use") and nbytes != cap["budget"]:
+            # F31: a single-use grant covers exactly the bytes it names, in one transfer
+            return self._refuse(peer, direction, nbytes, reasons.EP_BUDGET_EXHAUSTED, **extra)
         cap["budget"] -= nbytes
         self.bytes_passed[peer] = self.bytes_passed.get(peer, 0) + nbytes
+        if cap.get("single_use") and cap["budget"] == 0:
+            self.table.pop(self._key(cap), None)     # F31: the grant is spent and cannot be used again
         return True, reasons.OK
 
     def _refuse(self, peer: str, direction: str, nbytes: int, why: str, **extra) -> tuple[bool, str]:
