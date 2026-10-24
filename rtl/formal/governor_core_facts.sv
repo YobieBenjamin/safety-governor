@@ -5,7 +5,7 @@
 //   F-a a local cause (heartbeat loss, local trip, throttle command) never opens this chip's loop switch, on any
 //       rung, SAFE included: the neighbours keep their loop current and keep running.
 // The old F-b ("a signed HALT to a chip already in SAFE does not open the loop") was removed on 23 October 2026,
-// when Yobie decided a HALT opens the loop on every rung. Its replacement is a proven rule, not a fact: G3 in
+// when Yobie decided a HALT opens the loop on every rung. Its replacement is a proven rule, not a fact: RTL-HALT-REACHES-PINS in
 // governor_core.sv and the H rules in halt_seq.sv.
 module governor_core_facts_props(input clk, input rst);
   //@@DUT@@

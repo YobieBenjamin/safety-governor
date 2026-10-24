@@ -29,7 +29,7 @@ ever comes. The heartbeat never expires and the THROTTLE and HALT timers never c
 `load_hwm` is documented as "a one-cycle strobe at boot", but nothing in the RTL makes it one: it is a port, and
 whoever drives the counter's fuse interface can hold it high.
 
-**Evidence.** Rule G5 of `rtl/formal/governor_core.sv` (the strobe comes on every 2^ms_shift-th tick, whatever any
+**Evidence.** Rule RTL-EXPIRY-NOT-POSTPONED of `rtl/formal/governor_core.sv` (the strobe comes on every 2^ms_shift-th tick, whatever any
 other input does, `load_hwm` included). The old tap is a mutant ("the old millisecond tap on the monotonic counter")
 and is caught by assertion. Regression: `test_heartbeat_expires_even_while_load_hwm_is_hammered` runs the full-size
 core for three milliseconds of ticks with `load_hwm` hammered; on the old code the heartbeat is still alive and the
@@ -61,7 +61,7 @@ alone and never opens the loop to its neighbours. What the integrated RTL does, 
    makes the command the cause (tamper keeps its cause); the state stays SAFE. The design fact F-b that recorded the
    old behaviour is removed from `governor_core_facts.sv`. In its place, proven by k-induction: halt_seq.sv, H rules
    ("a halt command opens the loop in every state, SAFE included, unless an authorized CLEAR took that cycle", and
-   in SAFE "it stays SAFE, power off, cause command unless tamper"); governor_core.sv, G3, the same at the pins. The
+   in SAFE "it stays SAFE, power off, cause command unless tamper"); governor_core.sv, RTL-HALT-REACHES-PINS, the same at the pins. The
    old behaviour is a planted mutant ("a HALT to a chip in SAFE leaves the loop closed") and is caught; the
    reproducer `test_finding_cmd_halt_in_safe_opens_the_loop` (conformance F-07, also closed) and
    `rtl/tests/test_yobie_calls.py::test_halt_to_a_chip_in_safe_opens_its_loop_and_stays_safe` are guards, and both
@@ -71,23 +71,23 @@ alone and never opens the loop to its neighbours. What the integrated RTL does, 
    cause stays LOCAL and the switch stays closed. The same facts file proves it (rule F-b). docs/02 says "Any
    governor opens its switch on a loop-opening cause: a signed HALT"; for a chip in SAFE the RTL disagrees. HALT
    carries "this chip's id" (docs/04 section 3), so a HALT aimed at that chip to stop the domain stops nothing. A chip
-   in THROTTLE or HALT from a local cause does open on HALT (G3 is proven from every rung but SAFE). Not changed: it
+   in THROTTLE or HALT from a local cause does open on HALT (RTL-HALT-REACHES-PINS is proven from every rung but SAFE). Not changed: it
    is a design decision. The one-line change would be to let `cmd_halt` set `switch_open` in SAFE as well.
 4. **The asymmetry at boot.** The switch starts open and closes only when armed (HALTED_INITIAL, no cause, a live
    heartbeat). A governor that never receives its first heartbeat holds the whole loop open, and nobody in the domain
    reaches RUN (they need loop current). A governor that loses its heartbeat after arming stops only itself. Proven
-   pieces: G2 (boots open), G7 (the switch closes only through arming), F-a. So before the first heartbeat a missing
+   pieces: RTL-BOOTS-SAFE (boots open), RTL-LOOP-STAYS-OPEN (the switch closes only through arming), F-a. So before the first heartbeat a missing
    heartbeat is a domain stop; after it, a local one. **Decided** (23 October 2026, Yobie): it stays a domain stop (fail
    closed), but loud, named and with a deliberate way out. The sequencer counts the milliseconds it waits for its
    first heartbeat (`boot_timer`, `BOOT_WAIT` at 0x088); past `t_boot_ms` (5000 on the chip, 3 in the small build)
    it raises `no_first_hb`, which the core makes the hardware-owned sticky ALARMS bit 31 NO_FIRST_HEARTBEAT and the
    live CAUSE bit 3. An authorized EXCLUDE (`cmd_exclude`) closes that chip's switch while it stays in HALTED_INITIAL
    with every lever asserted; ALARMS bit 30 and CAUSE bit 4 say so. Proven: halt_seq.sv, the X and N rules, plus a
-   two-copy miter showing EXCLUDE changes no register outside HALTED_INITIAL with no cause; governor_core.sv, G7
-   (now "closes by a heartbeat or an EXCLUDE, and never for a chip halted by loop loss, command or tamper"), G8, G9.
+   two-copy miter showing EXCLUDE changes no register outside HALTED_INITIAL with no cause; governor_core.sv, RTL-LOOP-STAYS-OPEN
+   (now "closes by a heartbeat or an EXCLUDE, and never for a chip halted by loop loss, command or tamper"), RTL-EXCLUDED-LEVERS-SAFE, RTL-ALARMS-HARDWARE-OWNED.
    Nine planted bugs in halt.py and four in top.py for these rules, all caught by assertion.
 5. **loop_io is not where the stickiness lives.** `loop_lost` falls on the first sample that sees current again (L4
-   proves it falls only then). What is sticky is the sequencer's switch (G7: once opened by a cause, it closes only
+   proves it falls only then). What is sticky is the sequencer's switch (RTL-LOOP-STAYS-OPEN: once opened by a cause, it closes only
    through clear and re-arming). A current loss shorter than two samples never reaches the sequencer; a longer one is
    acted on only while the chip is RUN or THROTTLE. In HALT or SAFE the loss is not written to CAUSE (the levers are
    already down, so this is a logging gap, not a safety one).
@@ -113,7 +113,7 @@ alone and never opens the loop to its neighbours. What the integrated RTL does, 
 - heartbeat, meter, alarms, measure_reg, loop_io: the full-size blocks as checked in, bounded check plus k-induction
   (every reachable state), in yices, z3 and boolector. Plus thousands of random cycles each against a spec model in
   amaranth.sim. Every mutant caught by assertion.
-- governor_core: G1 to G7 proven by k-induction (every reachable state) on the small build of the same `top.py`
+- governor_core: RTL-PINS-FOLLOW-SEQUENCER to RTL-LOOP-STAYS-OPEN proven by k-induction (every reachable state) on the small build of the same `top.py`
   (2 entries per point, 2 tickets, 3 ms and 4 ms timers, a 4-tick millisecond), in yices, z3 and boolector. The
   design facts and the small-build miters run in yices only (minutes each in yices, far longer in the others on this
   shared machine). The randomized core simulation (3000 cycles, every rung visited, `load_hwm` hammered half the
