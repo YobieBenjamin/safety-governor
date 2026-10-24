@@ -2,15 +2,27 @@
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Enforcement points and action endpoints.
 
-Rack tier: the enforcement points are the switches the GPU's traffic already passes
-(NVSwitch ports, PCIe switch ports and ACS, DPU flow tables, the storage path). The governor
-is their only writer; a port or flow is open exactly when a matching, unexpired capability
-exists. Integrated tier (a future vendor ask): descriptor-level checkers inside the GPU.
+What this file holds:
+- Switches (the enforcement points at rack tier): the switches that the GPU's traffic already passes,
+  namely NVSwitch ports, PCIe switch ports, DPU flow tables and the storage path. A port or flow is
+  open only while a matching, unexpired capability exists. The governor is the only writer.
+- Descriptor checkers (integrated tier only, a future vendor request): the same idea inside the GPU,
+  at the copy engine and the peer MMU (memory management unit).
+- Action endpoints: the devices that carry out an action, such as a payment switch, a messaging
+  service, the DPU egress to the user, and the audit store. An endpoint holds the public keys of the
+  governors, its own record of used tickets, the current epoch, a heartbeat timer and its own sensors.
+  It re-checks a ticket at the moment it acts.
 
-Action endpoints are the comparators in the devices that act. They hold the public keys of
-the rack's governors, their own used-ticket store (the model's used-ticket set lives here, not
-in the governor), the current epoch, a heartbeat timer and their own sensors, and they re-check
-at the moment of action.
+What it guarantees, as written: an endpoint acts only on a ticket that names the same action and
+parameters, the current epoch and this endpoint, and that has not expired or been used already. The
+used-ticket record is written under a lock before the action happens, so one ticket is used at most
+once at this endpoint. An endpoint whose heartbeat timer has run out refuses to act. A capability's
+MAC (a keyed hash that proves who made the entry) is checked when the governor programs the entry.
+
+What it deliberately does NOT do: it does not decide whether an action is allowed. The governor decides
+that, and the endpoint only checks the ticket it was given. It does not re-check the MAC on each lookup.
+The device checks in ``strike_checks`` are the checks for one device, not a full list of what a device
+must check.
 """
 from __future__ import annotations
 
@@ -34,6 +46,9 @@ class Switch:
     """
 
     def __init__(self, kind: str, owner_chip_id: str, cap_key: bytes, log: Callable[[str, dict], None]):
+        """Create one switch of ``kind`` (one of ``RACK_POINTS``). ``owner_chip_id`` names the governor that
+        programs it, and ``cap_key`` is the key its capability MACs are made with. ``log`` is the governor's
+        logging function. A new switch has no open entries."""
         self.kind = kind
         self.owner = owner_chip_id
         self._cap_key = cap_key
@@ -44,6 +59,8 @@ class Switch:
         self.bytes_passed: dict[str, int] = {}           # peer -> bytes that crossed this switch
 
     def mac(self, cap: dict) -> str:
+        """The MAC over a capability's contents, leaving out the MAC field itself. Two capabilities with the
+        same contents have the same MAC, and a changed field makes the MAC wrong."""
         body = {k: v for k, v in cap.items() if k != "mac"}
         return hmac_sha256(self._cap_key, canonical(body))
 
@@ -52,6 +69,8 @@ class Switch:
         return (cap["peer"], cap["direction"])
 
     def program(self, cap: dict) -> bool:
+        """Open one port or flow from a capability the governor made. Output: True when it is stored. A capability
+        for another switch kind, or with a wrong MAC, is refused and logged. This is the only write path."""
         if cap.get("point") != self.kind or cap.get("mac") != self.mac(cap):
             self.refusals.append({"why": reasons.EP_NO_CAPABILITY, "cap": cap})
             return False
@@ -59,16 +78,21 @@ class Switch:
         return True
 
     def close_all(self) -> None:
+        """Close every port and flow on this switch."""
         self.table.clear()
 
     def close_peer(self, peer: str) -> None:
+        """Close every port and flow to one peer."""
         for k in [k for k in self.table if k[0] == peer]:
             self.table.pop(k)
 
     def set_epoch(self, epoch_tag: str) -> None:
+        """Record the epoch tag. A capability with a different tag is refused (see ``_admit``)."""
         self.epoch_tag = epoch_tag
 
     def pass_traffic(self, peer: str, direction: str, nbytes: int, now: float) -> tuple[bool, str]:
+        """Check one transfer against the table. An entry for this peer and direction is used, or an entry marked
+        ``both``, which covers either direction. With no entry the transfer is refused. Output: (ok, reason)."""
         cap = self.table.get((peer, direction)) or self.table.get((peer, "both"))
         if cap is None:
             return self._refuse(peer, direction, nbytes, reasons.EP_NO_CAPABILITY)
@@ -77,7 +101,7 @@ class Switch:
     def _admit(self, cap: dict, peer: str, direction: str, nbytes: int, now: float, **extra) -> tuple[bool, str]:
         """The checks on a matching entry: expiry, epoch tag, byte budget. One lookup, one decrement."""
         if cap["expiry"] <= now:
-            self.table.pop(self._key(cap), None)
+            self.table.pop(self._key(cap), None)      # an expired entry is removed, so it cannot be used again
             return self._refuse(peer, direction, nbytes, reasons.EP_EXPIRED, **extra)
         if cap["epoch_tag"] != self.epoch_tag:
             return self._refuse(peer, direction, nbytes, reasons.EP_STALE_EPOCH, **extra)
@@ -88,6 +112,7 @@ class Switch:
         return True, reasons.OK
 
     def _refuse(self, peer: str, direction: str, nbytes: int, why: str, **extra) -> tuple[bool, str]:
+        """Record one refused transfer in the refusal list and in the log, then return (False, reason)."""
         self.refusals.append({"switch": self.kind, "peer": peer, "direction": direction, "bytes": nbytes, "why": why, **extra})
         self.log("switch.refused", {"switch": self.kind, "peer": peer, "bytes": nbytes, "why": why, **extra})
         return False, why
@@ -98,9 +123,12 @@ class DescriptorChecker(Switch):
     (peer, direction, buffer class). A class with no entry for that peer is refused: EP_BUFFER_CLASS."""
 
     def _key(self, cap: dict) -> tuple:
+        """The table key for a checker: peer, direction and buffer class. Each buffer class has its own entry."""
         return (cap["peer"], cap["direction"], cap.get("buffer_class"))
 
     def pass_traffic(self, peer: str, direction: str, nbytes: int, now: float, buffer_class: str = "activations") -> tuple[bool, str]:
+        """Check one transfer at a checker, as ``Switch.pass_traffic`` does, but the buffer class must also have an
+        entry for that peer. When the peer has entries for other classes, the reason is EP_BUFFER_CLASS. Output: (ok, reason)."""
         cap = self.table.get((peer, direction, buffer_class)) or self.table.get((peer, "both", buffer_class))
         if cap is None:
             why = reasons.EP_BUFFER_CLASS if any(k[0] == peer for k in self.table) else reasons.EP_NO_CAPABILITY
@@ -114,6 +142,10 @@ class ActionEndpoint:
     def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], store: Store | None = None,
                  safe_transition: str = "no_action", lists: dict[str, Any] | None = None,
                  sensors: dict[str, Any] | None = None, heartbeat_expiry_s: float = 5.0):
+        """Create one endpoint. ``governor_keys`` maps each governor's key id to its public key, for every governor
+        that may mint a ticket for this device. ``safe_transition`` is what the endpoint does when it refuses
+        (the rack's endpoints use ``no_release``, ``decline`` or ``hold``). ``sensors`` are the device's own inputs at
+        the moment of action. The used-ticket record loads from the store, so it survives a restart."""
         self.name = name
         self.clock = clock
         self.keys = dict(governor_keys)      # key id -> VerifyKey of every governor that may mint for this device
@@ -137,16 +169,23 @@ class ActionEndpoint:
 
     # --- inputs from the governor ---------------------------------------------
     def set_epoch(self, signed_epoch: dict) -> bool:
+        """Accept the governor's signed statement of the current epoch. A statement that does not verify is ignored,
+        and the function returns False. Tickets for any other epoch are refused later, in ``admit``."""
         if verify_any(signed_epoch, self.keys) is None or signed_epoch["payload"].get("type") != "policy-epoch":
             return False
         self.epoch = signed_epoch["payload"]["epoch"]
         return True
 
     def heartbeat(self, now: float) -> None:
+        """Renew the heartbeat timer. ``execute`` refuses to act once the timer has run out."""
         self.hb_expiry = now + self.heartbeat_expiry_s
 
     # --- the comparator ---------------------------------------------------------
     def admit(self, ticket: dict | None, action: str, params: dict, now: float) -> tuple[bool, str]:
+        """The comparator. Checks a ticket against the action and parameters the caller presents. The checks run in
+        this order: the ticket is present, its signature verifies, it is a ticket, its action and parameters match,
+        its epoch is the current one, it names this endpoint (if it names one), it is inside its validity window,
+        and it has not been used. Output: (ok, reason). It does not burn the ticket; ``execute`` does that."""
         if ticket is None:
             return False, reasons.TICKET_MISSING
         if verify_any(ticket, self.keys) is None or ticket["payload"].get("type") != "ticket":
@@ -192,6 +231,8 @@ class ActionEndpoint:
             return self._refuse(reasons.COMMIT_UNREACHABLE)
         if not committed:
             return self._refuse(reasons.COMMIT_REJECTED)
+        # The device's own checks run after the commit, so a ticket that fails one of them is already burned and
+        # committed. The ticket cannot be used again. See the report for this ordering.
         for check in self.checks:              # the device's own sensors and lists
             ok, why = check(params, self.sensors)
             if not ok:
@@ -200,6 +241,8 @@ class ActionEndpoint:
         return True, reasons.OK
 
     def _refuse(self, why: str) -> tuple[bool, str]:
+        """Record a refusal and move the endpoint to its safe transition (for example no release, decline or hold).
+        Returns (False, reason)."""
         self.refused.append((why, self.safe_transition))
         self.state = self.safe_transition
         return False, why
@@ -219,6 +262,7 @@ class EgressEndpoint(ActionEndpoint):
     is admitted. Without a valid ticket the bytes never leave."""
 
     def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], store: Store | None = None, safe_transition: str = "hold"):
+        """The egress for one node. It holds responses until a release ticket covers them. Its safe transition is ``hold``."""
         super().__init__(name, clock, governor_keys, store, safe_transition=safe_transition)
         self.held: dict[tuple[str, str], dict] = {}        # (session, response_id) -> {"bytes", "response_hash", "stream_hashes"}
         self.delivered: dict[str, list[bytes]] = {}        # session -> responses that left
@@ -256,6 +300,7 @@ class AuditStore(EgressEndpoint):
     """The audit store: an egress of its own (the sandbox's only one) that also signs escrow receipts."""
 
     def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], key: SigningKey, store: Store | None = None):
+        """The escrow endpoint. ``key`` is its own signing key, used for escrow receipts. Its safe transition is ``hold``."""
         super().__init__(name, clock, governor_keys, store, safe_transition="hold")
         self.key = key
         self.receipts: list[str] = []
@@ -272,12 +317,16 @@ def strike_checks(protected_list_id: str = "protected-sites") -> list[Callable]:
     be on the signed protected-site list the device holds; a stale list is a denial."""
 
     def nav_agree(params: dict, sensors: dict) -> tuple[bool, str]:
+        """The satellite and inertial positions must agree: each coordinate differs by at most 0.01 degrees.
+        A missing reading counts as a conflict."""
         a, b = sensors.get("nav_gnss"), sensors.get("nav_inertial")
         if a is None or b is None or abs(a[0] - b[0]) > 0.01 or abs(a[1] - b[1]) > 0.01:
             return False, reasons.ENDPOINT_SENSOR_CONFLICT
         return True, reasons.OK
 
     def not_protected(params: dict, sensors: dict) -> tuple[bool, str]:
+        """The target position (from the satellite reading) must not be on the protected-site list. A missing or stale
+        list is a denial. Coordinates are compared rounded to three decimal places."""
         lst = sensors.get("lists", {}).get(protected_list_id)
         if lst is None or lst.get("stale"):
             return False, reasons.ENDPOINT_LIST_STALE
