@@ -149,6 +149,17 @@
         "request_ok": false,
         "why": "gate.held_for_human"
       }
+    },
+    {
+      "name": "ticket bound to no endpoint, driven at payment",
+      "finding": "F29",
+      "repelled": true,
+      "detail": {
+        "endpoint": [
+          false,
+          "ticket.unbound"
+        ]
+      }
     }
   ]
 }

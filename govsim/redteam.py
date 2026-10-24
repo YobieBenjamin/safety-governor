@@ -287,7 +287,7 @@ LIMITS = [
     "A model on ungoverned hardware, or weights already released, are outside this boundary.",
     "Capability can leave as legitimate outputs used for distillation (docs/18 8h); the gate bounds the rate, it does not make an output non-teaching.",
     "A compromised peer on a signed roster is a legitimate destination; destination gating trusts the roster.",
-    "A human who is persuaded to confirm a wire is still a human; the gate ensures the payer was asked and the agent could not answer for them.",
+    "A human who is persuaded to confirm a wire is still a human; the gate checks that the payer was asked and that the agent could not answer for them.",
 ]
 
 
