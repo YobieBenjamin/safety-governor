@@ -73,11 +73,13 @@ def min_vertex_cut(adj: dict[str, set[str]], sources: set[str], sinks: set[str],
     cap: dict[str, dict[str, int]] = {}
 
     def add(u: str, v: str, c: int) -> None:
+        """Add capacity from ``u`` to ``v``. The residual graph also needs a reverse edge, so one is created with zero capacity."""
         cap.setdefault(u, {}).setdefault(v, 0)
         cap.setdefault(v, {}).setdefault(u, 0)
         cap[u][v] += c
 
     for v in adj:
+        # a source, a sink or a protected vertex cannot be picked for the cut, so it gets unlimited capacity; any other vertex costs 1
         add(f"{v}+in", f"{v}+out", INF if (v in protected or v in sources or v in sinks) else 1)
     for u, nbrs in adj.items():
         for v in nbrs:
@@ -123,6 +125,8 @@ def min_vertex_cut(adj: dict[str, set[str]], sources: set[str], sinks: set[str],
 
 
 def separated(adj: dict[str, set[str]], sources: set[str], sinks: set[str], removed: set[str]) -> bool:
+    """True when removing the vertices in ``removed`` leaves no path from any source to any sink. This is a breadth-first
+    search. A True answer means the removal cuts every source off from every sink."""
     seen, q = set(), deque(s for s in sources if s not in removed)
     seen.update(q)
     while q:
@@ -137,6 +141,8 @@ def separated(adj: dict[str, set[str]], sources: set[str], sinks: set[str], remo
 
 
 def brute_min_cut(adj, sources, sinks, protected) -> int:
+    """The smallest vertex cut, found by trying every subset of candidate vertices, smallest subsets first. It is used only to
+    cross-check ``min_vertex_cut`` on a tiny graph (check K0). Returns INF when no cut exists."""
     cands = [v for v in adj if v not in protected and v not in sources and v not in sinks]
     for size in range(len(cands) + 1):
         for subset in itertools.combinations(cands, size):
@@ -154,6 +160,7 @@ def build(n_instances: int, n_effectors: int, core: int, k: int, n_users: int, n
     adj: dict[str, set[str]] = {}
 
     def edge(u, v):
+        """Add an undirected edge between ``u`` and ``v``, stored in both directions in the adjacency map."""
         adj.setdefault(u, set()).add(v)
         adj.setdefault(v, set()).add(u)
 
@@ -213,6 +220,7 @@ def build_two_hub(n_sources: int, n_targets: int, n_hubs: int):
     adj: dict[str, set[str]] = {}
 
     def edge(u, v):
+        """Add an undirected edge between ``u`` and ``v``, stored in both directions in the adjacency map."""
         adj.setdefault(u, set()).add(v)
         adj.setdefault(v, set()).add(u)
 
@@ -253,6 +261,8 @@ def percolation(g: dict[str, set[str]], trials: int = 40, seed: int = 1) -> list
 
 
 def main() -> int:
+    """Run the checks K0 to K7 on the instances built here, and print HOLDS or FAILS for each. With ``--percolation`` it
+    prints the percolation table as CSV instead, and returns 0. Returns 0 only when every check holds."""
     if "--percolation" in sys.argv:
         g = build(n_instances=12, n_effectors=10, core=60, k=6, n_users=20, n_services=20)
         print("fraction_of_core_removed,ai_pairs_connected,bystander_pairs_connected")
@@ -263,6 +273,8 @@ def main() -> int:
     ok = True
 
     def report(tag: str, passed: bool, text: str) -> None:
+        """Print one check's result and fold it into the overall result. ``passed`` is the check's outcome, and ``text`` is the
+        sentence printed with it."""
         nonlocal ok
         ok &= passed
         print(f"{'HOLDS ' if passed else 'FAILS '} {tag}  {text}")
