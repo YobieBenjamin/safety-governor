@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""L7 check (c): each block driven with random inputs in amaranth.sim for thousands of cycles and compared, every
+"""WAVE-FORMAL-PROOFS-ON-VERILOG check (c): each block driven with random inputs in amaranth.sim for thousands of cycles and compared, every
 cycle, with a small reference model written from the spec (docs/07 section 3, docs/04 sections 2 and 9, docs/02),
 not from the RTL. This is independent of the solvers and of yosys: a different simulator, a different description.
 
@@ -192,7 +192,7 @@ class SeqRef:
         s, run_like = self.state, self.state in (RUN, THROTTLE)
         ns, nc, nsw, nt = s, self.cause, self.sw_open, self.timer
         seen, exc = self.hb_seen, self.excluded
-        if i["tamper"]:                                       # tamper outranks CLEAR (F-05, fixed 23 October)
+        if i["tamper"]:                                       # tamper outranks CLEAR (CONFORMANCE-CLEAR-BEATS-TAMPER, fixed 23 October)
             ns, nc, nsw = SAFE, 3, True
         elif i["clear"] and s != HALTED_INITIAL:
             ns, nc, nt = HALTED_INITIAL, 0, 0                # clear does not touch the switch
@@ -206,7 +206,7 @@ class SeqRef:
             ns, nc, nt = THROTTLE, 2, 0
         elif s == HALTED_INITIAL and self.cause == 0 and i["hb_ok"]:
             nsw, seen, exc = False, True, False               # armed: ends any exclusion
-            if i["loop_sense"] and not i["lost"]:             # RUN needs a clean loop sample (F1, fixed 23 October)
+            if i["loop_sense"] and not i["lost"]:             # RUN needs a clean loop sample (RTL-CORE-HALTS-AFTER-REACHING-RUN, fixed 23 October)
                 ns = RUN
         elif i["cmd_exclude"] and s == HALTED_INITIAL and self.cause == 0:
             nsw, exc = False, True                            # Yobie's call 2: the levers stay, the loop closes
@@ -327,7 +327,7 @@ def sim_governor_core(cycles: int = 3000, seed: int = 6, cls=None) -> tuple[bool
             # the host side does random things too: reads anywhere, rings the doorbell; none of it may matter
             ctx.set(dut.csr_addr, rng.randrange(4096)); ctx.set(dut.doorbell, rng.random() < 0.1)
             # and the fuse side jumps the monotonic counter upward, often keeping its low bits: that must not move
-            # the millisecond (FINDINGS-b.md, F2), so the reference model's prescaler ignores it
+            # the millisecond (FINDINGS-b.md, RTL-HEARTBEAT-KEPT-ALIVE-WITHOUT-HEARTBEAT), so the reference model's prescaler ignores it
             hammer = rng.random() < 0.5
             ctx.set(dut.mono.load_hwm, hammer)
             if hammer:

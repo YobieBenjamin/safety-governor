@@ -18,25 +18,25 @@ capacities. This file does not re-prove Menger. It builds a graph in the shape t
 describes, computes the minimum vertex cuts with a max-flow (Edmonds-Karp over split vertices),
 cross-checks the smallest instance by brute force, and asserts the consequences:
 
-  K1  There is no switch in the deep network: a separator that stays out of the access nodes next
+  INVARIANT-NO-SWITCH-IN-DEEP-NETWORK  There is no switch in the deep network: a separator that stays out of the access nodes next
       to the ends does not exist in the instance built here (the core is too connected). The cheapest
       network-side separator lies entirely in that access layer, one hop from the ends, and is at
       least k vertices per end: it needs the same list of every instance or every effector that an
       end cut needs, and several times as many cuts.
-  K2  Cutting the network takes bystanders with it: the access-layer cut removes most of the core and
+  INVARIANT-NETWORK-CUT-HITS-BYSTANDERS  Cutting the network takes bystanders with it: the access-layer cut removes most of the core and
       severs a share of ordinary user-to-service pairs that have nothing to do with AI; the end cuts
       sever none.
-  K3  A network cut does not reach an instance wired straight to its effector (a local model driving
+  INVARIANT-LOCAL-PAIR-SURVIVES-CUT  A network cut does not reach an instance wired straight to its effector (a local model driving
       a local actuator). Killing the network is too much and too little at once.
-  K4  The effector ends form a separator of size one per effector, and the compute ends a separator
+  INVARIANT-EFFECTOR-ENDS-FORM-SEPARATOR  The effector ends form a separator of size one per effector, and the compute ends a separator
       of size one per instance; both leave every other flow intact. Those are the comparator and the
       governor. By Menger's theorem no separator is smaller than the number of disjoint paths, and
-      an end with one controller has exactly one. K4c then lets the cut fall anywhere except on the
+      an end with one controller has exactly one. INVARIANT-NO-CUT-BEATS-SMALLER-END then lets the cut fall anywhere except on the
       bystanders and checks that the smallest separator in the whole graph is still the smaller
       end's count: no switch anywhere beats one per machine at the smaller end. That is the claim
       docs/23 §3a calls Claim 3, and it is checked here on the instance rather than derived from
       assumption 2 alone, which only promises k disjoint paths per source-target pair.
-  K5  Only the irreversible effectors need to be in the separator; reversible ones can be left out
+  INVARIANT-ONLY-IRREVERSIBLE-NEED-GATE  Only the irreversible effectors need to be in the separator; reversible ones can be left out
       and audited afterwards, and the separator shrinks to their controllers.
   INVARIANT-TWO-HUB-NO-KILL  The two-hub counterexample: twelve sources reaching ten targets through two shared hubs have
       two vertex-disjoint paths per pair, yet a two-vertex separator cuts everything. This is why the
@@ -47,7 +47,7 @@ cross-checks the smallest instance by brute force, and asserts the consequences:
 
 What this is not: a statement about the real Internet's exact connectivity (it has regional
 chokepoints and it has been switched off in countries; it has never been switched off everywhere,
-and doing so would be K2), nor a proof that every effector is governed (coverage is a deployment
+and doing so would be INVARIANT-NETWORK-CUT-HITS-BYSTANDERS), nor a proof that every effector is governed (coverage is a deployment
 fact, not a theorem; docs/18 question 1), nor a proof about people, who are effectors no chip gates
 (docs/18 question 14).
 """
@@ -142,7 +142,7 @@ def separated(adj: dict[str, set[str]], sources: set[str], sinks: set[str], remo
 
 def brute_min_cut(adj, sources, sinks, protected) -> int:
     """The smallest vertex cut, found by trying every subset of candidate vertices, smallest subsets first. It is used only to
-    cross-check ``min_vertex_cut`` on a tiny graph (check K0). Returns INF when no cut exists."""
+    cross-check ``min_vertex_cut`` on a tiny graph (check INVARIANT-MAX-FLOW-MATCHES-BRUTE-FORCE). Returns INF when no cut exists."""
     cands = [v for v in adj if v not in protected and v not in sources and v not in sinks]
     for size in range(len(cands) + 1):
         for subset in itertools.combinations(cands, size):
@@ -261,7 +261,7 @@ def percolation(g: dict[str, set[str]], trials: int = 40, seed: int = 1) -> list
 
 
 def main() -> int:
-    """Run the checks K0 to K7 on the instances built here, and print HOLDS or FAILS for each. With ``--percolation`` it
+    """Run the checks INVARIANT-MAX-FLOW-MATCHES-BRUTE-FORCE to INVARIANT-SHARED-CONTROLLER-NO-KILL on the instances built here, and print HOLDS or FAILS for each. With ``--percolation`` it
     prints the percolation table as CSV instead, and returns 0. Returns 0 only when every check holds."""
     if "--percolation" in sys.argv:
         g = build(n_instances=12, n_effectors=10, core=60, k=6, n_users=20, n_services=20)
@@ -286,6 +286,7 @@ def main() -> int:
     ends = {v for v in tiny if v.startswith(("g", "e", "u", "v"))}
     f, _ = min_vertex_cut(tiny, S, T, protected=ends)
     b = brute_min_cut(tiny, S, T, protected=ends)
+    # Registered name: INVARIANT-MAX-FLOW-MATCHES-BRUTE-FORCE (old ID K0 is kept because code matches on it)
     report("K0", f == b, f"max-flow min cut ({f}) equals the brute-force min cut ({b}) on the tiny instance")
 
     n_i, n_e, core, k = 12, 10, 60, 6
@@ -297,43 +298,51 @@ def main() -> int:
     users = {v for v in g if v.startswith("u")}
     services = {v for v in g if v.startswith("v")}
 
-    # K1: a middle-only switch
+    # INVARIANT-NO-SWITCH-IN-DEEP-NETWORK: a middle-only switch
     net_S = S - {"m_local"}
     net_T = T - {"a_local"}
     ends = computes | controllers
     first_hop = {c for e in ends for c in g[e] if c.startswith("c")}
     deep_flow, _ = min_vertex_cut(g, net_S, net_T, protected=ends | users | services | first_hop)
+    # Registered name: INVARIANT-NO-DEEP-NETWORK-SEPARATOR (old ID K1a is kept because code matches on it)
     report("K1a", deep_flow >= INF, f"no separator exists that stays out of the access nodes next to the ends: there is no switch in the deep network "
            f"(a thin check on this instance: only {core - len(first_hop)} of its {core} core nodes are more than one hop from an end)")
     mid_flow, mid_cut = min_vertex_cut(g, net_S, net_T, protected=ends | users | services)
+    # Registered name: INVARIANT-CHEAPEST-CUT-AT-ACCESS-LAYER (old ID K1b is kept because code matches on it)
     report("K1b", mid_cut <= first_hop and mid_flow >= k and mid_flow > max(n_i, n_e),
            f"the cheapest network-side separator has {mid_flow} vertices, all of them access nodes one hop from an end (k={k}; {n_i} instances, {n_e} effectors)")
 
-    # K2: that cut takes bystanders with it; the end cuts do not
+    # INVARIANT-NETWORK-CUT-HITS-BYSTANDERS: that cut takes bystanders with it; the end cuts do not
     pairs = [(u, v) for u in sorted(users) for v in sorted(services)]
     severed = sum(1 for u, v in pairs if separated(g, {u}, {v}, mid_cut))
+    # Registered name: INVARIANT-NETWORK-CUT-HITS-BYSTANDERS (old ID K2 is kept because code matches on it)
     report("K2", len(mid_cut) / core >= 0.5 and severed > 0,
            f"that separator removes {len(mid_cut)} of {core} core nodes ({len(mid_cut) / core:.0%}) and severs {severed} of {len(pairs)} user-to-service pairs ({severed / len(pairs):.0%}) that had nothing to do with AI")
 
-    # K3: the local pair does not care about the network
+    # INVARIANT-LOCAL-PAIR-SURVIVES-CUT: the local pair does not care about the network
     k3 = not separated(g, {"m_local"}, {"a_local"}, {v for v in g if v.startswith("c")})
+    # Registered name: INVARIANT-LOCAL-PAIR-SURVIVES-CUT (old ID K3 is kept because code matches on it)
     report("K3", k3, "removing the entire core still leaves the local instance wired to its local actuator")
 
-    # K4: the ends
+    # INVARIANT-EFFECTOR-ENDS-FORM-SEPARATOR: the ends
     e_flow, e_cut = min_vertex_cut(g, S, T, protected=users | services | computes)
     g_flow, g_cut = min_vertex_cut(g, S, T, protected=users | services | controllers)
+    # Registered name: INVARIANT-CONTROLLER-CUT-ONE-PER-EFFECTOR (old ID K4a is kept because code matches on it)
     report("K4a", e_flow == len(controllers) and e_cut == controllers and not separated(g, users, services, e_cut),
            f"cutting at the effector controllers separates every instance from every actuator with {e_flow} vertices, one per effector, and users still reach services")
+    # Registered name: INVARIANT-COMPUTE-CUT-ONE-PER-INSTANCE (old ID K4b is kept because code matches on it)
     report("K4b", g_flow == len(computes) and g_cut == computes and not separated(g, users, services, g_cut),
            f"cutting at the compute separates them with {g_flow} vertices, one per instance, and users still reach services")
     any_flow, any_cut = min_vertex_cut(g, S, T, protected=users | services)
+    # Registered name: INVARIANT-NO-CUT-BEATS-SMALLER-END (old ID K4c is kept because code matches on it)
     report("K4c", any_flow == min(len(S), len(T)) and any_flow == e_flow,
            f"letting the cut fall anywhere but on bystanders, the smallest separator in the whole graph has {any_flow} vertices, "
            f"the smaller end's count ({len(S)} instances, {len(T)} actuators, the local pair included): nothing anywhere beats one per machine at the smaller end")
 
-    # K5: only irreversible effectors need the gate
+    # INVARIANT-ONLY-IRREVERSIBLE-NEED-GATE: only irreversible effectors need the gate
     irreversible = {f"a{j}" for j in range(n_e) if j % 2 == 0} | {"a_local"}
     r_flow, r_cut = min_vertex_cut(g, S, irreversible, protected=users | services | computes)
+    # Registered name: INVARIANT-ONLY-IRREVERSIBLE-NEED-GATE (old ID K5 is kept because code matches on it)
     report("K5", r_flow == len(irreversible) and r_cut == {f"e{a[1:]}" for a in irreversible},
            f"gating only the {len(irreversible)} irreversible effectors needs {r_flow} vertices, their own controllers; the reversible ones are audited instead")
 
@@ -346,6 +355,7 @@ def main() -> int:
     th, th_S, th_T = build_two_hub(n_sources=12, n_targets=10, n_hubs=2)
     th_pair, _ = min_vertex_cut(th, {"m0"}, {"e0"}, protected=th_S | th_T)
     th_agg, th_cut = min_vertex_cut(th, th_S, th_T, protected=th_S | th_T)
+    # Registered name: INVARIANT-TWO-HUB-NO-KILL (old ID K6 is kept because code matches on it)
     report("K6", th_pair == 2 and th_agg == 2 and th_cut == {"h0", "h1"} and th_agg < min(len(th_S), len(th_T)),
            f"two shared hubs: every source-target pair has {th_pair} vertex-disjoint paths, yet {th_agg} vertices (the hubs) separate all "
            f"{len(th_S)} sources from all {len(th_T)} targets, under min(|S|,|T|)={min(len(th_S), len(th_T))}: the per-pair bound does not imply a large cut, "
@@ -355,6 +365,7 @@ def main() -> int:
     sc, sc_S, sc_T = build_two_hub(n_sources=12, n_targets=10, n_hubs=1)
     sc_pair, _ = min_vertex_cut(sc, {"m0"}, {"e0"}, protected=sc_S | sc_T)
     sc_agg, sc_cut = min_vertex_cut(sc, sc_S, sc_T, protected=sc_S | sc_T)
+    # Registered name: INVARIANT-SHARED-CONTROLLER-NO-KILL (old ID K7 is kept because code matches on it)
     report("K7", sc_pair == 1 and sc_agg == 1 and sc_cut == {"h0"},
            f"one shared controller: each pair is joined through {sc_pair} vertex, so {sc_agg} vertex separates all {len(sc_S)} sources from all "
            f"{len(sc_T)} targets; the per-pair bound is silent about a shared vertex, and the corrected Claim 2 excludes this graph too")

@@ -20,20 +20,20 @@ What the proof is about, and what it is not about, is the point of the file:
     only moves forward.
   * Since 23 October 2026 replay is counted, not just flagged. An external audit pointed out that
     a Boolean executed[a] cannot tell a second external effect from a harmless repeat: a second
-    execution just rewrote the same bit, so the old P3 (executed => used) held even if the execute
+    execution just rewrote the same bit, so the old INVARIANT-NO-REPLAY-TICKET-SPENT (executed => used) held even if the execute
     step's spent-ticket guard was deleted. The machine now counts ticket instances (n_issued),
     the tickets consumed (n_spent) and the effects produced (n_events) per action, and proves no
-    action ever produces more effects than it was issued tickets (P14). Because these are counts,
+    action ever produces more effects than it was issued tickets (INVARIANT-NO-REPLAY-COUNTED). Because these are counts,
     a legitimate action done twice under two fresh tickets stays expressible; it is replay off one
-    ticket that the count forbids. P14 fails if the fresh-ticket guard is removed, so the proof now
-    catches that defect, where the Boolean P3 could not.
+    ticket that the count forbids. INVARIANT-NO-REPLAY-COUNTED fails if the fresh-ticket guard is removed, so the proof now
+    catches that defect, where the Boolean INVARIANT-NO-REPLAY-TICKET-SPENT could not.
   * Since 22 October 2026 it is also about what a signature authorizes. Two defects were found
     by testing the code that the first version of this file could not see, because it took
     "a quorum signed the new edition" and "the authority cleared the halt" as given yes-or-no
     inputs: an image that set its own threshold to zero passed, and a heartbeat cleared a halt.
     The machine now counts the valid governance signatures against a fused threshold that only
     rises (whatever threshold the image claims), and a clear needs a signature over a CLEAR,
-    for this chip, inside its expiry. P10 to P12 are those properties, and the file also checks
+    for this chip, inside its expiry. INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD to INVARIANT-ONLY-CLEAR-LEAVES-HALT are those properties, and the file also checks
     that the old rules break them, so the proof would have caught both.
   * It is not about the physics (whether the wire really carries no bytes without a ticket),
     the cryptography (signatures are modelled as unforgeable: nobody but the governor can
@@ -200,18 +200,18 @@ def steps(s: State, t: State, i: dict, **kw):
 def invariant_at(s: State, a):
     """The invariant for one action a. The full invariant is this for every a."""
     return And(
-        # P0  the edition counter never goes negative, so the "no ticket" marker (-1) can never equal an edition.
+        # INVARIANT-EDITION-NEVER-NEGATIVE  the edition counter never goes negative, so the "no ticket" marker (-1) can never equal an edition.
         #     Z3 found this one: without it, a state with epoch = -1 lets an action with no ticket execute.
         s.epoch >= 0,
-        # P1  nothing executes unless, when its ticket was issued, a rule allowed it and the witnesses were present
+        # INVARIANT-EXECUTE-ONLY-IF-ALLOWED  nothing executes unless, when its ticket was issued, a rule allowed it and the witnesses were present
         Implies(s.executed[a], s.okay_at_issue[a]),
-        # P2  a ticket exists only for an action the rule allowed, with witnesses, at issue time
+        # INVARIANT-TICKET-ONLY-FOR-ALLOWED-ACTION  a ticket exists only for an action the rule allowed, with witnesses, at issue time
         Implies(s.ticket[a] != -1, s.okay_at_issue[a]),
-        # P3  no replay: anything executed has its ticket marked spent
+        # INVARIANT-NO-REPLAY-TICKET-SPENT  no replay: anything executed has its ticket marked spent
         Implies(s.executed[a], s.used[a]),
-        # P4  tickets carry an edition no newer than the current one
+        # INVARIANT-TICKET-EDITION-NOT-NEWER  tickets carry an edition no newer than the current one
         Implies(s.ticket[a] != -1, And(s.ticket[a] >= 0, s.ticket[a] <= s.epoch)),
-        # P14 no replay, counted: effects, spent tickets and issued tickets are non-negative, each
+        # INVARIANT-NO-REPLAY-COUNTED no replay, counted: effects, spent tickets and issued tickets are non-negative, each
         #     effect consumes exactly one ticket (n_events == n_spent), and no more tickets are spent
         #     than were ever issued (n_spent <= n_issued). Together: n_events <= n_issued, so an
         #     action never produces more effects than it held tickets. A spent ticket cannot yield
@@ -231,25 +231,34 @@ def invariant(s: State):
 
 def one_step_properties(s: State, t: State, i: dict):
     """The properties that must hold across one step, as a dict from a label to a formula. Each formula relates the
-    state before the step (``s``), the state after it (``t``) and the step's inputs. The labels P5 to P13 are the one-step
+    state before the step (``s``), the state after it (``t``) and the step's inputs. The labels INVARIANT-HALT-IS-ABSORBING to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED are the one-step
     properties named in this file."""
     return {
+        # Registered name: INVARIANT-HALT-IS-ABSORBING (old ID P5 is kept because code matches on it)
         "P5  halt is absorbing without an authorized clear: halted, and no signed CLEAR for this chip in date, means still halted":
             Implies(And(s.halted, Not(clear_auth_of(s, i))), t.halted),
+        # Registered name: INVARIANT-FAIL-CLOSED-WITHOUT-HEARTBEAT (old ID P6 is kept because code matches on it)
         "P6  fail closed: with the heartbeat lost, no step executes anything":
             Implies(Not(s.heartbeat), t.executed == s.executed),
+        # Registered name: INVARIANT-NO-TICKET-WHILE-HALTED (old ID P7 is kept because code matches on it)
         "P7  no ticket is issued while halted or while the heartbeat is lost":
             Implies(Or(s.halted, Not(s.heartbeat)), t.ticket == s.ticket),
+        # Registered name: INVARIANT-EDITION-ONLY-MOVES-FORWARD (old ID P8 is kept because code matches on it)
         "P8  the edition only moves forward":
             t.epoch >= s.epoch,
+        # Registered name: INVARIANT-EDITION-CHANGE-NEEDS-QUORUM (old ID P9 is kept because code matches on it)
         "P9  an edition change needs a quorum":
             Implies(t.epoch != s.epoch, quorum_of(s, i)),
+        # Registered name: INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD (old ID P10 is kept because code matches on it)
         "P10 an edition change needs the threshold in force of distinct signatures from the keys in force, whatever the image claims":
             Implies(t.epoch != s.epoch, i["sigs"] >= s.kfuse),
+        # Registered name: INVARIANT-FUSED-THRESHOLD-NEVER-FALLS (old ID P11 is kept because code matches on it)
         "P11 the threshold in force never falls below the manufacture floor, which never moves":
             And(t.kfuse >= t.kfloor, t.kfloor == s.kfloor),
+        # Registered name: INVARIANT-ONLY-CLEAR-LEAVES-HALT (old ID P12 is kept because code matches on it)
         "P12 nothing but a signature over a CLEAR leaves the halt: a heartbeat, a halt or any other signed command does not":
             Implies(And(s.halted, Not(t.halted)), i["signed_cmd"] == CLEAR_CMD),
+        # Registered name: INVARIANT-NOTHING-EXECUTES-WHILE-HALTED (old ID P13 is kept because code matches on it)
         "P13 nothing executes while halted, not even against a ticket issued before the halt":
             Implies(s.halted, t.executed == s.executed),
     }
@@ -288,17 +297,17 @@ def main() -> int:
     a_step = inputs["a"]
     a_k = Const("a_k", Action)                       # an arbitrary action, for the conclusion
     results = []
-    results.append(prove("P1-P4, P14 hold in every initial state", invariant_at(s, a_k), [init(s)]))
+    results.append(prove("INVARIANT-EXECUTE-ONLY-IF-ALLOWED to INVARIANT-TICKET-EDITION-NOT-NEWER, INVARIANT-NO-REPLAY-COUNTED hold in every initial state", invariant_at(s, a_k), [init(s)]))
     # Induction, one step at a time. Every step touches at most the entry for a_step, so the
     # invariant at a_k after the step follows from the invariant at a_k and at a_step before it.
     # Assuming only those two instances is weaker than assuming the whole invariant, so the
     # proof is sound, and it keeps every query free of quantifiers.
     hyp = [invariant_at(s, a_k), invariant_at(s, a_step)]
     for name, tr in step_list(s, t, inputs):
-        results.append(prove(f"P1-P4, P14 preserved by step: {name}", invariant_at(t, a_k), hyp + [tr]))
+        results.append(prove(f"INVARIANT-EXECUTE-ONLY-IF-ALLOWED to INVARIANT-TICKET-EDITION-NOT-NEWER, INVARIANT-NO-REPLAY-COUNTED preserved by step: {name}", invariant_at(t, a_k), hyp + [tr]))
     for name, claim in one_step_properties(s, t, inputs).items():
         results.append(prove(name, claim, hyp + [step]))
-    # the regression check: under the old rules P10 and P12 must fail, or this file could not have caught the defects
+    # the regression check: under the old rules INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD and INVARIANT-ONLY-CLEAR-LEAVES-HALT must fail, or this file could not have caught the defects
     old = old_rules(s, inputs)
     old_step = steps(s, t, inputs, **old)
     props = one_step_properties(s, t, inputs)
@@ -317,11 +326,11 @@ def main() -> int:
     sol.set("timeout", 60_000)
     sol.add(*hyp, steps(s, t, inputs, execute_needs_run=False), Not(props[name]))
     caught = sol.check() == sat
-    print(("OK      " if caught else "FAILED  ") + "P13 fails on the machine as it was before 22 October, whose execute step did not require RUN")
+    print(("OK      " if caught else "FAILED  ") + "INVARIANT-NOTHING-EXECUTES-WHILE-HALTED fails on the machine as it was before 22 October, whose execute step did not require RUN")
     results.append(caught)
     # F19 regression: the proof must be able to SEE replay. Without the fresh-ticket guard, the trace
     # issue, execute, execute runs the same ticket twice and produces two effects against one issued
-    # ticket, so P14 (n_spent <= n_issued, n_events == n_spent) is falsified. The honest machine, with
+    # ticket, so INVARIANT-NO-REPLAY-COUNTED (n_spent <= n_issued, n_events == n_spent) is falsified. The honest machine, with
     # the guard, cannot reach such a state. Three concrete steps on a single action, not an induction.
     u, w = State("u"), State("w")
     inv0 = invariant_at(s, a_step)                       # start from any invariant-respecting state
@@ -332,7 +341,7 @@ def main() -> int:
     sol.set("timeout", 60_000)
     sol.add(inv0, issue_r, exec_r1, exec_r2, w.n_spent[a_step] > w.n_issued[a_step])
     caught = sol.check() == sat
-    print(("OK      " if caught else "FAILED  ") + "P14 fails without the fresh-ticket guard: issue, execute, execute replays one ticket into two effects (the proof catches replay)")
+    print(("OK      " if caught else "FAILED  ") + "INVARIANT-NO-REPLAY-COUNTED fails without the fresh-ticket guard: issue, execute, execute replays one ticket into two effects (the proof catches replay)")
     results.append(caught)
     # and the honest machine, same three steps WITH the guard, cannot replay: the property is specific
     # to the removed guard, not to any execution happening twice.
@@ -345,7 +354,7 @@ def main() -> int:
     print(("OK      " if blocked else "FAILED  ") + "with the fresh-ticket guard the same issue, execute, execute cannot overspend one ticket (replay is blocked, not merely flagged)")
     results.append(blocked)
     # and a legitimate action done twice, under two fresh tickets, stays expressible and does not
-    # violate P14: counting ticket instances does not collapse repeated executions into one.
+    # violate INVARIANT-NO-REPLAY-COUNTED: counting ticket instances does not collapse repeated executions into one.
     sol = Solver()
     sol.set("timeout", 60_000)
     issue_a = dict(step_list(s, t, inputs))["issue"]

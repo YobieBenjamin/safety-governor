@@ -16,7 +16,7 @@ You cannot trust an AI to police another AI, because the second AI fails the sam
 | [safety](https://github.com/YobieBenjamin/safety) | The algorithm mine: hypotheses YB-XXXX, each coded, tested and ledgered; the observer package (`observer/`), the witness lane | The observer as a measured witness, never the lock | `make all` |
 | [autonomic-graph-regulation](https://github.com/YobieBenjamin/autonomic-graph-regulation) | The public snapshot of `safety` | Same | `make all` |
 
-The three repositories that exchange messages agree on one wire contract: [hardware-and-silicon/docs/LANES.md](https://github.com/YobieBenjamin/hardware-and-silicon/blob/main/docs/LANES.md). Signed fixtures for every message type, and the checker the governor model runs, are experiment H1 (`make lanes`, on branch `exp/h1` until it merges).
+The three repositories that exchange messages agree on one wire contract: [hardware-and-silicon/docs/LANES.md](https://github.com/YobieBenjamin/hardware-and-silicon/blob/main/docs/LANES.md). Signed fixtures for every message type, and the checker the governor model runs, are experiment WAVE-LANES-CONFORMANCE-SUITE (`make lanes`, on branch `exp/h1` until it merges).
 
 ## 1. Follow the theory
 
@@ -25,7 +25,7 @@ Read in this order. Each one stands alone.
 1. The argument in plain words: *The Chip That Says No*, Parts 1 and 2, in [hardware-and-silicon/blog](https://github.com/YobieBenjamin/hardware-and-silicon/tree/main/blog). The reflex, the referee who is also a player, STOP but never GO, "can you undo it".
 2. The layer model and why only silicon can be the lock: [A Multi-Layer Approach to AI Safety](https://github.com/YobieBenjamin/hardware-and-silicon/blob/main/blog/01-a-multi-layer-approach-to-ai-safety.md).
 3. The whole chip as one story: [docs/10-plain-english-walkthrough.md](docs/10-plain-english-walkthrough.md). Under every section a box names the technical document, the model code, the test and the hardware block behind it. [docs/09-analogies.md](docs/09-analogies.md) is the same vocabulary as a table.
-4. What the design is for and what it refuses to claim: [docs/00-objectives.md](docs/00-objectives.md), goals G1 to G8, requirements R1 to R32 with where each is tested, non-goals N1 to N7.
+4. What the design is for and what it refuses to claim: [docs/00-objectives.md](docs/00-objectives.md), goals GOAL-ENFORCE-CONTRACT-IN-HARDWARE to GOAL-KEYS-OUT-OF-VENDOR-HANDS, requirements REQUIREMENT-DEVICE-SECRET-IN-FUSES to REQUIREMENT-DEPLOYMENT-OVERHEAD-UNDER-ONE-PERCENT with where each is tested, non-goals GOAL-NOT-UNDERSTANDING-TOKEN-CONTENT to GOAL-NOT-ONLY-SAFETY-LAYER.
 5. How solid any of it is: [docs/19-how-solid-is-the-theory.md](docs/19-how-solid-is-the-theory.md).
 6. Why there is no kill switch for AI and why there is one at the exits, with the theorem and the check: [docs/23-there-is-no-kill-switch.md](docs/23-there-is-no-kill-switch.md).
 7. The ladder every safety measure sits on, from a prompt that says "don't" to the chip to a person with a key, with what each rung catches, how it gets removed and the paper that showed it: [docs/24-the-ladder.md](docs/24-the-ladder.md).
@@ -44,7 +44,7 @@ The design documents, numbered, each opening with a plain-words summary and a "b
 | [04-specification.md](docs/04-specification.md) | The register map, the mailbox commands, the policy image, the request and the ticket (§5), the device-provenance record (§6), the crypto suite, timing, memory, physical targets (§11) |
 | [05-threat-model.md](docs/05-threat-model.md) | Adversaries; what is stopped, with the test that shows it; what is only made expensive; what is not addressed |
 | [06-assumptions-register.md](docs/06-assumptions-register.md) | One row per input the gate trusts: who signs it, how fresh it must be, what a failure means, what is not covered |
-| [07-verification-plan.md](docs/07-verification-plan.md) | Hypotheses H0 to H18 and what falsifies each; RTL invariants; silicon validation; FMEA |
+| [07-verification-plan.md](docs/07-verification-plan.md) | Hypotheses CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION to CONTRACT-OVERSIGHT-SURVIVES-MODEL and what falsifies each; RTL invariants; silicon validation; FMEA |
 | [11-loop-timing.md](docs/11-loop-timing.md) | The halt loop as a circuit: ngspice across 72 governors, 39 configurations including cut wires, worst case 317 microseconds against a 1 millisecond bound |
 
 The logic runs. [govsim/](govsim/) is the functional model of a rack of governed GPUs: the governor (`governor.py`, the order of checks is `_cmd_request`), the rulebook (`policy.py`), the ledger, the log, the fabric, the GPU with its levers, the switches as enforcement points. [tests/](tests/) holds one file per hypothesis, `test_h00_contract.py` to `test_h18_oversight.py`, 200 tests; each test is a thing that would knock a claim down. [rtl/](rtl/) holds the hard-core blocks in Amaranth (measurement registers, monotonic counter, epoch register, ticket store, capability table, halt sequencer, heartbeat, mailbox, lifecycle) with 20 simulation tests and generated Verilog. Forty-eight single-point mutations of the model and the RTL were run to confirm the tests bite (see the README).
@@ -60,16 +60,16 @@ Two machine-checked proofs and one checked graph argument, in [proofs/](proofs/)
 
 [proofs/core_invariants.py](proofs/core_invariants.py) proves, in the words of the file:
 
-- P0. The edition counter never goes negative.
-- P1. Nothing executes unless, when its ticket was issued, a rule allowed it and the witnesses were present.
-- P2. A ticket exists only for an action the rule allowed, with witnesses, at issue time.
-- P3. No replay: anything executed has its ticket marked spent, and a spent ticket is refused.
-- P4. A ticket carries an edition no newer than the current one, and only the current edition is honoured.
-- P5. Halt is absorbing: halted and no quorum means still halted after any step.
-- P6. Fail closed: with the heartbeat lost, no step executes anything.
-- P7. No ticket is issued while halted or while the heartbeat is lost.
-- P8. The edition only moves forward.
-- P9. An edition change needs a quorum.
+- INVARIANT-EDITION-NEVER-NEGATIVE. The edition counter never goes negative.
+- INVARIANT-EXECUTE-ONLY-IF-ALLOWED. Nothing executes unless, when its ticket was issued, a rule allowed it and the witnesses were present.
+- INVARIANT-TICKET-ONLY-FOR-ALLOWED-ACTION. A ticket exists only for an action the rule allowed, with witnesses, at issue time.
+- INVARIANT-NO-REPLAY-TICKET-SPENT. No replay: anything executed has its ticket marked spent, and a spent ticket is refused.
+- INVARIANT-TICKET-EDITION-NOT-NEWER. A ticket carries an edition no newer than the current one, and only the current edition is honoured.
+- INVARIANT-HALT-IS-ABSORBING. Halt is absorbing: halted and no quorum means still halted after any step.
+- INVARIANT-FAIL-CLOSED-WITHOUT-HEARTBEAT. Fail closed: with the heartbeat lost, no step executes anything.
+- INVARIANT-NO-TICKET-WHILE-HALTED. No ticket is issued while halted or while the heartbeat is lost.
+- INVARIANT-EDITION-ONLY-MOVES-FORWARD. The edition only moves forward.
+- INVARIANT-EDITION-CHANGE-NEEDS-QUORUM. An edition change needs a quorum.
 
 Plus a non-vacuity check: an allowed action can in fact execute, so the proofs are not true because nothing ever happens.
 
@@ -79,7 +79,7 @@ What the proofs found: the first draft of the core invariant let the edition cou
 
 [proofs/no_global_kill_switch.py](proofs/no_global_kill_switch.py) is the third file: the model-to-world graph, minimum separators computed by max-flow and cross-checked by brute force, backing [docs/23](docs/23-there-is-no-kill-switch.md): no separator exists in the deep network, the cheapest network-side one sits next to every machine and takes bystanders with it, the ends give a separator of one node per instance or per effector, and reversibility shrinks it to the irreversible exits. The theorem is Menger's; the script checks the instance.
 
-What the proofs are not about, in the files' own words: the physics (whether the wire really carries no bytes without a ticket), the cryptography (signatures are modelled as unforgeable), the lists and observers (an allowed action is whatever the signed rule says), and the link from the model to the RTL. That link is the formal work on the Verilog itself, experiment L7 in the program, not yet done. Whether the simulation takes only the steps the proven machine allows is experiment L4, which found that the model takes two steps the machine does not have (an "arm" step and burned tickets); that is open.
+What the proofs are not about, in the files' own words: the physics (whether the wire really carries no bytes without a ticket), the cryptography (signatures are modelled as unforgeable), the lists and observers (an allowed action is whatever the signed rule says), and the link from the model to the RTL. That link is the formal work on the Verilog itself, experiment WAVE-FORMAL-PROOFS-ON-VERILOG in the program, not yet done. Whether the simulation takes only the steps the proven machine allows is experiment WAVE-TRACE-CONFORMANCE-REPLAY, which found that the model takes two steps the machine does not have (an "arm" step and burned tickets); that is open.
 
 ## 4. Follow the code proof
 
@@ -87,7 +87,7 @@ Three suites and an attack catalogue, all runnable in minutes without hardware.
 
 | What | Where | Count | Command |
 |---|---|---|---|
-| Governor model: hypotheses H0 to H20 | `safety-governor/tests/` | 224 tests | `./run.sh` or `make test` |
+| Governor model: hypotheses CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION to CONTRACT-NAMED-CONTROLS-ENFORCED | `safety-governor/tests/` | 224 tests | `./run.sh` or `make test` |
 | RTL blocks | `safety-governor/rtl/tests/` | 20 tests | `make rtl-test` |
 | Halt-loop circuit | `safety-governor/hw/loop/` | 39 ngspice configurations | `make loop` |
 | Reference stack: gate, ledger, endpoints, OASP path, transactional contract | `hardware-and-silicon/tests/` | 56 tests | `./run.sh` |
@@ -100,18 +100,18 @@ A baseline is a legitimate operation that must go through; the catalogue carries
 
 | Grade | What | Where to check |
 |---|---|---|
-| Proven (Z3, by induction) | The core invariants P0 to P13 (P10 to P13, added 22 October 2026: the quorum the chip fuses, the clear only a signed CLEAR gives, and nothing executes while halted) and the commit-point properties (1) to (3), on the abstract machine | `make proof`; docs/19 §2 |
+| Proven (Z3, by induction) | The core invariants INVARIANT-EDITION-NEVER-NEGATIVE to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED (INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED, added 22 October 2026: the quorum the chip fuses, the clear only a signed CLEAR gives, and nothing executes while halted) and the commit-point properties (1) to (3), on the abstract machine | `make proof`; docs/19 §2 |
 | Tested (every run) | The functional model follows the rules (224 tests); the RTL blocks follow the model (21); the protocol holds against 75 attacks and lets 12 baselines through; OpenShell's shipped middleware contract (5 tests) | `./run.sh` in both repositories |
 | Simulated | The halt loop opens and every governor detects it inside 1 ms, worst case 317 µs | docs/11; `make loop` |
 | Assumed, and written down | Every input the gate trusts: who signs it, how fresh, what failure means | docs/06 |
-| Open, with an experiment | Simulation conforms to the proven machine (L4); two gates read one policy the same way (L5); the physical path enumeration with a source per row and the retrofit columns (P2); the overhead numbers (N); the observer's miss rate (YB-0052 to 0054); the proofs on the Verilog (L7) | docs/20, the pull requests, `audit/wave-N/` |
+| Open, with an experiment | Simulation conforms to the proven machine (WAVE-TRACE-CONFORMANCE-REPLAY); two gates read one policy the same way (WAVE-DIFFERENTIAL-GATE-TEST); the physical path enumeration with a source per row and the retrofit columns (WAVE-EXIT-REGISTER); the overhead numbers (N); the observer's miss rate (WAVE-OBSERVER-EVALUATION-SET to 0054); the proofs on the Verilog (WAVE-FORMAL-PROOFS-ON-VERILOG) | docs/20, the pull requests, `audit/wave-N/` |
 | Not claimed | That the chip knows what words mean, whether the rulebook is good, whether a witness is right, or that fabrication and physical attack are solved | docs/19 §3 and §6 |
 
 ## 6. The experiment program, and how to read a result
 
 [docs/20-experiment-program.md](docs/20-experiment-program.md) lists twenty-three experiments (twenty of them open issues on GitHub), one per claim, each with the condition that would disprove it and the exit criteria for leaving software. [docs/21-agent-run-plan.md](docs/21-agent-run-plan.md) says how coding agents run them in waves, on a budget, with a gate between waves. The gate has three readers: a script that checks what a script can check (no test weakened, no file outside the brief, the suite and the acceptance command in a clean checkout, no number without an artifact), a local model that lists every claim with the diff line that backs it, and a cloud model that must answer in a fixed shape with a file and a line for every finding, whose citations are checked before its verdict counts. A merge takes all three and a person.
 
-Every wave leaves a packet: [audit/wave-1/](audit/wave-1/) holds the briefs, the agents' summaries, the acceptance logs, the verifier's output and the reviews, with `MANIFEST.sha256`. The pull requests carry the gate's findings as comments: [#14](https://github.com/YobieBenjamin/safety-governor/pull/14) (L4), [#15](https://github.com/YobieBenjamin/safety-governor/pull/15) (L5), [#17](https://github.com/YobieBenjamin/safety-governor/pull/17) (H1), [safety #7](https://github.com/YobieBenjamin/safety/pull/7) (YB-0052). Nothing merges until the gate passes it, so a result on a branch is a result under review, not a result.
+Every wave leaves a packet: [audit/wave-1/](audit/wave-1/) holds the briefs, the agents' summaries, the acceptance logs, the verifier's output and the reviews, with `MANIFEST.sha256`. The pull requests carry the gate's findings as comments: [#14](https://github.com/YobieBenjamin/safety-governor/pull/14) (WAVE-TRACE-CONFORMANCE-REPLAY), [#15](https://github.com/YobieBenjamin/safety-governor/pull/15) (WAVE-DIFFERENTIAL-GATE-TEST), [#17](https://github.com/YobieBenjamin/safety-governor/pull/17) (WAVE-LANES-CONFORMANCE-SUITE), [safety #7](https://github.com/YobieBenjamin/safety/pull/7) (WAVE-OBSERVER-EVALUATION-SET). Nothing merges until the gate passes it, so a result on a branch is a result under review, not a result.
 
 If you are a model, or a person with time: [audit/PROMPT.md](audit/PROMPT.md) is the brief for an outside audit. Run the tests, reproduce every number, find a change that would make each test fail, and name what the program's own disproof conditions required and nobody tested.
 

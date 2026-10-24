@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""L7, work stream b: heartbeat, meter, alarms, measure_reg, loop_io, governor_core.
+"""WAVE-FORMAL-PROOFS-ON-VERILOG, work stream b: heartbeat, meter, alarms, measure_reg, loop_io, governor_core.
 
 Merged into rtl/formal/__main__.py's BLOCKS by a guarded import; same shape:
     block -> (Amaranth source file, class name, [(mutant description, old text, new text)])
@@ -365,7 +365,7 @@ FACTS = [
         "governor_core_cover.sv", 60, "from boot, a heartbeat that runs out reaches SAFE, power off, loop pad closed")),
     ("a local cause never opens the loop", lambda: _assert_fact(
         "governor_core_facts.sv", 12, "proven: cause LOCAL implies the loop pad is closed (the old fact that a HALT "
-        "to a chip in SAFE leaves the pad closed is gone: Yobie's call 1, now rule G3)")),
+        "to a chip in SAFE leaves the pad closed is gone: Yobie's call 1, now rule RTL-HALT-REACHES-PINS)")),
 ]
 
 

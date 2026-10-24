@@ -11,140 +11,140 @@ Findings (F-nn) are the tests that reproduce a disagreement; see `FINDINGS.md`.
 
 | Id | Source | The spec's words | Block | Owner | Conformance tests | Catalogue rows |
 |---|---|---|---|---|---|---|
-| R-001 | S §1 | Time is the governor's monotonic counter (64-bit, 1 µs ticks, never decremented | monotonic, top | RTL | `test_mono_counter_is_64_bits`<br>`test_mono_advances_once_per_tick`<br>`test_core_mono_csr_low_and_high_words` |  |
-| R-002 | V §3 | The counter value never decreases; a decrement request is refused | monotonic | RTL | `test_mono_decrement_request_refused_and_value_kept`<br>`test_mono_never_decreases_under_random_inputs`<br>`test_finding_mono_wraps_from_an_all_ones_high_water_mark` |  |
-| R-003 | S §1 | persisted across power loss with a fuse-backed high-water mark | monotonic | RTL | `test_mono_high_water_mark_raises_the_counter`<br>`test_mono_lower_high_water_mark_cannot_pull_back`<br>`test_finding_mono_wraps_from_an_all_ones_high_water_mark` |  |
-| R-004 | V §3 | The register changes only through extend; no write path exists | measure_reg | RTL | `test_meas_engine_output_without_request_ignored`<br>`test_meas_extend_latches_engine_result`<br>`test_meas_has_no_write_port` |  |
-| R-005 | S §2 | Measurement register 0 (loader); extend-only | top (MEAS0) | RTL | `test_core_meas_csr_windows_read_both_registers` |  |
-| R-006 | S §2 | Measurement register 1 (firmware); extend-only | top (MEAS1) | RTL | `test_core_meas_csr_windows_read_both_registers` |  |
-| R-007 | V §3 | The register changes only on policy_commit with quorum_ok; the host port cannot write it | epoch_reg | RTL | `test_epoch_commit_without_quorum_ignored`<br>`test_epoch_quorum_without_commit_ignored`<br>`test_epoch_host_write_has_no_effect`<br>`test_epoch_commit_with_quorum_switches` | 2 |
-| R-008 | S §2 | Policy epoch (digest of the accepted policy image) | top (EPOCH) | RTL | `test_core_epoch_csr_reads_256_bits` |  |
-| R-009 | S §5 | epoch_tag: u16 // low bits of the epoch | epoch_reg, cap_table | RTL | `test_epoch_tag_is_low_16_bits`<br>`test_core_epoch_switch_kills_every_old_capability` |  |
-| R-010 | V §3 | The state is monotone; in PRODUCTION, debug_grant is never asserted | lifecycle | RTL | `test_lifecycle_never_moves_down_by_advance`<br>`test_lifecycle_lower_fuse_load_cannot_move_down`<br>`test_lifecycle_monotone_under_random_inputs`<br>`test_finding_lifecycle_debug_before_fuse_load` |  |
-| R-011 | V §1 | Production silicon has no debug path | lifecycle | RTL | `test_lifecycle_debug_refused_in_production_and_later`<br>`test_lifecycle_debug_granted_before_production`<br>`test_finding_lifecycle_debug_before_fuse_load`<br>`test_finding_core_reports_test_lifecycle_before_fuse_load` (F-06)<br>`test_lifecycle_after_load_debug_is_dead` |  |
-| R-012 | S §2 | 0 test, 1 provisioned, 2 production, 3 decommissioned (fuse-backed, monotone) | top (LIFECYCLE) | RTL | `test_core_lifecycle_csr_encoding`<br>`test_finding_core_reports_test_lifecycle_before_fuse_load` (F-06) |  |
-| R-013 | V §4 | JTAG refused in PRODUCTION; attempt logged | lifecycle (flag); firmware (log) | RTL | `test_lifecycle_debug_refused_in_production_and_later` |  |
-| R-014 | S §5 | The capability table is a content-addressable memory keyed on (point, peer, dir) | cap_table | RTL | `test_cap_match_requires_point`<br>`test_cap_match_requires_peer`<br>`test_cap_match_requires_direction`<br>`test_cap_full_table_refuses_insert`<br>`test_finding_cap_reprogramming_a_key_replaces_it` (F-10)<br>`test_model_switch_replaces_on_reprogram`<br>`test_diff_cap_table_random_against_model_switch`<br>`test_finding_cap_rederived_after_epoch_switch_is_usable` (F-10) |  |
-| R-015 | S §5 | a lookup decrements budget | cap_table | RTL | `test_cap_lookup_decrements_by_bytes`<br>`test_finding_cap_reprogramming_a_key_replaces_it` (F-10)<br>`test_model_switch_replaces_on_reprogram`<br>`test_diff_cap_table_random_against_model_switch` |  |
-| R-016 | S §5 | refuses at zero, on expiry, or on an epoch-tag mismatch | cap_table (zero) | RTL | `test_cap_refuses_more_than_remaining_budget`<br>`test_finding_cap_refuses_at_zero_budget` (F-09)<br>`test_diff_cap_table_random_against_model_switch` |  |
-| R-017 | S §5 | refuses at zero, on expiry, or on an epoch-tag mismatch | cap_table (expiry) | RTL | `test_cap_refuses_at_expiry_and_drops_entry`<br>`test_diff_cap_table_random_against_model_switch` |  |
-| R-018 | S §5 | refuses at zero, on expiry, or on an epoch-tag mismatch | cap_table (epoch tag) | RTL | `test_cap_refuses_on_epoch_tag_mismatch`<br>`test_diff_cap_table_random_against_model_switch` |  |
-| R-019 | S §5 | The MAC is checked at insertion, not per lookup | cap_table | RTL | `test_cap_insert_needs_mac`<br>`test_cap_lookup_does_not_consult_mac` |  |
-| R-020 | V §3 | budget never underflows | cap_table | RTL | `test_cap_refuses_more_than_remaining_budget`<br>`test_cap_budget_never_underflows_random`<br>`test_diff_cap_table_random_against_model_switch` |  |
-| R-021 | S §5 | dir: u2 // in, out, both | cap_table | RTL | `test_cap_match_requires_direction`<br>`test_cap_both_admits_in_and_out`<br>`test_diff_cap_table_random_against_model_switch` |  |
-| R-022 | S §5 | The sizes are parameters of GovernorCore | top | RTL | `test_core_has_one_table_per_point_sized_by_parameter` |  |
-| R-023 | S §5 | instantiates the Amaranth defaults (8 entries per point, 16-bit peer, 24-bit budget, 32-bit ticket id, 8-bit command, 4 meter slots of 48 bits) | top | RTL | `test_core_default_sizes_are_the_spec_prototype` |  |
-| R-024 | S §5 | a port or flow is open in the switch exactly when a matching, unexpired entry exists | top, cap_table | RTL | `test_core_tables_empty_whenever_not_running`<br>`test_cap_expired_entry_closes_the_port_for_good` |  |
-| R-025 | S §9 | 1 cycle at the checker clock | cap_table | RTL | `test_cap_lookup_answers_in_the_same_cycle` |  |
-| R-026 | S §5 | 0 NVSwitch port, 1 PCIe switch port, 2 DPU flow, 3 storage path | top | RTL | `test_core_has_one_table_per_point_sized_by_parameter` |  |
-| R-027 | V §3 | A burned id is never admitted again | ticket_store | RTL | `test_ticket_seen_after_burn`<br>`test_ticket_second_burn_of_same_id_refused`<br>`test_ticket_full_store_refuses_burn_and_flags`<br>`test_ticket_never_admitted_twice_random` | 3 |
-| R-028 | V §3 | burn before admit ordering | ticket_store | RTL | `test_ticket_seen_after_burn` | 1 |
-| R-029 | V §3 | expired asserts within one millisecond tick of expiry | heartbeat | RTL | `test_hb_expired_at_reset`<br>`test_hb_expires_on_the_window_th_tick`<br>`test_finding_heartbeat_expires_on_time` (F-08) |  |
-| R-030 | V §3 | remaining reloads only on hb_valid, to the window given | heartbeat | RTL | `test_hb_reload_only_on_valid`<br>`test_hb_valid_wins_over_tick` |  |
-| R-031 | S §2 | Heartbeat time remaining, milliseconds | top (HB_REMAIN) | RTL | `test_core_hb_remain_csr`<br>`test_finding_heartbeat_expires_on_time` (F-08) |  |
-| R-032 | S §9 | the RTL sequencer and heartbeat timers run on a millisecond tick derived from the microsecond counter | top | RTL | `test_core_timers_ignore_the_raw_microsecond_tick`<br>`test_finding_heartbeat_expires_on_time` (F-08)<br>`test_core_ms_strobe_is_derived_from_the_counter` |  |
-| R-033 | S §9 | the governor clamps any signed window to it | heartbeat (window input) | FW | `test_fw_heartbeat_window_is_clamped_to_policy_expiry` |  |
-| R-034 | V §3 | The rung (state) climbs on any of loop_lost, hb_expired, tamper, cmd_halt, cmd_throttle, local_trip and on the timers | halt | RTL | `test_halt_loop_lost_from_run`<br>`test_halt_loop_lost_from_throttle`<br>`test_halt_hb_expired_throttles`<br>`test_halt_local_trip_throttles`<br>`test_halt_cmd_throttle_throttles`<br>`test_halt_cmd_halt_from_run`<br>`test_halt_cmd_halt_from_throttle`<br>`test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_halt_throttle_escalates_after_t_throttle_ticks`<br>`test_halt_halt_escalates_after_t_halt_ticks` |  |
-| R-035 | V §3 | never descends without clear | halt | RTL | `test_halt_never_descends_without_clear_random`<br>`test_halt_safe_is_absorbing_without_clear`<br>`test_finding_clear_and_tamper_pulse_same_cycle_ends_safe`<br>`test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung`<br>`test_model_finding_halt_in_safe_does_not_descend`<br>`test_calls_model_halt_in_safe_stays_safe_and_opens_loop` |  |
-| R-036 | V §3 | the levers pwrbrk, perst, pwr_en follow the rung exactly | halt | RTL | `test_halt_levers_follow_every_rung`<br>`test_halt_ports_closed_outside_run`<br>`test_model_finding_halt_in_safe_does_not_descend`<br>`test_diff_levers_per_rung_rtl_equals_model` |  |
-| R-037 | V §3 | switch_open starts set, clears only when armed (no cause, hb_ok) | halt | RTL | `test_halt_switch_open_at_reset`<br>`test_halt_no_arming_without_heartbeat`<br>`test_halt_arms_before_loop_current`<br>`test_halt_heartbeat_alone_never_recloses_after_a_loop_cause`<br>`test_diff_boot_rung_rtl_equals_model` |  |
-| R-038 | V §3 | sets on loop_lost, tamper or cmd_halt | halt | RTL | `test_halt_loop_lost_from_run`<br>`test_halt_loop_lost_from_throttle`<br>`test_halt_cmd_halt_from_run`<br>`test_halt_cmd_halt_from_throttle`<br>`test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_finding_cmd_halt_in_safe_opens_the_loop`<br>`test_cmd_halt_in_throttle_from_local_cause_opens_loop`<br>`test_finding_loop_lost_in_halt_sets_switch_open` (F-15) |  |
-| R-039 | V §3 | and clear does not reset it | halt | RTL | `test_halt_heartbeat_alone_never_recloses_after_a_loop_cause`<br>`test_halt_clear_does_not_close_the_switch_until_armed` |  |
-| R-040 | V §3 | cause bits 2:0 name the summary | halt | RTL | `test_halt_cause_codes_match_the_spec`<br>`test_halt_escalation_keeps_the_cause` |  |
-| R-041 | S §9 | 30 s / 300 s | halt, top | RTL | `test_halt_throttle_escalates_after_t_throttle_ticks`<br>`test_halt_halt_escalates_after_t_halt_ticks`<br>`test_core_default_timers_are_30s_and_300s` |  |
-| R-042 | V §4 | Mesh cut, glitch injection, temperature excursion: keys zeroized, state SAFE | halt (tamper) | RTL | `test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_finding_clear_and_tamper_pulse_same_cycle_ends_safe`<br>`test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung`<br>`test_level_tamper_with_clear_settles_in_safe`<br>`test_model_tamper_is_safe_and_unclearable` |  |
-| R-043 | S §2 | 0 HALTED_INITIAL, 1 RUN, 2 THROTTLE, 3 HALT, 4 SAFE | top (STATE) | RTL | `test_halt_state_codes_match_the_spec`<br>`test_core_state_and_cause_csrs` |  |
-| R-044 | S §2 | bit 0 power brake asserted, bit 1 PERST# asserted, bit 2 PWR_EN low | top (LEVERS) | RTL | `test_core_levers_csr_bits` |  |
-| R-045 | V §3 | the core boots on the HALTED_INITIAL rung with all three levers in the safe state and the loop switch open | top | RTL | `test_core_boot_state_levers_and_switch` |  |
-| R-046 | V §5 | Watchdog resets the governor into HALTED_INITIAL; loop opens | top (reset) | RTL | `test_core_reset_from_run_returns_to_boot_rung` |  |
-| R-047 | S §3 | close the loop switch if no cause remains | halt (clear strobe) | RTL | `test_halt_clear_does_not_close_the_switch_until_armed`<br>`test_halt_clear_in_boot_rung_is_a_no_op` |  |
-| R-144 | S §3 | A HALT opens the loop switch on every rung, SAFE included | halt | RTL | `test_finding_cmd_halt_in_safe_opens_the_loop`<br>`test_calls_halt_in_safe_from_local_cause_opens_loop_keeps_safe`<br>`test_calls_halt_opens_loop_from_every_rung` |  |
-| R-145 | S §3 | a HALT to a chip already in SAFE leaves it in SAFE with power off | halt; model enter_safe_mode | RTL | `test_model_finding_halt_in_safe_does_not_descend`<br>`test_calls_halt_in_safe_from_local_cause_opens_loop_keeps_safe`<br>`test_calls_model_halt_in_safe_stays_safe_and_opens_loop` |  |
-| R-146 | S §2 | ALARMS bit 31 is NO_FIRST_HEARTBEAT, set by the hardware when the chip has sat in HALTED_INITIAL with no cause and no valid heartbeat for longer than the boot window | halt, top (ALARMS, CAUSE, BOOT_WAIT) | RTL | `test_calls_core_names_the_chip_waiting_for_its_first_heartbeat` |  |
-| R-147 | S §2 | It is never set once the chip has been armed since reset | halt, top | RTL | `test_calls_core_never_raises_no_first_heartbeat_once_armed` |  |
-| R-148 | S §2 | only the sequencer raises them and firmware cannot raise them | top, alarms (hw_mask) | RTL | `test_calls_firmware_cannot_raise_the_hardware_alarm_bits` |  |
-| R-149 | S §3 | EXCLUDE has no effect in any state but HALTED_INITIAL with no cause | halt | RTL | `test_calls_exclude_does_nothing_outside_waiting_for_first_heartbeat` |  |
-| R-150 | S §3 | the excluded chip closes its own loop switch so the rest of the rack can run, while its own levers stay asserted | halt, top | RTL | `test_calls_exclude_closes_the_pad_and_keeps_every_lever` |  |
-| R-151 | S §3 | It leaves exclusion when a valid heartbeat arms it normally, on a reset, or when a HALT or a tamper moves it to a halted rung with its loop open | halt | RTL | `test_calls_exclusion_ends_by_heartbeat_halt_or_tamper_only` |  |
-| R-152 | S §3 | every EXCLUDE is logged with who signed it | model (_cmd_exclude); firmware | FW | `test_calls_model_logs_every_exclude_with_its_signer` |  |
-| R-048 | V §3 | loop_out_open follows switch_open | halt_loop | RTL | `test_loop_pad_follows_switch_request` |  |
-| R-049 | V §3 | loop_sense low for two samples drives loop_lost (debounce) | halt_loop | RTL | `test_loop_one_noisy_sample_is_not_a_loss`<br>`test_loop_two_low_samples_declare_loss`<br>`test_loop_counts_only_on_sample_strobes` |  |
-| R-050 | S §2 | bit 0 loop current sensed, bit 1 own switch open | top (LOOP) | RTL | `test_core_loop_csr_bits` |  |
-| R-051 | V §3 | Counters are read-only from the host port (host_wr is refused and flagged) | meter | RTL | `test_meter_host_write_refused_and_flagged` |  |
-| R-052 | V §3 | and only increment | meter | RTL | `test_meter_counters_only_increase_random`<br>`test_meter_slots_are_independent`<br>`test_meter_frozen_slot_stays_put_without_strobes`<br>`test_finding_meter_counter_wraps_at_48_bits` |  |
-| R-053 | S §2 | tokens, kernel cycles, bytes in, bytes out, per model digest slot | top (METER_SLOT) | RTL | `test_core_meter_csr_layout` |  |
-| R-054 | S §3 | sequence number greater than the last accepted one for that signer key | mailbox | RTL | `test_mbox_good_frame_dispatches_once`<br>`test_mbox_sequence_must_strictly_increase`<br>`test_mbox_sequence_is_per_key_slot`<br>`test_mbox_failed_frames_do_not_consume_sequence`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_replayed_halt`<br>`test_diff_spec_per_key_sequence`<br>`test_diff_finding_first_sequence_number_zero` (F-02)<br>`test_finding_mailbox_sequence_never_moves_backwards` (F-13) |  |
-| R-055 | S §3 | epoch equal to EPOCH (except the epoch-exempt commands | mailbox | RTL | `test_mbox_stale_epoch_refused_unless_exempt`<br>`test_mbox_self_authenticating_command_rides_on_the_firmware_verdict`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_halt_with_stale_epoch_is_exempt`<br>`test_diff_spec_stale_epoch_request` |  |
-| R-056 | S §3 | which move, repair or inspect the epoch itself and must work when it is stale), then the signature | mailbox | RTL | `test_mbox_bad_signature_refused`<br>`test_mbox_no_dispatch_before_signature`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_forged_request`<br>`test_diff_spec_good_heartbeat` |  |
-| R-057 | S §3 | then what was signed: the signed payload names the command it is for | mailbox | RTL | `test_mbox_signed_for_another_command_is_status_7`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_heartbeat_presented_as_clear`<br>`test_diff_finding_heartbeat_signed_as_something_else` (F-03) |  |
-| R-058 | S §3 | The first failing check is the reason reported; the model (_check_signed) and the RTL (mailbox.py) check in the same order | mailbox vs govsim | RTL | `test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_good_halt`<br>`test_diff_spec_replayed_halt`<br>`test_diff_spec_halt_with_stale_epoch_is_exempt`<br>`test_diff_spec_heartbeat_presented_as_clear`<br>`test_diff_spec_stale_epoch_request`<br>`test_diff_spec_forged_request`<br>`test_diff_spec_request_while_not_running`<br>`test_diff_spec_replayed_and_forged`<br>`test_diff_spec_stale_and_forged`<br>`test_diff_spec_not_running_and_forged`<br>`test_diff_spec_clear_for_another_chip`<br>`test_diff_spec_expired_clear`<br>`test_diff_spec_per_key_sequence`<br>`test_diff_spec_good_heartbeat`<br>`test_diff_finding_replayed_request_while_not_running` (F-01)<br>`test_diff_finding_stale_request_while_not_running` (F-01)<br>`test_diff_finding_first_sequence_number_zero` (F-02)<br>`test_diff_finding_replayed_forged_heartbeat` (F-03)<br>`test_diff_finding_heartbeat_signed_as_something_else` (F-03)<br>`test_model_clear_handler_reports_the_mailbox_reason`<br>`test_model_finding_clear_collapses_reasons` (F-04) |  |
-| R-059 | S §3 | Only then is the command dispatched. | mailbox | RTL | `test_mbox_good_frame_dispatches_once`<br>`test_mbox_no_dispatch_before_signature`<br>`test_diff_spec_good_halt` |  |
-| R-060 | S §2 | Last accepted inbound sequence number (key slot 0; one counter per signer key) | top (MBOX_SEQ), mailbox | RTL | `test_mbox_sequence_is_per_key_slot`<br>`test_core_mbox_status_and_seq_csrs` |  |
-| R-061 | S §2 | 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused | mailbox, top (MBOX_STATUS) | RTL | `test_mbox_refused_when_not_running`<br>`test_mbox_status_codes_match_the_register_map`<br>`test_core_mbox_status_and_seq_csrs`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_request_while_not_running`<br>`test_diff_spec_not_running_and_forged`<br>`test_diff_finding_replayed_request_while_not_running` (F-01)<br>`test_diff_finding_stale_request_while_not_running` (F-01)<br>`test_finding_spec_status_table_lists_status_7` (F-14) |  |
-| R-062 | V §3 | No command is dispatched unless frame_seq is above the key slot's last accepted sequence | mailbox | RTL | `test_mbox_failed_frames_do_not_consume_sequence`<br>`test_mbox_no_dispatch_without_all_checks_random`<br>`test_finding_mailbox_sequence_never_moves_backwards` (F-13) |  |
-| R-063 | S §3 | (mailbox.wrong_command, mailbox.expired; RTL status 7) | mailbox | RTL | `test_mbox_signed_for_another_command_is_status_7`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_heartbeat_presented_as_clear`<br>`test_diff_spec_clear_for_another_chip`<br>`test_diff_spec_expired_clear`<br>`test_finding_spec_status_table_lists_status_7` (F-14) |  |
-| R-064 | S §2 | There is no writable register other than the doorbell. | top | RTL | `test_core_has_no_csr_write_port`<br>`test_core_csr_reads_have_no_side_effects` |  |
-| R-065 | V §3 | No CSR write port but the doorbell | top | RTL | `test_core_has_no_csr_write_port`<br>`test_core_csr_reads_have_no_side_effects` |  |
-| R-066 | S §2 | Silicon id and revision | top (ID) | RTL | `test_core_id_register` |  |
-| R-067 | S §2 | Bits 2:0 the sequencer's own summary (0 none, 1 loop, 2 local, 3 tamper, 4 command); bit 3 waiting for the first heartbeat, boot window passed; bit 4 excluded; bits 15:8 the firmware's reason code | top (CAUSE) | RTL | `test_core_state_and_cause_csrs` |  |
-| R-068 | S §2 | firmware-mapped: the log engine is firmware over NVM, so the RTL core does not decode it | top (LOG_HEAD) | FW-ONLY | `test_core_log_window_is_not_decoded` |  |
-| R-069 | V §3 | Bits set by any source through set_mask | alarms | RTL | `test_alarm_any_source_sets` |  |
-| R-070 | V §3 | cleared only through clear_mask gated by clear_authorized | alarms | RTL | `test_alarm_clear_needs_authorization`<br>`test_alarm_set_beats_clear_in_the_same_cycle` |  |
-| R-071 | S §2 | Sticky alarm bits (monotone; cleared only through the clear path) | top (ALARMS) | RTL | `test_core_alarms_csr` |  |
-| R-072 | V §1 | Alarms are monotone | alarms | RTL | `test_alarm_any_source_sets`<br>`test_alarm_set_beats_clear_in_the_same_cycle`<br>`test_alarm_monotone_without_authorization_random` |  |
-| R-073 | V §5 | Boot refused; the sequencer never leaves HALTED_INITIAL | halt (hb_ok gate); firmware (boot) | RTL | `test_halt_no_arming_without_heartbeat`<br>`test_diff_boot_rung_rtl_equals_model` |  |
-| R-074 | V §5 | Zeroize, SAFE | halt (tamper strobe); key manager (zeroize) | FW | `test_model_tamper_is_safe_and_unclearable` |  |
-| R-080 | S §3 | POLICY_PROPOSE, POLICY_COMMIT, ATTEST, HALT, CLEAR, ALARM_CLEAR and EXCLUDE | mailbox (epoch_exempt input) | FW | `test_diff_spec_halt_with_stale_epoch_is_exempt`<br>`test_fw_epoch_exempt_list_matches_spec` |  |
-| R-081 | S §3 | a HALT or CLEAR also names the chip it is for and carries an expiry no more than 60 s ahead that has not passed | mailbox (signed_cmd input) | FW | `test_diff_spec_clear_for_another_chip`<br>`test_diff_spec_expired_clear`<br>`test_fw_authority_expiry_ceiling_is_60s` |  |
-| R-082 | S §3 | Commands that carry their own authentication in the body (an attestation report, a k-of-n signed policy image) are accepted without a frame signature | mailbox (sig_ok input) | FW | `test_mbox_self_authenticating_command_rides_on_the_firmware_verdict` |  |
-| R-083 | S §3 | Reloads the heartbeat timer | heartbeat (hb_valid strobe) | FW | `test_diff_spec_good_heartbeat`<br>`test_fw_heartbeat_window_is_clamped_to_policy_expiry` |  |
-| R-084 | S §4 | heartbeat_key: key, // signs heartbeats and nothing else | heartbeat (hb_valid strobe) | FW | `test_fw_heartbeat_key_cannot_sign_a_halt` |  |
-| R-085 | S §3 | an authority key (never the heartbeat key) | halt (cmd_halt, cmd_throttle strobes) | FW | `test_fw_heartbeat_key_cannot_sign_a_halt` |  |
-| R-086 | S §3 | Clear the cause if it is in the log and a fabric neighbor has acknowledged the checkpoint that contains it | halt (clear strobe) | FW | `test_model_clear_handler_reports_the_mailbox_reason`<br>`test_model_finding_clear_collapses_reasons` (F-04) |  |
-| R-087 | S §3 | Switch the epoch (the rack-wide rule in 02) | epoch_reg (commit, quorum_ok) | FW | `test_core_epoch_switch_kills_every_old_capability` | 3 |
-| R-088 | S §3 | Raises a sticky alarm (any party may) | alarms (set_mask) | FW | `test_alarm_any_source_sets` |  |
-| R-089 | S §3 | the policy's alarm approver key | alarms (clear_authorized) | FW | `test_alarm_clear_needs_authorization` |  |
-| R-090 | S §3 | The peer host is accepted only on the PCIe point, never on NVSwitch, DPU or storage | cap_table (ins, mac_ok) | FW | `test_fw_host_peer_only_on_pcie` |  |
-| R-091 | S §3 | Freezes the meter slot for that model | meter (strobe) | FW | `test_meter_frozen_slot_stays_put_without_strobes` |  |
-| R-092 | S §3 | the governor refuses a stale-epoch ticket and refuses while not in RUN | mailbox (needs_run); firmware (ticket) | FW | `test_diff_spec_request_while_not_running` | 2 |
-| R-093 | S §5 | the governor re-derives the switch configuration from the table after any epoch, roster or heartbeat event | cap_table (clear_all, ins) | FW | `test_cap_refuses_on_epoch_tag_mismatch`<br>`test_core_epoch_switch_kills_every_old_capability`<br>`test_finding_cap_rederived_after_epoch_switch_is_usable` (F-10) |  |
-| R-094 | S §3 | extends the fingerprint with the manifest digest | firmware (the fingerprint has no RTL register) | FW-ONLY | none |  |
-| R-100 | S §3 | Gate core; returns a ticket, a hold id, or a refusal | gate (firmware) | FW-ONLY | none | 12 |
-| R-101 | S §3 | Releases a hold if the policy quorum for that rule is met | gate (firmware) | FW-ONLY | none | 8 |
-| R-102 | S §4 | version: u32, // strictly increasing; the anti-rollback counter tracks it | policy loader, fuses | FW-ONLY | none |  |
-| R-103 | S §4 | never below the fused threshold | policy loader, fuses | FW-ONLY | none |  |
-| R-104 | S §4 | refuses an image in which any of them lacks a row in assumptions | policy loader | FW-ONLY | none |  |
-| R-105 | S §5 | request_hash = SHA-256(canonical(request_id, fingerprint, action, params)) | gate, endpoint | FW-ONLY | none | 5 |
-| R-106 | S §7 | A firmware change changes CDI_1 and every key under it. | key manager (IP) | FW-ONLY | none | 2 |
-| R-107 | S §9 | policy, never below 10 s | approvals (firmware) | FW-ONLY | none |  |
-| R-108 | S §9 | a governor that staged an image and saw no commit stops accepting heartbeats under the staged epoch and halts as a straggler | policy, heartbeat (firmware) | FW-ONLY | none |  |
-| R-109 | S §6 | prompt_hash_verified: false | provenance record (firmware) | FW-ONLY | none |  |
-| R-110 | S §9 | Device-provenance signature | crypto engine, firmware batching | FW-ONLY | none |  |
-| R-111 | S §8 | Update: signed by the governance root, measured at boot, gated by the anti-rollback counter. | boot ROM, fuses | FW-ONLY | none | 2 |
-| R-112 | S §3 | Returns the governor's quote: measurements, epoch, lifecycle, counters, over the nonce | attestation (firmware) | FW-ONLY | none | 4 |
-| R-113 | S §3 | Signed Merkle root, size, head, neighbor heads | log engine (firmware) | FW-ONLY | none | 8 |
-| R-120 | V §1 | Within the boundary, no protected operation executes without a fresh authorization bound to that exact operation | system (H0) | FW-ONLY | none | 16 |
-| R-121 | V §1 | Attestation binds permissions to firmware, model manifest and policy | system (H1) | FW-ONLY | none | 14 |
-| R-122 | V §1 | Every enumerated boundary crossing passes a governed switch | system (H2) | FW-ONLY | none | 4 |
-| R-123 | V §1 | Policy changes only with a quorum, and never backwards | system (H3); RTL monotonic | FW-ONLY | none | 4 |
-| R-124 | V §1 | The broker cannot choose its rule or lane | system (H4) | FW-ONLY | none | 2 |
-| R-125 | V §1 | The comparator holds with every layer above it compromised | system (H6) | FW-ONLY | none | 4 |
-| R-126 | V §1 | The assumptions register is complete for the deployment | system (H7) | FW-ONLY | none |  |
-| R-127 | V §1 | Human override is slow and fully logged | system (H8) | FW-ONLY | none | 1 |
-| R-128 | V §1 | Permitted-channel leakage stays within the budget | system (H10) | FW-ONLY | none |  |
-| R-129 | V §1 | A halt propagates to every GPU in the domain within the bound, fail-safe | system (H11); RTL halt_loop | FW-ONLY | none |  |
-| R-130 | V §1 | Only roster members speak on the fabric, and only once per message | system (H12) | FW-ONLY | none |  |
-| R-131 | V §1 | Shared budgets cannot be overspent across governors | system (H13) | FW-ONLY | none | 4 |
-| R-132 | V §1 | Partitions and epoch changes end in safe states, never in stale ones | system (H14); RTL heartbeat | FW-ONLY | none |  |
-| R-133 | V §1 | No governed action initiates without a ticket, and no governed response leaves the rack without a release ticket | system (H17) | FW-ONLY | none | 5 |
-| R-134 | V §1 | Oversight survives the model | system (H18) | FW-ONLY | none | 16 |
-| R-135 | V §1 | A signature authorizes exactly what was signed, and a policy cannot set its own quorum | system (H19); RTL mailbox status 7 | FW-ONLY | none | 2 |
-| R-136 | V §1 | The controls the rulebook names are enforced, not just stored | system (H20) | FW-ONLY | none | 1 |
-| R-137 | V §6 | the crypto engines compute what they claim | crypto IP (assumption) | FW-ONLY | none | 3 |
-| R-140 | V §4 | Oscilloscope on PWRBRK# across the domain; worst case over temperature and loop length | silicon (halt bound) | SILICON | none |  |
-| R-141 | V §4 | PWRBRK# throttles, PERST# resets, PWR_EN cuts | silicon (levers on a real GPU) | SILICON | none |  |
-| R-142 | V §5 | Governor loses power / Loop opens | silicon (normally-open switch) | SILICON | none |  |
-| R-143 | S §9 | Loss of current is declared after two sense periods (debounce) | board (sense period); RTL debounce | SILICON | `test_loop_one_noisy_sample_is_not_a_loss`<br>`test_loop_two_low_samples_declare_loss` |  |
+| REQUIREMENT-MONOTONIC-MICROSECOND-COUNTER | S §1 | Time is the governor's monotonic counter (64-bit, 1 µs ticks, never decremented | monotonic, top | RTL | `test_mono_counter_is_64_bits`<br>`test_mono_advances_once_per_tick`<br>`test_core_mono_csr_low_and_high_words` |  |
+| REQUIREMENT-COUNTER-REFUSES-DECREMENT | V §3 | The counter value never decreases; a decrement request is refused | monotonic | RTL | `test_mono_decrement_request_refused_and_value_kept`<br>`test_mono_never_decreases_under_random_inputs`<br>`test_finding_mono_wraps_from_an_all_ones_high_water_mark` |  |
+| REQUIREMENT-COUNTER-FUSE-HIGH-WATER-MARK | S §1 | persisted across power loss with a fuse-backed high-water mark | monotonic | RTL | `test_mono_high_water_mark_raises_the_counter`<br>`test_mono_lower_high_water_mark_cannot_pull_back`<br>`test_finding_mono_wraps_from_an_all_ones_high_water_mark` |  |
+| REQUIREMENT-MEASUREMENT-EXTEND-ONLY | V §3 | The register changes only through extend; no write path exists | measure_reg | RTL | `test_meas_engine_output_without_request_ignored`<br>`test_meas_extend_latches_engine_result`<br>`test_meas_has_no_write_port` |  |
+| REQUIREMENT-LOADER-MEASUREMENT-REGISTER | S §2 | Measurement register 0 (loader); extend-only | top (MEAS0) | RTL | `test_core_meas_csr_windows_read_both_registers` |  |
+| REQUIREMENT-FIRMWARE-MEASUREMENT-REGISTER | S §2 | Measurement register 1 (firmware); extend-only | top (MEAS1) | RTL | `test_core_meas_csr_windows_read_both_registers` |  |
+| REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM | V §3 | The register changes only on policy_commit with quorum_ok; the host port cannot write it | epoch_reg | RTL | `test_epoch_commit_without_quorum_ignored`<br>`test_epoch_quorum_without_commit_ignored`<br>`test_epoch_host_write_has_no_effect`<br>`test_epoch_commit_with_quorum_switches` | 2 |
+| REQUIREMENT-EPOCH-IS-POLICY-DIGEST | S §2 | Policy epoch (digest of the accepted policy image) | top (EPOCH) | RTL | `test_core_epoch_csr_reads_256_bits` |  |
+| REQUIREMENT-EPOCH-TAG-LOW-BITS | S §5 | epoch_tag: u16 // low bits of the epoch | epoch_reg, cap_table | RTL | `test_epoch_tag_is_low_16_bits`<br>`test_core_epoch_switch_kills_every_old_capability` |  |
+| REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG | V §3 | The state is monotone; in PRODUCTION, debug_grant is never asserted | lifecycle | RTL | `test_lifecycle_never_moves_down_by_advance`<br>`test_lifecycle_lower_fuse_load_cannot_move_down`<br>`test_lifecycle_monotone_under_random_inputs`<br>`test_finding_lifecycle_debug_before_fuse_load` |  |
+| REQUIREMENT-PRODUCTION-HAS-NO-DEBUG | V §1 | Production silicon has no debug path | lifecycle | RTL | `test_lifecycle_debug_refused_in_production_and_later`<br>`test_lifecycle_debug_granted_before_production`<br>`test_finding_lifecycle_debug_before_fuse_load`<br>`test_finding_core_reports_test_lifecycle_before_fuse_load` (CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD)<br>`test_lifecycle_after_load_debug_is_dead` |  |
+| REQUIREMENT-LIFECYCLE-REGISTER-ENCODING | S §2 | 0 test, 1 provisioned, 2 production, 3 decommissioned (fuse-backed, monotone) | top (LIFECYCLE) | RTL | `test_core_lifecycle_csr_encoding`<br>`test_finding_core_reports_test_lifecycle_before_fuse_load` (CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD) |  |
+| REQUIREMENT-JTAG-REFUSED-AND-LOGGED | V §4 | JTAG refused in PRODUCTION; attempt logged | lifecycle (flag); firmware (log) | RTL | `test_lifecycle_debug_refused_in_production_and_later` |  |
+| REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH | S §5 | The capability table is a content-addressable memory keyed on (point, peer, dir) | cap_table | RTL | `test_cap_match_requires_point`<br>`test_cap_match_requires_peer`<br>`test_cap_match_requires_direction`<br>`test_cap_full_table_refuses_insert`<br>`test_finding_cap_reprogramming_a_key_replaces_it` (CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES)<br>`test_model_switch_replaces_on_reprogram`<br>`test_diff_cap_table_random_against_model_switch`<br>`test_finding_cap_rederived_after_epoch_switch_is_usable` (CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES) |  |
+| REQUIREMENT-LOOKUP-DECREMENTS-BUDGET | S §5 | a lookup decrements budget | cap_table | RTL | `test_cap_lookup_decrements_by_bytes`<br>`test_finding_cap_reprogramming_a_key_replaces_it` (CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES)<br>`test_model_switch_replaces_on_reprogram`<br>`test_diff_cap_table_random_against_model_switch` |  |
+| REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO | S §5 | refuses at zero, on expiry, or on an epoch-tag mismatch | cap_table (zero) | RTL | `test_cap_refuses_more_than_remaining_budget`<br>`test_finding_cap_refuses_at_zero_budget` (CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES)<br>`test_diff_cap_table_random_against_model_switch` |  |
+| REQUIREMENT-CAPABILITY-REFUSES-ON-EXPIRY | S §5 | refuses at zero, on expiry, or on an epoch-tag mismatch | cap_table (expiry) | RTL | `test_cap_refuses_at_expiry_and_drops_entry`<br>`test_diff_cap_table_random_against_model_switch` |  |
+| REQUIREMENT-CAPABILITY-REFUSES-STALE-TAG | S §5 | refuses at zero, on expiry, or on an epoch-tag mismatch | cap_table (epoch tag) | RTL | `test_cap_refuses_on_epoch_tag_mismatch`<br>`test_diff_cap_table_random_against_model_switch` |  |
+| REQUIREMENT-MAC-CHECKED-AT-INSERTION | S §5 | The MAC is checked at insertion, not per lookup | cap_table | RTL | `test_cap_insert_needs_mac`<br>`test_cap_lookup_does_not_consult_mac` |  |
+| REQUIREMENT-BUDGET-NEVER-UNDERFLOWS | V §3 | budget never underflows | cap_table | RTL | `test_cap_refuses_more_than_remaining_budget`<br>`test_cap_budget_never_underflows_random`<br>`test_diff_cap_table_random_against_model_switch` |  |
+| REQUIREMENT-CAPABILITY-DIRECTION-FIELD | S §5 | dir: u2 // in, out, both | cap_table | RTL | `test_cap_match_requires_direction`<br>`test_cap_both_admits_in_and_out`<br>`test_diff_cap_table_random_against_model_switch` |  |
+| REQUIREMENT-TABLE-SIZES-ARE-PARAMETERS | S §5 | The sizes are parameters of GovernorCore | top | RTL | `test_core_has_one_table_per_point_sized_by_parameter` |  |
+| REQUIREMENT-PROTOTYPE-DEFAULT-SIZES | S §5 | instantiates the Amaranth defaults (8 entries per point, 16-bit peer, 24-bit budget, 32-bit ticket id, 8-bit command, 4 meter slots of 48 bits) | top | RTL | `test_core_default_sizes_are_the_spec_prototype` |  |
+| REQUIREMENT-PORT-OPEN-ONLY-WITH-ENTRY | S §5 | a port or flow is open in the switch exactly when a matching, unexpired entry exists | top, cap_table | RTL | `test_core_tables_empty_whenever_not_running`<br>`test_cap_expired_entry_closes_the_port_for_good` |  |
+| REQUIREMENT-LOOKUP-IN-ONE-CYCLE | S §9 | 1 cycle at the checker clock | cap_table | RTL | `test_cap_lookup_answers_in_the_same_cycle` |  |
+| REQUIREMENT-ENFORCEMENT-POINT-NUMBERING | S §5 | 0 NVSwitch port, 1 PCIe switch port, 2 DPU flow, 3 storage path | top | RTL | `test_core_has_one_table_per_point_sized_by_parameter` |  |
+| REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED | V §3 | A burned id is never admitted again | ticket_store | RTL | `test_ticket_seen_after_burn`<br>`test_ticket_second_burn_of_same_id_refused`<br>`test_ticket_full_store_refuses_burn_and_flags`<br>`test_ticket_never_admitted_twice_random` | 3 |
+| REQUIREMENT-BURN-BEFORE-ADMIT | V §3 | burn before admit ordering | ticket_store | RTL | `test_ticket_seen_after_burn` | 1 |
+| REQUIREMENT-HEARTBEAT-EXPIRES-ON-TIME | V §3 | expired asserts within one millisecond tick of expiry | heartbeat | RTL | `test_hb_expired_at_reset`<br>`test_hb_expires_on_the_window_th_tick`<br>`test_finding_heartbeat_expires_on_time` (CONFORMANCE-MILLISECOND-TICK-TOO-LONG) |  |
+| REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID | V §3 | remaining reloads only on hb_valid, to the window given | heartbeat | RTL | `test_hb_reload_only_on_valid`<br>`test_hb_valid_wins_over_tick` |  |
+| REQUIREMENT-HEARTBEAT-REMAINING-REGISTER | S §2 | Heartbeat time remaining, milliseconds | top (HB_REMAIN) | RTL | `test_core_hb_remain_csr`<br>`test_finding_heartbeat_expires_on_time` (CONFORMANCE-MILLISECOND-TICK-TOO-LONG) |  |
+| REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | S §9 | the RTL sequencer and heartbeat timers run on a millisecond tick derived from the microsecond counter | top | RTL | `test_core_timers_ignore_the_raw_microsecond_tick`<br>`test_finding_heartbeat_expires_on_time` (CONFORMANCE-MILLISECOND-TICK-TOO-LONG)<br>`test_core_ms_strobe_is_derived_from_the_counter` |  |
+| REQUIREMENT-HEARTBEAT-WINDOW-CLAMPED | S §9 | the governor clamps any signed window to it | heartbeat (window input) | FW | `test_fw_heartbeat_window_is_clamped_to_policy_expiry` |  |
+| REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | V §3 | The rung (state) climbs on any of loop_lost, hb_expired, tamper, cmd_halt, cmd_throttle, local_trip and on the timers | halt | RTL | `test_halt_loop_lost_from_run`<br>`test_halt_loop_lost_from_throttle`<br>`test_halt_hb_expired_throttles`<br>`test_halt_local_trip_throttles`<br>`test_halt_cmd_throttle_throttles`<br>`test_halt_cmd_halt_from_run`<br>`test_halt_cmd_halt_from_throttle`<br>`test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_halt_throttle_escalates_after_t_throttle_ticks`<br>`test_halt_halt_escalates_after_t_halt_ticks` |  |
+| REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED | V §3 | never descends without clear | halt | RTL | `test_halt_never_descends_without_clear_random`<br>`test_halt_safe_is_absorbing_without_clear`<br>`test_finding_clear_and_tamper_pulse_same_cycle_ends_safe`<br>`test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung`<br>`test_model_finding_halt_in_safe_does_not_descend`<br>`test_calls_model_halt_in_safe_stays_safe_and_opens_loop` |  |
+| REQUIREMENT-LEVERS-FOLLOW-RUNG | V §3 | the levers pwrbrk, perst, pwr_en follow the rung exactly | halt | RTL | `test_halt_levers_follow_every_rung`<br>`test_halt_ports_closed_outside_run`<br>`test_model_finding_halt_in_safe_does_not_descend`<br>`test_diff_levers_per_rung_rtl_equals_model` |  |
+| REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED | V §3 | switch_open starts set, clears only when armed (no cause, hb_ok) | halt | RTL | `test_halt_switch_open_at_reset`<br>`test_halt_no_arming_without_heartbeat`<br>`test_halt_arms_before_loop_current`<br>`test_halt_heartbeat_alone_never_recloses_after_a_loop_cause`<br>`test_diff_boot_rung_rtl_equals_model` |  |
+| REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | V §3 | sets on loop_lost, tamper or cmd_halt | halt | RTL | `test_halt_loop_lost_from_run`<br>`test_halt_loop_lost_from_throttle`<br>`test_halt_cmd_halt_from_run`<br>`test_halt_cmd_halt_from_throttle`<br>`test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_finding_cmd_halt_in_safe_opens_the_loop`<br>`test_cmd_halt_in_throttle_from_local_cause_opens_loop`<br>`test_finding_loop_lost_in_halt_sets_switch_open` (CONFORMANCE-SWITCH-OPEN-RUN-ONLY) |  |
+| REQUIREMENT-CLEAR-KEEPS-SWITCH-OPEN | V §3 | and clear does not reset it | halt | RTL | `test_halt_heartbeat_alone_never_recloses_after_a_loop_cause`<br>`test_halt_clear_does_not_close_the_switch_until_armed` |  |
+| REQUIREMENT-CAUSE-BITS-NAME-SUMMARY | V §3 | cause bits 2:0 name the summary | halt | RTL | `test_halt_cause_codes_match_the_spec`<br>`test_halt_escalation_keeps_the_cause` |  |
+| REQUIREMENT-THROTTLE-AND-HALT-TIMERS | S §9 | 30 s / 300 s | halt, top | RTL | `test_halt_throttle_escalates_after_t_throttle_ticks`<br>`test_halt_halt_escalates_after_t_halt_ticks`<br>`test_core_default_timers_are_30s_and_300s` |  |
+| REQUIREMENT-TAMPER-ZEROIZES-TO-SAFE | V §4 | Mesh cut, glitch injection, temperature excursion: keys zeroized, state SAFE | halt (tamper) | RTL | `test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_finding_clear_and_tamper_pulse_same_cycle_ends_safe`<br>`test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung`<br>`test_level_tamper_with_clear_settles_in_safe`<br>`test_model_tamper_is_safe_and_unclearable` |  |
+| REQUIREMENT-STATE-REGISTER-CODES | S §2 | 0 HALTED_INITIAL, 1 RUN, 2 THROTTLE, 3 HALT, 4 SAFE | top (STATE) | RTL | `test_halt_state_codes_match_the_spec`<br>`test_core_state_and_cause_csrs` |  |
+| REQUIREMENT-LEVERS-REGISTER-BITS | S §2 | bit 0 power brake asserted, bit 1 PERST# asserted, bit 2 PWR_EN low | top (LEVERS) | RTL | `test_core_levers_csr_bits` |  |
+| REQUIREMENT-CORE-BOOTS-HALTED-SAFE | V §3 | the core boots on the HALTED_INITIAL rung with all three levers in the safe state and the loop switch open | top | RTL | `test_core_boot_state_levers_and_switch` |  |
+| REQUIREMENT-WATCHDOG-RESETS-TO-HALTED | V §5 | Watchdog resets the governor into HALTED_INITIAL; loop opens | top (reset) | RTL | `test_core_reset_from_run_returns_to_boot_rung` |  |
+| REQUIREMENT-CLEAR-CLOSES-IF-NO-CAUSE | S §3 | close the loop switch if no cause remains | halt (clear strobe) | RTL | `test_halt_clear_does_not_close_the_switch_until_armed`<br>`test_halt_clear_in_boot_rung_is_a_no_op` |  |
+| REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG | S §3 | A HALT opens the loop switch on every rung, SAFE included | halt | RTL | `test_finding_cmd_halt_in_safe_opens_the_loop`<br>`test_calls_halt_in_safe_from_local_cause_opens_loop_keeps_safe`<br>`test_calls_halt_opens_loop_from_every_rung` |  |
+| REQUIREMENT-HALT-IN-SAFE-STAYS-SAFE | S §3 | a HALT to a chip already in SAFE leaves it in SAFE with power off | halt; model enter_safe_mode | RTL | `test_model_finding_halt_in_safe_does_not_descend`<br>`test_calls_halt_in_safe_from_local_cause_opens_loop_keeps_safe`<br>`test_calls_model_halt_in_safe_stays_safe_and_opens_loop` |  |
+| REQUIREMENT-NO-FIRST-HEARTBEAT-ALARM | S §2 | ALARMS bit 31 is NO_FIRST_HEARTBEAT, set by the hardware when the chip has sat in HALTED_INITIAL with no cause and no valid heartbeat for longer than the boot window | halt, top (ALARMS, CAUSE, BOOT_WAIT) | RTL | `test_calls_core_names_the_chip_waiting_for_its_first_heartbeat` |  |
+| REQUIREMENT-ARMED-CHIP-NEVER-WAITING | S §2 | It is never set once the chip has been armed since reset | halt, top | RTL | `test_calls_core_never_raises_no_first_heartbeat_once_armed` |  |
+| REQUIREMENT-HARDWARE-ALARMS-SEQUENCER-ONLY | S §2 | only the sequencer raises them and firmware cannot raise them | top, alarms (hw_mask) | RTL | `test_calls_firmware_cannot_raise_the_hardware_alarm_bits` |  |
+| REQUIREMENT-EXCLUDE-ONLY-WHILE-WAITING | S §3 | EXCLUDE has no effect in any state but HALTED_INITIAL with no cause | halt | RTL | `test_calls_exclude_does_nothing_outside_waiting_for_first_heartbeat` |  |
+| REQUIREMENT-EXCLUDED-CHIP-CLOSES-LOOP | S §3 | the excluded chip closes its own loop switch so the rest of the rack can run, while its own levers stay asserted | halt, top | RTL | `test_calls_exclude_closes_the_pad_and_keeps_every_lever` |  |
+| REQUIREMENT-EXCLUSION-ENDS-ON-EVENTS | S §3 | It leaves exclusion when a valid heartbeat arms it normally, on a reset, or when a HALT or a tamper moves it to a halted rung with its loop open | halt | RTL | `test_calls_exclusion_ends_by_heartbeat_halt_or_tamper_only` |  |
+| REQUIREMENT-EXCLUDE-LOGGED-WITH-SIGNER | S §3 | every EXCLUDE is logged with who signed it | model (_cmd_exclude); firmware | FW | `test_calls_model_logs_every_exclude_with_its_signer` |  |
+| REQUIREMENT-LOOP-PAD-FOLLOWS-SWITCH | V §3 | loop_out_open follows switch_open | halt_loop | RTL | `test_loop_pad_follows_switch_request` |  |
+| REQUIREMENT-LOOP-LOSS-DEBOUNCE | V §3 | loop_sense low for two samples drives loop_lost (debounce) | halt_loop | RTL | `test_loop_one_noisy_sample_is_not_a_loss`<br>`test_loop_two_low_samples_declare_loss`<br>`test_loop_counts_only_on_sample_strobes` |  |
+| REQUIREMENT-LOOP-REGISTER-BITS | S §2 | bit 0 loop current sensed, bit 1 own switch open | top (LOOP) | RTL | `test_core_loop_csr_bits` |  |
+| REQUIREMENT-METER-HOST-WRITE-REFUSED | V §3 | Counters are read-only from the host port (host_wr is refused and flagged) | meter | RTL | `test_meter_host_write_refused_and_flagged` |  |
+| REQUIREMENT-METER-ONLY-INCREMENTS | V §3 | and only increment | meter | RTL | `test_meter_counters_only_increase_random`<br>`test_meter_slots_are_independent`<br>`test_meter_frozen_slot_stays_put_without_strobes`<br>`test_finding_meter_counter_wraps_at_48_bits` |  |
+| REQUIREMENT-METER-SLOT-LAYOUT | S §2 | tokens, kernel cycles, bytes in, bytes out, per model digest slot | top (METER_SLOT) | RTL | `test_core_meter_csr_layout` |  |
+| REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | S §3 | sequence number greater than the last accepted one for that signer key | mailbox | RTL | `test_mbox_good_frame_dispatches_once`<br>`test_mbox_sequence_must_strictly_increase`<br>`test_mbox_sequence_is_per_key_slot`<br>`test_mbox_failed_frames_do_not_consume_sequence`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_replayed_halt`<br>`test_diff_spec_per_key_sequence`<br>`test_diff_finding_first_sequence_number_zero` (CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO)<br>`test_finding_mailbox_sequence_never_moves_backwards` (CONFORMANCE-FRAME-NOT-LATCHED) |  |
+| REQUIREMENT-FRAME-EPOCH-MUST-MATCH | S §3 | epoch equal to EPOCH (except the epoch-exempt commands | mailbox | RTL | `test_mbox_stale_epoch_refused_unless_exempt`<br>`test_mbox_self_authenticating_command_rides_on_the_firmware_verdict`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_halt_with_stale_epoch_is_exempt`<br>`test_diff_spec_stale_epoch_request` |  |
+| REQUIREMENT-FRAME-SIGNATURE-CHECKED | S §3 | which move, repair or inspect the epoch itself and must work when it is stale), then the signature | mailbox | RTL | `test_mbox_bad_signature_refused`<br>`test_mbox_no_dispatch_before_signature`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_forged_request`<br>`test_diff_spec_good_heartbeat` |  |
+| REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND | S §3 | then what was signed: the signed payload names the command it is for | mailbox | RTL | `test_mbox_signed_for_another_command_is_status_7`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_heartbeat_presented_as_clear`<br>`test_diff_finding_heartbeat_signed_as_something_else` (CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST) |  |
+| REQUIREMENT-FIRST-FAILURE-IS-REASON | S §3 | The first failing check is the reason reported; the model (_check_signed) and the RTL (mailbox.py) check in the same order | mailbox vs govsim | RTL | `test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_good_halt`<br>`test_diff_spec_replayed_halt`<br>`test_diff_spec_halt_with_stale_epoch_is_exempt`<br>`test_diff_spec_heartbeat_presented_as_clear`<br>`test_diff_spec_stale_epoch_request`<br>`test_diff_spec_forged_request`<br>`test_diff_spec_request_while_not_running`<br>`test_diff_spec_replayed_and_forged`<br>`test_diff_spec_stale_and_forged`<br>`test_diff_spec_not_running_and_forged`<br>`test_diff_spec_clear_for_another_chip`<br>`test_diff_spec_expired_clear`<br>`test_diff_spec_per_key_sequence`<br>`test_diff_spec_good_heartbeat`<br>`test_diff_finding_replayed_request_while_not_running` (CONFORMANCE-RUN-STATE-CHECK-ORDER)<br>`test_diff_finding_stale_request_while_not_running` (CONFORMANCE-RUN-STATE-CHECK-ORDER)<br>`test_diff_finding_first_sequence_number_zero` (CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO)<br>`test_diff_finding_replayed_forged_heartbeat` (CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST)<br>`test_diff_finding_heartbeat_signed_as_something_else` (CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST)<br>`test_model_clear_handler_reports_the_mailbox_reason`<br>`test_model_finding_clear_collapses_reasons` (CONFORMANCE-CLEAR-REPORTS-ONE-REASON) |  |
+| REQUIREMENT-DISPATCH-AFTER-ALL-CHECKS | S §3 | Only then is the command dispatched. | mailbox | RTL | `test_mbox_good_frame_dispatches_once`<br>`test_mbox_no_dispatch_before_signature`<br>`test_diff_spec_good_halt` |  |
+| REQUIREMENT-SEQUENCE-REGISTER-PER-KEY | S §2 | Last accepted inbound sequence number (key slot 0; one counter per signer key) | top (MBOX_SEQ), mailbox | RTL | `test_mbox_sequence_is_per_key_slot`<br>`test_core_mbox_status_and_seq_csrs` |  |
+| REQUIREMENT-MAILBOX-STATUS-CODES | S §2 | 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused | mailbox, top (MBOX_STATUS) | RTL | `test_mbox_refused_when_not_running`<br>`test_mbox_status_codes_match_the_register_map`<br>`test_core_mbox_status_and_seq_csrs`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_request_while_not_running`<br>`test_diff_spec_not_running_and_forged`<br>`test_diff_finding_replayed_request_while_not_running` (CONFORMANCE-RUN-STATE-CHECK-ORDER)<br>`test_diff_finding_stale_request_while_not_running` (CONFORMANCE-RUN-STATE-CHECK-ORDER)<br>`test_finding_spec_status_table_lists_status_7` (CONFORMANCE-STATUS-TABLE-MISSING-ROW) |  |
+| REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE | V §3 | No command is dispatched unless frame_seq is above the key slot's last accepted sequence | mailbox | RTL | `test_mbox_failed_frames_do_not_consume_sequence`<br>`test_mbox_no_dispatch_without_all_checks_random`<br>`test_finding_mailbox_sequence_never_moves_backwards` (CONFORMANCE-FRAME-NOT-LATCHED) |  |
+| REQUIREMENT-WRONG-COMMAND-STATUS | S §3 | (mailbox.wrong_command, mailbox.expired; RTL status 7) | mailbox | RTL | `test_mbox_signed_for_another_command_is_status_7`<br>`test_diff_mailbox_random_frames_only_known_disagreements`<br>`test_diff_spec_heartbeat_presented_as_clear`<br>`test_diff_spec_clear_for_another_chip`<br>`test_diff_spec_expired_clear`<br>`test_finding_spec_status_table_lists_status_7` (CONFORMANCE-STATUS-TABLE-MISSING-ROW) |  |
+| REQUIREMENT-ONLY-DOORBELL-WRITABLE | S §2 | There is no writable register other than the doorbell. | top | RTL | `test_core_has_no_csr_write_port`<br>`test_core_csr_reads_have_no_side_effects` |  |
+| REQUIREMENT-NO-CSR-WRITE-PORT | V §3 | No CSR write port but the doorbell | top | RTL | `test_core_has_no_csr_write_port`<br>`test_core_csr_reads_have_no_side_effects` |  |
+| REQUIREMENT-SILICON-ID-REGISTER | S §2 | Silicon id and revision | top (ID) | RTL | `test_core_id_register` |  |
+| REQUIREMENT-CAUSE-REGISTER-LAYOUT | S §2 | Bits 2:0 the sequencer's own summary (0 none, 1 loop, 2 local, 3 tamper, 4 command); bit 3 waiting for the first heartbeat, boot window passed; bit 4 excluded; bits 15:8 the firmware's reason code | top (CAUSE) | RTL | `test_core_state_and_cause_csrs` |  |
+| REQUIREMENT-LOG-WINDOW-FIRMWARE-MAPPED | S §2 | firmware-mapped: the log engine is firmware over NVM, so the RTL core does not decode it | top (LOG_HEAD) | FW-ONLY | `test_core_log_window_is_not_decoded` |  |
+| REQUIREMENT-ALARM-SET-BY-ANY-SOURCE | V §3 | Bits set by any source through set_mask | alarms | RTL | `test_alarm_any_source_sets` |  |
+| REQUIREMENT-ALARM-CLEAR-NEEDS-AUTHORIZATION | V §3 | cleared only through clear_mask gated by clear_authorized | alarms | RTL | `test_alarm_clear_needs_authorization`<br>`test_alarm_set_beats_clear_in_the_same_cycle` |  |
+| REQUIREMENT-STICKY-ALARM-REGISTER | S §2 | Sticky alarm bits (monotone; cleared only through the clear path) | top (ALARMS) | RTL | `test_core_alarms_csr` |  |
+| REQUIREMENT-ALARMS-MONOTONE | V §1 | Alarms are monotone | alarms | RTL | `test_alarm_any_source_sets`<br>`test_alarm_set_beats_clear_in_the_same_cycle`<br>`test_alarm_monotone_without_authorization_random` |  |
+| REQUIREMENT-BOOT-REFUSED-STAYS-HALTED | V §5 | Boot refused; the sequencer never leaves HALTED_INITIAL | halt (hb_ok gate); firmware (boot) | RTL | `test_halt_no_arming_without_heartbeat`<br>`test_diff_boot_rung_rtl_equals_model` |  |
+| REQUIREMENT-FIRMWARE-TAMPER-ZEROIZE | V §5 | Zeroize, SAFE | halt (tamper strobe); key manager (zeroize) | FW | `test_model_tamper_is_safe_and_unclearable` |  |
+| REQUIREMENT-EPOCH-EXEMPT-COMMANDS | S §3 | POLICY_PROPOSE, POLICY_COMMIT, ATTEST, HALT, CLEAR, ALARM_CLEAR and EXCLUDE | mailbox (epoch_exempt input) | FW | `test_diff_spec_halt_with_stale_epoch_is_exempt`<br>`test_fw_epoch_exempt_list_matches_spec` |  |
+| REQUIREMENT-HALT-CLEAR-NAME-CHIP-EXPIRY | S §3 | a HALT or CLEAR also names the chip it is for and carries an expiry no more than 60 s ahead that has not passed | mailbox (signed_cmd input) | FW | `test_diff_spec_clear_for_another_chip`<br>`test_diff_spec_expired_clear`<br>`test_fw_authority_expiry_ceiling_is_60s` |  |
+| REQUIREMENT-SELF-AUTHENTICATING-COMMANDS | S §3 | Commands that carry their own authentication in the body (an attestation report, a k-of-n signed policy image) are accepted without a frame signature | mailbox (sig_ok input) | FW | `test_mbox_self_authenticating_command_rides_on_the_firmware_verdict` |  |
+| REQUIREMENT-HEARTBEAT-RELOADS-TIMER | S §3 | Reloads the heartbeat timer | heartbeat (hb_valid strobe) | FW | `test_diff_spec_good_heartbeat`<br>`test_fw_heartbeat_window_is_clamped_to_policy_expiry` |  |
+| REQUIREMENT-HEARTBEAT-KEY-SIGNS-ONLY-HEARTBEATS | S §4 | heartbeat_key: key, // signs heartbeats and nothing else | heartbeat (hb_valid strobe) | FW | `test_fw_heartbeat_key_cannot_sign_a_halt` |  |
+| REQUIREMENT-AUTHORITY-KEY-SIGNS-HALT | S §3 | an authority key (never the heartbeat key) | halt (cmd_halt, cmd_throttle strobes) | FW | `test_fw_heartbeat_key_cannot_sign_a_halt` |  |
+| REQUIREMENT-CLEAR-NEEDS-LOGGED-CHECKPOINT | S §3 | Clear the cause if it is in the log and a fabric neighbor has acknowledged the checkpoint that contains it | halt (clear strobe) | FW | `test_model_clear_handler_reports_the_mailbox_reason`<br>`test_model_finding_clear_collapses_reasons` (CONFORMANCE-CLEAR-REPORTS-ONE-REASON) |  |
+| REQUIREMENT-RACK-WIDE-EPOCH-SWITCH | S §3 | Switch the epoch (the rack-wide rule in 02) | epoch_reg (commit, quorum_ok) | FW | `test_core_epoch_switch_kills_every_old_capability` | 3 |
+| REQUIREMENT-ANY-PARTY-RAISES-ALARM | S §3 | Raises a sticky alarm (any party may) | alarms (set_mask) | FW | `test_alarm_any_source_sets` |  |
+| REQUIREMENT-ALARM-APPROVER-KEY-CLEARS | S §3 | the policy's alarm approver key | alarms (clear_authorized) | FW | `test_alarm_clear_needs_authorization` |  |
+| REQUIREMENT-HOST-PEER-ONLY-ON-PCIE | S §3 | The peer host is accepted only on the PCIe point, never on NVSwitch, DPU or storage | cap_table (ins, mac_ok) | FW | `test_fw_host_peer_only_on_pcie` |  |
+| REQUIREMENT-METER-SLOT-FREEZE | S §3 | Freezes the meter slot for that model | meter (strobe) | FW | `test_meter_frozen_slot_stays_put_without_strobes` |  |
+| REQUIREMENT-TICKET-REFUSED-STALE-OR-STOPPED | S §3 | the governor refuses a stale-epoch ticket and refuses while not in RUN | mailbox (needs_run); firmware (ticket) | FW | `test_diff_spec_request_while_not_running` | 2 |
+| REQUIREMENT-SWITCH-RECONFIGURED-AFTER-EVENTS | S §5 | the governor re-derives the switch configuration from the table after any epoch, roster or heartbeat event | cap_table (clear_all, ins) | FW | `test_cap_refuses_on_epoch_tag_mismatch`<br>`test_core_epoch_switch_kills_every_old_capability`<br>`test_finding_cap_rederived_after_epoch_switch_is_usable` (CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES) |  |
+| REQUIREMENT-FINGERPRINT-EXTENDED-BY-MANIFEST | S §3 | extends the fingerprint with the manifest digest | firmware (the fingerprint has no RTL register) | FW-ONLY | none |  |
+| REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD | S §3 | Gate core; returns a ticket, a hold id, or a refusal | gate (firmware) | FW-ONLY | none | 12 |
+| REQUIREMENT-HOLD-RELEASED-BY-QUORUM | S §3 | Releases a hold if the policy quorum for that rule is met | gate (firmware) | FW-ONLY | none | 8 |
+| REQUIREMENT-POLICY-VERSION-INCREASING | S §4 | version: u32, // strictly increasing; the anti-rollback counter tracks it | policy loader, fuses | FW-ONLY | none |  |
+| REQUIREMENT-THRESHOLD-NOT-BELOW-FUSE | S §4 | never below the fused threshold | policy loader, fuses | FW-ONLY | none |  |
+| REQUIREMENT-IMAGE-NEEDS-ASSUMPTION-ROWS | S §4 | refuses an image in which any of them lacks a row in assumptions | policy loader | FW-ONLY | none |  |
+| REQUIREMENT-REQUEST-HASH-DEFINITION | S §5 | request_hash = SHA-256(canonical(request_id, fingerprint, action, params)) | gate, endpoint | FW-ONLY | none | 5 |
+| REQUIREMENT-FIRMWARE-CHANGE-ROTATES-KEYS | S §7 | A firmware change changes CDI_1 and every key under it. | key manager (IP) | FW-ONLY | none | 2 |
+| REQUIREMENT-APPROVAL-WINDOW-FLOOR | S §9 | policy, never below 10 s | approvals (firmware) | FW-ONLY | none |  |
+| REQUIREMENT-STRAGGLER-HALTS-WITHOUT-COMMIT | S §9 | a governor that staged an image and saw no commit stops accepting heartbeats under the staged epoch and halts as a straggler | policy, heartbeat (firmware) | FW-ONLY | none |  |
+| REQUIREMENT-PROMPT-HASH-UNVERIFIED-FLAG | S §6 | prompt_hash_verified: false | provenance record (firmware) | FW-ONLY | none |  |
+| REQUIREMENT-DEVICE-PROVENANCE-SIGNATURE | S §9 | Device-provenance signature | crypto engine, firmware batching | FW-ONLY | none |  |
+| REQUIREMENT-FIRMWARE-UPDATE-GATED | S §8 | Update: signed by the governance root, measured at boot, gated by the anti-rollback counter. | boot ROM, fuses | FW-ONLY | none | 2 |
+| REQUIREMENT-ATTESTATION-QUOTE-CONTENTS | S §3 | Returns the governor's quote: measurements, epoch, lifecycle, counters, over the nonce | attestation (firmware) | FW-ONLY | none | 4 |
+| REQUIREMENT-SIGNED-LOG-CHECKPOINT | S §3 | Signed Merkle root, size, head, neighbor heads | log engine (firmware) | FW-ONLY | none | 8 |
+| REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION | V §1 | Within the boundary, no protected operation executes without a fresh authorization bound to that exact operation | system (CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION) | FW-ONLY | none | 16 |
+| REQUIREMENT-SYSTEM-ATTESTATION-BINDING | V §1 | Attestation binds permissions to firmware, model manifest and policy | system (CONTRACT-ATTESTATION-BINDS-PERMISSIONS) | FW-ONLY | none | 14 |
+| REQUIREMENT-SYSTEM-CROSSINGS-GOVERNED | V §1 | Every enumerated boundary crossing passes a governed switch | system (CONTRACT-EVERY-CROSSING-GOVERNED) | FW-ONLY | none | 4 |
+| REQUIREMENT-SYSTEM-POLICY-QUORUM | V §1 | Policy changes only with a quorum, and never backwards | system (CONTRACT-POLICY-QUORUM-NO-ROLLBACK); RTL monotonic | FW-ONLY | none | 4 |
+| REQUIREMENT-SYSTEM-BROKER-NO-CHOICE | V §1 | The broker cannot choose its rule or lane | system (CONTRACT-BROKER-CANNOT-PICK-RULE) | FW-ONLY | none | 2 |
+| REQUIREMENT-SYSTEM-COMPARATOR-HOLDS | V §1 | The comparator holds with every layer above it compromised | system (CONTRACT-COMPARATOR-SURVIVES-COMPROMISE) | FW-ONLY | none | 4 |
+| REQUIREMENT-SYSTEM-ASSUMPTIONS-COMPLETE | V §1 | The assumptions register is complete for the deployment | system (CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE) | FW-ONLY | none |  |
+| REQUIREMENT-SYSTEM-OVERRIDE-SLOW-LOGGED | V §1 | Human override is slow and fully logged | system (CONTRACT-OVERRIDE-SLOW-AND-LOGGED) | FW-ONLY | none | 1 |
+| REQUIREMENT-SYSTEM-LEAKAGE-BUDGET | V §1 | Permitted-channel leakage stays within the budget | system (CONTRACT-LEAKAGE-WITHIN-BUDGET) | FW-ONLY | none |  |
+| REQUIREMENT-SYSTEM-HALT-PROPAGATES | V §1 | A halt propagates to every GPU in the domain within the bound, fail-safe | system (CONTRACT-HALT-REACHES-EVERY-GPU); RTL halt_loop | FW-ONLY | none |  |
+| REQUIREMENT-SYSTEM-ROSTER-SPEAKS-ONCE | V §1 | Only roster members speak on the fabric, and only once per message | system (CONTRACT-ONLY-ROSTER-SPEAKS-ONCE) | FW-ONLY | none |  |
+| REQUIREMENT-SYSTEM-SHARED-BUDGETS | V §1 | Shared budgets cannot be overspent across governors | system (CONTRACT-SHARED-BUDGET-NO-OVERSPEND) | FW-ONLY | none | 4 |
+| REQUIREMENT-SYSTEM-PARTITIONS-SAFE | V §1 | Partitions and epoch changes end in safe states, never in stale ones | system (CONTRACT-PARTITIONS-END-SAFE); RTL heartbeat | FW-ONLY | none |  |
+| REQUIREMENT-SYSTEM-TICKETED-ACTIONS | V §1 | No governed action initiates without a ticket, and no governed response leaves the rack without a release ticket | system (CONTRACT-NO-ACTION-WITHOUT-TICKET) | FW-ONLY | none | 5 |
+| REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES | V §1 | Oversight survives the model | system (CONTRACT-OVERSIGHT-SURVIVES-MODEL) | FW-ONLY | none | 16 |
+| REQUIREMENT-SYSTEM-SIGNATURE-EXACT | V §1 | A signature authorizes exactly what was signed, and a policy cannot set its own quorum | system (CONTRACT-SIGNATURE-AUTHORIZES-EXACTLY); RTL mailbox status 7 | FW-ONLY | none | 2 |
+| REQUIREMENT-SYSTEM-CONTROLS-ENFORCED | V §1 | The controls the rulebook names are enforced, not just stored | system (CONTRACT-NAMED-CONTROLS-ENFORCED) | FW-ONLY | none | 1 |
+| REQUIREMENT-CRYPTO-ENGINES-CORRECT | V §6 | the crypto engines compute what they claim | crypto IP (assumption) | FW-ONLY | none | 3 |
+| REQUIREMENT-HALT-BOUND-MEASURED-SILICON | V §4 | Oscilloscope on PWRBRK# across the domain; worst case over temperature and loop length | silicon (halt bound) | SILICON | none |  |
+| REQUIREMENT-LEVERS-WORK-ON-GPU | V §4 | PWRBRK# throttles, PERST# resets, PWR_EN cuts | silicon (levers on a real GPU) | SILICON | none |  |
+| REQUIREMENT-POWER-LOSS-OPENS-LOOP | V §5 | Governor loses power / Loop opens | silicon (normally-open switch) | SILICON | none |  |
+| REQUIREMENT-BOARD-LOSS-DEBOUNCE | S §9 | Loss of current is declared after two sense periods (debounce) | board (sense period); RTL debounce | SILICON | `test_loop_one_noisy_sample_is_not_a_loss`<br>`test_loop_two_low_samples_declare_loss` |  |
 
 ## The catalogue, row by row
 
@@ -154,93 +154,93 @@ reference gate. The owner column says which layer of the governor would decide t
 
 | Row | Governor-side owner | Requirements |
 |---|---|---|
-| `baseline.attest` | firmware | R-121, R-112 |
-| `baseline.pay_small` | firmware | R-100, R-133, R-134 |
-| `baseline.pay_large_hold_approve` | firmware | R-101, R-127 |
-| `baseline.mail_with_provenance` | reference gate | R-120 |
-| `baseline.http_auto` | firmware | R-100 |
-| `baseline.audit_verifies` | firmware | R-113 |
-| `baseline.openshell_supervised_action` | reference gate | R-133, R-120 |
-| `baseline.openshell_policy_derived` | reference gate | R-122 |
-| `baseline.dual_witness_allow` | firmware | R-134 |
-| `baseline.high_authority_dual_witness` | firmware | R-134, R-101 |
-| `baseline.hold_survives_restart` | firmware | R-101 |
-| `baseline.budget_recovers_after_ticket_expiry` | firmware | R-131 |
-| `L0.firmware_tamper` | firmware | R-121, R-106 |
-| `L0.lying_firmware` | firmware | R-121, R-106 |
-| `L0.rollback_fused` | firmware | R-111 |
-| `L0.rollback_unfused` | firmware | R-111, R-121 |
-| `L0.cloned_device` | firmware | R-121 |
-| `L0.revoked_device` | firmware | R-121, R-136 |
-| `L0.nonce_replay` | firmware | R-112 |
-| `L0.nonce_expired` | firmware | R-112 |
-| `L0.nonce_foreign` | firmware | R-112 |
-| `L0.gpu_swap` | firmware | R-121 |
-| `L5.reference_values_forged` | firmware | R-121, R-123 |
-| `L5.policy_forged` | firmware | R-123, R-087, R-007 |
-| `L5.policy_default_allow` | firmware | R-123, R-100 |
-| `L4.token_missing` | firmware | R-121, R-120 |
-| `L4.token_forged` | firmware | R-121, R-120 |
-| `L4.token_expired` | firmware | R-121, R-120 |
-| `L4.token_wrong_workload` | firmware | R-121 |
-| `L4.no_capability` | firmware | R-100, R-124 |
-| `L4.weights_exfiltration` | firmware | R-100, R-122 |
-| `L4.amount_over_limit` | firmware | R-100 |
-| `L4.currency_not_allowed` | firmware | R-100 |
-| `L4.destination_pattern` | firmware | R-100 |
-| `L4.type_confusion` | firmware | R-100 |
-| `L4.url_outside_allowlist` | firmware | R-100 |
-| `L4.rate_limit_burst` | firmware | R-100 |
-| `L4.request_replay` | firmware | R-120, R-105 |
-| `L4.hold_bypass` | firmware | R-101, R-133 |
-| `L4.approval_forged` | firmware | R-101, R-135 |
-| `L4.approval_wrong_request` | firmware | R-101, R-105, R-135 |
-| `L4.approval_replay` | firmware | R-101, R-120 |
-| `L4.approval_expired` | firmware | R-101 |
-| `L3.observer_missing` | firmware | R-134 |
-| `L3.observer_forged` | firmware | R-134 |
-| `L3.observer_stale` | firmware | R-134 |
-| `L3.observer_subject_swap` | firmware | R-134, R-105 |
-| `L3.observer_high_risk` | firmware | R-134 |
-| `L2.provenance_missing` | reference gate | R-120 |
-| `L2.provenance_tampered` | reference gate | R-120 |
-| `L2.provenance_content_swap` | reference gate | R-120 |
-| `L2.provenance_forged` | reference gate | R-120 |
-| `EP.no_ticket` | firmware | R-133, R-125 |
-| `EP.ticket_replay` | hard core | R-027, R-028, R-120 |
-| `EP.ticket_param_swap` | firmware | R-105, R-125 |
-| `EP.ticket_action_swap` | firmware | R-105, R-125 |
-| `EP.ticket_forged` | firmware | R-125, R-137 |
-| `EP.ticket_expired` | firmware | R-120 |
-| `AU.modify_record` | firmware | R-113 |
-| `AU.delete_middle` | firmware | R-113 |
-| `AU.truncate_tail` | firmware | R-113 |
-| `AU.reorder` | firmware | R-113 |
-| `AU.forge_checkpoint` | firmware | R-113, R-137 |
-| `AU.fork_after_checkpoint` | firmware | R-113 |
-| `AU.inclusion_forged_leaf` | firmware | R-113 |
-| `NV.unrouted_passthrough_no_ticket` | reference gate | R-133, R-122 |
-| `NV.unattested_sandbox` | reference gate | R-121 |
-| `NV.stale_host_token` | reference gate | R-121 |
-| `NV.sentry_drift_quarantine` | reference gate | R-134 |
-| `NV.sentry_identity_unverified` | reference gate | R-134 |
-| `NV.repeated_denials_quarantine` | reference gate | R-134 |
-| `NV.ticket_replay_across_sandboxes` | hard core | R-027, R-120 |
-| `NV.weights_export_via_supervisor` | reference gate | R-100, R-122 |
-| `NV.dual_witness_sentry_high` | firmware | R-134 |
-| `NV.dual_witness_obs_main_high` | firmware | R-134 |
-| `NV.dual_witness_second_forged` | firmware | R-134 |
-| `NV.dual_witness_second_missing` | firmware | R-134 |
-| `NV.high_authority_single_witness` | firmware | R-134 |
-| `TX.budget_exhausted` | firmware | R-131 |
-| `TX.concurrent_overspend` | firmware | R-131 |
-| `TX.ticket_after_policy_change` | firmware | R-092, R-087 |
-| `TX.epoch_forged` | hard core | R-007, R-087, R-123 |
-| `TX.ticket_replay_after_restart` | hard core | R-027 |
-| `TX.request_replay_after_restart` | firmware | R-120 |
-| `TX.commit_unreachable` | firmware | R-131, R-092 |
-| `TX.risk_label_ignored` | firmware | R-124 |
-| `TX.commit_forged_ticket` | firmware | R-120, R-137 |
+| `baseline.attest` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING, REQUIREMENT-ATTESTATION-QUOTE-CONTENTS |
+| `baseline.pay_small` | firmware | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD, REQUIREMENT-SYSTEM-TICKETED-ACTIONS, REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `baseline.pay_large_hold_approve` | firmware | REQUIREMENT-HOLD-RELEASED-BY-QUORUM, REQUIREMENT-SYSTEM-OVERRIDE-SLOW-LOGGED |
+| `baseline.mail_with_provenance` | reference gate | REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `baseline.http_auto` | firmware | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD |
+| `baseline.audit_verifies` | firmware | REQUIREMENT-SIGNED-LOG-CHECKPOINT |
+| `baseline.openshell_supervised_action` | reference gate | REQUIREMENT-SYSTEM-TICKETED-ACTIONS, REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `baseline.openshell_policy_derived` | reference gate | REQUIREMENT-SYSTEM-CROSSINGS-GOVERNED |
+| `baseline.dual_witness_allow` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `baseline.high_authority_dual_witness` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES, REQUIREMENT-HOLD-RELEASED-BY-QUORUM |
+| `baseline.hold_survives_restart` | firmware | REQUIREMENT-HOLD-RELEASED-BY-QUORUM |
+| `baseline.budget_recovers_after_ticket_expiry` | firmware | REQUIREMENT-SYSTEM-SHARED-BUDGETS |
+| `L0.firmware_tamper` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING, REQUIREMENT-FIRMWARE-CHANGE-ROTATES-KEYS |
+| `L0.lying_firmware` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING, REQUIREMENT-FIRMWARE-CHANGE-ROTATES-KEYS |
+| `L0.rollback_fused` | firmware | REQUIREMENT-FIRMWARE-UPDATE-GATED |
+| `L0.rollback_unfused` | firmware | REQUIREMENT-FIRMWARE-UPDATE-GATED, REQUIREMENT-SYSTEM-ATTESTATION-BINDING |
+| `L0.cloned_device` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING |
+| `L0.revoked_device` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING, REQUIREMENT-SYSTEM-CONTROLS-ENFORCED |
+| `L0.nonce_replay` | firmware | REQUIREMENT-ATTESTATION-QUOTE-CONTENTS |
+| `L0.nonce_expired` | firmware | REQUIREMENT-ATTESTATION-QUOTE-CONTENTS |
+| `L0.nonce_foreign` | firmware | REQUIREMENT-ATTESTATION-QUOTE-CONTENTS |
+| `L0.gpu_swap` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING |
+| `L5.reference_values_forged` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING, REQUIREMENT-SYSTEM-POLICY-QUORUM |
+| `L5.policy_forged` | firmware | REQUIREMENT-SYSTEM-POLICY-QUORUM, REQUIREMENT-RACK-WIDE-EPOCH-SWITCH, REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM |
+| `L5.policy_default_allow` | firmware | REQUIREMENT-SYSTEM-POLICY-QUORUM, REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD |
+| `L4.token_missing` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING, REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `L4.token_forged` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING, REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `L4.token_expired` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING, REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `L4.token_wrong_workload` | firmware | REQUIREMENT-SYSTEM-ATTESTATION-BINDING |
+| `L4.no_capability` | firmware | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD, REQUIREMENT-SYSTEM-BROKER-NO-CHOICE |
+| `L4.weights_exfiltration` | firmware | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD, REQUIREMENT-SYSTEM-CROSSINGS-GOVERNED |
+| `L4.amount_over_limit` | firmware | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD |
+| `L4.currency_not_allowed` | firmware | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD |
+| `L4.destination_pattern` | firmware | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD |
+| `L4.type_confusion` | firmware | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD |
+| `L4.url_outside_allowlist` | firmware | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD |
+| `L4.rate_limit_burst` | firmware | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD |
+| `L4.request_replay` | firmware | REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION, REQUIREMENT-REQUEST-HASH-DEFINITION |
+| `L4.hold_bypass` | firmware | REQUIREMENT-HOLD-RELEASED-BY-QUORUM, REQUIREMENT-SYSTEM-TICKETED-ACTIONS |
+| `L4.approval_forged` | firmware | REQUIREMENT-HOLD-RELEASED-BY-QUORUM, REQUIREMENT-SYSTEM-SIGNATURE-EXACT |
+| `L4.approval_wrong_request` | firmware | REQUIREMENT-HOLD-RELEASED-BY-QUORUM, REQUIREMENT-REQUEST-HASH-DEFINITION, REQUIREMENT-SYSTEM-SIGNATURE-EXACT |
+| `L4.approval_replay` | firmware | REQUIREMENT-HOLD-RELEASED-BY-QUORUM, REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `L4.approval_expired` | firmware | REQUIREMENT-HOLD-RELEASED-BY-QUORUM |
+| `L3.observer_missing` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `L3.observer_forged` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `L3.observer_stale` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `L3.observer_subject_swap` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES, REQUIREMENT-REQUEST-HASH-DEFINITION |
+| `L3.observer_high_risk` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `L2.provenance_missing` | reference gate | REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `L2.provenance_tampered` | reference gate | REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `L2.provenance_content_swap` | reference gate | REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `L2.provenance_forged` | reference gate | REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `EP.no_ticket` | firmware | REQUIREMENT-SYSTEM-TICKETED-ACTIONS, REQUIREMENT-SYSTEM-COMPARATOR-HOLDS |
+| `EP.ticket_replay` | hard core | REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED, REQUIREMENT-BURN-BEFORE-ADMIT, REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `EP.ticket_param_swap` | firmware | REQUIREMENT-REQUEST-HASH-DEFINITION, REQUIREMENT-SYSTEM-COMPARATOR-HOLDS |
+| `EP.ticket_action_swap` | firmware | REQUIREMENT-REQUEST-HASH-DEFINITION, REQUIREMENT-SYSTEM-COMPARATOR-HOLDS |
+| `EP.ticket_forged` | firmware | REQUIREMENT-SYSTEM-COMPARATOR-HOLDS, REQUIREMENT-CRYPTO-ENGINES-CORRECT |
+| `EP.ticket_expired` | firmware | REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `AU.modify_record` | firmware | REQUIREMENT-SIGNED-LOG-CHECKPOINT |
+| `AU.delete_middle` | firmware | REQUIREMENT-SIGNED-LOG-CHECKPOINT |
+| `AU.truncate_tail` | firmware | REQUIREMENT-SIGNED-LOG-CHECKPOINT |
+| `AU.reorder` | firmware | REQUIREMENT-SIGNED-LOG-CHECKPOINT |
+| `AU.forge_checkpoint` | firmware | REQUIREMENT-SIGNED-LOG-CHECKPOINT, REQUIREMENT-CRYPTO-ENGINES-CORRECT |
+| `AU.fork_after_checkpoint` | firmware | REQUIREMENT-SIGNED-LOG-CHECKPOINT |
+| `AU.inclusion_forged_leaf` | firmware | REQUIREMENT-SIGNED-LOG-CHECKPOINT |
+| `NV.unrouted_passthrough_no_ticket` | reference gate | REQUIREMENT-SYSTEM-TICKETED-ACTIONS, REQUIREMENT-SYSTEM-CROSSINGS-GOVERNED |
+| `NV.unattested_sandbox` | reference gate | REQUIREMENT-SYSTEM-ATTESTATION-BINDING |
+| `NV.stale_host_token` | reference gate | REQUIREMENT-SYSTEM-ATTESTATION-BINDING |
+| `NV.sentry_drift_quarantine` | reference gate | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `NV.sentry_identity_unverified` | reference gate | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `NV.repeated_denials_quarantine` | reference gate | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `NV.ticket_replay_across_sandboxes` | hard core | REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED, REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `NV.weights_export_via_supervisor` | reference gate | REQUIREMENT-GATE-RETURNS-TICKET-OR-HOLD, REQUIREMENT-SYSTEM-CROSSINGS-GOVERNED |
+| `NV.dual_witness_sentry_high` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `NV.dual_witness_obs_main_high` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `NV.dual_witness_second_forged` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `NV.dual_witness_second_missing` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `NV.high_authority_single_witness` | firmware | REQUIREMENT-SYSTEM-OVERSIGHT-SURVIVES |
+| `TX.budget_exhausted` | firmware | REQUIREMENT-SYSTEM-SHARED-BUDGETS |
+| `TX.concurrent_overspend` | firmware | REQUIREMENT-SYSTEM-SHARED-BUDGETS |
+| `TX.ticket_after_policy_change` | firmware | REQUIREMENT-TICKET-REFUSED-STALE-OR-STOPPED, REQUIREMENT-RACK-WIDE-EPOCH-SWITCH |
+| `TX.epoch_forged` | hard core | REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM, REQUIREMENT-RACK-WIDE-EPOCH-SWITCH, REQUIREMENT-SYSTEM-POLICY-QUORUM |
+| `TX.ticket_replay_after_restart` | hard core | REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED |
+| `TX.request_replay_after_restart` | firmware | REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION |
+| `TX.commit_unreachable` | firmware | REQUIREMENT-SYSTEM-SHARED-BUDGETS, REQUIREMENT-TICKET-REFUSED-STALE-OR-STOPPED |
+| `TX.risk_label_ignored` | firmware | REQUIREMENT-SYSTEM-BROKER-NO-CHOICE |
+| `TX.commit_forged_ticket` | firmware | REQUIREMENT-SYSTEM-FRESH-AUTHORIZATION, REQUIREMENT-CRYPTO-ENGINES-CORRECT |
 
 ## The count
 

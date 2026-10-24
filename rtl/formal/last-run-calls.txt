@@ -6,11 +6,11 @@
   caught  halt_seq mutant: tamper does not open the loop [simulation: caught it too]
   caught  halt_seq mutant: HALT never escalates to SAFE [simulation: caught it too]
   caught  halt_seq mutant: the power brake releases in THROTTLE [simulation: caught it too]
-  caught  halt_seq mutant: CLEAR outranks tamper again (F-05) [simulation: missed it]
-  caught  halt_seq mutant: RUN entered on a stale loop_lost (F1) [simulation: caught it too]
+  caught  halt_seq mutant: CLEAR outranks tamper again (CONFORMANCE-CLEAR-BEATS-TAMPER) [simulation: missed it]
+  caught  halt_seq mutant: RUN entered on a stale loop_lost (RTL-CORE-HALTS-AFTER-REACHING-RUN) [simulation: caught it too]
   caught  halt_seq mutant: a halt command is ignored once throttled [simulation: caught it too]
-  caught  halt_seq mutant: a HALT to a chip in SAFE leaves the loop closed (the old behaviour, F-07) [simulation: caught it too]
-  caught  halt_seq mutant: a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old F-07) [simulation: caught it too]
+  caught  halt_seq mutant: a HALT to a chip in SAFE leaves the loop closed (the old behaviour, CONFORMANCE-HALT-TO-SAFE-CHIP) [simulation: caught it too]
+  caught  halt_seq mutant: a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old CONFORMANCE-HALT-TO-SAFE-CHIP) [simulation: caught it too]
   caught  halt_seq mutant: EXCLUDE closes the loop of a chip halted by loop loss, a command or tamper [simulation: caught it too]
   caught  halt_seq mutant: an excluded chip's slot gets power (EXCLUDE moves it to the HALT rung) [simulation: caught it too]
   caught  halt_seq mutant: an excluded chip runs without a heartbeat [simulation: caught it too]
@@ -18,7 +18,7 @@
   caught  halt_seq mutant: the boot alarm is raised after the chip was armed [simulation: caught it too]
   caught  halt_seq mutant: the boot window never runs out (the timer does not count) [simulation: caught it too]
   caught  halt_seq mutant: arming records the first heartbeat only if it also enters RUN (the alarm can fire on an armed chip) [simulation: missed it]
-L7: every property proven on the Verilog, every mutant caught
+WAVE-FORMAL-PROOFS-ON-VERILOG: every property proven on the Verilog, every mutant caught
   PROVED  governor_core: bounded to 20 cycles and k-induction: every reachable state (yices, z3, boolector); host CSR reads write nothing (full-size netlist): the host's inputs reach 196 netlist objects, no register and no pin but csr_rdata; doorbell reaches only the mailbox (full-size netlist): the host's inputs reach 388 netlist objects, no register outside the mailbox and no pin but csr_rdata, mbox_verify_req, mbox_dispatch, mbox_cmd_out; host CSR reads write nothing (two-copy miter, small build): 85 registers and 29 pins unaffected, induction (yices); doorbell reaches only the mailbox (two-copy miter, small build): 75 registers and 26 pins unaffected, induction (yices)
   SIM-OK  governor_core: 3000 random cycles match the spec model; rungs visited [0, 1, 2, 3, 4], 56 cycles excluded (seed 6)
   caught  governor_core mutant: the old millisecond tap on the monotonic counter (the bug fixed on 23 October 2026) [simulation: caught it too]
@@ -33,7 +33,7 @@ L7: every property proven on the Verilog, every mutant caught
   caught  governor_core mutant: an excluded chip's PERST# pad releases [simulation: caught it too]
   caught  governor_core mutant: the host's CSR address selects the meter slot that gets charged [simulation: missed it]
   FACT  governor_core: lost heartbeat climbs to SAFE with the loop closed: from boot, a heartbeat that runs out reaches SAFE, power off, loop pad closed (trace of 28 cycles found)
-  FACT  governor_core: a local cause never opens the loop: proven: cause LOCAL implies the loop pad is closed (the old fact that a HALT to a chip in SAFE leaves the pad closed is gone: Yobie's call 1, now rule G3); bounded to 12 cycles and k-induction: every reachable state (yices)
+  FACT  governor_core: a local cause never opens the loop: proven: cause LOCAL implies the loop pad is closed (the old fact that a HALT to a chip in SAFE leaves the pad closed is gone: Yobie's call 1, now rule RTL-HALT-REACHES-PINS); bounded to 12 cycles and k-induction: every reachable state (yices)
   PROVED  alarms: bounded to 25 cycles and k-induction: every reachable state (yices, z3, boolector)
   SIM-OK  alarms: 4000 random cycles match the spec model (seed 3)
   caught  alarms mutant: an alarm clears without authorization [simulation: caught it too]
@@ -41,4 +41,4 @@ L7: every property proven on the Verilog, every mutant caught
   caught  alarms mutant: a clear racing a fresh alarm swallows it [simulation: caught it too]
   caught  alarms mutant: the summary bit sees only alarm 0 [simulation: caught it too]
   caught  alarms mutant: an unauthorized clear attempt is not flagged [simulation: caught it too]
-L7: every property proven on the Verilog, every mutant caught
+WAVE-FORMAL-PROOFS-ON-VERILOG: every property proven on the Verilog, every mutant caught

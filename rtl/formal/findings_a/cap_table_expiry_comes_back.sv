@@ -1,4 +1,5 @@
-// L7-SPLICE block: cap_table. FINDINGS-a.md F7. Expected to FAIL by assertion. Rule: once a capability has expired
+// Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
+// L7-SPLICE block: cap_table. FINDINGS-a.md RTL-EXPIRED-CAPABILITIES-RETURN. Expected to FAIL by assertion. Rule: once a capability has expired
 // it never allows again. Expiry is checked only at lookup against the `now` input; an entry nobody looked up while it
 // was expired stays valid, and when `now` goes back (governor_core wires now to the low 32 bits of the microsecond
 // counter, which wrap every 71.6 minutes) it allows again.

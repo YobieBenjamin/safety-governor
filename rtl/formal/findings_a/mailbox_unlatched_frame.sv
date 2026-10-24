@@ -1,4 +1,5 @@
-// L7-SPLICE block: mailbox. FINDINGS-a.md F9. Expected to FAIL by assertion. Rule: a dispatched frame carries a
+// Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
+// L7-SPLICE block: mailbox. FINDINGS-a.md RTL-MAILBOX-FRAME-NOT-HELD. Expected to FAIL by assertion. Rule: a dispatched frame carries a
 // sequence number above the slot's last accepted one. Reset only at the start. No assumption that the frame fields
 // hold still while the signature is being checked: the block reads frame_seq at the doorbell for the check and again
 // at sig_done for the record, so a frame that changes in between is recorded with a sequence that was never checked.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""L7 entries for the blocks the FPGA push added (the SMBus/I2C management-bus target).
+"""WAVE-FORMAL-PROOFS-ON-VERILOG entries for the blocks the FPGA push added (the SMBus/I2C management-bus target).
 
 Same format as ``BLOCKS`` in ``__main__.py``: block -> (Amaranth source, class, mutants), each mutant a
 one-line bug on purpose that must make ``rtl/formal/<block>.sv`` FAIL BY ASSERTION. The same mutants are

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""The independent second look for the L7 second set: random cycles of the Amaranth Python source in amaranth.sim,
+"""The independent second look for the WAVE-FORMAL-PROOFS-ON-VERILOG second set: random cycles of the Amaranth Python source in amaranth.sim,
 compared every cycle against a small reference model written from the spec (not from the RTL), outputs before the
 clock edge and state after it. Run on the real block (must agree on every cycle) and on every mutant in BLOCKS_A
 (a mutant that the random run never tells apart from the model is reported as such; the formal proof is what
@@ -10,7 +10,7 @@ The reference models are what docs/04-specification.md, docs/07-verification-pla
 block does. Where the spec and the RTL disagree (FINDINGS-a.md), the model follows the RTL's documented behaviour and
 the finding is pinned separately, so this check stays green while the finding is open.
 
-The random driver keeps the mailbox's A1 obligation (frame fields stable while verifying), as the proof assumes.
+The random driver keeps the mailbox's RTL-MAILBOX-FRAME-HELD-STILL obligation (frame fields stable while verifying), as the proof assumes.
 """
 from __future__ import annotations
 
@@ -214,7 +214,7 @@ class MailboxRef:
              "cmd": r.randrange(4), "epoch_match": r.random() < .8, "epoch_exempt": r.random() < .3,
              "needs_run": r.random() < .5, "running": r.random() < .7, "sig_done": r.random() < .4, "sig_ok": r.random() < .8}
         i["signed_cmd"] = i["cmd"] if r.random() < .7 else r.randrange(4)
-        if prev.get("_verifying"):                        # A1: the frame holds still while it is being verified
+        if prev.get("_verifying"):                        # RTL-MAILBOX-FRAME-HELD-STILL: the frame holds still while it is being verified
             for f in MailboxRef.FIELDS:
                 i[f] = prev[f]
         return i

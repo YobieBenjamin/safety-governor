@@ -68,7 +68,7 @@ class HaltSeq(Elaboratable):
         in_run = (self.state == RUN) | (self.state == THROTTLE)
 
         # tamper outranks everything, CLEAR included: a tamper strobe in the same cycle as an authorized CLEAR still
-        # lands in SAFE (conformance finding F-05, 23 October 2026; before this the CLEAR won and the strobe was lost)
+        # lands in SAFE (conformance finding CONFORMANCE-CLEAR-BEATS-TAMPER, 23 October 2026; before this the CLEAR won and the strobe was lost)
         with m.If(self.tamper):
             m.d.sync += [self.state.eq(SAFE), self.cause.eq(C_TAMPER), self.switch_open.eq(1)]
         with m.Elif(self.clear & (self.state != HALTED_INITIAL)):
@@ -90,7 +90,7 @@ class HaltSeq(Elaboratable):
             m.d.sync += [self.switch_open.eq(0), self.hb_seen.eq(1), self.excluded.eq(0)]   # armed (ends an exclusion)
             # RUN needs a clean loop sample: current present AND the debounce no longer saying lost. Without the
             # second term an armed core entered RUN with a stale loop_lost and halted itself a cycle later (FPGA
-            # finding F1, 23 October 2026)
+            # finding RTL-CORE-HALTS-AFTER-REACHING-RUN, 23 October 2026)
             with m.If(self.loop_sense & ~self.loop_lost):
                 m.d.sync += self.state.eq(RUN)
         with m.Elif(self.cmd_exclude & (self.state == HALTED_INITIAL) & (self.cause == C_NONE)):

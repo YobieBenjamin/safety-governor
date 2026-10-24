@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H2: every enumerated boundary crossing passes a governed switch. Link-level containment
+"""CONTRACT-EVERY-CROSSING-GOVERNED: every enumerated boundary crossing passes a governed switch. Link-level containment
 (no bytes to a non-roster peer, nothing while the heartbeat is dead, unchecked paths bricked)
 must hold at the rack tier. Descriptor-level containment between two roster members is the
 recorded residual at the rack and board tiers."""
@@ -169,7 +169,7 @@ def test_every_enumerated_exit_is_governed_or_bricked_at_rack_tier(rack):
 def test_descriptor_level_leak_between_roster_members_is_the_recorded_gap(tier):
     """A legitimate peer on an open port receiving bytes a rule would not have allowed. The rack
     and board tiers have no checker in the path: the weights leave with EP_UNCHECKED. That is the
-    recorded residual (docs/00 N5); the integrated tier closes it with buffer classes (below)."""
+    recorded residual (docs/00 GOAL-NOT-INSPECTING-ROSTER-TRANSFERS); the integrated tier closes it with buffer classes (below)."""
     r = build_rack(2, tier)
     r.bring_up()
     node, other = r.nodes
@@ -179,7 +179,7 @@ def test_descriptor_level_leak_between_roster_members_is_the_recorded_gap(tier):
 
 
 def test_integrated_checker_refuses_weights_to_a_roster_peer():
-    """H2b at the integrated tier: the policy's buffer policy keeps weights on the GPU. The copy
+    """CONTRACT-DESCRIPTOR-LEVEL-ROSTER-GAP at the integrated tier: the policy's buffer policy keeps weights on the GPU. The copy
     engine's checker, keyed per buffer class, refuses them to a roster member with EP_BUFFER_CLASS
     and logs it; the stranger is still refused for having no entry at all."""
     r = build_rack(2, "integrated")

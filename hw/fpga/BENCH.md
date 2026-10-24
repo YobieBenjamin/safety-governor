@@ -13,7 +13,7 @@ Results land in `hw/fpga/results/*.json` (and a CSV for the soak), pass or fail,
 
 ## Read this first: what will happen on day one
 
-`rtl/tests/test_smbus.py` found a halt-path bug before any hardware (finding F1 in `REPORT.md`): with the loop sense
+`rtl/tests/test_smbus.py` found a halt-path bug before any hardware (finding RTL-CORE-HALTS-AFTER-REACHING-RUN in `REPORT.md`): with the loop sense
 strobe running from power-on, the first RUN cycle sees a stale loop-lost and halts with cause LOOP. The bitstream
 carries the RTL as it is, so until `halt.py` or `halt_loop.py` is fixed, `host_test.py levers` and `soak` will fail
 at "reach RUN" and record it. That is the bench doing its job early. The fix is a one-line change proposed in
@@ -87,7 +87,7 @@ interposer is not designed yet; it is the next hardware item.
    `python3 -m pip install smbus2 spidev` (gpiozero ships with the OS), clone this repo.
 2. **HANDS**: wire as above, plug the ULX3S into a computer by USB, and load the timing-clean bitstream that
    `REPORT.md` names (today `hw/fpga/build/30mhz/governor_ulx3s_85f_30mhz.bit`, because 50 MHz does not close on this
-   part, finding F2) with `openFPGALoader -b ulx3s <file>`. `openFPGALoader` is in most Linux package managers and
+   part, finding RTL-FPGA-MISSES-50-MHZ) with `openFPGALoader -b ulx3s <file>`. `openFPGALoader` is in most Linux package managers and
    Homebrew. The bitstream comes from `hw/fpga/build.sh`, run anywhere.
 3. `i2cdetect -y 1` should show 0x58. Then `python3 hw/fpga/host_test.py all --hours 168`.
 
@@ -102,7 +102,7 @@ What each step proves on hardware:
 | `exclude` | reset with no heartbeat: the loop stays open and, after the 5 s boot window, ALARMS bit 31 and CAUSE bit 3 name it (NO_FIRST_HEARTBEAT); an EXCLUDE strobe on the firmware chain then closes the loop switch while PERST#, PWRBRK# and PWR_EN stay asserted (ALARMS bit 30, CAUSE bit 4); a heartbeat then arms it to RUN | each of those reads true on the pins and in the registers (Yobie's call 2, docs/26; added 23 October 2026) |
 | `soak` | heartbeats at 1 Hz, STATE/CAUSE/LOOP/LEVERS/ALARMS polled 5 times a second for `--hours` | zero halts and zero SMBus errors; every halt is logged with time and cause and counted |
 
-N3 (docs/20) asks for three cost numbers and the false-halt rate. This bench measures the false-halt rate of the
+WAVE-FPGA-BESIDE-REAL-GPU (docs/20) asks for three cost numbers and the false-halt rate. This bench measures the false-halt rate of the
 hardware halt path (sequencer, loop debounce, levers, heartbeat timer, a real loop wire) and the host-visible
 latencies. It cannot measure the firmware share, the crypto engine utilisation or the record latency, because the
 bitstream carries no firmware and no crypto engines. The soak's JSON says so in `not_measured_here`.

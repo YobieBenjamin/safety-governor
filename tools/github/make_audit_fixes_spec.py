@@ -112,7 +112,7 @@ add("F04", "high", "safety-governor", 1,
     "**Fix.** Enforce beneficiary admission at the governor and endpoint using a signed, current "
     "registry: a listed beneficiary takes the auto path; an unknown beneficiary enters an explicit "
     "enrollment/approval path (a hold) or is denied. Give the action an explicit destination field. "
-    "(The A1 audit classification part of this finding is F04-audit, wave 2.)\n\n"
+    "(The EXPERIMENT-ROAD-REACHABILITY audit classification part of this finding is F04-audit, wave 2.)\n\n"
     "**Discriminating test** (`tests/test_f04_beneficiary.py`). A 100 USD payment to a new "
     "beneficiary is held or denied, while a listed beneficiary still works. An unlisted beneficiary "
     "never takes the auto path.")
@@ -268,12 +268,13 @@ add("F12", "high", "safety-governor", 2,
     "**Claim.** A finite-byte containment ceiling must account for every externally observable "
     "channel, including message bodies and other permitted parameters.\n\n"
     "**Read first.** `govsim/containment.py:43-64`, `govsim/cluster.py:162-164` and `:219-225`, "
+    # Registered name: WAVE-COVERT-CHANNEL-BUDGET (old ID P3 is kept because code matches on it)
     "`govsim/governor.py:704-725`, `audit/wave-2/P3.revise-2.comment.md:9-18`, "
     "`results/containment.md:35-40`.\n\n"
     "**Concrete failure.** While RUN, consume the output allowance, then send `message.send` to a "
     "listed recipient with an arbitrary string in an unconstrained body. The auto rule bounds the "
     "recipient but not length/bytes/rate, and the endpoint adds no check, so the model has no finite "
-    "byte ceiling on this channel. P3b measures neither this path nor information in other "
+    "byte ceiling on this channel. EXPERIMENT-CONTAINMENT measures neither this path nor information in other "
     "parameters, adds a one-time unpresented allowance to a per-hour rate, and describes a rack "
     "ceiling from a single governor.\n\n"
     "**Fix.** Maintain a complete inventory of observable channels (typed actions and downstream "
@@ -286,6 +287,7 @@ add("F12", "high", "safety-governor", 2,
     "channel is bounded, and hold once it is.")
 
 add("F13", "high", "safety-governor", 2,
+    # Registered name: EXPERIMENT-CONTAINMENT (old ID P3b is kept because code matches on it)
     "F13 - P3b must install the policies it names and measure delivered bytes",
     "python3 -m pytest -q tests/test_f13_p3b_policy_and_egress.py",
     "**Claim.** The containment experiment must measure the policies it claims and bytes actually "
@@ -330,6 +332,7 @@ add("F23", "high", "safety-governor", 2,
     "the release-ticket signatures.")
 
 add("F04-audit", "high", "safety-governor", 2,
+    # Registered name: EXPERIMENT-ROAD-REACHABILITY (old ID A1 is kept because code matches on it)
     "F04-audit - A1 must not call an enum a destination boundary",
     "python3 -m pytest -q tests/test_f04_audit_reachability.py",
     "**Claim.** The reachability audit must not classify a rule as confined because a currency enum "
@@ -531,7 +534,7 @@ add("F19", "medium", "safety-governor", 3,
     "flag.\n\n"
     "**Read first.** `proofs/core_invariants.py:73-74`, `:131-136`, `:160-169`, `:238-258`, "
     "`docs/19-how-solid-is-the-theory.md:31-35`.\n\n"
-    "**Concrete failure.** Removing `Not(s.used[a])` from the execute guard leaves P3 "
+    "**Concrete failure.** Removing `Not(s.used[a])` from the execute guard leaves INVARIANT-NO-REPLAY-TICKET-SPENT "
     "(executed => used) satisfied after one execution, because a second execution just rewrites the "
     "same Booleans; the encoding cannot tell a second external effect from a stutter.\n\n"
     "**Fix.** Model an execution event or per-ticket count and prove a consumed ticket cannot produce "

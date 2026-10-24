@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H11: a halt propagates to every GPU in the domain within the bound, fail-safe. Falsified if
+"""CONTRACT-HALT-REACHES-EVERY-GPU: a halt propagates to every GPU in the domain within the bound, fail-safe. Falsified if
 any GPU keeps running after a halt or a loop break, or if any governor clears alone."""
 from govsim import reasons
 

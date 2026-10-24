@@ -56,7 +56,7 @@ print("""This space is for questions, critiques and proposals from outside the p
 
 Nothing posted here becomes part of the product by being posted. When a discussion changes the design, the change is written in the product repository in Yobie's own words, linking back here.
 
-Good places to start: the open questions in docs/18 (https://github.com/YobieBenjamin/safety-governor/blob/main/docs/18-viability-and-open-questions.md), including who reads the log (G1), how an affected party contests (G2), an agent that adds roads (A1) and the wire the customer never meant (I1).""")
+Good places to start: the open questions in docs/18 (https://github.com/YobieBenjamin/safety-governor/blob/main/docs/18-viability-and-open-questions.md), including who reads the log (WAVE-WHO-READS-THE-LOG), how an affected party contests (WAVE-AFFECTED-PARTY-CONTEST-LANE), an agent that adds roads (EXPERIMENT-ROAD-REACHABILITY) and the wire the customer never meant (EXPERIMENT-CUSTOMER-CONFIRMATION).""")
 PY
 )
   gh api graphql -f query='mutation($r:ID!,$c:ID!,$t:String!,$b:String!){createDiscussion(input:{repositoryId:$r,categoryId:$c,title:$t,body:$b}){discussion{url}}}' \

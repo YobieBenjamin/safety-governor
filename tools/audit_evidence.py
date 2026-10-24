@@ -75,11 +75,12 @@ FINDINGS = [
       "tests/test_h19_authorization.py::test_an_expired_clear_is_refused",
       "tests/test_h19_authorization.py::test_a_clear_good_for_a_day_is_refused"],
      ["tests/test_h11_halt_loop.py"]),
-    ("6", "sg", "a ticket issued before a halt commits during it (the code side of P13)",
+    ("6", "sg", "a ticket issued before a halt commits during it (the code side of INVARIANT-NOTHING-EXECUTES-WHILE-HALTED)",
      [("govsim/governor.py",
        "            if self.state != RUN:\n                self.log.append(\"gate.commit_rejected\", {\"why\": reasons.MBOX_NOT_RUNNING})\n                return False\n", "")],
      ["tests/test_h19_authorization.py::test_a_ticket_issued_before_a_halt_does_not_execute_during_it"],
      ["tests/test_h00_contract.py::test_allowed_operation_succeeds"]),
+    # Registered name: GAP-REVOCATIONS-UNENFORCED (old ID G1 is kept because code matches on it)
     ("G1", "sg", "revocations stored and never read",
      [("govsim/governor.py", "        return {kid: k for kid, k in keys.items() if kid not in revoked}", "        return keys"),
       ("govsim/governor.py",
@@ -89,16 +90,19 @@ FINDINGS = [
       "tests/test_h20_closed_gaps.py::test_a_revoked_gpu_cannot_attest",
       "tests/test_h20_closed_gaps.py::test_a_revoked_approver_cannot_release_a_hold"],
      ["tests/test_h18_oversight.py", "tests/test_h01_attestation.py"]),
+    # Registered name: GAP-SANDBOX-FLAG-IGNORED (old ID G2 is kept because code matches on it)
     ("G2", "sg", "CAP_REQUEST ignores the sandbox flag",
      [("govsim/governor.py", "        if self.policy.get(\"sandbox\") and peer != \"host\":", "        if False:")],
      ["tests/test_h20_closed_gaps.py::test_a_sandboxed_governor_grants_no_peer_capability"],
      ["tests/test_h20_closed_gaps.py::test_without_the_sandbox_the_same_request_is_granted"]),
+    # Registered name: GAP-HAZARD-BUDGET-PER-GOVERNOR (old ID G3 is kept because code matches on it)
     ("G3", "sg", "each governor counts a session's hazards on its own ledger",
      [("govsim/governor.py",
        "        owner = self.policy[\"budget_owners\"][\"hazard\"]",
        "        owner = self.chip_id")],
      ["tests/test_h20_closed_gaps.py::test_a_session_spread_over_two_governors_gets_one_hazard_budget"],
      ["tests/test_h17_use_cases.py::test_session_hazard_budget_parks_the_session_and_raises_a_scoped_alarm"]),
+    # Registered name: GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE (old ID G5 is kept because code matches on it)
     ("G5", "sg", "a workload token survives an edition change",
      [("govsim/governor.py", "                self.fingerprint = digest([self.workload, self.epoch])\n", "                pass\n")],
      ["tests/test_h20_closed_gaps.py::test_a_workload_token_from_the_old_edition_is_refused"],

@@ -840,7 +840,7 @@ class Governor:
         if any(code not in SESSION_SCOPED_ALARMS and code not in STATUS_ALARMS for code in self.alarms):
             return self._deny("request", reasons.GATE_ALARM, request_hash=rhash)
         lists = self._live_lists()          # the use-time view: list staleness is decided now, not at install (F06)
-        rule, why = select_rule(self.policy, workload, action, params, lists)   # requester labels never reach this call (H4)
+        rule, why = select_rule(self.policy, workload, action, params, lists)   # requester labels never reach this call (CONTRACT-BROKER-CANNOT-PICK-RULE)
         if rule is None:
             return self._deny("request", why, request_hash=rhash)
         req_mode = rule["requirement"]["mode"]

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H20: the controls the rulebook names are enforced, not just stored.
+"""CONTRACT-NAMED-CONTROLS-ENFORCED: the controls the rulebook names are enforced, not just stored.
 
 Four gaps from docs/REVIEW-2026-10-22-fact-check.md section 7, which an external audit on the same
 day called out as failures someone could reasonably expect these fields to prevent:

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """F23: the engine budget must include the per-response release-ticket signature.
 
-The external audit found that the H9 benchmark calls ``sign_output()`` and prices the batched provenance-record
+The external audit found that the CONTRACT-ZERO-PER-TOKEN-OVERHEAD benchmark calls ``sign_output()`` and prices the batched provenance-record
 signatures, but never follows the real response-release path. On that path the verified runtime requests a release
 ticket for every response and the governor SIGNS every ticket (counted in ``ops["ticket"]``, not ``ops["sign"]``).
 Those per-response release tickets are per-item capabilities and cannot be batched under one Merkle root the way the

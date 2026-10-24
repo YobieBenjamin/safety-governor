@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""L7, second set: mailbox, cap_table, ticket_store, epoch_reg, monotonic_counter, lifecycle.
+"""WAVE-FORMAL-PROOFS-ON-VERILOG, second set: mailbox, cap_table, ticket_store, epoch_reg, monotonic_counter, lifecycle.
 
 BLOCKS_A has the same shape as BLOCKS in __main__.py: block -> (Amaranth source file, class name, mutants), each
 mutant a one-line bug planted on purpose that the block's properties (rtl/formal/<block>.sv) must catch BY ASSERTION.
@@ -38,7 +38,7 @@ NO_SECOND_SOLVER = {"ticket_store": "yices did not finish in 15 minutes even at 
 
 BLOCKS_A = {
     "lifecycle": ("lifecycle.py", "Lifecycle", [
-        ("debug granted before the fuses are read (the code before 23 October 2026, F1)",
+        ("debug granted before the fuses are read (the code before 23 October 2026, RTL-DEBUG-WINDOW-AFTER-RESET)",
          "self.debug_grant.eq(self.debug_req & self.loaded & (self.state < PRODUCTION)),",
          "self.debug_grant.eq(self.debug_req & (self.state < PRODUCTION)),"),
         ("debug granted in PRODUCTION",
@@ -53,7 +53,7 @@ BLOCKS_A = {
          "self.debug_refused.eq(self.debug_req & (self.state >= PRODUCTION)),"),
     ]),
     "monotonic_counter": ("monotonic.py", "MonotonicCounter", [
-        ("the counter wraps to zero at the top (the code before 23 October 2026, F2)",
+        ("the counter wraps to zero at the top (the code before 23 October 2026, RTL-COUNTER-WRAPPED-TO-ZERO)",
          "with m.Elif(self.inc & ~self.value.all()):", "with m.Elif(self.inc):"),
         ("a lower high-water mark pulls the counter down",
          "with m.If(self.hwm > self.value):", "with m.If(self.hwm != self.value):"),

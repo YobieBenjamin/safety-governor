@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H10: the permitted output channel leaks no more than the threat model's budget. Falsified
+"""CONTRACT-LEAKAGE-WITHIN-BUDGET: the permitted output channel leaks no more than the threat model's budget. Falsified
 if model extraction through the output channel exceeds the query or byte budget without
 tripping a limit."""
 from govsim import reasons

@@ -11,21 +11,21 @@ reachable case), **low** (edge case, unreachable in practice, or a reporting dif
 
 | Id | Severity | What | Who disagrees |
 |---|---|---|---|
-| F-01 | low | Mailbox: where the run-state check sits in the order | RTL vs model; spec silent |
-| F-02 | low | Mailbox: sequence number 0 on a key's first frame | RTL vs model; spec silent |
-| F-03 | low | Model's heartbeat path checks the signature first | model vs spec and RTL |
-| F-04 | low | Model's CLEAR handler reports one reason for every failure | model vs spec |
-| F-05 | high, **closed** | CLEAR and tamper in the same cycle: CLEAR wins, the tamper is lost (fixed: tamper outranks CLEAR, branch fix/halt) | RTL vs spec and model (lead a) |
-| F-06 | high, **half closed** | Lifecycle reads TEST and grants debug before the fuse load (debug half fixed by a `loaded` flag, L7 group A; the register still reads TEST until the load) | RTL vs spec (lead b) |
-| F-07 | medium, **closed** | A signed HALT to a governor already in SAFE (fixed: a HALT opens the loop on every rung and SAFE stays SAFE, Yobie's call of 23 October 2026, branch feat/yobie-calls) | RTL vs spec; model vs spec, differently |
-| F-08 | low | The "millisecond" tick is 1,024 microseconds | RTL vs spec |
-| F-09 | low | A zero-byte lookup passes at zero budget | RTL and model vs spec |
-| F-10 | medium | Capability table holds two entries for one key | RTL vs spec and model |
-| F-11 | medium, **closed** | Meter counters wrap at 48 bits (fixed: counters saturate, `acce09f`) | RTL vs spec |
-| F-12 | low, **closed** | Monotonic counter wraps from an all-ones high-water mark (fixed: the counter saturates instead of wrapping (L7 group A, F2 there)) | RTL vs spec |
-| F-13 | low | Mailbox does not latch the frame between doorbell and verdict | an RTL interface assumption the spec never states |
-| F-14 | low | Register map's MBOX_STATUS row has no status 7 | spec vs spec |
-| F-15 | low | 07 says switch_open sets on loop_lost; RTL and model only do it in RUN or THROTTLE | spec text vs RTL and model |
+| CONFORMANCE-RUN-STATE-CHECK-ORDER | low | Mailbox: where the run-state check sits in the order | RTL vs model; spec silent |
+| CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO | low | Mailbox: sequence number 0 on a key's first frame | RTL vs model; spec silent |
+| CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST | low | Model's heartbeat path checks the signature first | model vs spec and RTL |
+| CONFORMANCE-CLEAR-REPORTS-ONE-REASON | low | Model's CLEAR handler reports one reason for every failure | model vs spec |
+| CONFORMANCE-CLEAR-BEATS-TAMPER | high, **closed** | CLEAR and tamper in the same cycle: CLEAR wins, the tamper is lost (fixed: tamper outranks CLEAR, branch fix/halt) | RTL vs spec and model (lead a) |
+| CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD | high, **half closed** | Lifecycle reads TEST and grants debug before the fuse load (debug half fixed by a `loaded` flag, WAVE-FORMAL-PROOFS-ON-VERILOG group A; the register still reads TEST until the load) | RTL vs spec (lead b) |
+| CONFORMANCE-HALT-TO-SAFE-CHIP | medium, **closed** | A signed HALT to a governor already in SAFE (fixed: a HALT opens the loop on every rung and SAFE stays SAFE, Yobie's call of 23 October 2026, branch feat/yobie-calls) | RTL vs spec; model vs spec, differently |
+| CONFORMANCE-MILLISECOND-TICK-TOO-LONG | low | The "millisecond" tick is 1,024 microseconds | RTL vs spec |
+| CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES | low | A zero-byte lookup passes at zero budget | RTL and model vs spec |
+| CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | medium | Capability table holds two entries for one key | RTL vs spec and model |
+| CONFORMANCE-METER-COUNTERS-WRAP | medium, **closed** | Meter counters wrap at 48 bits (fixed: counters saturate, `acce09f`) | RTL vs spec |
+| CONFORMANCE-MONOTONIC-COUNTER-WRAPS | low, **closed** | Monotonic counter wraps from an all-ones high-water mark (fixed: the counter saturates instead of wrapping (WAVE-FORMAL-PROOFS-ON-VERILOG group A, RTL-COUNTER-WRAPPED-TO-ZERO there)) | RTL vs spec |
+| CONFORMANCE-FRAME-NOT-LATCHED | low | Mailbox does not latch the frame between doorbell and verdict | an RTL interface assumption the spec never states |
+| CONFORMANCE-STATUS-TABLE-MISSING-ROW | low | Register map's MBOX_STATUS row has no status 7 | spec vs spec |
+| CONFORMANCE-SWITCH-OPEN-RUN-ONLY | low | 07 says switch_open sets on loop_lost; RTL and model only do it in RUN or THROTTLE | spec text vs RTL and model |
 
 ---
 
@@ -109,7 +109,7 @@ strobe and a tamper arrive in the same cycle, the sequencer goes to HALTED_INITI
 
 Related: the RTL will also take a CLEAR strobe out of SAFE when the cause is tamper. It relies on the firmware
 never strobing CLEAR after a tamper (in the model the keys are gone, so no CLEAR can verify). That is
-firmware-owned (R-074), but the hard core could carry it cheaply.
+firmware-owned (REQUIREMENT-FIRMWARE-TAMPER-ZEROIZE), but the hard core could carry it cheaply.
 
 **Reproducers:** `test_finding_clear_and_tamper_pulse_same_cycle_ends_safe`,
 `test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung`.
@@ -121,7 +121,7 @@ does nothing while `cause == C_TAMPER`), and add a formal property for it next t
 
 ## F-06 Lifecycle register between reset and the fuse load (lead b)
 
-**What the spec requires.** docs/07 section 1, H15: "Production silicon has no debug path." Section 3: in
+**What the spec requires.** docs/07 section 1, CONTRACT-NO-DEBUG-IN-PRODUCTION: "Production silicon has no debug path." Section 3: in
 PRODUCTION, `debug_grant` is never asserted. The register map says LIFECYCLE is fuse-backed and monotone.
 
 **What the RTL does.** `Lifecycle.state` is a plain register that resets to 0, which is TEST. It takes the fused
@@ -139,7 +139,7 @@ the OTP state has been read and decoded).
 **Suggested fix:** reset `state` to a most-restrictive "not yet loaded" value, or add a `loaded` flag that holds
 `debug_grant` at 0 until the fuse load, and drive the load from a reset sequencer rather than firmware.
 
-**Half closed** (23 October 2026). The dangerous half is fixed: debug needs a fuse load since the last reset (a `loaded` flag, found independently by the L7 proofs as their F1); the block-level reproducer now passes as a guard. The other half is open: until the load, the LIFECYCLE register still reads TEST (0), so software that reads it in that window is told the chip is a test part. Fix: reset the register to the most locked state, or report a distinct NOT_LOADED value. The core-level reproducer `test_finding_core_reports_test_lifecycle_before_fuse_load` still fails, on that half.
+**Half closed** (23 October 2026). The dangerous half is fixed: debug needs a fuse load since the last reset (a `loaded` flag, found independently by the WAVE-FORMAL-PROOFS-ON-VERILOG proofs as their RTL-DEBUG-WINDOW-AFTER-RESET); the block-level reproducer now passes as a guard. The other half is open: until the load, the LIFECYCLE register still reads TEST (0), so software that reads it in that window is told the chip is a test part. Fix: reset the register to the most locked state, or report a distinct NOT_LOADED value. The core-level reproducer `test_finding_core_reports_test_lifecycle_before_fuse_load` still fails, on that half.
 
 ## F-07 A signed HALT to a governor already in SAFE (closed)
 
@@ -160,7 +160,7 @@ Each gets half of it right. The spec wants both: stay in SAFE, and open the loop
 the new rung is higher. **(Model):** in `enter_safe_mode`, never apply a rung lower than the current one; open the
 loop separately.
 
-**Closed** on branch feat/yobie-calls (23 October 2026), by Yobie's decision ("silently failing is a bullshit feature"), now written into docs/04 section 3: "A HALT opens the loop switch on every rung, SAFE included" and "a HALT to a chip already in SAFE leaves it in SAFE with power off". RTL: in SAFE, `cmd_halt` sets `switch_open` and makes the command the cause (tamper keeps its cause); the state stays SAFE. Model: `enter_safe_mode` never applies a lower rung than the current one, so the HALT opens the loop and leaves SAFE and its power-off levers alone. Both reproducers pass and stay as guards (R-144, R-145), and the L7 design fact that recorded the old behaviour is gone, replaced by proven rules (rtl/formal/halt_seq.sv, the H rules; governor_core.sv, G3) with the old behaviour planted as a mutant that is caught.
+**Closed** on branch feat/yobie-calls (23 October 2026), by Yobie's decision ("silently failing is a bullshit feature"), now written into docs/04 section 3: "A HALT opens the loop switch on every rung, SAFE included" and "a HALT to a chip already in SAFE leaves it in SAFE with power off". RTL: in SAFE, `cmd_halt` sets `switch_open` and makes the command the cause (tamper keeps its cause); the state stays SAFE. Model: `enter_safe_mode` never applies a lower rung than the current one, so the HALT opens the loop and leaves SAFE and its power-off levers alone. Both reproducers pass and stay as guards (REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG, REQUIREMENT-HALT-IN-SAFE-STAYS-SAFE), and the WAVE-FORMAL-PROOFS-ON-VERILOG design fact that recorded the old behaviour is gone, replaced by proven rules (rtl/formal/halt_seq.sv, the H rules; governor_core.sv, RTL-HALT-REACHES-PINS) with the old behaviour planted as a mutant that is caught.
 
 ## F-08 The "millisecond" tick is 1,024 microseconds
 
@@ -211,7 +211,7 @@ long-lived slot serving a busy model can reach. The wrap looks like the counter 
 **Reproducer:** `test_finding_meter_counter_wraps_at_48_bits`. **Fix:** saturate instead of wrapping (and raise an
 alarm), or use 64 bits in the product.
 
-**Closed.** The L7 group B proofs found the same bug independently (one big add could move a counter down) and the
+**Closed.** The WAVE-FORMAL-PROOFS-ON-VERILOG group B proofs found the same bug independently (one big add could move a counter down) and the
 meter now saturates at its maximum (merge `acce09f`, regression in `rtl/tests/test_l7b_regressions.py`). The
 reproducer above now passes and stays in the suite as a guard. The alarm on saturation is not added yet.
 
@@ -224,7 +224,7 @@ governor's clock to 0, which every expiry check would then misread.
 **Reproducer:** `test_finding_mono_wraps_from_an_all_ones_high_water_mark`. **Fix:** saturate at the top, and treat an
 all-ones high-water mark as a fuse read failure (boot refused, as the FMEA row already says for fuse failures).
 
-**Closed** (23 October 2026): the counter saturates instead of wrapping (L7 group A, F2 there). The L7 proofs found the same bug independently. The reproducer above now passes and stays in the suite as a guard.
+**Closed** (23 October 2026): the counter saturates instead of wrapping (WAVE-FORMAL-PROOFS-ON-VERILOG group A, RTL-COUNTER-WRAPPED-TO-ZERO there). The WAVE-FORMAL-PROOFS-ON-VERILOG proofs found the same bug independently. The reproducer above now passes and stays in the suite as a guard.
 
 ## F-13 Mailbox does not latch the frame between doorbell and verdict
 
@@ -269,8 +269,8 @@ So the list above is not read as "everything else went unexamined":
   presented as CLEAR (the 22 October case), stale REQUEST, forged REQUEST, REQUEST while not running, replayed and
   forged, stale and forged, not running and forged, CLEAR for another chip, expired CLEAR, two keys with independent
   counters, a good heartbeat. RTL and model agree on the reason and on the stored sequence for all fourteen.
-- Mailbox, 4,000 random frames over twelve commands: 3,690 agree outright; every one of the other 310 is F-01, F-02
-  or F-03. No unexplained disagreement.
+- Mailbox, 4,000 random frames over twelve commands: 3,690 agree outright; every one of the other 310 is CONFORMANCE-RUN-STATE-CHECK-ORDER, CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO
+  or CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST. No unexplained disagreement.
 - Capability table vs the model's `Switch`: agree on all 1,280 random lookups and every remaining budget with
   non-overlapping keys.
 - Levers per rung: RTL and model identical for all five rungs. Boot state: identical.

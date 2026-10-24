@@ -61,7 +61,7 @@ current epoch and a live heartbeat, or it is closed. That blocks exfiltration to
 that is not on the roster, blocks all traffic when the heartbeat stops, and makes "which GPUs
 may talk" a policy decision the host cannot change. What it does not do is inspect individual
 transfers between two legitimate roster members; that residual is named in the objectives
-(N5) and is what the integrated tier would add.
+(GOAL-NOT-INSPECTING-ROSTER-TRANSFERS) and is what the integrated tier would add.
 
 In plain words: the governor does not stand in the corridor checking every parcel. It holds
 the keys to the doors between the buildings, and the doors only open for people on the roll.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H14: partitions and epoch changes end in safe states, never stale ones. Falsified if a
+"""CONTRACT-PARTITIONS-END-SAFE: partitions and epoch changes end in safe states, never stale ones. Falsified if a
 cut-off segment keeps running past heartbeat expiry, a replayed or forged heartbeat keeps it
 alive, or an epoch applies unevenly."""
 from govsim import reasons

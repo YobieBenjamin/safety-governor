@@ -440,7 +440,7 @@ class Rack:
         g = governor or node.governor
         body = {"request_id": random_id(8), "measurement_token": node.token, "action": action, "params": params, "witnesses": witnesses or []}
         if labels:
-            body.update(labels)      # requester-supplied labels; the gate must ignore them (H4, tests/test_h04_lane.py): labels do not pick the rule or the lane
+            body.update(labels)      # requester-supplied labels; the gate must ignore them (CONTRACT-BROKER-CANNOT-PICK-RULE, tests/test_h04_lane.py): labels do not pick the rule or the lane
         return g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))
 
     def customer_registry_list(self, expires_in_s: float = 86400.0, version: int = 0, entries: list | None = None) -> dict:
@@ -598,7 +598,7 @@ class Rack:
         off never acknowledges. When the acknowledging set is the whole roster the authority commits
         everywhere it can; otherwise it commits to the acknowledging set and the stragglers are
         expelled: the new heartbeats carry the new epoch, a governor still on the old epoch refuses
-        them, and it halts at its heartbeat expiry (the mechanism tested in H14)."""
+        them, and it halts at its heartbeat expiry (the mechanism tested in CONTRACT-PARTITIONS-END-SAFE)."""
         silent = set(silent or [])
         reachable = [n.governor for n in self.nodes if self.fabric.reachable(self.entry.chip_id, n.governor.chip_id) or n.governor is self.entry]
         acks = {}

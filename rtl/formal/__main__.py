@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""L7: prove the chip's properties on the generated Verilog, then prove the proofs can fail.
+"""WAVE-FORMAL-PROOFS-ON-VERILOG: prove the chip's properties on the generated Verilog, then prove the proofs can fail.
 
     python -m rtl.formal          # every block that has a property file; exit 1 on anything that does not hold
     python -m rtl.formal meter    # only the blocks named (any number)
@@ -45,17 +45,17 @@ BLOCKS = {
          "m.d.sync += [self.state.eq(SAFE), self.timer.eq(0)]", "m.d.sync += [self.state.eq(HALT), self.timer.eq(0)]"),
         ("the power brake releases in THROTTLE",
          "self.pwrbrk.eq(self.state != RUN),", "self.pwrbrk.eq((self.state != RUN) & (self.state != THROTTLE)),"),
-        ("CLEAR outranks tamper again (F-05)",
+        ("CLEAR outranks tamper again (CONFORMANCE-CLEAR-BEATS-TAMPER)",
          "with m.If(self.tamper):", "with m.If(self.tamper & ~(self.clear & (self.state != HALTED_INITIAL))):"),
-        ("RUN entered on a stale loop_lost (F1)",
+        ("RUN entered on a stale loop_lost (RTL-CORE-HALTS-AFTER-REACHING-RUN)",
          "with m.If(self.loop_sense & ~self.loop_lost):", "with m.If(self.loop_sense):"),
         ("a halt command is ignored once throttled",
          "with m.Elif(self.cmd_halt):", "with m.Elif(self.cmd_halt & (self.state != THROTTLE)):"),
         # Yobie's calls, 23 October 2026: HALT in SAFE opens the loop; EXCLUDE; NO_FIRST_HEARTBEAT
-        ("a HALT to a chip in SAFE leaves the loop closed (the old behaviour, F-07)",
+        ("a HALT to a chip in SAFE leaves the loop closed (the old behaviour, CONFORMANCE-HALT-TO-SAFE-CHIP)",
          "            m.d.sync += self.switch_open.eq(1)\n        with m.Elif(self.cmd_halt):",
          "            pass\n        with m.Elif(self.cmd_halt):"),
-        ("a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old F-07)",
+        ("a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old CONFORMANCE-HALT-TO-SAFE-CHIP)",
          "with m.Elif(self.cmd_halt & (self.state == SAFE)):", "with m.Elif(self.cmd_halt & (self.state == SAFE) & 0):"),
         ("EXCLUDE closes the loop of a chip halted by loop loss, a command or tamper",
          "with m.Elif(self.cmd_exclude & (self.state == HALTED_INITIAL) & (self.cause == C_NONE)):",
@@ -95,7 +95,7 @@ except ImportError:
 BLOCKS.update(BLOCKS_FPGA)
 
 # the second set of blocks (mailbox, cap_table, ticket_store, epoch_reg, monotonic_counter, lifecycle) lives in its own
-# file so two people can extend L7 at once; CHECKS_A are its extra, independent checks (a second solver, a random
+# file so two people can extend WAVE-FORMAL-PROOFS-ON-VERILOG at once; CHECKS_A are its extra, independent checks (a second solver, a random
 # simulation against a reference model). Missing file, missing blocks: the halt sequencer still runs.
 try:
     from .blocks_a import BLOCKS_A, CHECKS_A, DEPTH_A
@@ -136,6 +136,7 @@ def solvers() -> list:
     return _SOLVERS
 
 
+# Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
 SPLICE = "// L7-SPLICE"
 
 
@@ -145,7 +146,7 @@ def smt(work: str, top: str, yosys_extra: str = "") -> str | None:
     A props file that starts with SPLICE is pasted into the block's own module, just before endmodule, so its
     assertions can name the block's internal registers (yosys has no hierarchical references); the block's logic is
     untouched. Any yosys warning is refused: a misspelt signal name becomes a free wire, a variable driven from two
-    blocks becomes a conflict, and an assertion over either proves nothing (found by the L7 group A work)."""
+    blocks becomes a conflict, and an assertion over either proves nothing (found by the WAVE-FORMAL-PROOFS-ON-VERILOG group A work)."""
     text = open(os.path.join(work, "props.sv"), encoding="utf-8").read()
     if text.startswith(SPLICE):
         dut = open(os.path.join(work, "dut.v"), encoding="utf-8").read()
@@ -293,7 +294,7 @@ def main(argv: list) -> int:
         for ok, line in check(prove, names):
             print(f"  {line}")
             bad += not ok
-    print("L7: every property proven on the Verilog, every mutant caught" if not bad else f"L7: {bad} problem(s)")
+    print("WAVE-FORMAL-PROOFS-ON-VERILOG: every property proven on the Verilog, every mutant caught" if not bad else f"WAVE-FORMAL-PROOFS-ON-VERILOG: {bad} problem(s)")
     return 1 if bad else 0
 
 

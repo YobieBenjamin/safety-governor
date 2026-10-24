@@ -28,7 +28,7 @@ CLAIMS = {
     "observer_accuracy": {
         "standing": "unquantified",
         "needs": "a frozen evaluation set with per-family error rates",
-        "evidence": ["EXPERIMENTS.md YB-0052..YB-0057", "docs/19 section 6"],
+        "evidence": ["EXPERIMENTS.md WAVE-OBSERVER-EVALUATION-SET..WAVE-USE-CASES-WITH-REAL-WITNESS", "docs/19 section 6"],
         "statement": (
             "Whether the signed lists and observers tell allowed actions from harmful ones is not measured. "
             "Two honest witnesses can share a mistake, so defeating a dual-witness pair does not require "

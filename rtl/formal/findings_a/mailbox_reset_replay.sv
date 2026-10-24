@@ -1,4 +1,5 @@
-// L7-SPLICE block: mailbox. FINDINGS-a.md F8. Expected to FAIL by assertion. Rule: a dispatched frame's sequence
+// Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
+// L7-SPLICE block: mailbox. FINDINGS-a.md RTL-RESET-ZEROES-MAILBOX-SEQUENCES. Expected to FAIL by assertion. Rule: a dispatched frame's sequence
 // number is above every sequence number ever accepted for that key slot, with reset allowed in any cycle. The
 // sequence registers reset to zero and there is no port to restore them, so an old signed frame replays after reset.
   reg [31:0] f_hi = 0;       // highest sequence ever accepted in key slot 0; survives reset, as NVM would

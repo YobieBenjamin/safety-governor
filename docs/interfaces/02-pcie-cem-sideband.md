@@ -46,7 +46,7 @@ A per-slot block between the sequencer's levers and the pads (`rtl/governor_rtl/
 
 With the shaper every rule passes: T_PVPERL measured 100.000 ms, T_PERST 101 us on the short request, T_FAIL 0 us. Five mutants of the shaper (T_PVPERL halved, no power-good timer, the power-fail path registered one cycle late, T_PERST cut to 10 us, no hold) are each caught by the rule they break (`test_mutant_caught`), and an unmodified copy of the mutant harness passes (`test_mutant_unmodified_copy_passes`), so the harness itself is not what fails.
 
-**Not done:** the shaper is not wired into `GovernorCore` and has no formal proof yet. I left `top.py` alone on purpose: the L7 work on other branches is proving `halt_seq` properties on the generated Verilog, and changing the top-level pad path under it would invalidate that work mid-flight. Next step: wire it in, regenerate, and add its three invariants to `rtl/formal`. It also needs the per-slot power-good pin, which `governor_module.csv` does not have (proposed as `+SLOT_PWRGD` in `01-dcscm-dcsci-ltpi.md`).
+**Not done:** the shaper is not wired into `GovernorCore` and has no formal proof yet. I left `top.py` alone on purpose: the WAVE-FORMAL-PROOFS-ON-VERILOG work on other branches is proving `halt_seq` properties on the generated Verilog, and changing the top-level pad path under it would invalidate that work mid-flight. Next step: wire it in, regenerate, and add its three invariants to `rtl/formal`. It also needs the per-slot power-good pin, which `governor_module.csv` does not have (proposed as `+SLOT_PWRGD` in `01-dcscm-dcsci-ltpi.md`).
 
 ## 5. T_FAIL across LTPI
 

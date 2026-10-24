@@ -25,6 +25,7 @@ RUNG = {RUN: 0, THROTTLE: 1, HALT: 2, SAFE: 3}       # severity order; HALTED_IN
 
 
 # ================================================================ monotonic counter
+# Registered name: REQUIREMENT-MONOTONIC-MICROSECOND-COUNTER (old ID R-001 is kept because code matches on it)
 @conformance("R-001")
 def test_mono_counter_is_64_bits():
     """The counter is 64 bits wide."""
@@ -48,6 +49,7 @@ def test_mono_advances_once_per_tick():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-COUNTER-REFUSES-DECREMENT (old ID R-002 is kept because code matches on it)
 @conformance("R-002")
 def test_mono_decrement_request_refused_and_value_kept():
     """A decrement request is flagged as refused and the value does not move."""
@@ -87,6 +89,7 @@ def test_mono_never_decreases_under_random_inputs():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-COUNTER-FUSE-HIGH-WATER-MARK (old ID R-003 is kept because code matches on it)
 @conformance("R-003")
 def test_mono_high_water_mark_raises_the_counter():
     """At boot the fuse-backed high-water mark is loaded: the counter starts no lower than it."""
@@ -116,6 +119,7 @@ def test_mono_lower_high_water_mark_cannot_pull_back():
 
 
 # ================================================================ measurement registers
+# Registered name: REQUIREMENT-MEASUREMENT-EXTEND-ONLY (old ID R-004 is kept because code matches on it)
 @conformance("R-004")
 def test_meas_engine_output_without_request_ignored():
     """A hash result that this block did not ask for never lands in the register."""
@@ -157,6 +161,8 @@ def test_meas_has_no_write_port():
     assert ports == {"extend", "data", "hash_req", "hash_in", "hash_done", "hash_out", "value", "busy"}, ports
 
 
+# Registered name: REQUIREMENT-LOADER-MEASUREMENT-REGISTER (old ID R-005 is kept because code matches on it)
+# Registered name: REQUIREMENT-FIRMWARE-MEASUREMENT-REGISTER (old ID R-006 is kept because code matches on it)
 @conformance("R-005", "R-006")
 def test_core_meas_csr_windows_read_both_registers():
     """MEAS0 at 0x030.. and MEAS1 at 0x050.. read the two measurement registers, eight words each."""
@@ -181,6 +187,7 @@ def test_core_meas_csr_windows_read_both_registers():
 
 
 # ================================================================ epoch register
+# Registered name: REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM (old ID R-007 is kept because code matches on it)
 @conformance("R-007")
 def test_epoch_commit_without_quorum_ignored():
     """A commit strobe without quorum_ok leaves the epoch unchanged."""
@@ -234,6 +241,7 @@ def test_epoch_commit_with_quorum_switches():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-EPOCH-TAG-LOW-BITS (old ID R-009 is kept because code matches on it)
 @conformance("R-009")
 def test_epoch_tag_is_low_16_bits():
     """The capability epoch tag is the low 16 bits of the epoch."""
@@ -248,6 +256,7 @@ def test_epoch_tag_is_low_16_bits():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-EPOCH-IS-POLICY-DIGEST (old ID R-008 is kept because code matches on it)
 @conformance("R-008")
 def test_core_epoch_csr_reads_256_bits():
     """EPOCH[0..7] at 0x010.. reads the 256-bit epoch, low word first."""
@@ -267,6 +276,7 @@ def test_core_epoch_csr_reads_256_bits():
 
 
 # ================================================================ lifecycle
+# Registered name: REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG (old ID R-010 is kept because code matches on it)
 @conformance("R-010")
 def test_lifecycle_never_moves_down_by_advance():
     """advance to a lower or equal state is refused and flagged."""
@@ -319,6 +329,8 @@ def test_lifecycle_monotone_under_random_inputs():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-PRODUCTION-HAS-NO-DEBUG (old ID R-011 is kept because code matches on it)
+# Registered name: REQUIREMENT-JTAG-REFUSED-AND-LOGGED (old ID R-013 is kept because code matches on it)
 @conformance("R-011", "R-013")
 def test_lifecycle_debug_refused_in_production_and_later():
     """Once the register holds PRODUCTION or DECOMMISSIONED, debug_grant is 0 and debug_refused is 1."""
@@ -350,6 +362,7 @@ def test_lifecycle_debug_granted_before_production():
         sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-LIFECYCLE-REGISTER-ENCODING (old ID R-012 is kept because code matches on it)
 @conformance("R-012")
 def test_core_lifecycle_csr_encoding():
     """LIFECYCLE at 0x004 reads 0 test, 1 provisioned, 2 production, 3 decommissioned after the fuse load."""
@@ -396,6 +409,7 @@ def _cap_tb(body):
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH (old ID R-014 is kept because code matches on it)
 @conformance("R-014")
 def test_cap_match_requires_point():
     """An entry for one enforcement point never matches a lookup at another."""
@@ -419,6 +433,7 @@ def test_cap_match_requires_peer():
     _cap_tb(body)
 
 
+# Registered name: REQUIREMENT-CAPABILITY-DIRECTION-FIELD (old ID R-021 is kept because code matches on it)
 @conformance("R-014", "R-021")
 def test_cap_match_requires_direction():
     """An 'out' entry does not admit 'in' traffic; an 'in' entry does not admit 'out'."""
@@ -447,6 +462,7 @@ def test_cap_both_admits_in_and_out():
     _cap_tb(body)
 
 
+# Registered name: REQUIREMENT-LOOKUP-DECREMENTS-BUDGET (old ID R-015 is kept because code matches on it)
 @conformance("R-015")
 def test_cap_lookup_decrements_by_bytes():
     """An allowed lookup takes exactly lk_bytes off the entry's budget."""
@@ -463,6 +479,8 @@ def test_cap_lookup_decrements_by_bytes():
     _cap_tb(body)
 
 
+# Registered name: REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO (old ID R-016 is kept because code matches on it)
+# Registered name: REQUIREMENT-BUDGET-NEVER-UNDERFLOWS (old ID R-020 is kept because code matches on it)
 @conformance("R-016", "R-020")
 def test_cap_refuses_more_than_remaining_budget():
     """A lookup larger than what is left is refused with R_BUDGET and takes nothing."""
@@ -498,6 +516,7 @@ def test_cap_budget_never_underflows_random():
     _cap_tb(body)
 
 
+# Registered name: REQUIREMENT-CAPABILITY-REFUSES-ON-EXPIRY (old ID R-017 is kept because code matches on it)
 @conformance("R-017")
 def test_cap_refuses_at_expiry_and_drops_entry():
     """At now == expiry the lookup is refused R_EXPIRED and the entry is dropped."""
@@ -515,6 +534,8 @@ def test_cap_refuses_at_expiry_and_drops_entry():
     _cap_tb(body)
 
 
+# Registered name: REQUIREMENT-CAPABILITY-REFUSES-STALE-TAG (old ID R-018 is kept because code matches on it)
+# Registered name: REQUIREMENT-SWITCH-RECONFIGURED-AFTER-EVENTS (old ID R-093 is kept because code matches on it)
 @conformance("R-018", "R-093")
 def test_cap_refuses_on_epoch_tag_mismatch():
     """An entry minted under another epoch tag is refused R_STALE_EPOCH."""
@@ -527,6 +548,7 @@ def test_cap_refuses_on_epoch_tag_mismatch():
     _cap_tb(body)
 
 
+# Registered name: REQUIREMENT-MAC-CHECKED-AT-INSERTION (old ID R-019 is kept because code matches on it)
 @conformance("R-019")
 def test_cap_insert_needs_mac():
     """An insert without mac_ok is not stored."""
@@ -566,6 +588,7 @@ def test_cap_full_table_refuses_insert():
     _cap_tb(body)
 
 
+# Registered name: REQUIREMENT-LOOKUP-IN-ONE-CYCLE (old ID R-025 is kept because code matches on it)
 @conformance("R-025")
 def test_cap_lookup_answers_in_the_same_cycle():
     """allow and reason are combinational: the answer is there in the cycle the lookup is presented."""
@@ -578,6 +601,8 @@ def test_cap_lookup_answers_in_the_same_cycle():
     _cap_tb(body)
 
 
+# Registered name: REQUIREMENT-TABLE-SIZES-ARE-PARAMETERS (old ID R-022 is kept because code matches on it)
+# Registered name: REQUIREMENT-ENFORCEMENT-POINT-NUMBERING (old ID R-026 is kept because code matches on it)
 @conformance("R-022", "R-026")
 def test_core_has_one_table_per_point_sized_by_parameter():
     """GovernorCore has four capability tables (NVSwitch, PCIe, DPU, storage), each of cap_entries entries."""
@@ -588,6 +613,7 @@ def test_core_has_one_table_per_point_sized_by_parameter():
         assert dut.tickets.n == 2
 
 
+# Registered name: REQUIREMENT-PROTOTYPE-DEFAULT-SIZES (old ID R-023 is kept because code matches on it)
 @conformance("R-023")
 def test_core_default_sizes_are_the_spec_prototype():
     """Defaults: 8 entries per point, 16-bit peer, 24-bit budget, 32-bit ticket id, 8-bit command, 4 meter slots of 48 bits."""
@@ -599,6 +625,7 @@ def test_core_default_sizes_are_the_spec_prototype():
     assert dut.meter.slots == 4 and len(dut.meter.add_tokens) == 48
 
 
+# Registered name: REQUIREMENT-PORT-OPEN-ONLY-WITH-ENTRY (old ID R-024 is kept because code matches on it)
 @conformance("R-024")
 def test_core_tables_empty_whenever_not_running():
     """Out of RUN every table is cleared and an insert does not stick: no port can be open."""
@@ -633,6 +660,8 @@ def test_core_tables_empty_whenever_not_running():
 
 
 # ================================================================ used-ticket store
+# Registered name: REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED (old ID R-027 is kept because code matches on it)
+# Registered name: REQUIREMENT-BURN-BEFORE-ADMIT (old ID R-028 is kept because code matches on it)
 @conformance("R-027", "R-028")
 def test_ticket_seen_after_burn():
     """After a burn, a query for the same id reports seen, every time."""
@@ -706,6 +735,7 @@ def test_ticket_never_admitted_twice_random():
 
 
 # ================================================================ heartbeat
+# Registered name: REQUIREMENT-HEARTBEAT-EXPIRES-ON-TIME (old ID R-029 is kept because code matches on it)
 @conformance("R-029")
 def test_hb_expired_at_reset():
     """Before any valid heartbeat the timer is expired (nothing to arm on)."""
@@ -735,6 +765,7 @@ def test_hb_expires_on_the_window_th_tick():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID (old ID R-030 is kept because code matches on it)
 @conformance("R-030")
 def test_hb_reload_only_on_valid():
     """Changing the window input or ticking never reloads; only hb_valid does, and to the window given."""
@@ -769,6 +800,7 @@ def test_hb_valid_wins_over_tick():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-HEARTBEAT-REMAINING-REGISTER (old ID R-031 is kept because code matches on it)
 @conformance("R-031")
 def test_core_hb_remain_csr():
     """HB_REMAIN at 0x078 reads the heartbeat's remaining count."""
@@ -783,6 +815,7 @@ def test_core_hb_remain_csr():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER (old ID R-032 is kept because code matches on it)
 @conformance("R-032")
 def test_core_timers_ignore_the_raw_microsecond_tick():
     """The heartbeat counts on the derived slow strobe, not on every microsecond tick."""
@@ -833,6 +866,8 @@ def _cause_test(cause_sig, start, expect_state, expect_cause, opens):
     _halt(body)
 
 
+# Registered name: REQUIREMENT-RUNG-CLIMBS-ON-CAUSES (old ID R-034 is kept because code matches on it)
+# Registered name: REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE (old ID R-038 is kept because code matches on it)
 @conformance("R-034", "R-038")
 def test_halt_loop_lost_from_run():
     """loop_lost in RUN: HALT, cause loop, switch open."""
@@ -875,6 +910,7 @@ def test_halt_cmd_halt_from_throttle():
     _cause_test("cmd_halt", THROTTLE, HALT, C_COMMAND, 1)
 
 
+# Registered name: REQUIREMENT-TAMPER-ZEROIZES-TO-SAFE (old ID R-042 is kept because code matches on it)
 @conformance("R-034", "R-038", "R-042")
 def test_halt_tamper_from_run():
     """tamper in RUN: SAFE, cause tamper, switch open."""
@@ -904,6 +940,7 @@ def test_halt_tamper_from_every_rung():
         _halt(body, t_throttle=3, t_halt=4)
 
 
+# Registered name: REQUIREMENT-THROTTLE-AND-HALT-TIMERS (old ID R-041 is kept because code matches on it)
 @conformance("R-034", "R-041")
 def test_halt_throttle_escalates_after_t_throttle_ticks():
     """THROTTLE moves to HALT on exactly the t_throttle-th millisecond tick, not before."""
@@ -946,6 +983,7 @@ def test_core_default_timers_are_30s_and_300s():
     assert 300_000 < (1 << len(dut.halt.timer))      # the timer can count that far
 
 
+# Registered name: REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED (old ID R-035 is kept because code matches on it)
 @conformance("R-035")
 def test_halt_never_descends_without_clear_random():
     """5,000 random cycles of every cause, tick, hb_ok and loop_sense, clear held low: the rung only climbs.
@@ -985,6 +1023,7 @@ def test_halt_safe_is_absorbing_without_clear():
     _halt(body, t_throttle=2, t_halt=2)
 
 
+# Registered name: REQUIREMENT-LEVERS-FOLLOW-RUNG (old ID R-036 is kept because code matches on it)
 @conformance("R-036")
 def test_halt_levers_follow_every_rung():
     """Levers per rung: HALTED_INITIAL brake+reset+power off; RUN released; THROTTLE brake; HALT brake+reset; SAFE all."""
@@ -1022,6 +1061,7 @@ def test_halt_ports_closed_outside_run():
     _halt(body)
 
 
+# Registered name: REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED (old ID R-037 is kept because code matches on it)
 @conformance("R-037")
 def test_halt_switch_open_at_reset():
     """The loop switch starts open."""
@@ -1030,6 +1070,7 @@ def test_halt_switch_open_at_reset():
     _halt(body)
 
 
+# Registered name: REQUIREMENT-BOOT-REFUSED-STAYS-HALTED (old ID R-073 is kept because code matches on it)
 @conformance("R-037", "R-073")
 def test_halt_no_arming_without_heartbeat():
     """Without hb_ok the switch never closes and the sequencer never leaves HALTED_INITIAL, loop current or not."""
@@ -1055,6 +1096,7 @@ def test_halt_arms_before_loop_current():
     _halt(body)
 
 
+# Registered name: REQUIREMENT-CLEAR-KEEPS-SWITCH-OPEN (old ID R-039 is kept because code matches on it)
 @conformance("R-037", "R-039")
 def test_halt_heartbeat_alone_never_recloses_after_a_loop_cause():
     """Once a loop-opening cause opened the switch, a live heartbeat alone never closes it."""
@@ -1069,6 +1111,7 @@ def test_halt_heartbeat_alone_never_recloses_after_a_loop_cause():
     _halt(body)
 
 
+# Registered name: REQUIREMENT-CLEAR-CLOSES-IF-NO-CAUSE (old ID R-047 is kept because code matches on it)
 @conformance("R-039", "R-047")
 def test_halt_clear_does_not_close_the_switch_until_armed():
     """After clear the state is HALTED_INITIAL with no cause and the switch still open; it closes only when armed."""
@@ -1100,6 +1143,7 @@ def test_halt_clear_in_boot_rung_is_a_no_op():
     _halt(body)
 
 
+# Registered name: REQUIREMENT-CAUSE-BITS-NAME-SUMMARY (old ID R-040 is kept because code matches on it)
 @conformance("R-040")
 def test_halt_cause_codes_match_the_spec():
     """The cause encoding is 0 none, 1 loop, 2 local, 3 tamper, 4 command."""
@@ -1122,12 +1166,14 @@ def test_halt_escalation_keeps_the_cause():
     _halt(body, t_throttle=2, t_halt=2)
 
 
+# Registered name: REQUIREMENT-STATE-REGISTER-CODES (old ID R-043 is kept because code matches on it)
 @conformance("R-043")
 def test_halt_state_codes_match_the_spec():
     """The rung encoding is 0 HALTED_INITIAL, 1 RUN, 2 THROTTLE, 3 HALT, 4 SAFE."""
     assert (HALTED_INITIAL, RUN, THROTTLE, HALT, SAFE) == (0, 1, 2, 3, 4)
 
 
+# Registered name: REQUIREMENT-CAUSE-REGISTER-LAYOUT (old ID R-067 is kept because code matches on it)
 @conformance("R-043", "R-067")
 def test_core_state_and_cause_csrs():
     """STATE at 0x008 and CAUSE at 0x00C follow the sequencer, with the firmware's code in CAUSE[15:8]."""
@@ -1144,6 +1190,7 @@ def test_core_state_and_cause_csrs():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-LEVERS-REGISTER-BITS (old ID R-044 is kept because code matches on it)
 @conformance("R-044")
 def test_core_levers_csr_bits():
     """LEVERS at 0x080: bit 0 brake, bit 1 PERST#, bit 2 PWR_EN low, for each rung the core can reach quickly."""
@@ -1170,6 +1217,7 @@ def test_core_levers_csr_bits():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-CORE-BOOTS-HALTED-SAFE (old ID R-045 is kept because code matches on it)
 @conformance("R-045")
 def test_core_boot_state_levers_and_switch():
     """Out of reset: HALTED_INITIAL, brake and reset asserted at the pads (active low), PWR_EN low, switch open."""
@@ -1181,6 +1229,7 @@ def test_core_boot_state_levers_and_switch():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-WATCHDOG-RESETS-TO-HALTED (old ID R-046 is kept because code matches on it)
 @conformance("R-046")
 def test_core_reset_from_run_returns_to_boot_rung():
     """A reset (the watchdog's) in RUN puts the core back in HALTED_INITIAL with the loop switch open."""
@@ -1205,6 +1254,7 @@ def test_core_reset_from_run_returns_to_boot_rung():
 
 
 # ================================================================ loop
+# Registered name: REQUIREMENT-LOOP-PAD-FOLLOWS-SWITCH (old ID R-048 is kept because code matches on it)
 @conformance("R-048")
 def test_loop_pad_follows_switch_request():
     """loop_out_open is the sequencer's switch_open, both ways, in the same cycle."""
@@ -1217,6 +1267,8 @@ def test_loop_pad_follows_switch_request():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-LOOP-LOSS-DEBOUNCE (old ID R-049 is kept because code matches on it)
+# Registered name: REQUIREMENT-BOARD-LOSS-DEBOUNCE (old ID R-143 is kept because code matches on it)
 @conformance("R-049", "R-143")
 def test_loop_one_noisy_sample_is_not_a_loss():
     """A single low sample between good ones never declares a loss."""
@@ -1265,6 +1317,7 @@ def test_loop_counts_only_on_sample_strobes():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-LOOP-REGISTER-BITS (old ID R-050 is kept because code matches on it)
 @conformance("R-050")
 def test_core_loop_csr_bits():
     """LOOP at 0x07C: bit 0 current sensed, bit 1 own switch open."""
@@ -1285,6 +1338,7 @@ def test_core_loop_csr_bits():
 
 
 # ================================================================ meter
+# Registered name: REQUIREMENT-METER-HOST-WRITE-REFUSED (old ID R-051 is kept because code matches on it)
 @conformance("R-051")
 def test_meter_host_write_refused_and_flagged():
     """A host write is flagged and leaves every counter as it was."""
@@ -1302,6 +1356,7 @@ def test_meter_host_write_refused_and_flagged():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-METER-ONLY-INCREMENTS (old ID R-052 is kept because code matches on it)
 @conformance("R-052")
 def test_meter_counters_only_increase_random():
     """500 random strobes with small adds across slots: no counter ever goes down (while it does not wrap)."""
@@ -1343,6 +1398,7 @@ def test_meter_slots_are_independent():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-METER-SLOT-LAYOUT (old ID R-053 is kept because code matches on it)
 @conformance("R-053")
 def test_core_meter_csr_layout():
     """METER_SLOT[n] at 0x200 + 32n: tokens, cycles, bytes in, bytes out, each a low and a high word."""
@@ -1397,6 +1453,8 @@ def _mbox(body):
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED (old ID R-054 is kept because code matches on it)
+# Registered name: REQUIREMENT-DISPATCH-AFTER-ALL-CHECKS (old ID R-059 is kept because code matches on it)
 @conformance("R-054", "R-059")
 def test_mbox_good_frame_dispatches_once():
     """A good frame dispatches with the command on cmd_out; the same frame again is a replay."""
@@ -1418,6 +1476,7 @@ def test_mbox_sequence_must_strictly_increase():
     _mbox(body)
 
 
+# Registered name: REQUIREMENT-SEQUENCE-REGISTER-PER-KEY (old ID R-060 is kept because code matches on it)
 @conformance("R-054", "R-060")
 def test_mbox_sequence_is_per_key_slot():
     """Each signer key slot keeps its own last accepted sequence."""
@@ -1429,6 +1488,7 @@ def test_mbox_sequence_is_per_key_slot():
     _mbox(body)
 
 
+# Registered name: REQUIREMENT-FRAME-EPOCH-MUST-MATCH (old ID R-055 is kept because code matches on it)
 @conformance("R-055")
 def test_mbox_stale_epoch_refused_unless_exempt():
     """A stale epoch is refused with status 5; the same frame marked epoch-exempt goes through."""
@@ -1438,6 +1498,7 @@ def test_mbox_stale_epoch_refused_unless_exempt():
     _mbox(body)
 
 
+# Registered name: REQUIREMENT-FRAME-SIGNATURE-CHECKED (old ID R-056 is kept because code matches on it)
 @conformance("R-056")
 def test_mbox_bad_signature_refused():
     """A frame whose signature does not verify is refused with status 3 and not dispatched."""
@@ -1463,6 +1524,8 @@ def test_mbox_no_dispatch_before_signature():
     _mbox(body)
 
 
+# Registered name: REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND (old ID R-057 is kept because code matches on it)
+# Registered name: REQUIREMENT-WRONG-COMMAND-STATUS (old ID R-063 is kept because code matches on it)
 @conformance("R-057", "R-063")
 def test_mbox_signed_for_another_command_is_status_7():
     """A good signature over a different command is status 7, not dispatched, and the sequence is not consumed."""
@@ -1473,6 +1536,7 @@ def test_mbox_signed_for_another_command_is_status_7():
     _mbox(body)
 
 
+# Registered name: REQUIREMENT-MAILBOX-STATUS-CODES (old ID R-061 is kept because code matches on it)
 @conformance("R-061")
 def test_mbox_refused_when_not_running():
     """A command class that needs RUN is refused with status 6 while not running, and is not sent for verification."""
@@ -1490,6 +1554,7 @@ def test_mbox_status_codes_match_the_register_map():
     assert B.Mailbox().status.shape().width <= 8
 
 
+# Registered name: REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE (old ID R-062 is kept because code matches on it)
 @conformance("R-062", "R-054")
 def test_mbox_failed_frames_do_not_consume_sequence():
     """Bad signature, bad epoch, refused and wrong-command frames leave the sequence where it was."""
@@ -1555,6 +1620,8 @@ def test_core_mbox_status_and_seq_csrs():
 
 
 # ================================================================ top: the CSR window
+# Registered name: REQUIREMENT-ONLY-DOORBELL-WRITABLE (old ID R-064 is kept because code matches on it)
+# Registered name: REQUIREMENT-NO-CSR-WRITE-PORT (old ID R-065 is kept because code matches on it)
 @conformance("R-064", "R-065")
 def test_core_has_no_csr_write_port():
     """GovernorCore exposes no CSR write data or write enable; the doorbell is the only host-driven CSR input."""
@@ -1582,6 +1649,7 @@ def test_core_csr_reads_have_no_side_effects():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-SILICON-ID-REGISTER (old ID R-066 is kept because code matches on it)
 @conformance("R-066")
 def test_core_id_register():
     """ID at 0x000 reads a fixed, non-zero silicon id and revision."""
@@ -1594,6 +1662,7 @@ def test_core_id_register():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-LOG-WINDOW-FIRMWARE-MAPPED (old ID R-068 is kept because code matches on it)
 @conformance("R-068")
 def test_core_log_window_is_not_decoded():
     """LOG_HEAD and LOG_SIZE are firmware-mapped: the RTL core returns 0 there."""
@@ -1628,6 +1697,9 @@ def test_core_mono_csr_low_and_high_words():
 
 
 # ================================================================ alarms
+# Registered name: REQUIREMENT-ALARM-SET-BY-ANY-SOURCE (old ID R-069 is kept because code matches on it)
+# Registered name: REQUIREMENT-ALARMS-MONOTONE (old ID R-072 is kept because code matches on it)
+# Registered name: REQUIREMENT-ANY-PARTY-RAISES-ALARM (old ID R-088 is kept because code matches on it)
 @conformance("R-069", "R-072", "R-088")
 def test_alarm_any_source_sets():
     """Any bit presented on set_mask becomes and stays set."""
@@ -1644,6 +1716,8 @@ def test_alarm_any_source_sets():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-ALARM-CLEAR-NEEDS-AUTHORIZATION (old ID R-070 is kept because code matches on it)
+# Registered name: REQUIREMENT-ALARM-APPROVER-KEY-CLEARS (old ID R-089 is kept because code matches on it)
 @conformance("R-070", "R-089")
 def test_alarm_clear_needs_authorization():
     """clear_mask without clear_authorized is refused and flagged; with it, only the named bits clear."""
@@ -1695,10 +1769,11 @@ def test_alarm_monotone_without_authorization_random():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-STICKY-ALARM-REGISTER (old ID R-071 is kept because code matches on it)
 @conformance("R-071")
 def test_core_alarms_csr():
     """ALARMS at 0x084 reads the sticky alarm word. (Bits 31 and 30 became hardware-owned on 23 October 2026, so the
-    firmware-raised word here uses bit 29; R-148 checks that firmware cannot raise 31 and 30.)"""
+    firmware-raised word here uses bit 29; REQUIREMENT-HARDWARE-ALARMS-SEQUENCER-ONLY checks that firmware cannot raise 31 and 30.)"""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
 
     async def tb(ctx):
@@ -1710,6 +1785,7 @@ def test_core_alarms_csr():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-METER-SLOT-FREEZE (old ID R-091 is kept because code matches on it)
 @conformance("R-091", "R-052")
 def test_meter_frozen_slot_stays_put_without_strobes():
     """END_MODEL freezes a slot by the firmware no longer strobing it: with no strobe, no counter moves, whatever the add inputs say."""
@@ -1729,6 +1805,7 @@ def test_meter_frozen_slot_stays_put_without_strobes():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-RACK-WIDE-EPOCH-SWITCH (old ID R-087 is kept because code matches on it)
 @conformance("R-093", "R-009", "R-087")
 def test_core_epoch_switch_kills_every_old_capability():
     """After a quorum-backed epoch switch, every capability minted under the old epoch tag is refused at once, on every point."""
@@ -1759,6 +1836,7 @@ def test_core_epoch_switch_kills_every_old_capability():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-SELF-AUTHENTICATING-COMMANDS (old ID R-082 is kept because code matches on it)
 @conformance("R-082", "R-055")
 def test_mbox_self_authenticating_command_rides_on_the_firmware_verdict():
     """A command that authenticates itself in the body (a k-of-n policy image) has no frame signature; the RTL has

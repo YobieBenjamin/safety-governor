@@ -13,7 +13,7 @@ strobe every 2^10 ticks. LOG_HEAD and LOG_SIZE are firmware-mapped and not decod
 monotonic counter. Until 23 October 2026 it tapped ``mono.value[:10]``; ``load_hwm`` has priority over the
 increment and can move the value anywhere upward, so whoever drives ``load_hwm``/``hwm`` could hold the low
 bits off 1023 and stop every millisecond strobe: the heartbeat never expired and the rung timers froze,
-with no valid heartbeat. L7 found it (rtl/formal/governor_core.sv, rule G5; FINDINGS-b.md, F2).
+with no valid heartbeat. WAVE-FORMAL-PROOFS-ON-VERILOG found it (rtl/formal/governor_core.sv, rule RTL-EXPIRY-NOT-POSTPONED; FINDINGS-b.md, RTL-HEARTBEAT-KEPT-ALIVE-WITHOUT-HEARTBEAT).
 ``ms_shift`` is a parameter only so the proof can run a short millisecond; the chip uses 10.
 
 Operator signals (docs/04 section 2). ALARMS bit 31 NO_FIRST_HEARTBEAT and bit 30

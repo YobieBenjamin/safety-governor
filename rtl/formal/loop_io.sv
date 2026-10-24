@@ -1,12 +1,12 @@
-// L7, loop_io (rtl/governor_rtl/halt_loop.py): properties proven on the generated Verilog (rtl/gen/loop_io.v).
+// WAVE-FORMAL-PROOFS-ON-VERILOG, loop_io (rtl/governor_rtl/halt_loop.py): properties proven on the generated Verilog (rtl/gen/loop_io.v).
 // Run: python -m rtl.formal. Spec: docs/07-verification-plan.md section 3 (halt_loop row), docs/02-safety-fabric.md
 // (loss declared after two sense periods), docs/04 section 9. The rules:
-//   L1 the pad follows the sequencer: loop_out_open == switch_open, combinationally, every cycle.
-//   L2 a current loss is always seen: two consecutive samples with no current drive loop_lost, whatever happens
+//   RTL-LOOP-PAD-FOLLOWS-SEQUENCER the pad follows the sequencer: loop_out_open == switch_open, combinationally, every cycle.
+//   RTL-LOOP-TWO-LOW-SAMPLES-LOSS a current loss is always seen: two consecutive samples with no current drive loop_lost, whatever happens
 //      between samples. Stated against a ghost that counts consecutive low samples (saturating at 2), the spec's
 //      own definition of the debounce, so this is "loop_lost exactly when the last two samples were both low".
-//   L3 one noisy sample is not a loss (the same ghost: one low sample after a high one leaves loop_lost low).
-//   L4 the loss is sticky until current is seen again: loop_lost falls only on a sample with current, never
+//   RTL-LOOP-NOISY-SAMPLE-IGNORED one noisy sample is not a loss (the same ghost: one low sample after a high one leaves loop_lost low).
+//   RTL-LOOP-LOSS-STICKY-UNTIL-CURRENT the loss is sticky until current is seen again: loop_lost falls only on a sample with current, never
 //      between samples and never on a low sample.
 // Strengthening for k-induction: the ghost equals the counter (count == lowrun); with it 1-step induction closes.
 module loop_io_props(input clk, input rst, input switch_open, input sample, input loop_sense);
@@ -23,15 +23,15 @@ module loop_io_props(input clk, input rst, input switch_open, input sample, inpu
   always @(*) begin
     assume(!rst || init);
     if (!init) begin
-      assert(loop_out_open == switch_open);                                    // L1
-      assert(loop_lost == (lowrun == 2'd2));                                   // L2, L3
+      assert(loop_out_open == switch_open);                                    // RTL-LOOP-PAD-FOLLOWS-SEQUENCER
+      assert(loop_lost == (lowrun == 2'd2));                                   // RTL-LOOP-TWO-LOW-SAMPLES-LOSS, RTL-LOOP-NOISY-SAMPLE-IGNORED
       assert(count == lowrun);                                                 // strengthening
     end
   end
   always @(posedge clk) if (!init && !$past(init) && !$past(rst)) begin
-    // L4
+    // RTL-LOOP-LOSS-STICKY-UNTIL-CURRENT
     if ($past(loop_lost) && !loop_lost) assert($past(sample) && $past(loop_sense));
-    // L2 directly: a low sample while already one low sample deep is a loss on the next cycle
+    // RTL-LOOP-TWO-LOW-SAMPLES-LOSS directly: a low sample while already one low sample deep is a loss on the next cycle
     if ($past(sample) && !$past(loop_sense) && $past(count) >= 1) assert(loop_lost);
   end
 endmodule

@@ -146,7 +146,7 @@ class DescriptorChecker(Switch):
 
 
 class ActionEndpoint:
-    """The comparator in the device that acts (requirement R10, R11; hypotheses H0, H6)."""
+    """The comparator in the device that acts (requirement REQUIREMENT-RULEBOOK-SELECTS-RULE-AND-LANE, REQUIREMENT-AUTHORIZATION-IS-DURABLE-TRANSACTION; hypotheses CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION, CONTRACT-COMPARATOR-SURVIVES-COMPROMISE)."""
 
     def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], store: Store | None = None,
                  safe_transition: str = "no_action", lists: dict[str, Any] | None = None,

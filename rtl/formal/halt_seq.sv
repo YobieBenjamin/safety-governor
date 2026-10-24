@@ -1,4 +1,4 @@
-// L7, halt_seq: properties proven on the generated Verilog (rtl/gen/halt_seq.v), not on the Python model.
+// WAVE-FORMAL-PROOFS-ON-VERILOG, halt_seq: properties proven on the generated Verilog (rtl/gen/halt_seq.v), not on the Python model.
 // Run: python -m rtl.formal. Bounded check to 25 cycles, then k-induction, which makes the result hold for every
 // reachable state, at any depth. The spec these encode is docs/07-verification-plan.md, the halt row.
 //
@@ -51,9 +51,9 @@ module halt_seq_props(input clk, input rst, input hb_expired, tamper, cmd_halt, 
     // P: a halted chip (HALT or SAFE) never returns to running without an authorized clear
     if (($past(state) == 3 || $past(state) == 4) && !$past(clear)) assert(state == 3 || state == 4);
     // P: tamper always lands in SAFE, CLEAR or no CLEAR. The first version of this line said "unless cleared that
-    // same cycle", which wrote the bug's excuse into the proof (conformance finding F-05); the excuse is gone
+    // same cycle", which wrote the bug's excuse into the proof (conformance finding CONFORMANCE-CLEAR-BEATS-TAMPER); the excuse is gone
     if ($past(tamper)) assert(state == 4 && cause == 3);
-    // P: the chip enters RUN only on a clean loop sample (FPGA finding F1), and only with a live heartbeat
+    // P: the chip enters RUN only on a clean loop sample (FPGA finding RTL-CORE-HALTS-AFTER-REACHING-RUN), and only with a live heartbeat
     if (state == 1 && $past(state) != 1) assert($past(loop_sense) && !$past(loop_lost) && $past(hb_ok));
     // P: from SAFE nothing but clear moves the state
     if ($past(state) == 4 && !$past(clear)) assert(state == 4);

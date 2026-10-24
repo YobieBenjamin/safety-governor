@@ -1,4 +1,5 @@
-// L7-SPLICE block: monotonic_counter. FINDINGS-a.md F3. Expected to FAIL by assertion. Rule from docs/04 section 1
+// Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
+// L7-SPLICE block: monotonic_counter. FINDINGS-a.md RTL-COUNTER-ROLLBACK-ACROSS-RESET. Expected to FAIL by assertion. Rule from docs/04 section 1
 // ("never decremented, persisted"), read across a power cycle: after a reset and the boot-time load, the counter is
 // at least where it was before the reset. It is only at least the fuse high-water mark, which the firmware burns
 // now and then, so every tick since the last burn is lost. The fuse value is held constant here (no burn in between).

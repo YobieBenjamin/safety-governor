@@ -3,13 +3,13 @@
 """F19: the abstract proof must be able to observe repeated execution (replay).
 
 Audit finding F19. The old model recorded execution in two Booleans, ``used`` and ``executed``,
-and P3 checked ``executed => used``. A second execution of the same ticket only rewrote the same
-Booleans, so P3 stayed true even if the execute step's spent-ticket guard was deleted: the
+and INVARIANT-NO-REPLAY-TICKET-SPENT checked ``executed => used``. A second execution of the same ticket only rewrote the same
+Booleans, so INVARIANT-NO-REPLAY-TICKET-SPENT stayed true even if the execute step's spent-ticket guard was deleted: the
 encoding could not tell a second external effect from a harmless repeat, and the proof did not in
 fact forbid replay.
 
 The fix models ticket instances as counts: ``n_issued`` (tickets minted), ``n_spent`` (tickets
-consumed) and ``n_events`` (external effects), and proves P14, that an action never produces more
+consumed) and ``n_events`` (external effects), and proves INVARIANT-NO-REPLAY-COUNTED, that an action never produces more
 effects than it was issued tickets (n_events == n_spent <= n_issued). The anti-replay guard in the
 execute step is the outstanding-ticket test ``n_issued > n_spent``, exposed as the parameter
 ``execute_needs_fresh_ticket``.

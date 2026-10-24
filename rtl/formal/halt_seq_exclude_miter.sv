@@ -1,4 +1,4 @@
-// L7, halt_seq: EXCLUDE does nothing outside HALTED_INITIAL with no cause (Yobie's call 2, 23 October 2026).
+// WAVE-FORMAL-PROOFS-ON-VERILOG, halt_seq: EXCLUDE does nothing outside HALTED_INITIAL with no cause (Yobie's call 2, 23 October 2026).
 // Two copies of the generated sequencer (rtl/gen/halt_seq.v) get the same inputs, except that copy a sees the free
 // cmd_exclude and copy b never does. Whenever the two hold the same registers and copy a is anywhere but
 // HALTED_INITIAL with no cause, they hold the same registers one cycle later: in RUN, THROTTLE, HALT and SAFE, and in

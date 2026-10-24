@@ -1,4 +1,4 @@
-// L7, governor_core (rtl/governor_rtl/top.py, every block wired together): properties proven on Verilog generated
+// WAVE-FORMAL-PROOFS-ON-VERILOG, governor_core (rtl/governor_rtl/top.py, every block wired together): properties proven on Verilog generated
 // from top.py. Run: python -m rtl.formal. Spec: docs/07-verification-plan.md section 3 (top row, halt, heartbeat,
 // halt_loop rows), docs/04 sections 2 and 9, docs/01 (the ladder), docs/02 (the loop).
 //

@@ -162,7 +162,7 @@ About a year to a measured prototype, for a cost dominated by people, not masks.
 | OTP | Foundry anti-fuse OTP macro | Real fuses for the UDS, anti-rollback and lifecycle |
 | PHYs | PCIe Gen 3 x1 (host mailbox), 2 × SGMII (fabric), licensed hard IP; I2C/I3C, SMBus and MDIO masters for the switch management buses | The interfaces 130 nm cannot provide |
 | Crypto | OpenTitan engines synthesized for the node; side-channel countermeasures enabled | Same RTL as Leg A |
-| Security physical design | Active mesh shield on the top metal; voltage, clock and temperature sensors; light sensor; glitch detectors; key SRAM with scrambling; zeroization on alert | R5 in the objectives |
+| Security physical design | Active mesh shield on the top metal; voltage, clock and temperature sensors; light sensor; glitch detectors; key SRAM with scrambling; zeroization on alert | REQUIREMENT-GLITCH-DETECTORS-ZEROIZE in the objectives |
 | Package | BGA-169, 10 × 10 mm | Fits a GPU baseboard footprint |
 | Qualification | AEC-Q100-style temperature cycling and HTOL as a data-center analogue; IEC 61508 SIL 2 hardware metrics (probability of dangerous failure per hour, safe failure fraction, hardware fault tolerance), with the dangerous-failure budget expressed in FIT | The nuclear-plant analogy demands the nuclear-plant paperwork |
 | Flow | Commercial (Synopsys or Cadence) with the foundry PDK under NDA; the same RTL, the same tests | Open tools do not yet carry commercial PDKs |
@@ -192,7 +192,7 @@ NVSwitch, a halt message to the GSP, and later descriptor-level checkers) are li
 
 ## 5. Tape-out checklist (Leg A)
 
-- [ ] All `tests/` pass at the rack tier with the descriptor-level residual of H2 recorded as the known gap
+- [ ] All `tests/` pass at the rack tier with the descriptor-level residual of CONTRACT-EVERY-CROSSING-GOVERNED recorded as the known gap
 - [ ] All `rtl/tests/` pass; invariants in `07-verification-plan.md` §3 hold in simulation
 - [ ] Generated Verilog in `rtl/gen/` matches the Amaranth sources (CI regenerates and diffs)
 - [ ] LibreLane: synthesis clean, no latches, no combinational loops

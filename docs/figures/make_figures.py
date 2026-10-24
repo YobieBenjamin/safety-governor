@@ -426,7 +426,7 @@ def fig_ladder_witnesses():
     arrow(ax, 1.55, ymid, 5.35, ymid, color=CORAL, lw=1.3)
     box(ax, 5.4, ymid - 0.3, 1.0, 0.6, "an action", ["through"], kind="nv", align="center", title_size=7.4, line_size=6.6)
     ax.text(3.45, 3.62, "the holes line up: the same substrate (a transformer), the same injection, the same edit, the same root", ha="center", va="center", fontsize=6.4, color=CORAL)
-    label(ax, 0.3, 0.8, "Three rates, and not independent ones. Measured first in YB-0052:", size=6.5, color=CORAL)
+    label(ax, 0.3, 0.8, "Three rates, and not independent ones. Measured first in WAVE-OBSERVER-EVALUATION-SET:", size=6.5, color=CORAL)
     label(ax, 0.3, 0.64, "the keyword baseline overlapped the observer's own vocabulary.", size=6.5, color=CORAL)
     # right: the gate
     ax.plot([6.75, 6.75], [0.95, 3.95], color=RULE, lw=1.0)
@@ -546,7 +546,7 @@ def fig_rulebook():
             arrow(ax, 9.42, y - 0.62, 9.42, y - 0.74, color=INK, lw=0.9)
         y -= 0.76
     ax.text(8.75, 2.55, "What never reaches it:", ha="left", va="top", fontsize=6.8, color=CORAL, fontweight="bold")
-    wrapped(ax, 8.75, 2.38, "the broker's label for the job, the tenant, the user, the prompt, the words around the fields. select_rule has no parameter they could arrive through (H4).", 26, 6.0, color=CORAL, step=0.13)
+    wrapped(ax, 8.75, 2.38, "the broker's label for the job, the tenant, the user, the prompt, the words around the fields. select_rule has no parameter they could arrive through (CONTRACT-BROKER-CANNOT-PICK-RULE).", 26, 6.0, color=CORAL, step=0.13)
     label(ax, 0.3, 0.6, "Model: govsim/policy.py (make_policy, make_rule, select_rule, check_constraints) · the rulebook the suite runs: govsim/cluster.py make_policy_image", size=6.6)
     label(ax, 0.3, 0.38, "Tests: tests/test_h04_lane.py (the fields pick the rule, exact beats wildcard, out of range matches nothing) · test_h07_register.py (lists and the register) · test_h03_quorum.py", size=6.6)
     save(fig, "fig-rulebook.png")
@@ -684,9 +684,9 @@ def fig_prompt_flow(part: str = "all"):
     last = ("9 · The egress, and the people", "Bytes leave the DPU only against the ticket; the user of a refused request gets a code, not an explanation. A hold waits at least the floor (60 s) for two approvers with keys and a written reason. A rack alarm stops the gate until the alarm key clears it; a session alarm parks that session alone. Every line is in the log, cross-linked with the neighbours'.")
     notes = [
         ("one rulebook at a time", "The edition is rack-wide: an edition change is staged on every governor and committed at once, and a straggler halts. A ticket from an old edition is dead everywhere.", "docs/02 §2", BLUE),
-        ("a shared budget has one owner", "A typed budget (the hourly payment limit) is kept by one owner governor: the others reserve against it over the fabric, so two racks cannot each spend it. The session's hazard budget is not shared yet: it is a window on each governor's own ledger.", "docs/02 §2; H13", BLUE),
-        ("an alarm fans out", "Output pushed without being presented raises a sticky rack alarm that every governor sees on the fabric; the gate stops answering until the alarm key clears it. A session over its hazard budget raises a session alarm and is parked; the other sessions go on.", "H5; H17", CORAL),
-        ("the loop halts the domain", "Any governor that opens its switch halts every GPU slot on the loop within a millisecond, with no software in the path.", "docs/11; H11", GREEN),
+        ("a shared budget has one owner", "A typed budget (the hourly payment limit) is kept by one owner governor: the others reserve against it over the fabric, so two racks cannot each spend it. The session's hazard budget is not shared yet: it is a window on each governor's own ledger.", "docs/02 §2; CONTRACT-SHARED-BUDGET-NO-OVERSPEND", BLUE),
+        ("an alarm fans out", "Output pushed without being presented raises a sticky rack alarm that every governor sees on the fabric; the gate stops answering until the alarm key clears it. A session over its hazard budget raises a session alarm and is parked; the other sessions go on.", "CONTRACT-ALARMS-ARE-MONOTONE; CONTRACT-NO-ACTION-WITHOUT-TICKET", CORAL),
+        ("the loop halts the domain", "Any governor that opens its switch halts every GPU slot on the loop within a millisecond, with no software in the path.", "docs/11; CONTRACT-HALT-REACHES-EVERY-GPU", GREEN),
         ("another site", "The stamp travels, the wire does not: a ticket minted here is checked at another site under that site's own key; there is no planet-wide halt wire, by design.", "Part 7", QUIET),
     ]
     nl = lambda t, w: len(textwrap.wrap(t, w))
@@ -786,7 +786,7 @@ def fig_prompt_flow(part: str = "all"):
         label(ax, 0.3, 0.52, "The chip never reads a word, a byte or a token. It reads signatures, hashes, counters and lists, and the two scenarios in docs/25 section 0 end at the gates above.", size=6.4, color=BLUE)
         label(ax, 0.3, 0.32, "Model: govsim/governor.py (_cmd_begin_model, _cmd_sign_output, _cmd_request, _release_gate) · narrations and tests: docs/17 §4, tests/test_h17_use_cases.py, test_h18_oversight.py, test_h10_leakage.py", size=6.4)
     elif part == "b":
-        label(ax, 0.3, 0.35, "The chip never reads a word, a byte or a token: signatures, hashes, counters and lists. Model: govsim/governor.py (_cmd_begin_model, _cmd_request, _release_gate) · docs/17 §4 · tests H17, H18, H10", size=6.2, color=BLUE)
+        label(ax, 0.3, 0.35, "The chip never reads a word, a byte or a token: signatures, hashes, counters and lists. Model: govsim/governor.py (_cmd_begin_model, _cmd_request, _release_gate) · docs/17 §4 · tests CONTRACT-NO-ACTION-WITHOUT-TICKET, CONTRACT-OVERSIGHT-SURVIVES-MODEL, CONTRACT-LEAKAGE-WITHIN-BUDGET", size=6.2, color=BLUE)
     else:
         label(ax, 0.3, 0.38, "Steps 1 to 6 are software and wires the chip only measures; nothing here can be argued with because nothing here is asked an opinion. The chip's own questions are in figure 2 of 2.", size=6.4, color=BLUE)
     save(fig, {"all": "fig-prompt-flow.png", "a": "fig-prompt-flow-a.png", "b": "fig-prompt-flow-b.png"}[part])

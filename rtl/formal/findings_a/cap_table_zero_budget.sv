@@ -1,4 +1,5 @@
-// L7-SPLICE block: cap_table. FINDINGS-a.md F6. Expected to FAIL by assertion. Rule from docs/07 section 3
+// Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
+// L7-SPLICE block: cap_table. FINDINGS-a.md RTL-ZERO-BYTE-SPENT-LOOKUP. Expected to FAIL by assertion. Rule from docs/07 section 3
 // ("budget > 0") and docs/04 section 5 ("refuses at zero"): a lookup is never allowed through an entry whose budget
 // is zero. The RTL compares budget >= bytes, so a zero-byte lookup on an exhausted entry is allowed.
   wire [7:0]   f_val  = {valid7, valid6, valid5, valid4, valid3, valid2, valid1, valid0};

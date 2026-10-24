@@ -14,15 +14,15 @@ Reproduce: `python -m govsim.prove`. The verdict is 1 only if no component fails
 |---|---|---|
 | `redteam-selftest` | the red-team oracle returns 0 on a broken gate (non-vacuous) | pass |
 | `redteam` | capstone: one protected action, every attack the audit named | pass |
-| `proofs-core` | abstract-machine invariants (P0..P14, non-vacuity) | pass |
+| `proofs-core` | abstract-machine invariants (INVARIANT-EDITION-NEVER-NEGATIVE..INVARIANT-NO-REPLAY-COUNTED, non-vacuity) | pass |
 | `proofs-commit` | the commit-point proof | pass |
 | `proofs-killswitch` | no global kill switch / corrected min-cut | pass |
 | `conformance` | RTL differential-conformance suite | pass |
 | `rtl-formal` | RTL formal properties with planted mutants | skipped |
-| `exp-origin-gate` | W1: the origin gate (no key, no model) | pass |
-| `exp-containment` | P3b: containment measurement | pass |
-| `exp-road` | A1: rulebook reachability audit | pass |
-| `exp-customer` | I1: the payer's own-key confirmation | pass |
+| `exp-origin-gate` | EXPERIMENT-ORIGIN-GATE: the origin gate (no key, no model) | pass |
+| `exp-containment` | EXPERIMENT-CONTAINMENT: containment measurement | pass |
+| `exp-road` | EXPERIMENT-ROAD-REACHABILITY: rulebook reachability audit | pass |
+| `exp-customer` | EXPERIMENT-CUSTOMER-CONFIRMATION: the payer's own-key confirmation | pass |
 | `unit-tests` | the discriminating test suite (fail-before, pass-after) | pass |
 
 ## What a VERDICT of 1 means

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H6: the comparator holds with every layer above it compromised. The red team holds the
+"""CONTRACT-COMPARATOR-SURVIVES-COMPROMISE: the comparator holds with every layer above it compromised. The red team holds the
 host, the broker and the runtime. Falsified if a release succeeds."""
 from govsim import reasons
 from govsim.cluster import PROTECTED_SITES

@@ -1,6 +1,6 @@
 # What I proved about six parts of the chip, in plain English
 
-This is the non-engineer's version of L7, work stream b. The engineer's version is `FINDINGS-b.md` and the
+This is the non-engineer's version of WAVE-FORMAL-PROOFS-ON-VERILOG, work stream b. The engineer's version is `FINDINGS-b.md` and the
 property files (`*.sv`) in this folder. One command checks all of it: `python -m rtl.formal`.
 
 ## How "proven" works here, in one paragraph

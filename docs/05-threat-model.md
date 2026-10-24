@@ -28,26 +28,26 @@ it is the list the assumptions register and the human layers exist for.
 
 | Threat | Mechanism | Hypothesis / test |
 |---|---|---|
-| Action without authorization | Endpoint comparator demands a ticket bound to the exact fields, single use, current epoch, committed at the governor | H0 |
-| Forged, altered, expired, replayed ticket | Signature under the governor's DICE key; params digest; expiry; durable used-ticket set | H0 |
-| Broker chooses its own lane ("this is reversible") | The rulebook selects the rule from fingerprint, action and limited fields only | H4 |
-| Modified GPU firmware, swapped model, changed policy, with permissions carried over | Fingerprint covers all three; permissions keyed on the fingerprint | H1 |
-| Policy loosened by one operator | k-of-n signatures checked by the governor itself | H3 |
-| Policy rollback to an older, looser image | Anti-rollback counter in fuses tracks the policy version | H3 |
-| Alarm cleared by the model, the host or a lone operator | Alarms are sticky; clearing needs a rule or an approver key | H5 |
-| Everything above the comparator compromised | Comparator re-checks against its own sensors and lists | H6 |
-| A rule relying on an input nobody vouched for | Policy load fails if a constraint names an input with no register row | H7 |
-| Fast, silent override | Quorum, latency floor, mandatory log entry | H8 |
-| Weight exfiltration to a non-roster peer, or over any path while the heartbeat is dead | Roster-bound NVSwitch ports, PCIe switch ports and ACS, DPU flows; unchecked paths bricked | H2 |
-| Slow leakage over the permitted output channel beyond budget | Query and byte budgets per workload; entropy and rate limits | H10 |
-| GPU keeps running when told to stop | Power brake, reset, slot power cut (where the board provides per-slot power control), needing nothing from the GPU | H16 |
-| A halt that reaches some GPUs and not others | The halt loop; fail-safe open | H11 |
-| A rogue device on the fabric; replayed fabric messages | Roster from mutual attestation; signed, sequenced, epoch-bound messages | H12 |
-| Two governors overspending a shared budget | One ledger owner per key; reserve at the owner | H13 |
-| A partitioned segment kept alive by silence or a replayed heartbeat | Heartbeat expiry; authority signature; sequence numbers | H14 |
-| An epoch change applied unevenly | Two-phase commit with a deadline; stragglers halted | H14 |
-| Debug port used in production | Lifecycle fuse; access refused and logged | H15 |
-| Host silences the governor | Silence is a missed heartbeat; the governor halts | H14 |
+| Action without authorization | Endpoint comparator demands a ticket bound to the exact fields, single use, current epoch, committed at the governor | CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION |
+| Forged, altered, expired, replayed ticket | Signature under the governor's DICE key; params digest; expiry; durable used-ticket set | CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION |
+| Broker chooses its own lane ("this is reversible") | The rulebook selects the rule from fingerprint, action and limited fields only | CONTRACT-BROKER-CANNOT-PICK-RULE |
+| Modified GPU firmware, swapped model, changed policy, with permissions carried over | Fingerprint covers all three; permissions keyed on the fingerprint | CONTRACT-ATTESTATION-BINDS-PERMISSIONS |
+| Policy loosened by one operator | k-of-n signatures checked by the governor itself | CONTRACT-POLICY-QUORUM-NO-ROLLBACK |
+| Policy rollback to an older, looser image | Anti-rollback counter in fuses tracks the policy version | CONTRACT-POLICY-QUORUM-NO-ROLLBACK |
+| Alarm cleared by the model, the host or a lone operator | Alarms are sticky; clearing needs a rule or an approver key | CONTRACT-ALARMS-ARE-MONOTONE |
+| Everything above the comparator compromised | Comparator re-checks against its own sensors and lists | CONTRACT-COMPARATOR-SURVIVES-COMPROMISE |
+| A rule relying on an input nobody vouched for | Policy load fails if a constraint names an input with no register row | CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE |
+| Fast, silent override | Quorum, latency floor, mandatory log entry | CONTRACT-OVERRIDE-SLOW-AND-LOGGED |
+| Weight exfiltration to a non-roster peer, or over any path while the heartbeat is dead | Roster-bound NVSwitch ports, PCIe switch ports and ACS, DPU flows; unchecked paths bricked | CONTRACT-EVERY-CROSSING-GOVERNED |
+| Slow leakage over the permitted output channel beyond budget | Query and byte budgets per workload; entropy and rate limits | CONTRACT-LEAKAGE-WITHIN-BUDGET |
+| GPU keeps running when told to stop | Power brake, reset, slot power cut (where the board provides per-slot power control), needing nothing from the GPU | CONTRACT-LEVERS-WITHOUT-GPU-COOPERATION |
+| A halt that reaches some GPUs and not others | The halt loop; fail-safe open | CONTRACT-HALT-REACHES-EVERY-GPU |
+| A rogue device on the fabric; replayed fabric messages | Roster from mutual attestation; signed, sequenced, epoch-bound messages | CONTRACT-ONLY-ROSTER-SPEAKS-ONCE |
+| Two governors overspending a shared budget | One ledger owner per key; reserve at the owner | CONTRACT-SHARED-BUDGET-NO-OVERSPEND |
+| A partitioned segment kept alive by silence or a replayed heartbeat | Heartbeat expiry; authority signature; sequence numbers | CONTRACT-PARTITIONS-END-SAFE |
+| An epoch change applied unevenly | Two-phase commit with a deadline; stragglers halted | CONTRACT-PARTITIONS-END-SAFE |
+| Debug port used in production | Lifecycle fuse; access refused and logged | CONTRACT-NO-DEBUG-IN-PRODUCTION |
+| Host silences the governor | Silence is a missed heartbeat; the governor halts | CONTRACT-PARTITIONS-END-SAFE |
 
 ## What the governor only raises the cost of
 

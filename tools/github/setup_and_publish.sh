@@ -96,7 +96,7 @@ program_pids() { { pgrep -f "tools/agents/run_program.sh" 2>/dev/null || true; }
 kill_tree() { local c; for c in $(pgrep -P "$1" 2>/dev/null || true); do kill_tree "$c"; done; kill -TERM "$1" 2>/dev/null || true; }
 # An agent is a claude process the launchers started with --add-dir <clone>/.agents/wave-N; nothing a
 # person runs by hand carries that. The watchdog before 22 October signalled the shell around the
-# agent, not the agent, so a killed shell left its claude running (L6 kept writing its log for an
+# agent, not the agent, so a killed shell left its claude running (WAVE-MUTATION-TESTING-GATE kept writing its log for an
 # hour after its launcher had reported it done, and the move's compare failed on that file).
 orphan_agents() { pgrep -f -- "--add-dir [^ ]*/\.agents/wave-" 2>/dev/null || true; }
 stop_program() {   # the program and its agents, whichever version of run_program.sh is installed: the one before 21 October did not know --stop

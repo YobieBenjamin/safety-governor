@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H12: only roster members speak on the fabric, and only once per message. Falsified if a
+"""CONTRACT-ONLY-ROSTER-SPEAKS-ONCE: only roster members speak on the fabric, and only once per message. Falsified if a
 rogue or replayed message is acted on."""
 import copy
 

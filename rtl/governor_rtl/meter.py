@@ -5,7 +5,7 @@
 Four counters per slot (tokens, cycles, bytes in, bytes out); a slot is one model digest.
 The adds saturate: a counter that would pass all ones stays at all ones. Until 23 October 2026 they
 wrapped, so one strobe with a large enough ``add_*`` moved a counter down, which let a job spend past a
-cycle budget and then read as under it (L7 found it: rtl/formal/meter.sv, rule E1; FINDINGS-b.md, F1).
+cycle budget and then read as under it (WAVE-FORMAL-PROOFS-ON-VERILOG found it: rtl/formal/meter.sv, rule RTL-METER-NEVER-DECREASES; FINDINGS-b.md, RTL-METER-COULD-GO-DOWN).
 """
 from amaranth import Array, Elaboratable, Module, Mux, Signal
 

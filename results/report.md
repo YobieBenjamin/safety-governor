@@ -6,28 +6,28 @@ Generated 2026-10-24 00:05 UTC by `govsim sweep`.
 
 | Id | Hypothesis | rack (plan of record) | board (fallback) | integrated (future ask) |
 |---|---|---|---|---|
-| H0 | every protected operation needs a fresh, exact, single-use authorization | pass | pass | pass |
-| H1 | attestation binds permissions to firmware, model and policy | pass | pass | pass |
-| H2a | link-level: no bytes to a non-roster peer; unchecked paths bricked | pass | gap | pass |
-| H2b | descriptor-level: a transfer between two roster members the buffer policy would not allow | gap | gap | pass |
-| H3 | policy changes only with a quorum, never backwards | pass | pass | pass |
-| H4 | the broker cannot choose its rule or lane | pass | pass | pass |
-| H5 | alarms are monotone | pass | pass | pass |
-| H6 | the comparator holds with every layer above it compromised | pass | pass | pass |
-| H7 | the assumptions register is complete or the policy does not load | pass | pass | pass |
-| H8 | human override is slow and fully logged | pass | pass | pass |
-| H9 | zero per-token work; firmware under one percent of GPU time; the signing engine keeps up | pass | pass | pass |
-| H10 | permitted-channel leakage trips the budget | pass | pass | pass |
-| H11 | a halt reaches every GPU within the bound; nobody clears alone; a governor jumpered out of the loop is named and the loop opened | pass | pass | pass |
-| H12 | only roster members speak on the fabric; forged heartbeats fail | pass | pass | pass |
-| H13 | shared budgets cannot be overspent across governors | pass | pass | pass |
-| H14 | partitions and epoch changes end in safe states | pass | pass | pass |
-| H15 | no debug path in production; tamper zeroizes | pass | pass | pass |
-| H16 | the levers work without the GPU's cooperation | pass | pass | pass |
-| H17 | no governed action initiates without a ticket and no governed response leaves the rack without a release ticket | pass | pass | pass |
-| H18 | oversight survives the model: the observer is always invoked and cannot be impersonated, audit sampling is unpredictable, the evaluated model is the deployed model, compute and hazard budgets bind | pass | pass | pass |
+| CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION | every protected operation needs a fresh, exact, single-use authorization | pass | pass | pass |
+| CONTRACT-ATTESTATION-BINDS-PERMISSIONS | attestation binds permissions to firmware, model and policy | pass | pass | pass |
+| CONTRACT-LINK-LEVEL-CONTAINMENT | link-level: no bytes to a non-roster peer; unchecked paths bricked | pass | gap | pass |
+| CONTRACT-DESCRIPTOR-LEVEL-ROSTER-GAP | descriptor-level: a transfer between two roster members the buffer policy would not allow | gap | gap | pass |
+| CONTRACT-POLICY-QUORUM-NO-ROLLBACK | policy changes only with a quorum, never backwards | pass | pass | pass |
+| CONTRACT-BROKER-CANNOT-PICK-RULE | the broker cannot choose its rule or lane | pass | pass | pass |
+| CONTRACT-ALARMS-ARE-MONOTONE | alarms are monotone | pass | pass | pass |
+| CONTRACT-COMPARATOR-SURVIVES-COMPROMISE | the comparator holds with every layer above it compromised | pass | pass | pass |
+| CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE | the assumptions register is complete or the policy does not load | pass | pass | pass |
+| CONTRACT-OVERRIDE-SLOW-AND-LOGGED | human override is slow and fully logged | pass | pass | pass |
+| CONTRACT-ZERO-PER-TOKEN-OVERHEAD | zero per-token work; firmware under one percent of GPU time; the signing engine keeps up | pass | pass | pass |
+| CONTRACT-LEAKAGE-WITHIN-BUDGET | permitted-channel leakage trips the budget | pass | pass | pass |
+| CONTRACT-HALT-REACHES-EVERY-GPU | a halt reaches every GPU within the bound; nobody clears alone; a governor jumpered out of the loop is named and the loop opened | pass | pass | pass |
+| CONTRACT-ONLY-ROSTER-SPEAKS-ONCE | only roster members speak on the fabric; forged heartbeats fail | pass | pass | pass |
+| CONTRACT-SHARED-BUDGET-NO-OVERSPEND | shared budgets cannot be overspent across governors | pass | pass | pass |
+| CONTRACT-PARTITIONS-END-SAFE | partitions and epoch changes end in safe states | pass | pass | pass |
+| CONTRACT-NO-DEBUG-IN-PRODUCTION | no debug path in production; tamper zeroizes | pass | pass | pass |
+| CONTRACT-LEVERS-WITHOUT-GPU-COOPERATION | the levers work without the GPU's cooperation | pass | pass | pass |
+| CONTRACT-NO-ACTION-WITHOUT-TICKET | no governed action initiates without a ticket and no governed response leaves the rack without a release ticket | pass | pass | pass |
+| CONTRACT-OVERSIGHT-SURVIVES-MODEL | oversight survives the model: the observer is always invoked and cannot be impersonated, audit sampling is unpredictable, the evaluated model is the deployed model, compute and hazard budgets bind | pass | pass | pass |
 
-## Modelled cost (H9)
+## Modelled cost (CONTRACT-ZERO-PER-TOKEN-OVERHEAD)
 
 A model, not a measurement: operation counts from the functional model priced with the figures in `docs/04-specification.md` §9, against a GPU doing 2,000 tokens per second with 500-token responses. Firmware time is the share of GPU time spent on action paths. The signing engine (ECDSA P-384 at OpenTitan's published 1,697,985 OTBN cycles, 17 ms at 100 MHz, shared by eight slots) runs beside the GPU and has to keep up; one signature per 50 ms batch window caps it. Record latency is the most a response waits if the runtime insists on its record before release.
 
@@ -50,5 +50,5 @@ At 100-token responses the honest engine load is well over one engine, not 34 pe
 
 ## What the gaps mean
 
-- **H2b at rack and board**: from the board the governor governs links and flows, not descriptors. Two legitimate roster members can exchange bytes the buffer policy would not have allowed (the weights, over the copy engine). That is the residual named in `docs/00-objectives.md` N5. At the integrated tier the descriptor checkers are keyed per buffer class and programmed from the policy image's buffer policy, which closes it there.
-- **H2a at board**: a system where the switches' management is unreachable, or a baseboard with direct NVLink and no NVSwitch, has no port authority. The governor still has its levers, its tickets and its log; it cannot keep a stranger off the link.
+- **CONTRACT-DESCRIPTOR-LEVEL-ROSTER-GAP at rack and board**: from the board the governor governs links and flows, not descriptors. Two legitimate roster members can exchange bytes the buffer policy would not have allowed (the weights, over the copy engine). That is the residual named in `docs/00-objectives.md` GOAL-NOT-INSPECTING-ROSTER-TRANSFERS. At the integrated tier the descriptor checkers are keyed per buffer class and programmed from the policy image's buffer policy, which closes it there.
+- **CONTRACT-LINK-LEVEL-CONTAINMENT at board**: a system where the switches' management is unreachable, or a baseboard with direct NVLink and no NVSwitch, has no port authority. The governor still has its levers, its tickets and its log; it cannot keep a stranger off the link.

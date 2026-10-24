@@ -130,7 +130,7 @@ feature. Operators should have some verbose warning / signal / notice."
    domain stops, as `02-safety-fabric.md` section 1 says a HALT does. SAFE outranks HALT, so a HALT to a chip already in SAFE leaves it in SAFE with power off, and the command becomes
    the cause on record (CAUSE bits 2:0 read 4), except that a tamper cause is kept. The priority is unchanged:
    tamper, then an authorized CLEAR, then the rest. Before this the RTL ignored a HALT in SAFE and the model dropped
-   to HALT and turned slot power back on (conformance finding F-07, now closed).
+   to HALT and turned slot power back on (conformance finding CONFORMANCE-HALT-TO-SAFE-CHIP, now closed).
 2. A chip that never gets its first heartbeat keeps holding the rack (fail closed, unchanged), loudly (section 2,
    operator signals). The deliberate way out is `EXCLUDE`, signed by the authority under the same rules as `CLEAR`.
    EXCLUDE has no effect in any state but HALTED_INITIAL with no cause, and none while a valid heartbeat is live (that chip arms
@@ -201,7 +201,7 @@ to the policy edition as well (a rule cannot be keyed by the fingerprint because
 fingerprint contains the epoch of the image the rule is in). The loader derives the inputs a
 rule relies on from its constraints (`in_list`, `not_in_list`, `digest_of`), its observers and
 its budget key, unions them with the declared `inputs`, and refuses an image in which any of
-them lacks a row in `assumptions` (R-H7), or in which a budget key has no `budget_owners` row.
+them lacks a row in `assumptions` (R-CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE), or in which a budget key has no `budget_owners` row.
 The heartbeat period is the authority's own configuration and is not a governor policy field;
 the governor enforces only `heartbeat_expiry_s`.
 

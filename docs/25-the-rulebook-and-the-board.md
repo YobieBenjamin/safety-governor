@@ -25,7 +25,7 @@ through them.
 > `test_h00_contract.py`, `test_h01_attestation.py`, `test_h02_enforcement_points.py`,
 > `test_h03_quorum.py` (the mailbox order), `test_h04_lane.py`,
 > `test_h05_alarms.py`, `test_h07_register.py`, `test_h08_override.py`; spec
-> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (P0 to P13).
+> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (INVARIANT-EDITION-NEVER-NEGATIVE to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED).
 
 ## 0. Two scenarios first: a request for a weapon that destroys a city
 
@@ -304,7 +304,7 @@ model digest)`, computed by the chip at `BEGIN_MODEL` out of two attestation rep
 publisher-signed manifest (`_cmd_begin_model`). A rule keyed to a measurement applies to that
 exact firmware-and-model triple and nothing else. The broker's name for the job, the
 scheduler's label, the tenant id: none of them exist as far as the rulebook is concerned.
-Hypothesis H4 is exactly that, and `select_rule` has no parameter they could arrive through.
+Hypothesis CONTRACT-BROKER-CANNOT-PICK-RULE is exactly that, and `select_rule` has no parameter they could arrive through.
 
 **Selection is mechanical.** Rules for the exact measurement come before rules for `*`. Several
 rules may share an action (a small-payment rule and a large-payment rule); the first whose
@@ -705,19 +705,19 @@ hole in it, and the loop is how the hole is found before a job runs.
 
 ## 9. What is pinned, and what is still an ask
 
-Pinned by the suite and the proofs: the contract and the replay store across a restart (H0),
-the attestation checks (H1) and the one-hour freshness (H2), the k-of-n and rollback refusals
-and the mailbox order (H3), the lane, the typed limits and the measurement key with no path
-for labels (H4), alarms that anyone may raise and only the alarm key clears (H5), the lists
-and the register completeness refusal (H7), the override floor and the quorum (H8), output
-that left without being presented (H10), the use cases end to end including the
-hazardous-knowledge release and a stale witness (H17), witness impersonation, the deployment
-gate and the audit sample (H18), and the core invariants P0 to P13 in Z3
+Pinned by the suite and the proofs: the contract and the replay store across a restart (CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION),
+the attestation checks (CONTRACT-ATTESTATION-BINDS-PERMISSIONS) and the one-hour freshness (CONTRACT-EVERY-CROSSING-GOVERNED), the k-of-n and rollback refusals
+and the mailbox order (CONTRACT-POLICY-QUORUM-NO-ROLLBACK), the lane, the typed limits and the measurement key with no path
+for labels (CONTRACT-BROKER-CANNOT-PICK-RULE), alarms that anyone may raise and only the alarm key clears (CONTRACT-ALARMS-ARE-MONOTONE), the lists
+and the register completeness refusal (CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE), the override floor and the quorum (CONTRACT-OVERRIDE-SLOW-AND-LOGGED), output
+that left without being presented (CONTRACT-LEAKAGE-WITHIN-BUDGET), the use cases end to end including the
+hazardous-knowledge release and a stale witness (CONTRACT-NO-ACTION-WITHOUT-TICKET), witness impersonation, the deployment
+gate and the audit sample (CONTRACT-OVERSIGHT-SURVIVES-MODEL), and the core invariants INVARIANT-EDITION-NEVER-NEGATIVE to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED in Z3
 (`proofs/core_invariants.py`): nothing executes unless a rule allowed it with its witnesses
-present when the ticket was issued (P1, P2); no replay (P3); no ticket from an edition newer
-than the current one (P4); halt is absorbing without a quorum (P5); with the heartbeat lost
-nothing executes and no ticket is issued (P6, P7); the edition only moves forward and only
-with a quorum (P8, P9).
+present when the ticket was issued (INVARIANT-EXECUTE-ONLY-IF-ALLOWED, INVARIANT-TICKET-ONLY-FOR-ALLOWED-ACTION); no replay (INVARIANT-NO-REPLAY-TICKET-SPENT); no ticket from an edition newer
+than the current one (INVARIANT-TICKET-EDITION-NOT-NEWER); halt is absorbing without a quorum (INVARIANT-HALT-IS-ABSORBING); with the heartbeat lost
+nothing executes and no ticket is issued (INVARIANT-FAIL-CLOSED-WITHOUT-HEARTBEAT, INVARIANT-NO-TICKET-WHILE-HALTED); the edition only moves forward and only
+with a quorum (INVARIANT-EDITION-ONLY-MOVES-FORWARD, INVARIANT-EDITION-CHANGE-NEEDS-QUORUM).
 
 Not pinned, because it is NVIDIA's to give (`03-interfaces.md` §9): a manifest digest inside
 the GPU's own report, so the measurement binds the model the GPU loaded rather than the one

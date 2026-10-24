@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H19: a signature authorizes exactly what was signed, and a policy cannot set its own quorum.
+"""CONTRACT-SIGNATURE-AUTHORIZES-EXACTLY: a signature authorizes exactly what was signed, and a policy cannot set its own quorum.
 
 Two defects found on 22 October 2026 by testing against the code: an image with threshold 0 and no
 signatures passed the k-of-n check, because the check read k from the image it was checking; and an
@@ -267,7 +267,7 @@ def test_no_signed_message_is_accepted_by_a_command_it_was_not_signed_for(monkey
     assert not accepted, f"signed frames accepted by commands they were not signed for: {accepted}"
 
 
-# ---------------------------------------------------------------- 4. the code side of P13
+# ---------------------------------------------------------------- 4. the code side of INVARIANT-NOTHING-EXECUTES-WHILE-HALTED
 def test_a_ticket_issued_before_a_halt_does_not_execute_during_it(rack1):
     """The abstract machine let a ticket issued before a halt execute during it (an audit asked the
     solver on 22 October and got SAT). The code always refused at commit; this pins that it does."""

@@ -73,7 +73,7 @@ Bitstreams are build products and are not committed. Flash: `openFPGALoader -b u
 
 ## Findings from this build
 
-**F1. The core halts itself one cycle after it first reaches RUN when the loop sense strobe runs from power-on.**
+**RTL-CORE-HALTS-AFTER-REACHING-RUN. The core halts itself one cycle after it first reaches RUN when the loop sense strobe runs from power-on.**
 `LoopIO` counts sense samples with no current. Before the governor arms, its own loop switch is open, so on a
 one-governor loop (and on any loop where this governor's switch is the open one) there is no current and the
 debounce counter saturates: `loop_lost` is high while the core sits in HALTED_INITIAL. The heartbeat arms the core,
@@ -88,7 +88,7 @@ Proposed fix, not applied (halt.py is not this branch's): in `HaltSeq`, enter RU
 so an armed core waits for one clean sense sample (at most 100 us). Until then the bench (`host_test.py levers` and
 `soak`) cannot hold RUN and will say so.
 
-**F2. 50 MHz is not met on the ECP5: the design reaches about 38 MHz, limited by the capability table's one-cycle
+**RTL-FPGA-MISSES-50-MHZ. 50 MHz is not met on the ECP5: the design reaches about 38 MHz, limited by the capability table's one-cycle
 lookup.** The critical path (below) runs from a lookup input of `cap_dpu` through the eight-entry CAM compare, the
 priority select and the 24-bit budget compare and decrement, into the budget register, in one cycle (docs/04
 section 9: "1 cycle at the checker clock"). In the router2 run at seed 1: 26.4 ns, 4.7 ns logic and 21.7 ns routing.

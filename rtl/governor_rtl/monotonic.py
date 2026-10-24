@@ -8,8 +8,8 @@ counter backwards; the firmware writes the high-water mark to fuses periodically
 block).
 
 The increment saturates at the top value. Before 23 October 2026 it wrapped: a high-water mark of all ones
-followed by one tick put the counter at zero, the one move this block exists to forbid (L7 found it:
-rtl/formal/FINDINGS-a.md, F2). At 1 us a tick the top is 584,000 years away; the reachable path was the load.
+followed by one tick put the counter at zero, the one move this block exists to forbid (WAVE-FORMAL-PROOFS-ON-VERILOG found it:
+rtl/formal/FINDINGS-a.md, RTL-COUNTER-WRAPPED-TO-ZERO). At 1 us a tick the top is 584,000 years away; the reachable path was the load.
 """
 from amaranth import Elaboratable, Module, Signal
 

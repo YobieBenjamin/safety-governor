@@ -1,4 +1,4 @@
-// L7, smbus: properties proven on the generated Verilog (rtl/gen/smbus.v).
+// WAVE-FORMAL-PROOFS-ON-VERILOG, smbus: properties proven on the generated Verilog (rtl/gen/smbus.v).
 // Run: python -m rtl.formal. Bounded check, then k-induction: the assertions hold in every reachable state.
 //
 // The pins (scl_i, sda_i), the tick and the CSR read data are completely free: any waveform at all, glitches,
@@ -7,14 +7,14 @@
 // computes the PEC, and knows the one transaction that may ring the doorbell:
 //   S, addr+W, 0x40, count 4, d0 d1 d2 d3, PEC over all of them, P   (no repeated start, nothing after the PEC)
 // The safety properties:
-//   P1 the doorbell fires only on a STOP that ends exactly that transaction with a correct PEC
+//   RTL-SMBUS-DOORBELL-ON-VALID-STOP the doorbell fires only on a STOP that ends exactly that transaction with a correct PEC
 //      (so a bad PEC, a wrong command code, a wrong count, a truncated or overlong frame, a repeated start, a
 //      wrong address or a timed-out transaction never commit a write)
-//   P2 the doorbell carries the four data bytes of that transaction, little-endian
-//   P3 the target never pulls SCL (no clock stretching: tLOW:SEXT is zero)
-//   P4 the target never drives SDA outside a transaction
-//   P5 a transaction whose SCL low (or our own SDA hold) lasts 25,000 ticks is abandoned on that tick
-//   P6 the only address the target ever presents to the core is a word-aligned read inside the CSR window
+//   RTL-SMBUS-DOORBELL-CARRIES-BYTES the doorbell carries the four data bytes of that transaction, little-endian
+//   RTL-SMBUS-NO-CLOCK-STRETCHING the target never pulls SCL (no clock stretching: tLOW:SEXT is zero)
+//   RTL-SMBUS-QUIET-OUTSIDE-TRANSACTION the target never drives SDA outside a transaction
+//   RTL-SMBUS-TIMEOUT-ABANDONS-TRANSACTION a transaction whose SCL low (or our own SDA hold) lasts 25,000 ticks is abandoned on that tick
+//   RTL-SMBUS-ONLY-CSR-WINDOW-READS the only address the target ever presents to the core is a word-aligned read inside the CSR window
 // The rest are the bookkeeping that ties the target's state to the monitor's, which k-induction needs.
 module smbus_props(input clk, input rst, input scl_i, sda_i, tick, input [31:0] csr_rdata);
   wire ack, armed, cmd_valid, doorbell, host_ack, pec_error, refused_write, scl_f, scl_oe, scl_p, sda_f, sda_oe, sda_p,
@@ -106,7 +106,7 @@ module smbus_props(input clk, input rst, input scl_i, sda_i, tick, input [31:0] 
     assume(!rst || init);
     assume(init == rst || !init);
     if (!init) begin
-      // P3, P4, P6
+      // RTL-SMBUS-NO-CLOCK-STRETCHING, RTL-SMBUS-QUIET-OUTSIDE-TRANSACTION, RTL-SMBUS-ONLY-CSR-WINDOW-READS
       assert(!scl_oe);
       if (!m_busy) assert(!sda_oe);
       assert(csr_addr[1:0] == 0 && csr_addr[11:10] == 0);
@@ -147,12 +147,12 @@ module smbus_props(input clk, input rst, input scl_i, sda_i, tick, input [31:0] 
   end
 
   always @(posedge clk) if (!init && !$past(init) && !$past(rst)) begin
-    // P1: the doorbell rings only on the STOP of the one well-formed, PEC-correct doorbell write, never on a
+    // RTL-SMBUS-DOORBELL-ON-VALID-STOP: the doorbell rings only on the STOP of the one well-formed, PEC-correct doorbell write, never on a
     // transaction the timeout already killed
     if (doorbell) assert($past(m_stop) && $past(m_commit_ok) && !$past(m_expire));
-    // P2: and it carries that write's bytes
+    // RTL-SMBUS-DOORBELL-CARRIES-BYTES: and it carries that write's bytes
     if (doorbell) assert(doorbell_value == $past(m_d));
-    // P5: the timeout fires on the tick the monitor says it must, and only then
+    // RTL-SMBUS-TIMEOUT-ABANDONS-TRANSACTION: the timeout fires on the tick the monitor says it must, and only then
     assert(timeout == $past(m_expire));
   end
 endmodule

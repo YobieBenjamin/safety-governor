@@ -105,7 +105,7 @@ def test_lifecycle_monotone_and_debug_dead_in_production():
 
     async def tb(ctx):
         ctx.set(dut.debug_req, 1)
-        assert ctx.get(dut.debug_grant) == 0         # fuses not mirrored yet: no debug (F1, rtl/formal/FINDINGS-a.md)
+        assert ctx.get(dut.debug_grant) == 0         # fuses not mirrored yet: no debug (RTL-DEBUG-WINDOW-AFTER-RESET, rtl/formal/FINDINGS-a.md)
         ctx.set(dut.fuse_state, TEST)
         ctx.set(dut.load, 1)
         await ctx.tick()

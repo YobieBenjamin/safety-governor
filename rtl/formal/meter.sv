@@ -1,12 +1,12 @@
-// L7, meter: properties proven on the generated Verilog (rtl/gen/meter.v), the full block: 4 slots, 48-bit counters.
+// WAVE-FORMAL-PROOFS-ON-VERILOG, meter: properties proven on the generated Verilog (rtl/gen/meter.v), the full block: 4 slots, 48-bit counters.
 // Run: python -m rtl.formal. Spec: docs/07-verification-plan.md section 3 (meter row), docs/04 section 2
 // (METER_SLOT read-only), govsim/governor.py (the compute budget compares metered cycles against the licence).
 // The rules, for every slot and every one of the four counters:
-//   E1 never decreases. This is what makes the meter usable as evidence for a budget: a counter that can go
+//   RTL-METER-NEVER-DECREASES never decreases. This is what makes the meter usable as evidence for a budget: a counter that can go
 //      down lets a job spend past its budget and then read as under it.
-//   E2 changes only on strobe for that slot, and then by exactly the amount added, saturating at all ones
+//   RTL-METER-MOVES-ONLY-ON-STROBE changes only on strobe for that slot, and then by exactly the amount added, saturating at all ones
 //      (a counter that would wrap stops at the top, which reads as "over every budget", the safe side).
-//   E3 the host cannot write: host_wr changes nothing (E2 already says only strobe moves a counter) and is
+//   RTL-METER-HOST-CANNOT-WRITE the host cannot write: host_wr changes nothing (RTL-METER-MOVES-ONLY-ON-STROBE already says only strobe moves a counter) and is
 //      flagged (host_wr_refused == host_wr).
 // The slot under watch is a solver-chosen constant (anyconst) driven onto rd_slot, so one proof covers every
 // slot: the solver may pick any of them. Strengthening for k-induction: none needed, every rule is one step.
@@ -24,13 +24,13 @@ module meter_props(input clk, input rst, input strobe, input host_wr, input [1:0
   endfunction
   always @(*) begin
     assume(!rst || init);
-    if (!init) assert(host_wr_refused == host_wr);                              // E3
+    if (!init) assert(host_wr_refused == host_wr);                              // RTL-METER-HOST-CANNOT-WRITE
   end
   always @(posedge clk) if (!init && !$past(init) && !$past(rst)) begin
-    // E1
+    // RTL-METER-NEVER-DECREASES
     assert(rd_tokens >= $past(rd_tokens)); assert(rd_cycles >= $past(rd_cycles));
     assert(rd_in >= $past(rd_in));         assert(rd_out >= $past(rd_out));
-    // E2
+    // RTL-METER-MOVES-ONLY-ON-STROBE
     if (!($past(strobe) && $past(slot) == watch)) begin
       assert(rd_tokens == $past(rd_tokens)); assert(rd_cycles == $past(rd_cycles));
       assert(rd_in == $past(rd_in));         assert(rd_out == $past(rd_out));

@@ -41,8 +41,8 @@ The name is James Watt's. His governor was two brass balls on a spinning shaft. 
 engine ran too fast the balls flew out and throttled the steam valve. No operator could talk
 it out of its job. It understood nothing about the factory. It never slept.
 
-> **Technical version:** `00-objectives.md` (goals G1 to G8, requirements R1 to R32,
-> non-goals N1 to N7, the three tiers, the acceptance rule).
+> **Technical version:** `00-objectives.md` (goals GOAL-ENFORCE-CONTRACT-IN-HARDWARE to GOAL-KEYS-OUT-OF-VENDOR-HANDS, requirements REQUIREMENT-DEVICE-SECRET-IN-FUSES to REQUIREMENT-DEPLOYMENT-OVERHEAD-UNDER-ONE-PERCENT,
+> non-goals GOAL-NOT-UNDERSTANDING-TOKEN-CONTENT to GOAL-NOT-ONLY-SAFETY-LAYER, the three tiers, the acceptance rule).
 > **Where every requirement is tested:** the last column of each table in `00`.
 
 ---
@@ -478,7 +478,7 @@ the wall of the security office.
 
 ## 12. How we know it works: seventeen ways to knock it down
 
-Every claim the blog makes about the chip is written as a hypothesis, H0 to H16, with the
+Every claim the blog makes about the chip is written as a hypothesis, CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION to CONTRACT-LEVERS-WITHOUT-GPU-COOPERATION, with the
 exact observation that would falsify it. Each one has a test file. The tests run the
 functional model of a whole rack through bring-up, jobs, attacks and failures, at three
 levels of the design: the **rack tier** (the plan of record, where the governor owns the
@@ -597,8 +597,8 @@ releasing a response waits at most one window plus one signature, 67 millisecond
 All of this is a model. The real figures come from the Phase 2 measurement on a real node and
 replace it.
 
-> **Technical version:** `04-specification.md` §9 (timing budgets), `00-objectives.md` R31
-> and R32.
+> **Technical version:** `04-specification.md` §9 (timing budgets), `00-objectives.md` REQUIREMENT-PER-TOKEN-WORK-ZERO
+> and REQUIREMENT-DEPLOYMENT-OVERHEAD-UNDER-ONE-PERCENT.
 > **Code:** `govsim/bench.py` (`python -m govsim.cli bench`).
 > **Tests:** `tests/test_h09_overhead.py`.
 
@@ -632,5 +632,5 @@ replace it.
 - The governor **does not understand words**. It never will, and the design is honest that
   the semantic residual belongs to narrow rulebooks, witnesses and humans.
 
-> **Technical version:** `00-objectives.md` N1 to N7, `05-threat-model.md` (the last two
+> **Technical version:** `00-objectives.md` GOAL-NOT-UNDERSTANDING-TOKEN-CONTENT to GOAL-NOT-ONLY-SAFETY-LAYER, `05-threat-model.md` (the last two
 > tables), `06-assumptions-register.md`, `results/report.md` (the three gaps), `AUDIT-2026-10.md`.

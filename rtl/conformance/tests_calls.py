@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""Conformance tests for the two design decisions of 23 October 2026 (requirements R-144 to R-152, quoting the
+"""Conformance tests for the two design decisions of 23 October 2026 (requirements REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG to REQUIREMENT-EXCLUDE-LOGGED-WITH-SIGNER, quoting the
 sentences added to docs/04 sections 2 and 3 that day). The halt-in-SAFE reproducers live on in
 tests_findings.py as ordinary guards; these cover the rest, on the RTL blocks and on the model beside them.
 """
@@ -21,6 +21,8 @@ async def _pulse(ctx, sig):
     ctx.set(sig, 0)
 
 
+# Registered name: REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG (old ID R-144 is kept because code matches on it)
+# Registered name: REQUIREMENT-HALT-IN-SAFE-STAYS-SAFE (old ID R-145 is kept because code matches on it)
 @conformance("R-144", "R-145")
 def test_calls_halt_in_safe_from_local_cause_opens_loop_keeps_safe():
     """A chip in SAFE on a local cause: a HALT opens the switch, the rung stays SAFE, power stays off, cause command."""
@@ -62,6 +64,7 @@ def test_calls_halt_opens_loop_from_every_rung():
         sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED (old ID R-035 is kept because code matches on it)
 @conformance("R-145", "R-035")
 def test_calls_model_halt_in_safe_stays_safe_and_opens_loop():
     """The model: a HALT to a governor in SAFE on a local cause leaves it in SAFE, power off, switch open."""
@@ -91,6 +94,7 @@ def _csr(ctx, dut, a):
     return ctx.get(dut.csr_rdata)
 
 
+# Registered name: REQUIREMENT-NO-FIRST-HEARTBEAT-ALARM (old ID R-146 is kept because code matches on it)
 @conformance("R-146")
 def test_calls_core_names_the_chip_waiting_for_its_first_heartbeat():
     """Past the boot window with no heartbeat: ALARMS bit 31, CAUSE bit 3, BOOT_WAIT, and the rack is still held."""
@@ -106,6 +110,7 @@ def test_calls_core_names_the_chip_waiting_for_its_first_heartbeat():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-ARMED-CHIP-NEVER-WAITING (old ID R-147 is kept because code matches on it)
 @conformance("R-147")
 def test_calls_core_never_raises_no_first_heartbeat_once_armed():
     """A heartbeat inside the window, then a long silence (with clears and halts): bit 31 never rises."""
@@ -124,6 +129,7 @@ def test_calls_core_never_raises_no_first_heartbeat_once_armed():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-HARDWARE-ALARMS-SEQUENCER-ONLY (old ID R-148 is kept because code matches on it)
 @conformance("R-148")
 def test_calls_firmware_cannot_raise_the_hardware_alarm_bits():
     """set_mask with every bit: bits 31 and 30 stay clear, the firmware bits are set."""
@@ -137,6 +143,7 @@ def test_calls_firmware_cannot_raise_the_hardware_alarm_bits():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-EXCLUDE-ONLY-WHILE-WAITING (old ID R-149 is kept because code matches on it)
 @conformance("R-149")
 def test_calls_exclude_does_nothing_outside_waiting_for_first_heartbeat():
     """EXCLUDE in RUN, in HALT (loop loss, command), in SAFE (tamper): every register unchanged."""
@@ -165,6 +172,7 @@ def test_calls_exclude_does_nothing_outside_waiting_for_first_heartbeat():
         sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-EXCLUDED-CHIP-CLOSES-LOOP (old ID R-150 is kept because code matches on it)
 @conformance("R-150")
 def test_calls_exclude_closes_the_pad_and_keeps_every_lever():
     """Through the core: the loop pad closes, the three pins stay safe, ALARMS bit 30 and CAUSE bit 4 show it."""
@@ -181,6 +189,7 @@ def test_calls_exclude_closes_the_pad_and_keeps_every_lever():
     sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-EXCLUSION-ENDS-ON-EVENTS (old ID R-151 is kept because code matches on it)
 @conformance("R-151")
 def test_calls_exclusion_ends_by_heartbeat_halt_or_tamper_only():
     """Ends on a heartbeat (arms, runs), on a HALT and on a tamper (loop open); a CLEAR or time does not end it."""
@@ -202,6 +211,7 @@ def test_calls_exclusion_ends_by_heartbeat_halt_or_tamper_only():
         sim(dut, tb)
 
 
+# Registered name: REQUIREMENT-EXCLUDE-LOGGED-WITH-SIGNER (old ID R-152 is kept because code matches on it)
 @conformance("R-152")
 def test_calls_model_logs_every_exclude_with_its_signer():
     """The model: an accepted EXCLUDE and a refused one are both in the log, the accepted one with its signer."""

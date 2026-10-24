@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""Regressions for the two RTL bugs L7 (work stream b) found; each test fails by assertion on the old code.
+"""Regressions for the two RTL bugs WAVE-FORMAL-PROOFS-ON-VERILOG (work stream b) found; each test fails by assertion on the old code.
 
-F1 meter: the counters wrapped, so one large add moved a counter down (rtl/formal/meter.sv, E1).
-F2 governor_core: the millisecond strobe tapped the monotonic counter, which load_hwm can move, so the heartbeat
-   could be kept from ever expiring without a valid heartbeat (rtl/formal/governor_core.sv, G5).
+RTL-METER-COULD-GO-DOWN meter: the counters wrapped, so one large add moved a counter down (rtl/formal/meter.sv, RTL-METER-NEVER-DECREASES).
+RTL-HEARTBEAT-KEPT-ALIVE-WITHOUT-HEARTBEAT governor_core: the millisecond strobe tapped the monotonic counter, which load_hwm can move, so the heartbeat
+   could be kept from ever expiring without a valid heartbeat (rtl/formal/governor_core.sv, RTL-EXPIRY-NOT-POSTPONED).
 Details and reproducers: rtl/formal/FINDINGS-b.md.
 """
 import os

@@ -52,7 +52,7 @@ count() { echo "$1" | grep -Eo '[0-9]+ passed' | tail -1; }
 echo "== 1. The fixed code"
 cd "$SG"
 out=$("$SGPY" -m pytest -p no:cacheprovider tests rtl/tests 2>&1); [ $? -eq 0 ] && ok "safety-governor tests: $(count "$out")" || { bad "safety-governor tests"; echo "$out" | tail -20; }
-check "proofs: P0 to P13, the regression checks, the commit point, K0 to K5" bash -c "\"$SGPY\" proofs/core_invariants.py && \"$SGPY\" proofs/commit_point.py && \"$SGPY\" proofs/no_global_kill_switch.py"
+check "proofs: INVARIANT-EDITION-NEVER-NEGATIVE to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED, the regression checks, the commit point, INVARIANT-MAX-FLOW-MATCHES-BRUTE-FORCE to INVARIANT-ONLY-IRREVERSIBLE-NEED-GATE" bash -c "\"$SGPY\" proofs/core_invariants.py && \"$SGPY\" proofs/commit_point.py && \"$SGPY\" proofs/no_global_kill_switch.py"
 check "checked-in Verilog matches the Amaranth source (CI's rtl.gen --check)" "$SGPY" -m rtl.gen --check
 check "governor harness" "$SGPY" -m govsim.harness
 cp results/report.md "$TMP/report.before"; "$SGPY" -m govsim.cli sweep >/dev/null 2>&1
@@ -86,7 +86,7 @@ cd "$TMP/sg-old"; out=$(PYTHONPATH=. "$SGPY" -c "
 from govsim.cluster import build_rack
 r = build_rack(1, 'rack'); r.bring_up(); g = r.nodes[0].governor
 print('quorum', g.command('POLICY_PROPOSE', {'image': {**r.make_policy_image(r.policy_version + 1), 'threshold': 0, 'signatures': []}})['ok'])
-" 2>&1); echo "$out" | grep -q "quorum True" && ok "the governor's old code accepts the unsigned image the H19 test refuses" || bad "old governor check: $out"
+" 2>&1); echo "$out" | grep -q "quorum True" && ok "the governor's old code accepts the unsigned image the CONTRACT-SIGNATURE-AUTHORIZES-EXACTLY test refuses" || bad "old governor check: $out"
 
 echo "== 5. Each regression fails for the intended reason (an assertion, not an interface error)"
 cd "$SG"; ev=$("$SGPY" tools/audit_evidence.py --python "$SGPY" --hs-python "$HSPY" --hs "$HS" --out "$TMP/EVIDENCE.md" 2>&1)

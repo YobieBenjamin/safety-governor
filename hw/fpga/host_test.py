@@ -13,7 +13,7 @@
 
 Every run writes hw/fpga/results/<step>-<UTC time>.json with what it measured, pass or fail.
 
-What this measures of N3 (docs/20): the false-halt rate of the hardware halt path (sequencer, loop debounce, levers,
+What this measures of WAVE-FPGA-BESIDE-REAL-GPU (docs/20): the false-halt rate of the hardware halt path (sequencer, loop debounce, levers,
 heartbeat timer) on real silicon, real wires and a real loop, and the host-visible latencies (CSR read over SMBus,
 lever response to a halt command as the Pi sees it, which is coarse: a scope on PERST# gives the real figure).
 What it cannot measure on this bitstream: firmware share, crypto engine utilisation and record latency. The FPGA

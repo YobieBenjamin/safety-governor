@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H15: production silicon has no debug path, and a tamper event leaves nothing to steal.
+"""CONTRACT-NO-DEBUG-IN-PRODUCTION: production silicon has no debug path, and a tamper event leaves nothing to steal.
 Falsified if a debug access succeeds in the PRODUCTION lifecycle state, or if keys survive a
 tamper event."""
 import pytest

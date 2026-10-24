@@ -55,15 +55,15 @@ def components(quick: bool):
     c = [
         ("redteam-selftest", "the red-team oracle returns 0 on a broken gate (non-vacuous)", [sys.executable, "-m", "govsim.redteam", "--selftest"], False),
         ("redteam", "capstone: one protected action, every attack the audit named", [sys.executable, "-m", "govsim.redteam"], False),
-        ("proofs-core", "abstract-machine invariants (P0..P14, non-vacuity)", [sys.executable, "proofs/core_invariants.py"], False),
+        ("proofs-core", "abstract-machine invariants (INVARIANT-EDITION-NEVER-NEGATIVE..INVARIANT-NO-REPLAY-COUNTED, non-vacuity)", [sys.executable, "proofs/core_invariants.py"], False),
         ("proofs-commit", "the commit-point proof", [sys.executable, "proofs/commit_point.py"], False),
         ("proofs-killswitch", "no global kill switch / corrected min-cut", [sys.executable, "proofs/no_global_kill_switch.py"], False),
         ("conformance", "RTL differential-conformance suite", [sys.executable, "-m", "rtl.conformance"], False),
         ("rtl-formal", "RTL formal properties with planted mutants", [sys.executable, "-m", "rtl.formal"], True),
-        ("exp-origin-gate", "W1: the origin gate (no key, no model)", [sys.executable, "-m", "govsim.origin_gate"], False),
-        ("exp-containment", "P3b: containment measurement", [sys.executable, "-m", "govsim.containment"], False),
-        ("exp-road", "A1: rulebook reachability audit", [sys.executable, "-m", "govsim.road_reachability"], False),
-        ("exp-customer", "I1: the payer's own-key confirmation", [sys.executable, "-m", "govsim.customer_confirm"], False),
+        ("exp-origin-gate", "EXPERIMENT-ORIGIN-GATE: the origin gate (no key, no model)", [sys.executable, "-m", "govsim.origin_gate"], False),
+        ("exp-containment", "EXPERIMENT-CONTAINMENT: containment measurement", [sys.executable, "-m", "govsim.containment"], False),
+        ("exp-road", "EXPERIMENT-ROAD-REACHABILITY: rulebook reachability audit", [sys.executable, "-m", "govsim.road_reachability"], False),
+        ("exp-customer", "EXPERIMENT-CUSTOMER-CONFIRMATION: the payer's own-key confirmation", [sys.executable, "-m", "govsim.customer_confirm"], False),
     ]
     if not quick:
         c.append(("unit-tests", "the discriminating test suite (fail-before, pass-after)", [sys.executable, "-m", "pytest", "-q"], False))

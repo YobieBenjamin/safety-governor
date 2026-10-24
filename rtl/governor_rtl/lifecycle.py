@@ -8,7 +8,7 @@ register moving up) and never moves down.
 
 Debug is also refused until ``load`` has mirrored the fuses since the last reset. Before 23 October 2026 the
 register came out of reset as TEST and granted debug to anyone who asked in the cycles before the boot code
-strobed ``load``, on a chip whose fuses said PRODUCTION (L7 found it: rtl/formal/FINDINGS-a.md, F1).
+strobed ``load``, on a chip whose fuses said PRODUCTION (WAVE-FORMAL-PROOFS-ON-VERILOG found it: rtl/formal/FINDINGS-a.md, RTL-DEBUG-WINDOW-AFTER-RESET).
 """
 from amaranth import Elaboratable, Module, Signal
 

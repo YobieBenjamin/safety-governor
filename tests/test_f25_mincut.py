@@ -90,12 +90,12 @@ def test_corrected_claim_3_wording_is_preserved():
     # the already-corrected Claim 3 must not regress
     assert "stronger assumption" in claim3
     assert "min(|S|, |T|) disjoint paths between the sides" in claim3
-    assert "K4c" in claim3
+    assert "INVARIANT-NO-CUT-BEATS-SMALLER-END" in claim3
 
 
 def test_the_well_connected_instance_still_has_a_large_network_cut():
     """The corrected Claim 2 still HOLDS where its assumption holds: the well-connected 6-regular
-    core gives a large network-side separator, as the script's K1b measures. This guards against
+    core gives a large network-side separator, as the script's INVARIANT-CHEAPEST-CUT-AT-ACCESS-LAYER measures. This guards against
     'fixing' Claim 2 by gutting it."""
     g = NK.build(n_instances=12, n_effectors=10, core=60, k=6, n_users=20, n_services=20)
     S = {v for v in g if v.startswith("m")} - {"m_local"}

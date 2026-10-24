@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H18: oversight survives a model smarter than its monitors. The observer is always invoked and
+"""CONTRACT-OVERSIGHT-SURVIVES-MODEL: oversight survives a model smarter than its monitors. The observer is always invoked and
 cannot be impersonated; audit sampling comes from the chip's TRNG after the response hash exists,
 so the runtime cannot know which responses are watched, and a sampled or hazard-class response is
 escrowed before release; the evaluated model is the deployed model; compute and hazard budgets
@@ -87,7 +87,7 @@ def test_observer_is_always_invoked_and_cannot_be_impersonated():
     assert r.request_release(node, "s", "r1", h, sh, [r.verdict(h, key=node.governor.key)])["why"] == reasons.GATE_WITNESS_MISSING   # even the governor's
     labelled = r.request(node, "response.release", {"session": "s", "response_id": "r1", "response_hash": h, "stream_hashes": sh},
                          labels={"requirement": "auto", "hazard_class": "none"})
-    assert labelled["why"] == reasons.GATE_WITNESS_MISSING                  # labels do not pick the lane (H4)
+    assert labelled["why"] == reasons.GATE_WITNESS_MISSING                  # labels do not pick the lane (CONTRACT-BROKER-CANNOT-PICK-RULE)
     assert node.egress.bytes_delivered == 0
 
 

@@ -4,7 +4,7 @@ Trusted hardware does not make a declared fact true. The governor compares a val
 given against a protected rule, and the contract holds exactly as far as the value can be
 trusted. Every deployment ships a register with one row per input any rule or any endpoint
 relies on. The policy loader refuses an image whose rules name an input with no row
-(requirement R-H7, `tests/test_h07_register.py`).
+(requirement R-CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE, `tests/test_h07_register.py`).
 
 In plain words: the list taped to the wall of the security office. Who is allowed to tell us
 this, how old can it be, what do we do when two people disagree, and what can we not check.

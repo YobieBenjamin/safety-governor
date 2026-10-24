@@ -226,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("sweep", help="run every hypothesis against every tier and write results/report.md")
     sub.add_parser("demo", help="a narrated walk through one rack")
-    sub.add_parser("bench", help="the H9 overhead model")
+    sub.add_parser("bench", help="the CONTRACT-ZERO-PER-TOKEN-OVERHEAD overhead model")
     uc = sub.add_parser("usecase", help="a narrated use case: the hops, what the governor saw and did, the bypasses and their refusals")
     uc.add_argument("name", choices=sorted(USECASES))
     args = ap.parse_args(argv)

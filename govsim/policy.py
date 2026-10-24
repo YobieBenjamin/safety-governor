@@ -16,12 +16,12 @@ quorum (``verify_policy``), and picks the rule for a request (``select_rule``, `
 Rules and the register: a rule relies on inputs. They are the lists its constraints name, the observer
 verdict its lane needs, and the budget key it spends from, plus anything it declares. ``check_register``
 returns the inputs that have no register row. ``check_budget_owners`` returns the budget keys that have no
-owner. A governor refuses an image where either list is not empty (H7, R12; tests/test_h07_register.py).
+owner. A governor refuses an image where either list is not empty (CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE, REQUIREMENT-ONE-LEDGER-OWNS-BUDGET; tests/test_h07_register.py).
 
 What it guarantees: a governor accepts an image only when at least k distinct valid signatures from the keys
 in force cover the image's epoch, the threshold is in range, and the register and budget owners are
 complete. Rule selection uses only the verified measurement, the action and the typed fields. Requester
-labels never reach it (H4).
+labels never reach it (CONTRACT-BROKER-CANNOT-PICK-RULE).
 
 What it deliberately does NOT do: it does not judge whether a rule is wise. It does not choose the signers,
 because the governance root does that. It does not reach the network. The default buffer policy and audit
@@ -278,7 +278,7 @@ def select_rule(image: dict, measurement: str, action: str, params: dict, lists:
     """The rulebook selects the rule from the verified measurement, the action and the typed
     fields, and from nothing else. Several rules may share an action (a small-payment rule
     and a large-payment rule); the first whose constraints the fields satisfy wins. Requester
-    labels never reach this function (H4)."""
+    labels never reach this function (CONTRACT-BROKER-CANNOT-PICK-RULE)."""
     candidates = [r for r in image["rules"] if r["action"] == action and r["measurement"] == measurement]
     candidates += [r for r in image["rules"] if r["action"] == action and r["measurement"] == "*"]
     if not candidates:

@@ -17,7 +17,7 @@ What it deliberately does NOT do: it does not decide which budget a request uses
 It does not share budgets between chips. A budget is counted at its owner chip (the policy's
 ``budget_owners``), and other chips ask that owner over the fabric.
 
-Requirements R11 and R12. ``reserve`` is the check-and-reserve half of the transaction;
+Requirements REQUIREMENT-AUTHORIZATION-IS-DURABLE-TRANSACTION and REQUIREMENT-ONE-LEDGER-OWNS-BUDGET. ``reserve`` is the check-and-reserve half of the transaction;
 ``commit`` and ``release`` are the other half. Everything is saved before returning.
 """
 from __future__ import annotations

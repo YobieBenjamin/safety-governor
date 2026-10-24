@@ -12,7 +12,7 @@
 #   REVISE_BACKEND=auto|local|cloud   auto (default): the local model for the first round when one answers,
 #     the cloud for the second. The local model gets a fresh session with the brief and the review (its
 #     context is 64k; the cloud build session is often larger); the cloud resumes the agent's own session.
-#     Wave 1 taught the split: two local rounds on L4 took three and four hours, the second hit the clock
+#     Wave 1 taught the split: two local rounds on WAVE-TRACE-CONFORMANCE-REPLAY took three and four hours, the second hit the clock
 #     with no summary, and the gate still said revise; a cloud round is minutes and about a dollar.
 #   REVISE_LOCAL_TURNS=40  REVISE_LOCAL_TIMEOUT_MIN=90   the local round's own caps (not the build's 80 / 240)
 set -euo pipefail

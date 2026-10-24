@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""H3: policy changes only with a quorum, and never backwards. Falsified if an image with
+"""CONTRACT-POLICY-QUORUM-NO-ROLLBACK: policy changes only with a quorum, and never backwards. Falsified if an image with
 fewer than k signatures, or an older version, is accepted, or if the host can touch the
 epoch register."""
 from govsim import reasons

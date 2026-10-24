@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The silicon root of trust: measured boot, extend-only registers, DICE key derivation, the
-quote engine and the monotonic counter. Requirement R2.
+quote engine and the monotonic counter. Requirement REQUIREMENT-MEASURED-BOOT-DERIVES-KEY.
 
 Simplification: the boot ROM and loader are represented by their digests; "booting" a
 firmware image is ``boot(loader_digest, firmware_digest)``.

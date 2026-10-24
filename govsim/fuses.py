@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """One-time-programmable fuses and the lifecycle state.
 
-Requirements R1, R3, R4. The unique device secret is readable only through ``derive``; there
+Requirements REQUIREMENT-DEVICE-SECRET-IN-FUSES, REQUIREMENT-FUSED-ANTI-ROLLBACK, REQUIREMENT-DEBUG-FUSED-OFF. The unique device secret is readable only through ``derive``; there
 is no accessor that returns it. The anti-rollback counter and the lifecycle state are
 monotone. Debug access is refused in PRODUCTION and the attempt is reported to the caller so
 the governor can log it.

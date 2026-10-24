@@ -309,25 +309,45 @@ def probe_h18(rack):
 
 
 PROBES = [
+    # Registered name: CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION (old ID H0 is kept because code matches on it)
     ("H0", "every protected operation needs a fresh, exact, single-use authorization", probe_h0),
+    # Registered name: CONTRACT-ATTESTATION-BINDS-PERMISSIONS (old ID H1 is kept because code matches on it)
     ("H1", "attestation binds permissions to firmware, model and policy", probe_h1),
+    # Registered name: CONTRACT-LINK-LEVEL-CONTAINMENT (old ID H2a is kept because code matches on it)
     ("H2a", "link-level: no bytes to a non-roster peer; unchecked paths bricked", probe_h2_link),
+    # Registered name: CONTRACT-DESCRIPTOR-LEVEL-ROSTER-GAP (old ID H2b is kept because code matches on it)
     ("H2b", "descriptor-level: a transfer between two roster members the buffer policy would not allow", probe_h2_descriptor),
+    # Registered name: CONTRACT-POLICY-QUORUM-NO-ROLLBACK (old ID H3 is kept because code matches on it)
     ("H3", "policy changes only with a quorum, never backwards", probe_h3),
+    # Registered name: CONTRACT-BROKER-CANNOT-PICK-RULE (old ID H4 is kept because code matches on it)
     ("H4", "the broker cannot choose its rule or lane", probe_h4),
+    # Registered name: CONTRACT-ALARMS-ARE-MONOTONE (old ID H5 is kept because code matches on it)
     ("H5", "alarms are monotone", probe_h5),
+    # Registered name: CONTRACT-COMPARATOR-SURVIVES-COMPROMISE (old ID H6 is kept because code matches on it)
     ("H6", "the comparator holds with every layer above it compromised", probe_h6),
+    # Registered name: CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE (old ID H7 is kept because code matches on it)
     ("H7", "the assumptions register is complete or the policy does not load", probe_h7),
+    # Registered name: CONTRACT-OVERRIDE-SLOW-AND-LOGGED (old ID H8 is kept because code matches on it)
     ("H8", "human override is slow and fully logged", probe_h8),
+    # Registered name: CONTRACT-ZERO-PER-TOKEN-OVERHEAD (old ID H9 is kept because code matches on it)
     ("H9", "zero per-token work; firmware under one percent of GPU time; the signing engine keeps up", probe_h9),
+    # Registered name: CONTRACT-LEAKAGE-WITHIN-BUDGET (old ID H10 is kept because code matches on it)
     ("H10", "permitted-channel leakage trips the budget", probe_h10),
+    # Registered name: CONTRACT-HALT-REACHES-EVERY-GPU (old ID H11 is kept because code matches on it)
     ("H11", "a halt reaches every GPU within the bound; nobody clears alone; a governor jumpered out of the loop is named and the loop opened", probe_h11),
+    # Registered name: CONTRACT-ONLY-ROSTER-SPEAKS-ONCE (old ID H12 is kept because code matches on it)
     ("H12", "only roster members speak on the fabric; forged heartbeats fail", probe_h12),
+    # Registered name: CONTRACT-SHARED-BUDGET-NO-OVERSPEND (old ID H13 is kept because code matches on it)
     ("H13", "shared budgets cannot be overspent across governors", probe_h13),
+    # Registered name: CONTRACT-PARTITIONS-END-SAFE (old ID H14 is kept because code matches on it)
     ("H14", "partitions and epoch changes end in safe states", probe_h14),
+    # Registered name: CONTRACT-NO-DEBUG-IN-PRODUCTION (old ID H15 is kept because code matches on it)
     ("H15", "no debug path in production; tamper zeroizes", probe_h15),
+    # Registered name: CONTRACT-LEVERS-WITHOUT-GPU-COOPERATION (old ID H16 is kept because code matches on it)
     ("H16", "the levers work without the GPU's cooperation", probe_h16),
+    # Registered name: CONTRACT-NO-ACTION-WITHOUT-TICKET (old ID H17 is kept because code matches on it)
     ("H17", "no governed action initiates without a ticket and no governed response leaves the rack without a release ticket", probe_h17),
+    # Registered name: CONTRACT-OVERSIGHT-SURVIVES-MODEL (old ID H18 is kept because code matches on it)
     ("H18", "oversight survives the model: the observer is always invoked and cannot be impersonated, audit sampling is unpredictable, the evaluated model is the deployed model, compute and hazard budgets bind", probe_h18),
 ]
 
@@ -355,7 +375,7 @@ def report(matrix: dict[str, dict[str, str]], out_dir: str = "results") -> str:
     for hid, text, _ in PROBES:
         row = matrix[hid]
         lines.append(f"| {hid} | {text} | {row['rack']} | {row['board']} | {row['integrated']} |")
-    lines += ["", "## Modelled cost (H9)", "",
+    lines += ["", "## Modelled cost (CONTRACT-ZERO-PER-TOKEN-OVERHEAD)", "",
               "A model, not a measurement: operation counts from the functional model priced with the figures in `docs/04-specification.md` §9, against a GPU doing 2,000 tokens per second with 500-token responses. "
               "Firmware time is the share of GPU time spent on action paths. The signing engine (ECDSA P-384 at OpenTitan's published 1,697,985 OTBN cycles, 17 ms at 100 MHz, shared by eight slots) runs beside the GPU and has to keep up; one signature per 50 ms batch window caps it. Record latency is the most a response waits if the runtime insists on its record before release.", "",
               "| Tier | Tokens | Firmware time | GPU time | Firmware share | Engine, one signature per response | Engine, batched | Record latency |", "|---|---|---|---|---|---|---|---|"]
@@ -382,8 +402,8 @@ def report(matrix: dict[str, dict[str, str]], out_dir: str = "results") -> str:
               "atomic per-item consumption, or a keyed endpoint MAC for the release tickets. The 34 percent figure holds "
               "only for the records, and only the records were ever batched.", "",
               "## What the gaps mean", "",
-              "- **H2b at rack and board**: from the board the governor governs links and flows, not descriptors. Two legitimate roster members can exchange bytes the buffer policy would not have allowed (the weights, over the copy engine). That is the residual named in `docs/00-objectives.md` N5. At the integrated tier the descriptor checkers are keyed per buffer class and programmed from the policy image's buffer policy, which closes it there.",
-              "- **H2a at board**: a system where the switches' management is unreachable, or a baseboard with direct NVLink and no NVSwitch, has no port authority. The governor still has its levers, its tickets and its log; it cannot keep a stranger off the link.", ""]
+              "- **CONTRACT-DESCRIPTOR-LEVEL-ROSTER-GAP at rack and board**: from the board the governor governs links and flows, not descriptors. Two legitimate roster members can exchange bytes the buffer policy would not have allowed (the weights, over the copy engine). That is the residual named in `docs/00-objectives.md` GOAL-NOT-INSPECTING-ROSTER-TRANSFERS. At the integrated tier the descriptor checkers are keyed per buffer class and programmed from the policy image's buffer policy, which closes it there.",
+              "- **CONTRACT-LINK-LEVEL-CONTAINMENT at board**: a system where the switches' management is unreachable, or a baseboard with direct NVLink and no NVSwitch, has no port authority. The governor still has its levers, its tickets and its log; it cannot keep a stranger off the link.", ""]
     text = "\n".join(lines)
     with open(os.path.join(out_dir, "report.md"), "w", encoding="utf-8") as fh:
         fh.write(text)
