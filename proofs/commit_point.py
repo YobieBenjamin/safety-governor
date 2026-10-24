@@ -50,7 +50,10 @@ NAMES = ["severity_high", "version", "held", "cleared_for", "allclear", "deadlin
 
 
 class State:
+    """The machine's state at one moment: one Z3 constant per field, for every action. ``tag`` names the copy, so two
+    states can appear in one formula."""
     def __init__(self, tag: str):
+        """Create fresh constants for one state. Their names include ``tag``."""
         self.severity_high = Const(f"sev_{tag}", ABool)
         self.version = Const(f"ver_{tag}", AInt)
         self.held = Const(f"held_{tag}", ABool)
@@ -63,10 +66,13 @@ class State:
 
 
 def unchanged(s, t, *except_names):
+    """A formula that says state ``t`` equals state ``s`` on every field, except the fields named in ``except_names``."""
     return And(*[getattr(s, n) == getattr(t, n) for n in NAMES if n not in except_names])
 
 
 def init_at(s, a):
+    """The starting condition for one action. Its version is at least zero, and nothing is held, cleared, all-clear,
+    late, alarmed or committed."""
     return And(s.version[a] >= 0, Not(s.held[a]), s.cleared_for[a] == -1, Not(s.allclear[a]), Not(s.deadline_passed[a]),
                Not(s.alarm[a]), Not(s.committed[a]), Not(s.okay_at_commit[a]))
 
@@ -107,6 +113,9 @@ def steps(s, t, a):
 
 
 def invariant_at(s, a):
+    """The safety invariants for one action, which must hold in every reachable state. (1) A committed action carries the
+    okay mark that was recorded at commit. (2) A clearance on file is for the current version, or there is none. (3) A passed
+    deadline with no verdict has its alarm raised. The last clause is always true, so it adds no check of its own."""
     return And(
         s.version[a] >= 0,
         # (1) a committed action was cleared, or was low-severity with a regulator all-clear, at commit
@@ -117,11 +126,15 @@ def invariant_at(s, a):
         Implies(And(s.deadline_passed[a], s.cleared_for[a] != s.version[a], Not(s.allclear[a])), s.alarm[a]),
         # a high-severity action never commits on the regulator's all-clear alone: recorded through okay_at_commit's
         # definition in the commit step, re-stated here as a reachable-state fact
+        # (this clause is Implies(X, True), which is always true, so it adds no check: the commit step does the work)
         Implies(And(s.committed[a], s.severity_high[a]), True),
     )
 
 
 def prove(name, claim, assumptions) -> bool:
+    """Ask Z3 whether ``claim`` follows from ``assumptions``. As in core_invariants.py, the solver looks for a state where
+    the claim is false. If it finds none (unsat), the claim is proved and the function returns True. A counterexample is
+    printed with its model."""
     sol = Solver()
     sol.set("timeout", 60_000)
     sol.add(*assumptions)
@@ -135,6 +148,8 @@ def prove(name, claim, assumptions) -> bool:
 
 
 def main() -> int:
+    """Run the induction proofs, the three safety properties and the non-vacuity checks. Print each result, and return 0
+    only when all of them hold."""
     s, t = State("s"), State("t")
     a = Const("a_step", Action)
     k = Const("a_k", Action)
