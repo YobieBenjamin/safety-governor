@@ -79,6 +79,7 @@ def submit_payment(r, node, amount, destination, from_account, confirm_as, *, ep
 
 
 def effect_count(r):
+    """How many times the protected effect has happened. This is the number of executions recorded at the payment endpoint."""
     return len(r.endpoints[ENDPOINT].executed)
 
 
@@ -124,26 +125,35 @@ def a_forged_ticket(r, node):
 
 
 def a_unlisted_beneficiary(r, node):      # F04
+    """F04: a payment to a payee that is not on the signed beneficiary registry. The payment must be held or refused,
+    so no effect occurs."""
     res, params = submit_payment(r, node, 100, "attacker-new-account", LISTED_PAYER, LISTED_PAYER)
     return not try_effect(r, node, res, params), {"request_ok": res.get("ok"), "why": res.get("why"), "cause": res.get("cause")}
 
 
 def a_no_payer_consent(r, node):          # F05 / I1
+    """F05: a payment with no payer confirmation at all. It must not proceed."""
     res, params = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, None)
     return not try_effect(r, node, res, params), {"request_ok": res.get("ok"), "why": res.get("why")}
 
 
 def a_wrong_key_consent(r, node):         # I1: the classifier's key cannot stand in for the payer
+    """I1: a payer confirmation signed by a key that belongs to no customer. That key must not stand in for the
+    payer, so the payment must not proceed."""
     res, params = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, "__not_a_customer__")
     return not try_effect(r, node, res, params), {"request_ok": res.get("ok"), "why": res.get("why")}
 
 
 def a_another_customers_consent(r, node): # I1: bob cannot confirm alice's wire
+    """I1: a payer confirmation signed by another customer's key (bob, for alice's account). It must not count, so
+    the payment must not proceed."""
     res, params = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, "bob-456")
     return not try_effect(r, node, res, params), {"request_ok": res.get("ok"), "why": res.get("why")}
 
 
 def a_nan_amount(r, node):                # F03
+    """F03: a payment amount of NaN (not a number). It must be refused. A request that cannot be encoded for signing
+    at all also counts as refused."""
     try:
         res, params = submit_payment(r, node, float("nan"), LISTED_PAYEE, LISTED_PAYER, LISTED_PAYER)
     except ValueError as e:
@@ -152,11 +162,15 @@ def a_nan_amount(r, node):                # F03
 
 
 def a_over_budget(r, node):               # a bigger payment cannot slip through the small auto rule
+    """A payment of 5000, above the small-payment rule's limit of 1000. The large-payment rule is a human lane, so the
+    payment is parked for approval and no effect occurs."""
     res, params = submit_payment(r, node, 5000, LISTED_PAYEE, LISTED_PAYER, LISTED_PAYER)
     return not try_effect(r, node, res, params), {"request_ok": res.get("ok"), "why": res.get("why")}
 
 
 def a_params_tamper(r, node):             # binding: mint for the listed payee, execute for the attacker
+    """Binding: a ticket minted for the listed payee must not execute with a different destination. The endpoint
+    compares the parameters' digest with the ticket, so the tampered call is refused."""
     res, _ = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, LISTED_PAYER)
     if not res.get("ok"):
         return True, {"note": "no ticket minted", "why": res.get("why")}
@@ -167,6 +181,7 @@ def a_params_tamper(r, node):             # binding: mint for the listed payee, 
 
 
 def a_replay(r, node):                    # F11: one ticket, executed twice, must yield one effect
+    """F11: the same ticket is executed twice. Exactly one effect may occur, and the second execution must be refused."""
     res, params = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, LISTED_PAYER)
     if not res.get("ok"):
         return False, {"note": "control ticket failed to mint", "why": res.get("why")}
@@ -176,6 +191,8 @@ def a_replay(r, node):                    # F11: one ticket, executed twice, mus
 
 
 def a_concurrent_double_dispatch(r, node):  # F11: one ticket, two threads, must yield one effect
+    """F11: one ticket is dispatched by two threads at once. The endpoint's compare-and-set lets only one of them through.
+    A barrier holds both threads just after the admission check, so they race for the burn."""
     res, params = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, LISTED_PAYER)
     if not res.get("ok"):
         return False, {"note": "control ticket failed to mint", "why": res.get("why")}
@@ -183,6 +200,7 @@ def a_concurrent_double_dispatch(r, node):  # F11: one ticket, two threads, must
     ep = r.endpoints[ENDPOINT]
     orig_admit = ep.admit
     def gated_admit(*a, **k):
+        """Wraps the endpoint's admit so that each caller waits at a barrier after admission. This forces the race."""
         out = orig_admit(*a, **k)
         try:
             barrier.wait(timeout=5)   # hold both callers past admission so they race the burn
@@ -200,6 +218,7 @@ def a_concurrent_double_dispatch(r, node):  # F11: one ticket, two threads, must
 
 
 def a_stale_epoch(r, node):               # epoch binding: a ticket from a retired edition must not execute
+    """Epoch binding: a ticket minted under the old policy must not execute after the policy has changed."""
     res, params = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, LISTED_PAYER)
     if not res.get("ok"):
         return True, {"note": "no ticket minted", "why": res.get("why")}
@@ -210,6 +229,8 @@ def a_stale_epoch(r, node):               # epoch binding: a ticket from a retir
 
 
 def a_expired_registry(r, node):          # F06: a stale beneficiary registry fails closed
+    """F06: the beneficiary registry is installed already expired, and the clock is moved forward 2 seconds. A payment to a
+    listed payee must still be refused, because a stale registry fails closed."""
     r.clock.advance(2) if hasattr(r.clock, "advance") else None
     # install a beneficiary registry that is already expired, then pay a listed payee
     expired = r.signed_list("beneficiary-registry", ["recipient-a", "recipient-b", "acct-1", "acct-9"], expires_in_s=-1, version=99)
@@ -219,6 +240,8 @@ def a_expired_registry(r, node):          # F06: a stale beneficiary registry fa
 
 
 def a_rolled_back_registry(r, node):      # F06: an older signed list cannot replace a newer one
+    """F06: a newer beneficiary registry is installed first, then an older list that names only the attacker. Whether or not
+    the older list is accepted, a payment to the attacker payee must not proceed."""
     newer = r.signed_list("beneficiary-registry", ["recipient-a", "recipient-b", "acct-1", "acct-9"], version=10)
     node.governor.install_list("beneficiary-registry", newer)
     older = r.signed_list("beneficiary-registry", ["attacker-new-account"], version=2)
@@ -255,6 +278,9 @@ LIMITS = [
 
 
 def run():
+    """Run the whole battery. The control runs on its own fresh rack, and each attack runs on another fresh rack, so no attack
+    can change the state another attack depends on. An exception counts as a failure, not as a pass. Output: (verdict,
+    results). The verdict is 1 only when the control proceeds exactly once and every attack is repelled."""
     results = []
     # control on its own rack
     rc, nc = make_rack()
@@ -273,6 +299,8 @@ def run():
 
 
 def report(verdict, results) -> str:
+    """Build the markdown report text for one run. Inputs: the verdict and the results. Output: a string. This
+    function writes no file; ``main`` does, and only with ``--write``."""
     L = ["# Capstone red team: one protected action, every attack the audit named", "",
          f"**VERDICT: {verdict}**  ({'the boundary holds' if verdict else 'A LEAK OCCURRED'})", "",
          "Generated by `python -m govsim.redteam --write`. The protected effect is a USD payment at the "
@@ -303,6 +331,7 @@ def selftest() -> int:
     orig_admit, orig_exec = ActionEndpoint.admit, ActionEndpoint.execute
     ActionEndpoint.admit = lambda self, ticket, action, params, now: (True, "ok")
     def leak_exec(self, ticket, action, params):
+        """A broken execute that always reports success and records an effect. Used only by ``selftest``."""
         self.executed.append({"action": action, "params": params, "ticket": "subverted", "t": self.clock.now()})
         return True, "ok"
     ActionEndpoint.execute = leak_exec
@@ -319,6 +348,9 @@ def selftest() -> int:
 
 
 def main(argv=None) -> int:
+    """Command-line entry point. Runs the battery and prints one line per scenario, then the VERDICT. With ``--write`` it
+    overwrites results/redteam.md and results/redteam.json. With ``--json`` it prints the results as JSON. With
+    ``--selftest`` it runs the self-test. Returns 0 when the verdict is 1."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--json", action="store_true", help="print the machine-readable result")
