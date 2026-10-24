@@ -26,7 +26,7 @@ def test_reference_small_payment_needs_no_payer_key():
 
 
 def test_auto_rule_with_payer_confirm_requires_the_payer_key():
-    """sandbox off, payer-confirm on: the auto lane needs the payer's own key (the I1 behaviour)."""
+    """sandbox off, payer-confirm on: the auto lane needs the payer's own key (the EXPERIMENT-CUSTOMER-CONFIRMATION behaviour)."""
     r, node = _rack(sandbox=False, payer=True)
     assert not r.pay(node, 100, "alice-123", confirm_as=None)["ok"]
     assert r.pay(node, 100, "alice-123", confirm_as="alice-123")["ok"]

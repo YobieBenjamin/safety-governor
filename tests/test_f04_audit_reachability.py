@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""F04 (external audit): the A1 reachability audit called any enum a destination boundary.
+"""F04 (external audit): the EXPERIMENT-ROAD-REACHABILITY audit called any enum a destination boundary.
 
 classify() labelled a rule "confined" if any constraint field had in / in_list / not_in_list, so a
 `currency in [USD]` enum or a `munition in [...]` enum made an unbounded payment or strike rule look

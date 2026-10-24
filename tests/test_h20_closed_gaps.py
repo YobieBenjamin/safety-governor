@@ -4,9 +4,9 @@
 
 Four gaps from docs/REVIEW-2026-10-22-fact-check.md section 7, which an external audit on the same
 day called out as failures someone could reasonably expect these fields to prevent:
-G1 revocations were stored and never read; G2 CAP_REQUEST ignored the sandbox flag; G3 the session
+GAP-REVOCATIONS-UNENFORCED revocations were stored and never read; GAP-SANDBOX-FLAG-IGNORED CAP_REQUEST ignored the sandbox flag; GAP-HAZARD-BUDGET-PER-GOVERNOR the session
 hazard budget was counted per governor, so a session spread over several chips got several budgets;
-G5 a workload token kept working after the rulebook changed. Falsified if any of these still holds.
+GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE a workload token kept working after the rulebook changed. Falsified if any of these still holds.
 """
 from govsim import reasons
 from govsim.cluster import build_rack
@@ -22,13 +22,13 @@ def _new_edition(rack, **image_changes):
     image.update(image_changes)
     image = sign_policy(image, rack.governance[: rack.threshold])
     assert rack.change_epoch(image)["committed"]
-    for node in rack.nodes:                     # the host presents its manifest again under the new edition (G5)
+    for node in rack.nodes:                     # the host presents its manifest again under the new edition (GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE)
         if node.governor.state == "RUN" and node.governor.model_digest:
             rack.load_model(node)
     return image
 
 
-# ---------------------------------------------------------------- G1 revocations are enforced
+# ---------------------------------------------------------------- GAP-REVOCATIONS-UNENFORCED revocations are enforced
 def test_a_revoked_observer_key_is_not_a_witness():
     r = build_rack(1, "rack", policy_kw=NO_SAMPLING)
     r.bring_up()
@@ -64,7 +64,7 @@ def test_a_revoked_approver_cannot_release_a_hold():
     assert not second.get("ticket"), second
 
 
-# ---------------------------------------------------------------- G2 the sandbox closes CAP_REQUEST too
+# ---------------------------------------------------------------- GAP-SANDBOX-FLAG-IGNORED the sandbox closes CAP_REQUEST too
 def test_a_sandboxed_governor_grants_no_peer_capability():
     r = build_rack(2, "rack", policy_kw={"sandbox": True, **NO_SAMPLING})
     r.bring_up()
@@ -83,7 +83,7 @@ def test_without_the_sandbox_the_same_request_is_granted():
     assert r.cap_request(node, point="nvswitch", peer=peer, direction="both", budget=1000, ttl=60)["ok"]
 
 
-# ---------------------------------------------------------------- G3 one hazard budget per session, whichever chip
+# ---------------------------------------------------------------- GAP-HAZARD-BUDGET-PER-GOVERNOR one hazard budget per session, whichever chip
 def test_a_session_spread_over_two_governors_gets_one_hazard_budget():
     r = build_rack(2, "rack", policy_kw={**NO_SAMPLING, "on_hazard": "human", "hazard_budget": {"max": 2, "window_s": 600}})
     r.bring_up()
@@ -106,7 +106,7 @@ def test_the_hazard_owner_unreachable_fails_closed():
     assert not res["released"][0]
 
 
-# ---------------------------------------------------------------- G5 a token dies with its edition
+# ---------------------------------------------------------------- GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE a token dies with its edition
 def test_a_workload_token_from_the_old_edition_is_refused():
     r = build_rack(1, "rack", policy_kw=BIG)
     r.bring_up()

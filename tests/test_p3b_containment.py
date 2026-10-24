@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""P3b, the containment rate (govsim/containment.py): how little can leave a governed rack under a tight policy.
+"""EXPERIMENT-CONTAINMENT, the containment rate (govsim/containment.py): how little can leave a governed rack under a tight policy.
 The defensive side of the replication question; companion to test_h10_leakage.py (P3)."""
 from govsim import containment
 

@@ -13,8 +13,8 @@ measured a well-connected instance, not the universal implication the prose stat
 
 The fix mirrors the already-corrected Claim 3: Claim 2 is now conditioned on the aggregate-
 connectivity assumption (the network carries min(|S|, |T|) disjoint paths between the two whole
-sides, not merely k between each pair), and the proof constructs the two-hub graph (K6) and a
-single shared controller (K7) as counterexamples it checks directly.
+sides, not merely k between each pair), and the proof constructs the two-hub graph (INVARIANT-TWO-HUB-NO-KILL) and a
+single shared controller (INVARIANT-SHARED-CONTROLLER-NO-KILL) as counterexamples it checks directly.
 
 This test is discriminating. On the pre-fix source it cannot import ``build_two_hub`` and the
 corrected docs wording is absent, so it fails; on the fixed source it:

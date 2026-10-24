@@ -5,7 +5,7 @@
 The external audit found two things. First, while RUN, after the output allowance is consumed, a listed-recipient
 ``message.send`` carries an arbitrary string in an unconstrained body: the auto rule bounds the recipient but not the
 length, bytes or rate, and the endpoint adds no check, so the model has no finite byte ceiling on that channel, yet
-P3b ignored it and reported a finite ceiling from the signed-response channel alone. Second, P3b added a one-time
+EXPERIMENT-CONTAINMENT ignored it and reported a finite ceiling from the signed-response channel alone. Second, EXPERIMENT-CONTAINMENT added a one-time
 unpresented allowance (bytes) directly onto a per-hour rate.
 
 These tests pin the honest behaviour: an unbounded permitted channel makes the finite-ceiling claim FAIL; bounding the
