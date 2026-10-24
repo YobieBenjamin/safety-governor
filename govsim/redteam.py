@@ -217,6 +217,19 @@ def a_concurrent_double_dispatch(r, node):  # F11: one ticket, two threads, must
     return effect_count(r) == 1, {"effects": effect_count(r)}
 
 
+def a_unbound_ticket_at_payment(r, node):   # F29
+    """F29: a ticket minted for model.export, a rule that names no endpoint, is driven at the payment endpoint. The
+    ticket is not bound to that endpoint, so the payment endpoint must refuse it and no effect occurs. This attack
+    fails when the binding check is removed, which is what the self-test checks."""
+    P = {"target": "not-a-payment"}
+    res = r.request(node, "model.export", P)
+    if not res.get("ok"):
+        return True, {"note": "no ticket minted", "why": res.get("why")}
+    before = effect_count(r)
+    ok, why = r.endpoints[ENDPOINT].execute(res["ticket"], "model.export", P)
+    return effect_count(r) == before, {"endpoint": [ok, why]}
+
+
 def a_stale_epoch(r, node):               # epoch binding: a ticket from a retired edition must not execute
     """Epoch binding: a ticket minted under the old policy must not execute after the policy has changed."""
     res, params = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, LISTED_PAYER)
@@ -266,6 +279,7 @@ ATTACKS = [
     ("stale-epoch ticket", "epoch", a_stale_epoch),
     ("expired beneficiary registry", "F06", a_expired_registry),
     ("rolled-back beneficiary registry", "F06", a_rolled_back_registry),
+    ("ticket bound to no endpoint, driven at payment", "F29", a_unbound_ticket_at_payment),
 ]
 
 LIMITS = [
@@ -326,8 +340,16 @@ def report(verdict, results) -> str:
 
 def selftest() -> int:
     """Prove the oracle is not vacuous: subvert the endpoint's ticket enforcement and require the
-    verdict to fall to 0. A proof that cannot fail proves nothing; this shows it can."""
+    verdict to fall to 0. A proof that cannot fail proves nothing; this shows it can. It also removes only the
+    F29 binding check and requires the verdict to fall to 0, so the battery cannot be blind to a missing binding."""
+    from . import endpoints as _ep
     from .endpoints import ActionEndpoint
+    _ep.ENFORCE_TICKET_BINDING = False
+    try:
+        _, binding_results = run()
+    finally:
+        _ep.ENFORCE_TICKET_BINDING = True
+    binding_caught = any(not x["repelled"] and x["finding"] == "F29" for x in binding_results)
     orig_admit, orig_exec = ActionEndpoint.admit, ActionEndpoint.execute
     ActionEndpoint.admit = lambda self, ticket, action, params, now: (True, "ok")
     def leak_exec(self, ticket, action, params):
@@ -340,9 +362,10 @@ def selftest() -> int:
     finally:
         ActionEndpoint.admit, ActionEndpoint.execute = orig_admit, orig_exec
     leaks = sum(1 for x in results if not x["repelled"] and x["finding"] != "control")
-    ok = verdict == 0 and leaks > 0
+    ok = verdict == 0 and leaks > 0 and binding_caught
     print(f"  self-test: with endpoint enforcement subverted, VERDICT={verdict} (must be 0), "
           f"{leaks} endpoint-stage attacks flagged a leak")
+    print(f"  self-test: with only the F29 ticket-binding check removed, the F29 attack flagged a leak: {binding_caught} (must be True)")
     print(f"\nSELFTEST: {'1' if ok else '0'}  ({'the oracle detects a broken gate' if ok else 'ORACLE IS VACUOUS'})")
     return 0 if ok else 1
 

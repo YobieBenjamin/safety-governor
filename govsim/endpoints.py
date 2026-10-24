@@ -33,6 +33,10 @@ from . import reasons
 from .crypto import SigningKey, VerifyKey, canonical, digest, hmac_sha256, sha256, verify_any, verify_object
 from .store import Store
 
+# F29: the ticket-binding check. True in every real run. The red-team self-test sets it to False, for the length
+# of one run, to show that the battery reports a leak when the binding is missing. Nothing else changes it.
+ENFORCE_TICKET_BINDING = True
+
 RACK_POINTS = ("nvswitch", "pcie", "dpu", "storage")
 INTEGRATED_POINTS = ("copy_engine", "peer_mmu")
 BRICKED = ("display", "jtag", "debug")
@@ -207,10 +211,11 @@ class ActionEndpoint:
             return False, reasons.TICKET_PARAMS_MISMATCH
         # F29: every ticket names exactly one endpoint. An unbound ticket is refused, and so is a ticket
         # that names another endpoint. The check does not depend on the ticket carrying a truthy field.
-        if not t.get("endpoint"):
-            return False, reasons.TICKET_UNBOUND
-        if t["endpoint"] != self.name:
-            return False, reasons.TICKET_WRONG_ENDPOINT
+        if ENFORCE_TICKET_BINDING:
+            if not t.get("endpoint"):
+                return False, reasons.TICKET_UNBOUND
+            if t["endpoint"] != self.name:
+                return False, reasons.TICKET_WRONG_ENDPOINT
         if self.policy_expires_at is not None and now >= self.policy_expires_at:
             return False, reasons.POLICY_EXPIRED     # F30: the edition has expired, whatever the governor's tick has or has not done
         if t["policy_epoch"] != self.epoch:

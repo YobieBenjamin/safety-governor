@@ -36,6 +36,7 @@ from typing import Any
 
 from . import reasons
 from .crypto import SigningKey, VerifyKey, canonical, digest, finite_number, hmac_sha256, random_id, verify_any, verify_object
+from . import endpoints as _endpoints
 from .endpoints import BRICKED, DescriptorChecker, INTEGRATED_POINTS, RACK_POINTS, Switch
 from .fuses import Fuses, PRODUCTION
 from .ledger import Ledger
@@ -1175,7 +1176,7 @@ class Governor:
                 return False
             t = ticket["payload"]
             # F29: a commit needs a ticket bound to a named endpoint of the current policy.
-            if not t.get("endpoint") or t["endpoint"] not in {e["name"] for e in self.policy.get("endpoints", [])}:
+            if _endpoints.ENFORCE_TICKET_BINDING and (not t.get("endpoint") or t["endpoint"] not in {e["name"] for e in self.policy.get("endpoints", [])}):
                 self.log.append("gate.commit_rejected", {"why": reasons.TICKET_UNBOUND})
                 return False
             if t["policy_epoch"] != self.epoch:
