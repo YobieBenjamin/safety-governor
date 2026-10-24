@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""Experiment I1: the wire the customer never meant. A payment rule whose witness must be the payer's own key.
+"""EXPERIMENT-CUSTOMER-CONFIRMATION: the wire the customer never meant. A payment rule whose witness must be the payer's own key.
 
     python -m govsim.customer_confirm            # the checks
     python -m govsim.customer_confirm --write     # also results/customer-confirm.md

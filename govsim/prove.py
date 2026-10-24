@@ -18,7 +18,7 @@ The layers:
   - formal proofs      : the abstract-machine invariants, the commit point, the min-cut argument
   - RTL conformance    : the RTL differential-conformance suite
   - RTL formal         : the RTL formal properties with planted mutants (needs yowasp-yosys)
-  - experiments        : W1 origin gate, P3b containment, A1 reachability, I1 customer confirm
+  - experiments        : EXPERIMENT-ORIGIN-GATE, EXPERIMENT-CONTAINMENT, EXPERIMENT-ROAD-REACHABILITY, EXPERIMENT-CUSTOMER-CONFIRMATION
   - discriminating tests: the pytest suite, every fix with a test that fails before and passes after
 
 A component needing a toolchain that is absent (RTL formal without yowasp-yosys) is recorded as

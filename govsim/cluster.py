@@ -108,7 +108,7 @@ class Rack:
                           "message.send.any": [SigningKey.generate() for _ in range(2)], "shipment.order": [SigningKey.generate() for _ in range(2)]}
         self.publisher = SigningKey.generate()
         self.observer = SigningKey.generate()
-        # I1 (tests/test_i1_customer_confirm.py): a couple of customers, each with their own key, as a signed customer registry would hold them
+        # EXPERIMENT-CUSTOMER-CONFIRMATION (tests/test_i1_customer_confirm.py): a couple of customers, each with their own key, as a signed customer registry would hold them
         self.customers = {"alice-123": SigningKey.generate(), "bob-456": SigningKey.generate()}
         self.evaluator = SigningKey.generate()           # signs that a model passed its evaluations
         self.licensor = SigningKey.generate()            # signs compute licenses
@@ -444,7 +444,7 @@ class Rack:
         return g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))
 
     def customer_registry_list(self, expires_in_s: float = 86400.0, version: int = 0, entries: list | None = None) -> dict:
-        """I1: the signed account -> customer-key registry the payer-confirm rule names. ``entries`` replaces the
+        """EXPERIMENT-CUSTOMER-CONFIRMATION: the signed account -> customer-key registry the payer-confirm rule names. ``entries`` replaces the
         default list, so a test can install a wrong one."""
         entries = entries if entries is not None else [{"account": acct, "key": k.public.hex} for acct, k in self.customers.items()]
         return self.governance[0].sign({"type": "list", "list_id": "customer-registry", "entries": entries, "version": version,

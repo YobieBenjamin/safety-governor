@@ -79,7 +79,7 @@ def make_rule(rule_id: str, action: str, *, measurement: str = "*", constraints:
                         "allowed_hazard_classes": list(allowed_hazard_classes if allowed_hazard_classes is not None else ["none"]),
                         "min_legibility": min_legibility, "on_hazard": on_hazard, "on_illegible": on_illegible},
         "rate": rate, "budget": budget, "endpoint": endpoint, "delay_s": delay_s,
-        "payer_confirm": payer_confirm,   # I1: {"registry": <list id>, "account_param": <param naming the paying account>}
+        "payer_confirm": payer_confirm,   # EXPERIMENT-CUSTOMER-CONFIRMATION: {"registry": <list id>, "account_param": <param naming the paying account>}
         "beneficiary": beneficiary,       # F04: {"registry": <list id>, "param": <param naming the payee>}; a payee not on the current signed registry is a hold
         "inputs": inputs or [],              # the register rows this rule relies on
         "output_budget": output_budget,      # {"queries": n, "bytes": n, "window_s": s}

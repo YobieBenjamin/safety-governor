@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""Experiment A1: an agent that adds roads. Does the rulebook let a chain of auto-approved actions reach an effector?
+"""EXPERIMENT-ROAD-REACHABILITY: an agent that adds roads. Does the rulebook let a chain of auto-approved actions reach an effector?
 
     python -m govsim.road_reachability            # the audit
     python -m govsim.road_reachability --write     # also results/road-reachability.md

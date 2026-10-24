@@ -38,12 +38,12 @@ cross-checks the smallest instance by brute force, and asserts the consequences:
       assumption 2 alone, which only promises k disjoint paths per source-target pair.
   K5  Only the irreversible effectors need to be in the separator; reversible ones can be left out
       and audited afterwards, and the separator shrinks to their controllers.
-  K6  The two-hub counterexample: twelve sources reaching ten targets through two shared hubs have
+  INVARIANT-TWO-HUB-NO-KILL  The two-hub counterexample: twelve sources reaching ten targets through two shared hubs have
       two vertex-disjoint paths per pair, yet a two-vertex separator cuts everything. This is why the
       per-pair connectivity bound (assumption 2) does not by itself bound the whole cut from below,
       and why Claim 2 and Claim 3 both need the aggregate-connectivity assumption. The corrected
       Claim 2 excludes this graph: its two sides carry only two disjoint paths, below min(|S|, |T|).
-  K7  A single shared controller does the same with one vertex, the sharpest form of K6.
+  INVARIANT-SHARED-CONTROLLER-NO-KILL  A single shared controller does the same with one vertex, the sharpest form of INVARIANT-TWO-HUB-NO-KILL.
 
 What this is not: a statement about the real Internet's exact connectivity (it has regional
 chokepoints and it has been switched off in countries; it has never been switched off everywhere,
@@ -337,7 +337,7 @@ def main() -> int:
     report("K5", r_flow == len(irreversible) and r_cut == {f"e{a[1:]}" for a in irreversible},
            f"gating only the {len(irreversible)} irreversible effectors needs {r_flow} vertices, their own controllers; the reversible ones are audited instead")
 
-    # K6: the two-hub counterexample. This is why Claim 2 cannot read the per-pair bound as a claim about
+    # INVARIANT-TWO-HUB-NO-KILL: the two-hub counterexample. This is why Claim 2 cannot read the per-pair bound as a claim about
     # the whole cut, and why both Claim 2 and Claim 3 need the aggregate-connectivity assumption, not
     # pairwise k. Twelve sources reach ten targets through two shared hubs: every pair has two
     # vertex-disjoint paths (pairwise k = 2), yet two vertices separate everything, far under the
@@ -351,7 +351,7 @@ def main() -> int:
            f"{len(th_S)} sources from all {len(th_T)} targets, under min(|S|,|T|)={min(len(th_S), len(th_T))}: the per-pair bound does not imply a large cut, "
            f"and the corrected Claim 2 excludes this graph because its sides carry only {th_agg} disjoint paths")
 
-    # K7: a single shared controller, the same lesson sharpened to one vertex.
+    # INVARIANT-SHARED-CONTROLLER-NO-KILL: a single shared controller, the same lesson sharpened to one vertex.
     sc, sc_S, sc_T = build_two_hub(n_sources=12, n_targets=10, n_hubs=1)
     sc_pair, _ = min_vertex_cut(sc, {"m0"}, {"e0"}, protected=sc_S | sc_T)
     sc_agg, sc_cut = min_vertex_cut(sc, sc_S, sc_T, protected=sc_S | sc_T)

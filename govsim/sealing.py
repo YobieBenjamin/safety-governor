@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""The origin gate's cryptography: weights sealed to governed hardware (docs/18 question 20, issue W1).
+"""The origin gate's cryptography: weights sealed to governed hardware (docs/18 question 20, issue EXPERIMENT-ORIGIN-GATE).
 
 The problem: a model's weights should run only on a GPU the governor has verified, and only while the
 signed rulebook still lists the model.

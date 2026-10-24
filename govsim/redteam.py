@@ -131,21 +131,21 @@ def a_unlisted_beneficiary(r, node):      # F04
     return not try_effect(r, node, res, params), {"request_ok": res.get("ok"), "why": res.get("why"), "cause": res.get("cause")}
 
 
-def a_no_payer_consent(r, node):          # F05 / I1
+def a_no_payer_consent(r, node):          # F05 / EXPERIMENT-CUSTOMER-CONFIRMATION
     """F05: a payment with no payer confirmation at all. It must not proceed."""
     res, params = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, None)
     return not try_effect(r, node, res, params), {"request_ok": res.get("ok"), "why": res.get("why")}
 
 
-def a_wrong_key_consent(r, node):         # I1: the classifier's key cannot stand in for the payer
-    """I1: a payer confirmation signed by a key that belongs to no customer. That key must not stand in for the
+def a_wrong_key_consent(r, node):         # EXPERIMENT-CUSTOMER-CONFIRMATION: the classifier's key cannot stand in for the payer
+    """EXPERIMENT-CUSTOMER-CONFIRMATION: a payer confirmation signed by a key that belongs to no customer. That key must not stand in for the
     payer, so the payment must not proceed."""
     res, params = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, "__not_a_customer__")
     return not try_effect(r, node, res, params), {"request_ok": res.get("ok"), "why": res.get("why")}
 
 
-def a_another_customers_consent(r, node): # I1: bob cannot confirm alice's wire
-    """I1: a payer confirmation signed by another customer's key (bob, for alice's account). It must not count, so
+def a_another_customers_consent(r, node): # EXPERIMENT-CUSTOMER-CONFIRMATION: bob cannot confirm alice's wire
+    """EXPERIMENT-CUSTOMER-CONFIRMATION: a payer confirmation signed by another customer's key (bob, for alice's account). It must not count, so
     the payment must not proceed."""
     res, params = submit_payment(r, node, 100, LISTED_PAYEE, LISTED_PAYER, "bob-456")
     return not try_effect(r, node, res, params), {"request_ok": res.get("ok"), "why": res.get("why")}

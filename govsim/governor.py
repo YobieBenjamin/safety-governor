@@ -326,7 +326,7 @@ class Governor:
             self.holds.clear()          # a hold carries the epoch that parked it; the new rules re-decide
             if self.workload:
                 # the fingerprint names the edition, so every workload token minted under the old one dies
-                # here; the host presents its manifest again and the new rules decide (gap G5, a workload token survived a rulebook change; closed 22 October 2026)
+                # here; the host presents its manifest again and the new rules decide (gap GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE, a workload token survived a rulebook change; closed 22 October 2026)
                 self.fingerprint = digest([self.workload, self.epoch])
         # the origin gate: an edition that no longer lists a model takes its key back now (the lease bound is the
         # guarantee; this is the fast path when the governor can still reach the GPU)
@@ -434,7 +434,7 @@ class Governor:
             return {}
         else:
             hexes = []
-        revoked = set(p.get("revocations", []))         # a revoked key counts for nothing, in any role (gap G1, revocations were stored but not enforced; closed 22 October 2026)
+        revoked = set(p.get("revocations", []))         # a revoked key counts for nothing, in any role (gap GAP-REVOCATIONS-UNENFORCED, revocations were stored but not enforced; closed 22 October 2026)
         keys = {VerifyKey.from_hex(h).key_id: VerifyKey.from_hex(h) for h in hexes}
         return {kid: k for kid, k in keys.items() if kid not in revoked}
 
@@ -868,7 +868,7 @@ class Governor:
                 return self._deny("request", why, request_hash=rhash)
             if verdict_mode == "hold":
                 req_mode, hold_cause = "human", why
-        # I1/F05: the payer's own confirmation is a SEPARATE conjunctive predicate. It is required whatever the rule's
+        # EXPERIMENT-CUSTOMER-CONFIRMATION/F05: the payer's own confirmation is a SEPARATE conjunctive predicate. It is required whatever the rule's
         # lane, human lanes included, so turning on operator approval can never turn off payer consent. The agent
         # cannot sign for the customer: the only key that counts is the one the signed customer registry lists for the
         # paying account. The confirmation commitment is kept with any hold and revalidated at release (_cmd_approve).
@@ -929,7 +929,7 @@ class Governor:
             key = f"hazard|{session}"
             hazardous = verdict is not None and verdict["hazard_class"] != "none"
             # one budget per session, whichever chip answers: it is counted at the policy's hazard owner, the
-            # way a shared payment budget is (gap G3, the hazard budget counted per governor; closed 22 October 2026)
+            # way a shared payment budget is (gap GAP-HAZARD-BUDGET-PER-GOVERNOR, the hazard budget counted per governor; closed 22 October 2026)
             count = self._hazard_count(key, hazardous, hb["window_s"], now)
             if count is None:
                 self.log.append("release.hazard_owner_unreachable", {"session": session, "response_id": response_id})
@@ -996,7 +996,7 @@ class Governor:
         return False, reasons.GATE_WITNESS_MISSING
 
     def _payer_confirmed(self, rule: dict, params: dict, rhash: str, witnesses: list[dict], now: float) -> tuple[bool, str, dict | None]:
-        """I1/F05: a confirmation signed by the key the signed customer registry lists for the paying account, over
+        """EXPERIMENT-CUSTOMER-CONFIRMATION/F05: a confirmation signed by the key the signed customer registry lists for the paying account, over
         THIS request, unexpired. No observer key, no other customer, no stale or replayed confirmation counts. On
         success returns the consent commitment, so a human-lane hold can keep it and have it revalidated before the
         ticket is minted (``_revalidate_payer``). The registry is read through the use-time view (F06)."""
@@ -1489,7 +1489,7 @@ class Governor:
         peer, kind, direction = p.get("peer"), p.get("point"), p.get("direction", "both")
         if self.policy.get("sandbox") and peer != "host":
             # the same rule open_ports_for_roster applies: a model organism gets no peer path and no network
-            # flow, asked for or not (gap G2, CAP_REQUEST ignored the sandbox flag; closed 22 October 2026)
+            # flow, asked for or not (gap GAP-SANDBOX-FLAG-IGNORED, CAP_REQUEST ignored the sandbox flag; closed 22 October 2026)
             return self._deny("cap_request", reasons.EP_SANDBOXED, peer=peer, point=kind)
         if peer == "host":
             if kind != "pcie" or direction != "both":

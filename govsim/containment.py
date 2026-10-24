@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""Experiment P3b: the containment rate. How little can leave a governed rack under the tightest serviceable policy.
+"""EXPERIMENT-CONTAINMENT: the containment rate. How little can leave a governed rack under the tightest serviceable policy.
 
     python -m govsim.containment            # the ceiling, measured, and what it means for exfiltration
     python -m govsim.containment --write     # also results/containment.md
@@ -184,7 +184,7 @@ def egress_ceiling(output_bytes: int, output_queries: int, unpresented_bytes: in
 
 def exfil_time(sustained_per_hour: float) -> dict:
     """How long to move each set of weights at the SUSTAINED ceiling (the one-time burst is irrelevant to a model
-    far larger than it). Sealed weights (W1) are ciphertext without the key, so this is the time to move a USELESS
+    far larger than it). Sealed weights (EXPERIMENT-ORIGIN-GATE) are ciphertext without the key, so this is the time to move a USELESS
     copy; it is the plaintext case that the ceiling has to make impractical."""
     years = {}
     for name, size in WEIGHTS.items():
