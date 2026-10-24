@@ -1,6 +1,6 @@
 # Sweep report
 
-Generated 2026-10-13 22:50 UTC by `govsim sweep`.
+Generated 2026-10-24 00:05 UTC by `govsim sweep`.
 
 `pass`: the hypothesis held. `gap`: it failed exactly as the design predicts for that tier (the recorded residual). `FAIL`: it failed in a way the design does not predict.
 
@@ -36,6 +36,17 @@ A model, not a measurement: operation counts from the functional model priced wi
 | rack | 100,000 | 5.2 ms | 50.0 s | 0.010 % | 54 % | 34 % | 67 ms |
 | integrated | 100,000 | 5.2 ms | 50.0 s | 0.010 % | 54 % | 34 % | 67 ms |
 | rack, 100-token responses | 20,000 | 5.2 ms | 10.0 s | 0.052 % | 272 % (cannot keep up) | 34 % | 67 ms |
+
+## Full request-to-effect path (F23)
+
+The table above prices only the batched provenance records. The real path also requests a release ticket for every response, and the governor signs every ticket. Those per-response release tickets are per-item capabilities: each independently authorises one response to leave, so they cannot be collapsed under one Merkle root the way the records can, and they must be priced too. Below, the records-only figure is the 34 percent above; the full-path figure adds the release-ticket signatures.
+
+| Response size | Records only | Full path (incl. release tickets) |
+|---|---|---|
+| 500-token responses | 34 % | 88 % |
+| 100-token responses | 34 % | 306 % (over one engine) |
+
+At 100-token responses the honest engine load is well over one engine, not 34 percent. The release-ticket signatures are not hidden. The implication, stated plainly: at small response sizes a single OTBN-class engine cannot keep up, and the design needs faster signing hardware, verifiable batch authorisation with atomic per-item consumption, or a keyed endpoint MAC for the release tickets. The 34 percent figure holds only for the records, and only the records were ever batched.
 
 ## What the gaps mean
 

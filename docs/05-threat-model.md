@@ -69,6 +69,7 @@ it is the list the assumptions register and the human layers exist for.
 | A policy that is wrong | Policy review, formal checking, and the humans who sign it |
 | Fab-level compromise, a leaked vendor key | Supply-chain controls, public logs of firmware hashes, key diversity |
 | The operator who holds the quorum and uses it badly | Governance design, not hardware |
+| One organization holding a quorum of keys and signing a change that loosens a protected rule | Counting keys is not independence; the optional across-class quorum (`govsim/policy.py`, F26) rejects a change that does not span distinct principal classes, but the enrolment, custody and recourse obligations that make it mean anything are governance, named in `docs/18` section 8c |
 | Availability: a heartbeat too aggressive, a safe move badly chosen | The safe-mode policy and the measurement program |
 
 In plain words: the governor makes sure nobody gets past the gate without a ticket, and that

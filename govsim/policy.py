@@ -14,7 +14,7 @@ import copy
 from typing import Any, Iterable
 
 from . import reasons
-from .crypto import SigningKey, VerifyKey, digest, finite_number, verify_object
+from .crypto import SigningKey, VerifyKey, canonical, digest, finite_number, verify_object
 
 # Buffer classes at the integrated tier, and where each class may go through the copy engines
 # and the peer MMU. Scopes: "none" (never leaves the GPU), "roster" (roster peers only), "host"
@@ -79,10 +79,18 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
                 audit: dict | None = None, streams_required: list[str] | None = None,
                 eval_keys: list[VerifyKey] | None = None, deployment_gate: bool = False,
                 compute_budget: dict | None = None, sandbox: bool = False, authority_keys: list[VerifyKey] | None = None,
-                sealed_models: list[str] | None = None, key_lease_s: float = 60.0) -> dict:
+                sealed_models: list[str] | None = None, key_lease_s: float = 60.0,
+                governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0) -> dict:
     return {
         "version": version, "issued_at": issued_at, "expires_at": expires_at,
         "governance_keys": [k.hex for k in governance_keys], "threshold": threshold,
+        # F26: optional quorum across enrolled principal CLASSES. governance_classes maps a governance key's
+        # hex to the class (the organisation or role) that holds it; governance_class_quorum is how many
+        # DISTINCT classes the signers of a change must span. 0 means the check is off and behaviour is the
+        # bare key count as before. When on, several keys of ONE class no longer suffice: counting keys is not
+        # independence.
+        "governance_classes": dict(governance_classes or {}),
+        "governance_class_quorum": int(governance_class_quorum),
         "approver_keys": {rid: [k.hex for k in ks] for rid, ks in approver_keys.items()},
         "heartbeat_key": heartbeat_key.hex,
         "authority_keys": [k.hex for k in (authority_keys or [])],          # HALT and CLEAR; a different key from the heartbeat's, so a key that only says "alive" can never say "stop" or "go"
@@ -165,6 +173,19 @@ def verify_policy(image: dict, governance_hashes: list[str] | None = None, min_t
                     good.add(k.key_id)
         if len(good) < required:
             return False, reasons.POLICY_QUORUM
+        # F26: optional quorum across enrolled principal classes. The requirement in force governs this change,
+        # so it comes from the trusted record when there is one (the image cannot relax its own class rule, the
+        # same discipline as the threshold), and from the image only on the first rulebook. When on, the valid
+        # signers must span at least that many DISTINCT classes: several keys of one class are one class, so an
+        # org holding three of five keys cannot sign a change alone. Off by default (quorum 0): behaviour is the
+        # bare key count as before.
+        src = trusted if trusted is not None else image
+        class_quorum = int(src.get("governance_class_quorum") or 0)
+        if class_quorum > 0:
+            class_of = {VerifyKey.from_hex(h).key_id: cls for h, cls in (src.get("governance_classes") or {}).items()}
+            classes_present = {class_of[kid] for kid in good if kid in class_of}
+            if len(classes_present) < class_quorum:
+                return False, reasons.POLICY_CLASS_QUORUM
         return True, reasons.OK
     except (KeyError, TypeError, ValueError):
         return False, reasons.POLICY_QUORUM
@@ -250,6 +271,17 @@ def check_constraints(rule: dict, params: dict, lists: dict[str, Any]) -> tuple[
             return False, f"{reasons.GATE_CONSTRAINT}.{name}.above_max"
         if "in" in c and v not in c["in"]:
             return False, f"{reasons.GATE_CONSTRAINT}.{name}.not_allowed"
+        if "max_bytes" in c:
+            # F12: a byte ceiling on a free-form parameter (a message body, a payload). The externally
+            # observable size is the canonical serialization, the same bytes that would be signed and
+            # that leave through the channel. Without this a listed-recipient message.send carries an
+            # arbitrary body, so the permitted channel has no finite byte ceiling.
+            try:
+                n = len(canonical(v))
+            except (TypeError, ValueError):
+                return False, f"{reasons.GATE_CONSTRAINT}.{name}.not_serializable"
+            if n > c["max_bytes"]:
+                return False, f"{reasons.GATE_CONSTRAINT}.{name}.above_max_bytes"
         if "not_in_list" in c:
             lst = lists.get(c["not_in_list"])
             if lst is None or lst.get("stale"):

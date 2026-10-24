@@ -14,20 +14,20 @@
 
 | Finding | Reproducer | What the RTL or model did |
 |---|---|---|
-| F-01 | `test_diff_finding_replayed_request_while_not_running` | assert: REQUEST seq=2 (last 2) [replayed/low seq, not running]: RTL status 4 (bad sequence), model mailbox.governor_not_running (tests_differential.py:265) |
-| F-01 | `test_diff_finding_stale_request_while_not_running` | assert: REQUEST seq=1 (last 0) [stale epoch, not running]: RTL status 5 (bad epoch), model mailbox.governor_not_running (tests_differential.py:265) |
-| F-02 | `test_diff_finding_first_sequence_number_zero` | assert: HALT seq=0 (last 0) [replayed/low seq]: RTL status 4 (bad sequence), model ok (tests_differential.py:265) |
-| F-03 | `test_diff_finding_replayed_forged_heartbeat` | assert: HEARTBEAT seq=4 (last 4) [replayed/low seq, bad signature]: RTL status 4 (bad sequence), model heartbeat.bad_signature (tests_differential.py:265) |
-| F-03 | `test_diff_finding_heartbeat_signed_as_something_else` | assert: HEARTBEAT seq=1 (last 0) [signed for another command]: RTL status 7 (wrong command), model heartbeat.bad_signature (tests_differential.py:265) |
-| F-04 | `test_model_finding_clear_collapses_reasons` | assert: clear.unauthorized (tests_differential.py:432) |
-| F-06 | `test_finding_core_reports_test_lifecycle_before_fuse_load` | assert: LIFECYCLE reads 0 and debug_grant is 0 (tests_findings.py:134) |
-| F-08 | `test_finding_heartbeat_expires_on_time` | assert: heartbeat still live after 2,001 us; HB_REMAIN = 1 (tests_findings.py:261) |
-| F-09 | `test_finding_cap_refuses_at_zero_budget` | assert: zero budget, zero-byte lookup allowed (reason 0) (tests_findings.py:299) |
-| F-10 | `test_finding_cap_reprogramming_a_key_replaces_it` | assert: a 500-byte lookup passed after the capability was reprogrammed to 10 bytes (tests_findings.py:319) |
-| F-10 | `test_finding_cap_rederived_after_epoch_switch_is_usable` | assert: re-derived capability refused (reason 3): the stale entry shadows it (tests_findings.py:547) |
-| F-13 | `test_finding_mailbox_sequence_never_moves_backwards` | assert: last accepted sequence moved back to 3 (tests_findings.py:450) |
-| F-14 | `test_finding_spec_status_table_lists_status_7` | assert: register map row: / 0x104 / `MBOX_STATUS` / RO / 8 / 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused / (tests_findings.py:460) |
-| F-15 | `test_finding_loop_lost_in_halt_sets_switch_open` | assert: loop_lost in HALT did not set switch_open (tests_findings.py:241) |
+| F-01 | `test_diff_finding_replayed_request_while_not_running` | assert: REQUEST seq=2 (last 2) [replayed/low seq, not running]: RTL status 4 (bad sequence), model mailbox.governor_not_running (tests_differential.py:267) |
+| F-01 | `test_diff_finding_stale_request_while_not_running` | assert: REQUEST seq=1 (last 0) [stale epoch, not running]: RTL status 5 (bad epoch), model mailbox.governor_not_running (tests_differential.py:267) |
+| F-02 | `test_diff_finding_first_sequence_number_zero` | assert: HALT seq=0 (last 0) [replayed/low seq]: RTL status 4 (bad sequence), model ok (tests_differential.py:267) |
+| F-03 | `test_diff_finding_replayed_forged_heartbeat` | assert: HEARTBEAT seq=4 (last 4) [replayed/low seq, bad signature]: RTL status 4 (bad sequence), model heartbeat.bad_signature (tests_differential.py:267) |
+| F-03 | `test_diff_finding_heartbeat_signed_as_something_else` | assert: HEARTBEAT seq=1 (last 0) [signed for another command]: RTL status 7 (wrong command), model heartbeat.bad_signature (tests_differential.py:267) |
+| F-04 | `test_model_finding_clear_collapses_reasons` | assert: clear.unauthorized (tests_differential.py:434) |
+| F-06 | `test_finding_core_reports_test_lifecycle_before_fuse_load` | assert: LIFECYCLE reads 0 and debug_grant is 0 (tests_findings.py:136) |
+| F-08 | `test_finding_heartbeat_expires_on_time` | assert: heartbeat still live after 2,001 us; HB_REMAIN = 1 (tests_findings.py:263) |
+| F-09 | `test_finding_cap_refuses_at_zero_budget` | assert: zero budget, zero-byte lookup allowed (reason 0) (tests_findings.py:301) |
+| F-10 | `test_finding_cap_reprogramming_a_key_replaces_it` | assert: a 500-byte lookup passed after the capability was reprogrammed to 10 bytes (tests_findings.py:321) |
+| F-10 | `test_finding_cap_rederived_after_epoch_switch_is_usable` | assert: re-derived capability refused (reason 3): the stale entry shadows it (tests_findings.py:549) |
+| F-13 | `test_finding_mailbox_sequence_never_moves_backwards` | assert: last accepted sequence moved back to 3 (tests_findings.py:452) |
+| F-14 | `test_finding_spec_status_table_lists_status_7` | assert: register map row: / 0x104 / `MBOX_STATUS` / RO / 8 / 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused / (tests_findings.py:462) |
+| F-15 | `test_finding_loop_lost_in_halt_sets_switch_open` | assert: loop_lost in HALT did not set switch_open (tests_findings.py:243) |
 
 First example of each mailbox disagreement class in the random run:
 
@@ -243,7 +243,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_cap_both_admits_in_and_out` | R-021 | pass | 0.0 |
 | `test_cap_lookup_decrements_by_bytes` | R-015 | pass | 0.0 |
 | `test_cap_refuses_more_than_remaining_budget` | R-016, R-020 | pass | 0.0 |
-| `test_cap_budget_never_underflows_random` | R-020 | pass | 0.1 |
+| `test_cap_budget_never_underflows_random` | R-020 | pass | 0.2 |
 | `test_cap_refuses_at_expiry_and_drops_entry` | R-017 | pass | 0.0 |
 | `test_cap_refuses_on_epoch_tag_mismatch` | R-018, R-093 | pass | 0.0 |
 | `test_cap_insert_needs_mac` | R-019 | pass | 0.0 |
@@ -256,13 +256,13 @@ First example of each mailbox disagreement class in the random run:
 | `test_ticket_seen_after_burn` | R-027, R-028 | pass | 0.0 |
 | `test_ticket_second_burn_of_same_id_refused` | R-027 | pass | 0.0 |
 | `test_ticket_full_store_refuses_burn_and_flags` | R-027 | pass | 0.0 |
-| `test_ticket_never_admitted_twice_random` | R-027 | pass | 0.1 |
+| `test_ticket_never_admitted_twice_random` | R-027 | pass | 0.0 |
 | `test_hb_expired_at_reset` | R-029 | pass | 0.0 |
 | `test_hb_expires_on_the_window_th_tick` | R-029 | pass | 0.0 |
 | `test_hb_reload_only_on_valid` | R-030 | pass | 0.0 |
 | `test_hb_valid_wins_over_tick` | R-030 | pass | 0.0 |
 | `test_core_hb_remain_csr` | R-031 | pass | 0.1 |
-| `test_core_timers_ignore_the_raw_microsecond_tick` | R-032 | pass | 0.2 |
+| `test_core_timers_ignore_the_raw_microsecond_tick` | R-032 | pass | 0.1 |
 | `test_halt_loop_lost_from_run` | R-034, R-038 | pass | 0.0 |
 | `test_halt_loop_lost_from_throttle` | R-034, R-038 | pass | 0.0 |
 | `test_halt_hb_expired_throttles` | R-034 | pass | 0.0 |
@@ -271,11 +271,11 @@ First example of each mailbox disagreement class in the random run:
 | `test_halt_cmd_halt_from_run` | R-034, R-038 | pass | 0.0 |
 | `test_halt_cmd_halt_from_throttle` | R-034, R-038 | pass | 0.0 |
 | `test_halt_tamper_from_run` | R-034, R-038, R-042 | pass | 0.0 |
-| `test_halt_tamper_from_every_rung` | R-034, R-038, R-042 | pass | 0.1 |
+| `test_halt_tamper_from_every_rung` | R-034, R-038, R-042 | pass | 0.0 |
 | `test_halt_throttle_escalates_after_t_throttle_ticks` | R-034, R-041 | pass | 0.0 |
 | `test_halt_halt_escalates_after_t_halt_ticks` | R-034, R-041 | pass | 0.0 |
 | `test_core_default_timers_are_30s_and_300s` | R-041 | pass | 0.0 |
-| `test_halt_never_descends_without_clear_random` | R-035 | pass | 0.7 |
+| `test_halt_never_descends_without_clear_random` | R-035 | pass | 0.6 |
 | `test_halt_safe_is_absorbing_without_clear` | R-035 | pass | 0.0 |
 | `test_halt_levers_follow_every_rung` | R-036 | pass | 0.0 |
 | `test_halt_ports_closed_outside_run` | R-036 | pass | 0.0 |
@@ -311,7 +311,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_mbox_refused_when_not_running` | R-061 | pass | 0.0 |
 | `test_mbox_status_codes_match_the_register_map` | R-061 | pass | 0.0 |
 | `test_mbox_failed_frames_do_not_consume_sequence` | R-062, R-054 | pass | 0.0 |
-| `test_mbox_no_dispatch_without_all_checks_random` | R-062 | pass | 0.6 |
+| `test_mbox_no_dispatch_without_all_checks_random` | R-062 | pass | 0.7 |
 | `test_core_mbox_status_and_seq_csrs` | R-060, R-061 | pass | 0.1 |
 | `test_core_has_no_csr_write_port` | R-064, R-065 | pass | 0.0 |
 | `test_core_csr_reads_have_no_side_effects` | R-064, R-065 | pass | 0.1 |
@@ -326,7 +326,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_meter_frozen_slot_stays_put_without_strobes` | R-091, R-052 | pass | 0.0 |
 | `test_core_epoch_switch_kills_every_old_capability` | R-093, R-009, R-087 | pass | 0.1 |
 | `test_mbox_self_authenticating_command_rides_on_the_firmware_verdict` | R-082, R-055 | pass | 0.0 |
-| `test_diff_mailbox_random_frames_only_known_disagreements` | R-058, R-054, R-055, R-056, R-057, R-061, R-063 | pass | 2.3 |
+| `test_diff_mailbox_random_frames_only_known_disagreements` | R-058, R-054, R-055, R-056, R-057, R-061, R-063 | pass | 2.5 |
 | `test_diff_spec_good_halt` | R-058, R-059 | pass | 0.0 |
 | `test_diff_spec_replayed_halt` | R-058, R-054 | pass | 0.0 |
 | `test_diff_spec_halt_with_stale_epoch_is_exempt` | R-058, R-055, R-080 | pass | 0.0 |
@@ -365,13 +365,13 @@ First example of each mailbox disagreement class in the random run:
 | `test_cmd_halt_in_throttle_from_local_cause_opens_loop` | R-038 | pass | 0.0 |
 | `test_finding_loop_lost_in_halt_sets_switch_open` | R-038 | reproduces F-15 | 0.0 |
 | `test_finding_heartbeat_expires_on_time` | R-032, R-029, R-031 | reproduces F-08 | 0.3 |
-| `test_core_ms_strobe_is_derived_from_the_counter` | R-032 | pass | 0.5 |
+| `test_core_ms_strobe_is_derived_from_the_counter` | R-032 | pass | 0.6 |
 | `test_finding_cap_refuses_at_zero_budget` | R-016 | reproduces F-09 | 0.0 |
 | `test_finding_cap_reprogramming_a_key_replaces_it` | R-014, R-015 | reproduces F-10 | 0.0 |
 | `test_model_switch_replaces_on_reprogram` | R-014, R-015 | pass | 0.0 |
 | `test_diff_cap_table_random_against_model_switch` | R-014, R-015, R-016, R-017, R-018, R-020, R-021 | pass | 0.5 |
 | `test_finding_meter_counter_wraps_at_48_bits` | R-052 | pass | 0.0 |
-| `test_finding_mono_wraps_from_an_all_ones_high_water_mark` | R-002, R-003 | pass | 0.1 |
+| `test_finding_mono_wraps_from_an_all_ones_high_water_mark` | R-002, R-003 | pass | 0.0 |
 | `test_finding_mailbox_sequence_never_moves_backwards` | R-062, R-054 | reproduces F-13 | 0.0 |
 | `test_finding_spec_status_table_lists_status_7` | R-061, R-063 | reproduces F-14 | 0.0 |
 | `test_diff_levers_per_rung_rtl_equals_model` | R-036 | pass | 0.0 |

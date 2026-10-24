@@ -141,6 +141,16 @@ def write(path: str, seed: str, dirs: list[str]) -> int:
         L.append(f"- Bench bitstream: `build/{os.path.basename(c['dir'])}/{os.path.basename(c['bit'])}` at {c['mhz']} MHz. "
                  "The governor's timers run on a 1 us tick divided from whatever the clock is, so the heartbeat, "
                  "throttle, halt and loop-sense timings are the same at any of these clocks.")
+        mpath = os.path.join(c["dir"], "manifest.json")
+        if os.path.exists(mpath):
+            try:
+                m = json.load(open(mpath, encoding="utf-8"))
+                bit = m.get("bitstream") or {}
+                L.append(f"- Build manifest (`{os.path.basename(c['dir'])}/manifest.json`): fail-closed, source_rev "
+                         f"`{m.get('source_rev', '')[:16]}`, stages {','.join(m.get('stages', []))}, bitstream sha256 "
+                         f"`{(bit.get('sha256') or '')[:16]}`. The verdict is read from this manifest, not from the bitstream's presence.")
+            except (ValueError, OSError):
+                pass
     else:
         L.append("- No timing-clean bitstream.")
     L += ["", "## Utilisation", "", "After synthesis (yosys `synth_ecp5`) and after place and route (nextpnr), "

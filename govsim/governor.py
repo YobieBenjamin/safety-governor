@@ -258,8 +258,12 @@ class Governor:
         self.policy = image
         self._epoch = policy_epoch(image)
         self.fuses.bump_policy(image["version"])
-        # this edition's keys and k now authorize the next change (rotation included); never below the fused floor
-        self.fuses.record_governance(image["governance_keys"], int(image["threshold"]), self._epoch)
+        # this edition's keys and k now authorize the next change (rotation included); never below the fused floor.
+        # F26: the across-class quorum and the key->class enrolment travel with it, so the rule in force governs
+        # the next change too.
+        self.fuses.record_governance(image["governance_keys"], int(image["threshold"]), self._epoch,
+                                     classes=image.get("governance_classes"),
+                                     class_quorum=int(image.get("governance_class_quorum") or 0))
         self.store.data["policy_image"] = image
         if not self.epoch_history or self.epoch_history[-1] != self._epoch:
             self.epoch_history.append(self._epoch)        # the compliance report lists every edition this chip ran under

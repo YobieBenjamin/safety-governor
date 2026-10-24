@@ -12,6 +12,7 @@ ATTEST_PATH_OPEN = "attest.unchecked_path_open"
 
 # policy
 POLICY_QUORUM = "policy.quorum_not_met"
+POLICY_CLASS_QUORUM = "policy.class_quorum_not_met"   # F26: signatures did not span enough distinct principal classes
 POLICY_ROLLBACK = "policy.rollback"
 POLICY_REGISTER_INCOMPLETE = "policy.register_incomplete"
 POLICY_EXPIRED = "policy.expired"

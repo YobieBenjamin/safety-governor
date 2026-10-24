@@ -130,6 +130,29 @@ Who pays and who says no:
 
 The hard adoption truths, said once: a chip that nobody wires to anything that acts is a logger; a logger that nobody reads is a heatsink; and the first year of any safety system is spent proving that it does not fire when it should not.
 
+### The false-halt and review economics, as an acceptance envelope (F28)
+
+*Added 24 October 2026, prompted by the external audit. The adoption cost is not one number; it is a set of budgets, and none of them has been measured. They are written here as an envelope a deployment must accept, with the measurement that would discharge each.*
+
+The halt domain is shared, and that is the whole cost. One governor's local false alarm halts its failure domain, and the plan-of-record domain is a 72-GPU rack sharing one loop and one epoch, so a single local false alarm can take 72 GPUs down at once. Worse, for a fixed recovery time the lost GPU-time grows roughly as the square of the domain: a domain twice as wide has twice as many GPUs to lose and, at a per-GPU alarm rate, twice as many alarms to lose them, so the product grows about fourfold. The review side scales the same way on people: a gateway making a million benign decisions a day at a 1 percent false-hold rate parks about 10,000 of them for a human, which at one minute of review each is about 167 staff-hours a day, a day that has only 24. These figures are arithmetic from assumed rates, not measurements; the real rates are exactly what is unmeasured.
+
+So the design states separate acceptance budgets, each a number a deployment must set and then measure against, not a single "overhead":
+
+| Budget | What it bounds | How it would be measured (not yet measured) |
+|---|---|---|
+| False holds per benign decisions | Benign actions parked for a human that should not have been | A staffed gateway pilot counting holds against adjudicated-benign volume |
+| False halts per domain-hour | Halts of a failure domain with no real cause | A rack trial running the loop beacon for weeks with no injected fault |
+| Legitimate denials | Actions correctly refused or held; a cost to the workload even when correct | The same pilot, separating correct denials from false ones |
+| Recovery time per halt | Wall-clock from a halt to a cleared, running domain | The rack trial, timing the clear-and-resume path |
+| Lost useful work | GPU-hours and staff-hours lost to the above, per domain per period | Both trials, combining domain size, alarm rate and recovery time |
+
+Two design obligations follow and are owed:
+
+- **The smallest safe failure domain.** The domain should be the smallest region that is still safe to halt as a unit, so a local false alarm costs the least work, and the recovery process (detect, clear with the authority's signature, resume, with the cause in the log) should be fast and rehearsed. The plan-of-record 72-GPU domain is a ceiling to argue down, not a target; partitioning the loop and the epoch into smaller domains is an open design task tied to question 7 (the multi-tenant rack).
+- **Zero observed is not zero.** A trial that runs for a time and sees no false halt does not establish a zero rate. With no events observed in a window, the honest result is a Poisson upper bound on the rate at a stated confidence (roughly three over the observed domain-hours at 95 percent), never a claim of a zero rate. Any report of these budgets must state the upper bound and the exposure behind it, not a bare "none seen".
+
+Until a rack trial and a staffed gateway pilot produce these numbers (N2 in `docs/20`, question 3 in section 8), the budgets are targets with a model behind them. None of the figures above is a measurement.
+
 > **Backed by.** The meter and the compliance report: `test_compliance_report_is_signed_through_the_device_key_chain_and_reflects_the_meter` and `test_compliance_report_lists_every_epoch_and_survives_a_restart_and_refuses_a_nonce_replay` (`tests/test_h18_oversight.py`). Edition history and rollback refusal: `tests/test_h03_quorum.py`. Verifiable halt: `test_halt_cause_is_broadcast`, `test_power_cycle_does_not_clear_a_halt` (H11). G8 and the acceptance rule: `docs/00-objectives.md`. The false-halt question: `test_healthy_rack_raises_no_loop_alarm_over_twenty_heartbeats` and `test_legitimate_halt_and_clear_is_not_mistaken_for_a_jumper` (H11) in the model; the FMEA in `docs/07-verification-plan.md`; no hardware measurement yet. The adoption order is a judgement.
 
 ## 7. Does it strengthen NVIDIA's safety promise, from the chip's point of view?
@@ -214,6 +237,23 @@ Where each of his four questions stands:
 | Can the affected contest a ticket, or reopen the rules? | **Not designed.** The override and the hold are both for insiders. Question 19, issue G2 | `tests/test_h08_override.py`, `25` |
 
 The two open ones are hypotheses until an experiment says otherwise. Each issue states what would settle it and what would count as failure. In both cases the chip already has the parts: a signed rulebook field, a quorum, a reason code, a timer, the log. The missing piece is the governance decision of who holds which key, written down and then rehearsed in simulation, with the result published whichever way it goes.
+
+### Governance independence and recourse: the obligations the claim rests on (F26)
+
+*Added 24 October 2026, prompted by the external audit. The audit showed a concrete failure: one organization that holds three of five keys can sign a change that loosens a protected rule, and the chip accepts three valid signatures, because counting keys is not independence. A withheld log leaves an affected party no recourse.*
+
+Counting keys is not independence. A k-of-n threshold proves that k private keys signed; it does not prove that k *independent* parties signed. So the mechanism now carries an **optional across-class quorum**: the rulebook may enrol each governance key in a principal class and require a change to be signed by at least so many distinct classes. When it is on, several keys of one class no longer suffice, and the audit's three-of-five-from-one-org change is rejected (`govsim/policy.py` `verify_policy`, `govsim/fuses.py` `record_governance`, reason `policy.class_quorum_not_met`). The default is off, so this is an obligation the deployer must choose, not a silently changed behaviour. The chip enforces the choice; it cannot make the choice.
+
+These are the governance obligations that constrain the public claim. The silicon is only as independent as these are kept, and none of them is proven by the chip:
+
+- **Principal classes and custody.** Name the principal classes (for example chip vendor, operator, an independent auditor, a regulator) and which keys each holds, in custody that is written down and separable, so that no single organization holds a cross-class quorum. Set the across-class quorum to at least two classes for any security-weakening change. Questions 6 and 16 name who and how far apart; this names that the enrolment and the custody must be explicit.
+- **Emergency authority.** State who may act under time pressure, with what reduced quorum if any, for how long, and what record and after-the-fact review that emergency path leaves. An emergency path with no bound and no review is a standing back door.
+- **Rotation.** State how keys are rotated on a schedule and on departure, under the current quorum, without lowering the threshold or the class quorum, and how the enrolment record is updated. The configuration in force authorizes its own replacement, so rotation runs through the same quorum that governs any change.
+- **Compromise recovery.** State how a suspected key compromise is detected, how the compromised key is removed and replaced, and how a change signed with a since-compromised key is identified in the log and contested. Recovery must not require trusting the party that may be compromised.
+- **A challengeable, delayed process for security-weakening updates.** A change that weakens a protected rule (loosening a limit, dropping a witness, lowering a quorum, relaxing the class quorum) must be published, delayed by a stated window before it takes effect, and challengeable within that window by a party outside the signers, so a quorum cannot both weaken the rules and have the weakening take effect the same instant.
+- **Authenticated log access with independent checkpoint retention and a contest process.** An affected party must have an authenticated way to read the log entries that concern them, not only the public integrity checkpoints; the signed checkpoints must be retained by a party independent of the operator so a withheld or truncated log is detectable; and there must be a contest lane (question 19, issue G2) by which an affected party can hold a ticket for a separate quorum. A log the operator can withhold leaves the affected with no recourse, which is a failure of the claim, not a missing feature.
+
+Until these are written down, held and rehearsed, the independence and recourse the design talks about are obligations, not guarantees. The chip makes the signers visible, countable and replaceable; it does not make them independent, and it does not, on its own, give the affected a way in.
 
 ## 8d. The origin gate: no key, no model
 

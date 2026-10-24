@@ -85,6 +85,18 @@ The governor does not read meaning. It demands structure the model cannot produc
 
 This is the most important thing to understand about the theory's standing. By refusing claim S, the design converts an unprovable promise ("the AI will not do harm") into a provable one ("nothing happens that the signed rulebook did not allow, and every refusal is logged") plus a measurable one ("how often do the observers miss"). That conversion is the theory. It is the same move every engineered safety system makes: an interlock does not understand why the press must not close on a hand; it refuses to close while the light curtain is broken.
 
+## 6b. Three claims, kept apart
+
+The one error that would flatter this design is to let the proof of one claim lend its standing to another. So the claims are stated separately here, each scoped to its own evidence, and a machine-checkable copy lives in `govsim/claims.py` (`python3 -c "import govsim.claims as c; c.check()"`).
+
+1. **Structural enforcement. Proven.** Nothing executes without a rule, a stamp and a present witness (claim L, section 2). This is enforcement *of* a verdict, not the *truth* of the verdict. The chip guarantees that a verdict was demanded, came from the right key, and was separate from the thing judged; it does not and cannot guarantee that the verdict was correct. A structurally valid action can still be harmful.
+
+2. **Observer accuracy. Not quantified.** Whether the signed lists and observers actually tell allowed actions from harmful ones is the semantic question (claim S), and it is unmeasured. It needs a frozen evaluation set and per-family error rates, not a pooled headline (YB-0052 to YB-0057 in `EXPERIMENTS.md`; the audit's R2 and R4 are exactly the lesson that a threshold set on the test labels or a pooled false-alarm rate overstates accuracy). Two honest witnesses can share a mistake: their misses correlate through the substrate they share, so a second witness is not a second independent key, and defeating a pair does not require compromising two keys. Witness independence is itself an open measurement (YB-0053).
+
+3. **End-to-end harm reduction. Not established.** That the whole stack lowers real-world harm is neither proven nor measured. Structural enforcement of a wrong verdict still permits the harm the verdict missed; a halt is a structural failure made visible, but the semantic residual is not a halt, not a hold, and does not show up as one. Nothing in sections 2 to 5 upgrades this claim.
+
+A claim may be relied on only at or below its own standing. None of these three is allowed to borrow the standing of another.
+
 ## 7. Claim N: not yet measured
 
 Under one percent overhead is a model's figure, built from OpenTitan's published cycle count for a P-384 signature (17 milliseconds) and a batching scheme (one signature per 50 millisecond window). The false-halt rate has a design (the loop beacon, a two-period debounce, an FMEA) and no measurement. Both numbers decide adoption, and both wait for an FPGA beside a real GPU. Nothing theoretical can replace that.

@@ -68,15 +68,20 @@ class Fuses:
             raise ValueError(reasons.POLICY_ROLLBACK)
         self.policy_version = to
 
-    def record_governance(self, keys: list[str], threshold: int, image_epoch: str) -> None:
+    def record_governance(self, keys: list[str], threshold: int, image_epoch: str,
+                          classes: dict[str, str] | None = None, class_quorum: int = 0) -> None:
         """The chip's protected record of the governance configuration now in force: the keys whose
-        signatures count, the k they must reach, and the edition that set them. The next rulebook is
-        authorized by THIS record, not by anything it carries itself, so the configuration in force
-        authorizes its own replacement, keys and threshold included. The threshold can never be set
-        below the floor fused at manufacture."""
+        signatures count, the k they must reach, the edition that set them, and (F26) the optional
+        across-class quorum, with each key's enrolled principal class. The next rulebook is authorized by
+        THIS record, not by anything it carries itself, so the configuration in force authorizes its own
+        replacement, keys, threshold and class rule included. The threshold can never be set below the floor
+        fused at manufacture."""
         if threshold < max(1, self.governance_threshold):
             raise ValueError(reasons.POLICY_QUORUM)
-        self.trusted_governance = {"keys": list(dict.fromkeys(keys)), "threshold": int(threshold), "image_epoch": image_epoch}
+        self.trusted_governance = {"keys": list(dict.fromkeys(keys)), "threshold": int(threshold),
+                                   "image_epoch": image_epoch,
+                                   "governance_classes": dict(classes or {}),
+                                   "governance_class_quorum": int(class_quorum)}
 
     def bump_governance_threshold(self, to: int) -> None:
         """The manufacture floor. Thermometer-coded like the version counters: it only goes up, and only at

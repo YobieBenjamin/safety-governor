@@ -128,7 +128,9 @@ class Rack:
                           audit: dict | None = None, deployment_gate: bool = False, compute_cycles: int | None = None,
                           sandbox: bool = False, extra_refs: list[dict] | None = None,
                           sealed_models: list[str] | None = None, key_lease_s: float = 60.0,
-                          payer_confirm_payments: bool = False) -> dict:
+                          payer_confirm_payments: bool = False,
+                          message_max_bytes: int | None = None, message_rate: dict | None = None,
+                          governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0) -> dict:
         now = self.clock.now()
         refs = [
             {"device_class": "gpu", "vendor_key": self.gpu_vendor.public.hex, "firmware_digest": GPU_FW, "valid_until": now + 365 * 86400},
@@ -163,7 +165,10 @@ class Rack:
             make_rule("weights.write.any", "weights.write", mode="human", approvers_quorum=2),
             make_rule("compute.extend", "compute.extend", **(human if sandbox else {})),          # carries a compute license
             # an agent acting in the world: each action is its own rule and its own endpoint
-            make_rule("message.send.listed", "message.send", constraints={"recipient": {"in_list": "recipient-registry"}},
+            make_rule("message.send.listed", "message.send",
+                      constraints={"recipient": {"in_list": "recipient-registry"},
+                                   **({"body": {"max_bytes": message_max_bytes}} if message_max_bytes is not None else {})},
+                      rate=message_rate,       # F12: a per-byte bound plus a message rate give the channel a finite byte ceiling
                       endpoint="messaging", inputs=["recipient-registry"], **(human if sandbox else {})),
             make_rule("message.send.any", "message.send", mode="human", approvers_quorum=2, endpoint="messaging"),
             make_rule("shipment.order", "shipment.order", mode="human", approvers_quorum=2, endpoint="fulfilment"),
@@ -207,6 +212,7 @@ class Rack:
             audit=audit, streams_required=streams_required, eval_keys=[self.evaluator.public], deployment_gate=deployment_gate,
             compute_budget={"cycles": compute_cycles, "license_keys": [self.licensor.public.hex]}, sandbox=sandbox,
             sealed_models=sealed_models, key_lease_s=key_lease_s,
+            governance_classes=governance_classes, governance_class_quorum=governance_class_quorum,
         )
 
     def signed_list(self, list_id: str, entries: list, expires_in_s: float = 86400.0, version: int = 0, signer: SigningKey | None = None) -> dict:

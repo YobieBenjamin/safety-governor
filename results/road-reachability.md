@@ -14,7 +14,7 @@ Building a road is itself an action that needs a ticket. This audits a rulebook:
 
 | Rule | Action | Reaches | Mode |
 |---|---|---|---|
-| strike | strike | confined | observer |
+| strike | strike | open | observer |
 | payments.transfer.small | payments.transfer | confined | auto |
 | payments.transfer.large | payments.transfer | open | human |
 | model.output | model.output | internal | auto |
@@ -28,7 +28,7 @@ Building a road is itself an action that needs a ticket. This audits a rulebook:
 | message.send.any | message.send | open | human |
 | shipment.order | shipment.order | open | human |
 
-*internal: no effector. confined: a world action bounded to a signed place (a list, own storage). open: a world action that names no place.*
+*internal: no effector. confined: a world action whose effect lands on a receiver bound to a signed allowlist (a recipient list, a destination `in` the model's own storage, an enforced beneficiary registry) and grants nothing further. open: a world action not so bounded. A denylist complement (`not_in_list`), an enum on an unrelated field (a currency, a product, a munition), and an effect that issues a credential, opens an account, or forwards to another service do not confine: they are open.*
 
 ## What this shows, and what it cannot
 
