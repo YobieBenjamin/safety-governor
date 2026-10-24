@@ -299,6 +299,10 @@ class EgressEndpoint(ActionEndpoint):
             params = {"session": session, "response_id": response_id, "response_hash": item["response_hash"], "stream_hashes": item["stream_hashes"]}
             if digest(params) != want:
                 continue
+            # F32: the bytes held here must still hash to the committed hash the ticket names. A write to the
+            # held buffer that changes the bytes is refused before the ticket is spent or anything leaves.
+            if sha256(item["bytes"]) != item["response_hash"]:
+                return self._refuse(reasons.RELEASE_HASH_MISMATCH)
             ok, why = self.execute(ticket, RELEASE_ACTION, params)
             if ok:
                 self.held.pop((session, response_id))
