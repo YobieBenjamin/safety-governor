@@ -129,7 +129,7 @@ HEARTBEAT_LOST = "halt.heartbeat_lost"
 EPOCH_STRAGGLER = "halt.epoch_straggler"
 TAMPER = "halt.tamper"
 
-# boot: the first heartbeat (Yobie's call 2, 23 October 2026). A chip that never gets its first heartbeat keeps
+# boot: the first heartbeat. A chip that never gets its first heartbeat keeps
 # holding the rack, loudly: the hardware raises NO_FIRST_HEARTBEAT past the boot window (ALARMS bit 31, CAUSE bit 3 in
 # silicon). An authorized EXCLUDE closes its loop switch while its own levers stay on (ALARMS bit 30, CAUSE bit 4).
 NO_FIRST_HEARTBEAT = "boot.no_first_heartbeat"

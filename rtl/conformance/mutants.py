@@ -75,7 +75,7 @@ MUTANTS: list[tuple[str, str, str, str, str]] = [
     ("R-070", "alarms.py",
      "m.d.comb += cleared.eq(self.alarms & ~(self.clear_mask & self.clear_authorized.replicate(len(self.alarms))))",
      "m.d.comb += cleared.eq(self.alarms & ~self.clear_mask)", "test_alarm_clear_needs_authorization"),
-    # Yobie's calls, 23 October 2026
+    # Operator signals, 23 October 2026
     ("R-144", "halt.py", "            m.d.sync += self.switch_open.eq(1)\n        with m.Elif(self.cmd_halt):",
      "            pass\n        with m.Elif(self.cmd_halt):", "test_calls_halt_opens_loop_from_every_rung"),
     ("R-149", "halt.py", "with m.Elif(self.cmd_exclude & (self.state == HALTED_INITIAL) & (self.cause == C_NONE)):",

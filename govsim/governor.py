@@ -57,7 +57,7 @@ BOOT_WINDOW_S = 5.0             # the hardware's boot window (t_boot_ms in rtl/g
 LOOP_OPENING_CAUSES = (reasons.LOOP_OPEN, reasons.LOOP_BROKEN, reasons.TAMPER, reasons.HALT_COMMANDED, reasons.LOOP_JUMPERED)
 # Alarms scoped to one session: they park that session's releases for the human lane and do not block the gate for every request.
 SESSION_SCOPED_ALARMS = {reasons.SESSION_HAZARD_BUDGET}
-# Operator-status alarms (Yobie's call 2): loud and sticky, but they say why a chip is not running, so they do not
+# Operator-status alarms: loud and sticky, but they say why a chip is not running, so they do not
 # park the gate of a chip (or a neighbour) that is running.
 STATUS_ALARMS = {reasons.NO_FIRST_HEARTBEAT, reasons.EXCLUDED}
 
@@ -323,7 +323,7 @@ class Governor:
             self.holds.clear()          # a hold carries the epoch that parked it; the new rules re-decide
             if self.workload:
                 # the fingerprint names the edition, so every workload token minted under the old one dies
-                # here; the host presents its manifest again and the new rules decide (G5, closed 22 October 2026)
+                # here; the host presents its manifest again and the new rules decide (gap G5, a workload token survived a rulebook change; closed 22 October 2026)
                 self.fingerprint = digest([self.workload, self.epoch])
         # the origin gate: an edition that no longer lists a model takes its key back now (the lease bound is the
         # guarantee; this is the fast path when the governor can still reach the GPU)
@@ -423,7 +423,7 @@ class Governor:
             return {}
         else:
             hexes = []
-        revoked = set(p.get("revocations", []))         # a revoked key counts for nothing, in any role (G1, closed 22 October 2026)
+        revoked = set(p.get("revocations", []))         # a revoked key counts for nothing, in any role (gap G1, revocations were stored but not enforced; closed 22 October 2026)
         keys = {VerifyKey.from_hex(h).key_id: VerifyKey.from_hex(h) for h in hexes}
         return {kid: k for kid, k in keys.items() if kid not in revoked}
 
@@ -912,7 +912,7 @@ class Governor:
             key = f"hazard|{session}"
             hazardous = verdict is not None and verdict["hazard_class"] != "none"
             # one budget per session, whichever chip answers: it is counted at the policy's hazard owner, the
-            # way a shared payment budget is (G3, closed 22 October 2026: each chip used to count on its own)
+            # way a shared payment budget is (gap G3, the hazard budget counted per governor; closed 22 October 2026)
             count = self._hazard_count(key, hazardous, hb["window_s"], now)
             if count is None:
                 self.log.append("release.hazard_owner_unreachable", {"session": session, "response_id": response_id})
@@ -1412,7 +1412,7 @@ class Governor:
         peer, kind, direction = p.get("peer"), p.get("point"), p.get("direction", "both")
         if self.policy.get("sandbox") and peer != "host":
             # the same rule open_ports_for_roster applies: a model organism gets no peer path and no network
-            # flow, asked for or not (G2, closed 22 October 2026: CAP_REQUEST used to ignore the flag)
+            # flow, asked for or not (gap G2, CAP_REQUEST ignored the sandbox flag; closed 22 October 2026)
             return self._deny("cap_request", reasons.EP_SANDBOXED, peer=peer, point=kind)
         if peer == "host":
             if kind != "pcie" or direction != "both":
@@ -1511,8 +1511,8 @@ class Governor:
             current = RUNG_ORDER.get(self.state, 0)
             if self.cause is None or RUNG_ORDER[rung] > current or (opens and not self.cause_opens_loop):
                 # never a lower rung than the current one: a HALT to a chip in SAFE opens the loop and leaves it in SAFE
-                # with power off (conformance F-07, closed 23 October 2026; before this the model dropped to HALT and
-                # turned slot power back on)
+                # with power off (Before the fix, the model dropped to HALT and
+                # turned slot power back on.)
                 applied = rung if RUNG_ORDER[rung] >= current or self.state == HALTED_INITIAL else self.state
                 self.cause = cause
                 self.cause_opens_loop = opens or self.cause_opens_loop
@@ -1632,7 +1632,7 @@ class Governor:
                              {"chip_id": self.chip_id, "since": self.boot_at, "boot_window_s": BOOT_WINDOW_S})
 
     def _cmd_exclude(self, body, env):
-        """EXCLUDE (Yobie's call 2, 23 October 2026): the authority's deliberate, logged way past a chip that never
+        """EXCLUDE: the authority's deliberate, logged way past a chip that never
         got its first heartbeat. Same authority class and checks as CLEAR (bound to this chip, expiring, typed, never
         the heartbeat key). Only a chip in HALTED_INITIAL with no cause and no live heartbeat is excluded: its loop
         switch closes so the rest of the rack can run, and its own levers stay on (the state stays HALTED_INITIAL:

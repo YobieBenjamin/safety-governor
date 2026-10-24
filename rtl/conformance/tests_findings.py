@@ -159,7 +159,7 @@ def test_lifecycle_after_load_debug_is_dead():
     sim(dut, tb)
 
 
-# ================================================================ F-07: a signed HALT to a governor already in SAFE
+# ================================================================ a signed HALT to a governor already in SAFE
 async def _safe_by_local_cause(ctx, dut):
     await _to_run(ctx, dut)
     ctx.set(dut.hb_expired, 1)
@@ -172,10 +172,10 @@ async def _safe_by_local_cause(ctx, dut):
     assert ctx.get(dut.state) == SAFE and ctx.get(dut.cause) == C_LOCAL and ctx.get(dut.switch_open) == 0
 
 
-# F-07 closed by Yobie's call 1 (23 October 2026): a HALT opens the loop on every rung. This test passes and guards it.
+# Closed on 23 October 2026: a HALT opens the loop on every rung. This test passes and guards it.
 @conformance("R-038", "R-144")
 def test_finding_cmd_halt_in_safe_opens_the_loop():
-    """F-07 (RTL): a governor that climbed to SAFE on a local cause keeps its loop switch closed (right: local
+    """RTL: a governor that climbed to SAFE on a local cause keeps its loop switch closed (right: local
     causes do not stop the rack). A signed HALT then arrives. The spec: switch_open sets on cmd_halt, and a
     signed HALT is a loop-opening cause that stops the whole domain. The RTL ignores cmd_halt in SAFE."""
     dut = B.HaltSeq(t_throttle=2, t_halt=2)
@@ -189,10 +189,10 @@ def test_finding_cmd_halt_in_safe_opens_the_loop():
     sim(dut, tb)
 
 
-# F-07 closed (model half): enter_safe_mode never applies a lower rung. This test passes and guards it.
+# Closed (model half): enter_safe_mode never applies a lower rung. This test passes and guards it.
 @conformance("R-035", "R-036", "R-145")
 def test_model_finding_halt_in_safe_does_not_descend():
-    """F-07 (model): the same event in govsim moves the governor DOWN from SAFE to HALT and turns slot power back
+    """Model: the same event in govsim moves the governor DOWN from SAFE to HALT and turns slot power back
     on. The spec: the rung never descends without CLEAR; SAFE has PWR_EN low."""
     rack = build_rack(1, "rack")
     rack.bring_up()

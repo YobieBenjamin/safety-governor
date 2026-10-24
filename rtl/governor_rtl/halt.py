@@ -10,7 +10,7 @@ Two design calls by Yobie, 23 October 2026 ("silently failing is a bullshit feat
 1. A HALT opens the loop on every rung, SAFE included. A chip that reached SAFE on a local cause (a lost
    heartbeat) keeps its loop switch closed; a signed HALT to it now opens the switch and records the command as the
    cause (CAUSE reads 4), so the neighbours stop too. The state stays SAFE, which outranks HALT. Tamper keeps its
-   cause. Before this the sequencer ignored ``cmd_halt`` in SAFE (conformance F-07, FINDINGS-b.md F3.3).
+   cause. Before this the sequencer ignored ``cmd_halt`` in SAFE (FINDINGS-b.md).
 2. A chip that never gets its first heartbeat still holds the rack (fail closed), but loudly. ``boot_timer`` counts
    milliseconds in HALTED_INITIAL with no cause while the chip has never been armed since reset (``hb_seen`` low);
    past ``t_boot`` the level ``no_first_hb`` rises (the core makes it the sticky ALARMS bit NO_FIRST_HEARTBEAT and
@@ -78,7 +78,7 @@ class HaltSeq(Elaboratable):
             m.d.sync += [self.state.eq(HALT), self.cause.eq(C_LOOP), self.switch_open.eq(1), self.timer.eq(0)]
         with m.Elif(self.cmd_halt & (self.state == SAFE)):
             # a HALT to a chip already in SAFE: SAFE outranks HALT, so the state stays; the loop opens and the command
-            # is the cause on record, unless the cause is tamper (Yobie's call 1, 23 October 2026)
+            # is the cause on record, unless the cause is tamper 
             with m.If(self.cause != C_TAMPER):
                 m.d.sync += self.cause.eq(C_COMMAND)
             m.d.sync += self.switch_open.eq(1)
@@ -94,7 +94,7 @@ class HaltSeq(Elaboratable):
             with m.If(self.loop_sense & ~self.loop_lost):
                 m.d.sync += self.state.eq(RUN)
         with m.Elif(self.cmd_exclude & (self.state == HALTED_INITIAL) & (self.cause == C_NONE)):
-            # EXCLUDE (Yobie's call 2): no cause and no live heartbeat (a live one armed the chip in the branch above).
+            # EXCLUDE: no cause and no live heartbeat (a live one armed the chip in the branch above).
             # Close our switch so the rest of the rack can run; the state, and so the levers, stay HALTED_INITIAL
             m.d.sync += [self.switch_open.eq(0), self.excluded.eq(1)]
         with m.Elif(self.tick & (self.state == THROTTLE)):

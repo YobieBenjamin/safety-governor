@@ -16,7 +16,7 @@ bits off 1023 and stop every millisecond strobe: the heartbeat never expired and
 with no valid heartbeat. L7 found it (rtl/formal/governor_core.sv, rule G5; FINDINGS-b.md, F2).
 ``ms_shift`` is a parameter only so the proof can run a short millisecond; the chip uses 10.
 
-Operator signals (Yobie's calls, 23 October 2026; docs/04 section 2). ALARMS bit 31 NO_FIRST_HEARTBEAT and bit 30
+Operator signals (docs/04 section 2). ALARMS bit 31 NO_FIRST_HEARTBEAT and bit 30
 EXCLUDED are hardware-owned: the sequencer raises them (``alarms.hw_set``) and firmware cannot. CAUSE bit 3 is the
 live "waiting for the first heartbeat, boot window passed" flag and bit 4 the live "excluded" flag. BOOT_WAIT
 (0x088) is how many milliseconds the chip waited before its first heartbeat (saturating at 65535; frozen once
