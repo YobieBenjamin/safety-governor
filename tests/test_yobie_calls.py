@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""Yobie's two design calls of 23 October 2026 in the functional model ("silently failing is a bullshit feature").
+"""The two design decisions of 23 October 2026 in the functional model ("silently failing is a bullshit feature").
 
 1. A signed HALT to a governor already in SAFE opens its loop switch; the governor stays in SAFE with slot power off
-   (conformance F-07: the model used to drop to HALT and turn the power back on).
+   (before this, the model dropped to HALT and turned the power back on).
 2. A governor that never gets its first heartbeat keeps holding the rack, loudly: NO_FIRST_HEARTBEAT past the boot
    window, logged with the chip and since when. The way out is EXCLUDE: signed by the authority, bound to the chip,
    expiring, logged with its signer. The excluded chip closes its loop switch and keeps its own levers on.
