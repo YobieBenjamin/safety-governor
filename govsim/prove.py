@@ -39,8 +39,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def have_yosys() -> bool:
+    """True when the yowasp-yosys package imports. That package is the RTL formal toolchain. The import is only a
+    presence check. When the package is absent, the RTL formal component is recorded as skipped, never as a pass."""
     try:
-        import yowasp_yosys  # noqa: F401
+        import yowasp_yosys  # noqa: F401  (only checks that the package can be imported)
         return True
     except Exception:
         return False
@@ -48,6 +50,8 @@ def have_yosys() -> bool:
 
 # (key, description, argv, needs_yosys)
 def components(quick: bool):
+    """The components the proof runs, as (key, description, command, needs_yosys) tuples. The pytest sweep is added unless
+    ``quick`` is set. Output: the list."""
     c = [
         ("redteam-selftest", "the red-team oracle returns 0 on a broken gate (non-vacuous)", [sys.executable, "-m", "govsim.redteam", "--selftest"], False),
         ("redteam", "capstone: one protected action, every attack the audit named", [sys.executable, "-m", "govsim.redteam"], False),
@@ -67,6 +71,7 @@ def components(quick: bool):
 
 
 def git_commit() -> str:
+    """The commit hash of this checkout, for the manifest. Returns "unknown" if git cannot be run."""
     try:
         return subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"], capture_output=True, text=True, timeout=30).stdout.strip() or "unknown"
     except Exception:
@@ -74,6 +79,9 @@ def git_commit() -> str:
 
 
 def run_component(key, desc, argv, needs_yosys, yosys_ok) -> dict:
+    """Run one component as a subprocess from the repository root. Output: a record with its status. It is ``pass`` when
+    the exit code is 0 and ``fail`` otherwise, including a timeout after 30 minutes or a crash. It is ``skipped`` when the
+    component needs yosys and yosys is absent. A skipped component is never counted as a pass."""
     if needs_yosys and not yosys_ok:
         return {"key": key, "description": desc, "command": " ".join(argv[1:]) if argv and argv[0] == sys.executable else " ".join(argv),
                 "status": "skipped", "note": "yowasp-yosys not installed in this environment; run on a host that has it for the full verdict"}
@@ -90,12 +98,15 @@ def run_component(key, desc, argv, needs_yosys, yosys_ok) -> dict:
 
 
 def build(quick: bool) -> dict:
+    """Run every component and collapse the results into one record. The verdict is 1 only when nothing failed and at least
+    one component passed. Coverage is ``software-only`` when yosys is absent, ``full`` when yosys is present and pytest ran,
+    and ``no-pytest`` for a quick run with yosys present."""
     yosys_ok = have_yosys()
     results = [run_component(*c, yosys_ok) for c in components(quick)]
     failed = [r for r in results if r["status"] == "fail"]
     skipped = [r for r in results if r["status"] == "skipped"]
     passed = [r for r in results if r["status"] == "pass"]
-    verdict = 1 if (not failed and passed) else 0
+    verdict = 1 if (not failed and passed) else 0   # one failure forces 0; a run where nothing passed is also 0
     coverage = "full" if yosys_ok and not quick else ("software-only" if not yosys_ok else "no-pytest")
     return {
         "verdict": verdict,
@@ -109,6 +120,8 @@ def build(quick: bool) -> dict:
 
 
 def render(m: dict) -> str:
+    """Turn the record into the markdown report (PROOF.md). Input: the record. Output: a string. This function writes no
+    file. ``main`` writes it, and only with ``--write``."""
     v = m["verdict"]
     L = [f"# PROOF: the safety governor, in software", "",
          f"**VERDICT: {v}**  ({'every component holds' if v else 'A COMPONENT FAILED'})", "",
@@ -140,6 +153,9 @@ def render(m: dict) -> str:
 
 
 def main(argv=None) -> int:
+    """Command-line entry point. Runs the components and prints one line per component, then the VERDICT. ``--write`` also
+    overwrites results/PROOF.md and results/proof-manifest.json. ``--quick`` skips the pytest sweep. ``--json`` prints the
+    record. Returns 0 when the verdict is 1."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--quick", action="store_true", help="skip the full pytest sweep")
