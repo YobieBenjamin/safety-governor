@@ -2,14 +2,23 @@
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The origin gate's cryptography: weights sealed to governed hardware (docs/18 question 20, issue W1).
 
-A publisher encrypts the weights once, chunk by chunk, with a random data key (AES-256-GCM, each chunk bound
-to the model digest and its index, so chunks cannot be swapped or reordered). The data key is sealed to the
-governor's key-encryption key: X25519 to the governor's public half, HKDF, AES-GCM. Only the governor can
-open it. The governor never hands the data key out in the clear: it re-seals it to the X25519 key of one GPU
-whose confidential-computing report it has verified, and only while the signed rulebook lists the model.
+The problem: a model's weights should run only on a GPU the governor has verified, and only while the
+signed rulebook still lists the model.
 
-These are the primitives, not the protocol; the protocol (KEY_RELEASE, KEY_RENEW, revocation) is in
-``govsim/governor.py`` and the GPU's half in ``govsim/gpu.py``.
+How it works: the publisher encrypts the weights once, chunk by chunk, with a random data key
+(AES-256-GCM). Each chunk is bound to the model digest and its index, so chunks cannot be swapped or
+reordered. The data key is sealed to the governor's key-encryption key (X25519 to the governor's public
+half, HKDF, AES-GCM), so only the governor can open it. The governor never hands the data key out in the
+clear. It re-seals the key to the X25519 key of one GPU whose confidential-computing report it has
+verified, and only while the rulebook lists the model.
+
+What it guarantees: a package that decrypts correctly under the key is intact. The decrypted bytes must
+also match the publisher's signed commitment (hash, length, chunk layout, format and config). A label
+alone cannot attach a model name to different weights (F01).
+
+What it deliberately does NOT do: AES-GCM does not prove the bytes were approved. That is the job of the
+commitment, which the manifest signs. This file holds only the primitives. The protocol (KEY_RELEASE,
+KEY_RENEW, revocation) is in ``govsim/governor.py``, and the GPU's half is in ``govsim/gpu.py``.
 """
 from __future__ import annotations
 
@@ -25,10 +34,12 @@ CHUNK = 1 << 20          # 1 MiB chunks: a GPU decrypts while it streams the wei
 
 
 def x25519_private(seed32: bytes) -> X25519PrivateKey:
+    """Make an X25519 private key from 32 seed bytes. Only the first 32 bytes are used."""
     return X25519PrivateKey.from_private_bytes(seed32[:32])
 
 
 def public_hex(priv: X25519PrivateKey) -> str:
+    """The public half of an X25519 key, as hex."""
     return priv.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
 
 
@@ -38,6 +49,7 @@ def seal_to(pub_hex: str, plaintext: bytes, info: bytes) -> dict:
     eph_pub = eph.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
     recipient = bytes.fromhex(pub_hex)
     shared = eph.exchange(X25519PublicKey.from_public_bytes(recipient))
+    # the context and both public keys go into the derived key, so a box cannot be reused under another context or recipient
     key = hkdf(shared, b"govsim-seal|" + info + eph_pub + recipient)
     nonce = os.urandom(12)
     return {"eph": eph_pub.hex(), "nonce": nonce.hex(), "ct": AESGCM(key).encrypt(nonce, plaintext, info).hex(), "to": pub_hex}
@@ -56,6 +68,8 @@ def open_sealed(priv: X25519PrivateKey, box: dict, info: bytes) -> bytes | None:
 
 
 def _aad(model_digest: str, index: int) -> bytes:
+    """Associated data for one chunk: the model digest and the chunk index. The data is checked along with the
+    ciphertext but not encrypted, so a chunk moved to another model or another position fails to decrypt."""
     return model_digest.encode() + b"|" + index.to_bytes(8, "big")
 
 
@@ -109,6 +123,7 @@ def decrypt_weights(sealed: dict, dek: bytes) -> bytes | None:
     out = bytearray()
     try:
         for idx, ct in enumerate(sealed["chunks"]):
+            # the nonce is the chunk's byte offset, the same value seal_weights used when it encrypted the chunk
             out += aes.decrypt((idx * sealed["chunk"]).to_bytes(12, "big"), ct, _aad(sealed["model_digest"], idx))
     except Exception:
         return None
