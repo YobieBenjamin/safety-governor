@@ -1,12 +1,31 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""The policy image: rules, keys, reference values, the assumptions register, k-of-n
-signatures and the epoch. ``docs/04-specification.md`` section 4.
+"""The policy image: the signed rulebook that a governor enforces. ``docs/04-specification.md`` section 4.
 
-A rule relies on *inputs*: the lists its constraints name, the observer verdict its lane needs,
-the budget key it spends from, and anything it declares. ``check_register`` derives that set and
-returns the inputs with no assumptions-register row; ``check_budget_owners`` returns budget keys
-with no owner. A governor refuses an image where either set is not empty (H7, R12).
+What a policy image holds: the governance keys and the threshold k (how many of them must sign a change);
+the keys that may sign each role (authority, heartbeat, publisher, observer, approver, eval, license); the
+reference values (the firmware digests and vendor keys a chip must match); the rules (for each action, a
+mode, the typed limits, a budget, an endpoint); the assumptions register (one row for each input the rules
+rely on); the endpoints; the budget owners; and the safe-mode and fabric timers.
+
+What this file does: it builds images (``make_rule``, ``make_register_row``, ``make_policy``), signs them
+(``sign_policy``), gives each one an epoch (``policy_epoch``, a digest of its body), checks signatures and
+quorum (``verify_policy``), and picks the rule for a request (``select_rule``, ``find_rule``,
+``check_constraints``).
+
+Rules and the register: a rule relies on inputs. They are the lists its constraints name, the observer
+verdict its lane needs, and the budget key it spends from, plus anything it declares. ``check_register``
+returns the inputs that have no register row. ``check_budget_owners`` returns the budget keys that have no
+owner. A governor refuses an image where either list is not empty (H7, R12; tests/test_h07_register.py).
+
+What it guarantees: a governor accepts an image only when at least k distinct valid signatures from the keys
+in force cover the image's epoch, the threshold is in range, and the register and budget owners are
+complete. Rule selection uses only the verified measurement, the action and the typed fields. Requester
+labels never reach it (H4).
+
+What it deliberately does NOT do: it does not judge whether a rule is wise. It does not choose the signers,
+because the governance root does that. It does not reach the network. The default buffer policy and audit
+settings are starting values, and an image may replace them.
 """
 from __future__ import annotations
 
@@ -46,6 +65,11 @@ def make_rule(rule_id: str, action: str, *, measurement: str = "*", constraints:
               min_legibility: float = 0.0, on_hazard: str = "refuse", on_illegible: str = "refuse",
               hazard_budget: dict | None = None, streams_required: list[str] | None = None,
               payer_confirm: dict | None = None, beneficiary: dict | None = None) -> dict:
+    """Build one rule. ``action`` is the action it covers. ``measurement`` is the workload it applies to, where ``*``
+    means any workload. ``constraints`` are the typed limits a request must meet. ``mode`` sets how a passing request
+    is handled: ``auto`` issues a ticket at once; ``observer`` needs an observer verdict whose risk is at or below
+    ``max_risk``; ``human`` parks the request until ``approvers_quorum`` approvers sign. The other fields set the rate
+    limit, the budget, the endpoint, the release checks, and the payer and beneficiary checks. Output: a dict."""
     return {
         "id": rule_id, "measurement": measurement, "action": action,
         "constraints": constraints or {},
@@ -65,6 +89,9 @@ def make_rule(rule_id: str, action: str, *, measurement: str = "*", constraints:
 
 
 def make_register_row(input_name: str, authority: str, freshness: str, on_conflict: str, independence: str, unchecked: str) -> dict:
+    """Build one row of the assumptions register: the input, who vouches for it (``authority``), how fresh it must
+    be, what a conflict does (``on_conflict``), why it is independent of what it checks, and what is not checked.
+    The row is a written reason. The governor checks that every input a rule uses has one."""
     return {"input": input_name, "authority": authority, "freshness": freshness,
             "on_conflict": on_conflict, "independence": independence, "unchecked": unchecked}
 
@@ -81,6 +108,10 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
                 compute_budget: dict | None = None, sandbox: bool = False, authority_keys: list[VerifyKey] | None = None,
                 sealed_models: list[str] | None = None, key_lease_s: float = 60.0,
                 governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0) -> dict:
+    """Assemble an unsigned policy image from its parts. The keyword arguments set the defaults for the timers, the
+    buffer policy, the audit sampling and the escrow classes. The result is a dict with a version, an expiry, the keys,
+    the rules and the register. It is not in force until it is signed with ``sign_policy`` and a governor accepts it
+    through ``verify_policy``."""
     return {
         "version": version, "issued_at": issued_at, "expires_at": expires_at,
         "governance_keys": [k.hex for k in governance_keys], "threshold": threshold,
@@ -113,20 +144,24 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
         "sandbox": bool(sandbox),                                          # model organisms: no network flows
         "sealed_models": list(sealed_models or []),                        # the origin gate: models whose key this chip may release
         "key_lease_s": float(key_lease_s),                                 # a released key lives this long unless renewed
-        "safe_mode": safe_mode or {"default_rung": "THROTTLE", "T_throttle_s": 30.0, "T_halt_s": 300.0,
+        "safe_mode": safe_mode or {"default_rung": "THROTTLE", "T_throttle_s": 30.0, "T_halt_s": 300.0,   # default rung for an unlisted cause; a THROTTLE escalates to HALT after T_throttle_s, a HALT to SAFE after T_halt_s
                                    "causes": {reasons.LOOP_OPEN: "HALT", reasons.LOOP_BROKEN: "HALT", reasons.LOOP_JUMPERED: "HALT",
                                               reasons.TAMPER: "SAFE", reasons.HEARTBEAT_LOST: "THROTTLE",
                                               reasons.EPOCH_STRAGGLER: "HALT", reasons.HALT_COMMANDED: "HALT"}},
-        "fabric": fabric or {"heartbeat_expiry_s": 5.0, "max_hops": 16, "epoch_deadline_s": 10.0, "loop_bound_s": 0.001},
+        "fabric": fabric or {"heartbeat_expiry_s": 5.0, "max_hops": 16, "epoch_deadline_s": 10.0, "loop_bound_s": 0.001},   # heartbeat trust (s), relay hops, staged-epoch deadline (s), loop bound (s)
     }
 
 
 def policy_epoch(image: dict) -> str:
+    """The epoch of an image: a digest of its body, with the signatures left out. Two images that differ in any field
+    get different epochs, so a command made under one edition cannot be replayed under another."""
     body = {k: v for k, v in image.items() if k != "signatures"}
     return digest(body)
 
 
 def sign_policy(image: dict, keys: Iterable[SigningKey]) -> dict:
+    """Return a copy of the image with one signature from each signing key. Each signature covers the image's epoch, so a
+    signature on one edition is not valid for another. The original image is not changed."""
     image = copy.deepcopy(image)
     body = {k: v for k, v in image.items() if k != "signatures"}
     image["signatures"] = [k.sign({"type": "policy", "epoch": digest(body)}) for k in keys]
