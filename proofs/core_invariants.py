@@ -80,7 +80,11 @@ Policy = ArraySort(IntSort(), ABool)
 
 
 class State:
+    """The machine's state at one moment, as Z3 constants: one constant for each state variable listed in the module
+    docstring. ``tag`` names the copy (for example "s" for the state before a step and "t" for the state after it),
+    so that two states can appear in one formula."""
     def __init__(self, tag: str):
+        """Create a fresh set of constants for one state. Their names include ``tag``, so two states never share a constant."""
         self.allows = Const(f"allows_{tag}", Policy)
         self.witness = Const(f"witness_{tag}", ABool)
         self.ticket = Const(f"ticket_{tag}", AInt)
@@ -97,15 +101,20 @@ class State:
         self.kfloor = Const(f"kfloor_{tag}", IntSort())
 
     def vars(self):
+        """Every state constant, as one list."""
         return [self.allows, self.witness, self.ticket, self.used, self.executed, self.n_issued, self.n_spent, self.n_events, self.okay_at_issue, self.epoch, self.halted, self.heartbeat, self.kfuse, self.kfloor]
 
 
 def unchanged(s: State, t: State, *except_names: str):
+    """A formula that says that state ``t`` equals state ``s`` on every field, except the fields named in
+    ``except_names``."""
     names = ["allows", "witness", "ticket", "used", "executed", "n_issued", "n_spent", "n_events", "okay_at_issue", "epoch", "halted", "heartbeat", "kfuse", "kfloor"]
     return And(*[getattr(s, n) == getattr(t, n) for n in names if n not in except_names])
 
 
 def init(s: State):
+    """The initial state. No ticket is issued or spent, no effect has happened, the edition is at least zero, and the
+    fused threshold is at least the floor, which is at least one."""
     a = Const("a0", Action)
     return And(
         s.epoch >= 0, s.kfloor >= 1, s.kfuse >= s.kfloor,
@@ -122,6 +131,10 @@ CLEAR_CMD, HEARTBEAT_CMD = 0x10, 0x0E          # the opcodes in docs/04 §3; any
 
 
 def make_inputs(tag: str = "step"):
+    """The environment's free choices for one step: the action, the number of valid governance signatures on a
+    proposed edition, the threshold the image claims for itself, the command named in an authority signature, whether that
+    signature names this chip and is still in date, and whether a neighbour holds the logged cause. Each one is an unknown
+    for the solver, so the proof covers every value."""
     a = Const(f"a_{tag}", Action)
     sigs, claimed_k, signed_cmd = Consts(f"sigs_{tag} claimed_k_{tag} signed_cmd_{tag}", IntSort())
     for_me, fresh, neighbour = Consts(f"for_me_{tag} fresh_{tag} neighbour_{tag}", BoolSort())
@@ -162,11 +175,13 @@ def step_list(s: State, t: State, i: dict, quorum=None, clear_auth=None, execute
                   t.executed == Store(s.executed, a, True), t.used == Store(s.used, a, True),
                   t.n_spent == Store(s.n_spent, a, s.n_spent[a] + 1), t.n_events == Store(s.n_events, a, s.n_events[a] + 1),
                   unchanged(s, t, "executed", "used", "n_spent", "n_events"))
-    forged_execute = And(Or(s.ticket[a] != s.epoch, Not(s.n_issued[a] > s.n_spent[a]), Not(s.heartbeat), s.halted), unchanged(s, t))
+    # an execution that fails a guard (old ticket, no fresh ticket, no heartbeat, or halted) changes nothing: it is refused
+    forged_execute = And(Or(s.ticket[a] != s.epoch,Not(s.n_issued[a] > s.n_spent[a]), Not(s.heartbeat), s.halted), unchanged(s, t))
     new_epoch = And(quorum, t.epoch == s.epoch + 1,                          # an edition that asks for more signatures raises the floor
                     t.kfuse == i["claimed_k"],                                  # the new edition's k governs the next change
                     unchanged(s, t, "epoch", "allows", "witness", "kfuse"))
     halt = And(t.halted == True, unchanged(s, t, "halted"))
+    # a clear needs a signed CLEAR for this chip in date (clear_auth), and a neighbour that holds the logged cause
     clear = And(s.halted, clear_auth, i["neighbour"], t.halted == False, unchanged(s, t, "halted"))
     beat_lost = And(t.heartbeat == False, unchanged(s, t, "heartbeat"))
     beat_back = And(t.heartbeat == True, unchanged(s, t, "heartbeat"))
@@ -176,6 +191,8 @@ def step_list(s: State, t: State, i: dict, quorum=None, clear_auth=None, execute
 
 
 def steps(s: State, t: State, i: dict, **kw):
+    """The one-step relation: the disjunction of every transition in ``step_list``. Any one step of the machine
+    satisfies it."""
     return Or(*[tr for _, tr in step_list(s, t, i, **kw)])
 
 
@@ -207,11 +224,15 @@ def invariant_at(s: State, a):
 
 
 def invariant(s: State):
+    """The invariant for the whole machine: ``invariant_at`` holds for every action."""
     a = Const("a_inv", Action)
     return ForAll([a], invariant_at(s, a))
 
 
 def one_step_properties(s: State, t: State, i: dict):
+    """The properties that must hold across one step, as a dict from a label to a formula. Each formula relates the
+    state before the step (``s``), the state after it (``t``) and the step's inputs. The labels P5 to P13 are the one-step
+    properties named in this file."""
     return {
         "P5  halt is absorbing without an authorized clear: halted, and no signed CLEAR for this chip in date, means still halted":
             Implies(And(s.halted, Not(clear_auth_of(s, i))), t.halted),
@@ -235,6 +256,9 @@ def one_step_properties(s: State, t: State, i: dict):
 
 
 def prove(name: str, claim, assumptions) -> bool:
+    """Ask Z3 whether ``claim`` follows from ``assumptions``. The solver is asked for a counterexample, that is, a
+    state where the assumptions hold and the claim does not. If none exists (the answer is unsat), the claim is proved and
+    the function returns True. A counterexample is printed with its model."""
     sol = Solver()
     sol.set("timeout", 60_000)
     sol.add(*assumptions)
@@ -255,6 +279,9 @@ def old_rules(s: State, i: dict):
 
 
 def main() -> int:
+    """Run every proof and every check, print each result, and return 0 only when all of them hold. The regression
+    checks show that the old rules fail and that the proof can see replay. The non-vacuity checks show that the machine
+    can act at all, so the proofs are not trivially true."""
     s, t = State("s"), State("t")
     inputs = make_inputs()
     step = steps(s, t, inputs)
