@@ -204,9 +204,11 @@ class Rack:
                       on_hazard=on_hazard, on_illegible=on_illegible, min_legibility=min_legibility, hazard_budget=hazard_budget,
                       streams_required=streams_required),
             # training governance: a model writes its weights to its own storage flow and nowhere else without humans
+            # F29: both weights rules are bound to the storage path, the only effect a weights ticket reaches
             make_rule("weights.write.own", "weights.write", measurement=WORKLOAD_70B, constraints={"destination": {"in": [MODEL_70B]}},
-                      **(human if sandbox else {})),
-            make_rule("weights.write.any", "weights.write", mode="human", approvers_quorum=2),
+                      endpoint="storage", **(human if sandbox else {})),
+            make_rule("weights.write.any", "weights.write", mode="human", approvers_quorum=2, endpoint="storage"),
+            # data-only: no endpoint and no grant consumes a compute.extend ticket; the licence is the authority (F29)
             make_rule("compute.extend", "compute.extend", **(human if sandbox else {})),          # carries a compute license
             # an agent acting in the world: each action is its own rule and its own endpoint
             make_rule("message.send.listed", "message.send",

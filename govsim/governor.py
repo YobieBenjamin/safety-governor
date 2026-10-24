@@ -1443,6 +1443,11 @@ class Governor:
             t = ticket["payload"]
             if t["action"] != "weights.write":
                 return False, reasons.TICKET_ACTION_MISMATCH
+            # F29: a weights ticket must name the storage path, and no other. An unbound ticket is refused.
+            if not t.get("endpoint"):
+                return False, reasons.TICKET_UNBOUND
+            if t["endpoint"] != "storage":
+                return False, reasons.TICKET_WRONG_ENDPOINT
             # the request names the export in this exact shape: destination, model digest and byte count
             export_params = {"destination": self.model_digest, "model_digest": self.model_digest, "bytes": int(nbytes)}
             if t["params_digest"] != digest(export_params):

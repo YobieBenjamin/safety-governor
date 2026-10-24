@@ -356,11 +356,11 @@ rulebook in miniature, with enough of each kind to break every mechanism the des
 | `strike` | any | `target` not in the signed `protected-sites` list; `munition` in a fixed set | observer (risk at or under 0.5); two approvers when the rule is switched to the human lane | | `strike-guidance`, 2 s delay | The deconfliction case from `17-use-cases.md` §3: list, witness and a delay, with people when the mode says so |
 | `model.output` | any | | | 50 queries and 200 KB per hour; 1 MB unpresented | | How much may leave as output at all, and the alarm when more bytes pass the port than were presented |
 | `response.release` | any | | observer; allowed hazard classes, legibility floor; a hazard budget per session when the rule sets one (the narration: one per hour) | | `egress` (the audit store in a sandbox) | A response leaving the rack is an action: the verdict, the classes, the escrow. Scenario 1 and 2 end here |
-| `model.export.70b` | the 70B workload exactly | | auto | | | The one workload that may export its own weights, keyed to its measurement |
-| `model.export.any` | any other | | human, 2 | | | Anything else that wants to copy weights out meets people |
-| `weights.write.own` | the 70B workload exactly | `destination` in {its own storage flow} | auto | | | Training: a model writes its weights to its own flow and nowhere else |
-| `weights.write.any` | any | | human, 2 | | | Any other write of weights |
-| `compute.extend` | any | carries a licence | auto, licence checked | cycles | | A compute budget that only a signed licence extends |
+| `model.export.70b` | the 70B workload exactly | | auto | | none: data-only, no effector or grant consumes this ticket | The one workload that may export its own weights, keyed to its measurement |
+| `model.export.any` | any other | | human, 2 | | none: data-only, no effector or grant consumes this ticket | Anything else that wants to copy weights out meets people |
+| `weights.write.own` | the 70B workload exactly | `destination` in {its own storage flow} | auto | | `storage` | Training: a model writes its weights to its own flow and nowhere else |
+| `weights.write.any` | any | | human, 2 | | `storage` | Any other write of weights |
+| `compute.extend` | any | carries a licence | auto, licence checked | cycles | none: data-only, the licence is the authority | A compute budget that only a signed licence extends |
 
 Standing rules that are not rules but fields of the image: the buffer policy (weights never
 leave the GPU, KV cache and activations only to roster peers, outputs only to the verified
