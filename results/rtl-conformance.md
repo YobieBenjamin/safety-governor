@@ -14,26 +14,26 @@
 
 | Finding | Reproducer | What the RTL or model did |
 |---|---|---|
-| CONFORMANCE-RUN-STATE-CHECK-ORDER | `test_diff_finding_replayed_request_while_not_running` | assert: REQUEST seq=2 (last 2) [replayed/low seq, not running]: RTL status 4 (bad sequence), model mailbox.governor_not_running (tests_differential.py:277) |
-| CONFORMANCE-RUN-STATE-CHECK-ORDER | `test_diff_finding_stale_request_while_not_running` | assert: REQUEST seq=1 (last 0) [stale epoch, not running]: RTL status 5 (bad epoch), model mailbox.governor_not_running (tests_differential.py:277) |
-| CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO | `test_diff_finding_first_sequence_number_zero` | assert: HALT seq=0 (last 0) [replayed/low seq]: RTL status 4 (bad sequence), model ok (tests_differential.py:277) |
-| CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST | `test_diff_finding_replayed_forged_heartbeat` | assert: HEARTBEAT seq=4 (last 4) [replayed/low seq, bad signature]: RTL status 4 (bad sequence), model heartbeat.bad_signature (tests_differential.py:277) |
-| CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST | `test_diff_finding_heartbeat_signed_as_something_else` | assert: HEARTBEAT seq=1 (last 0) [signed for another command]: RTL status 7 (wrong command), model heartbeat.bad_signature (tests_differential.py:277) |
-| CONFORMANCE-CLEAR-REPORTS-ONE-REASON | `test_model_finding_clear_collapses_reasons` | assert: clear.unauthorized (tests_differential.py:451) |
-| CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD | `test_finding_core_reports_test_lifecycle_before_fuse_load` | assert: LIFECYCLE reads 0 and debug_grant is 0 (tests_findings.py:143) |
-| CONFORMANCE-MILLISECOND-TICK-TOO-LONG | `test_finding_heartbeat_expires_on_time` | assert: heartbeat still live after 2,001 us; HB_REMAIN = 1 (tests_findings.py:279) |
-| CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES | `test_finding_cap_refuses_at_zero_budget` | assert: zero budget, zero-byte lookup allowed (reason 0) (tests_findings.py:319) |
-| CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | `test_finding_cap_reprogramming_a_key_replaces_it` | assert: a 500-byte lookup passed after the capability was reprogrammed to 10 bytes (tests_findings.py:342) |
-| CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | `test_finding_cap_rederived_after_epoch_switch_is_usable` | assert: re-derived capability refused (reason 3): the stale entry shadows it (tests_findings.py:587) |
-| CONFORMANCE-FRAME-NOT-LATCHED | `test_finding_mailbox_sequence_never_moves_backwards` | assert: last accepted sequence moved back to 3 (tests_findings.py:483) |
-| CONFORMANCE-STATUS-TABLE-MISSING-ROW | `test_finding_spec_status_table_lists_status_7` | assert: register map row: / 0x104 / `MBOX_STATUS` / RO / 8 / 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused / (tests_findings.py:496) |
-| CONFORMANCE-SWITCH-OPEN-RUN-ONLY | `test_finding_loop_lost_in_halt_sets_switch_open` | assert: loop_lost in HALT did not set switch_open (tests_findings.py:255) |
+| CONFORMANCE-CLEAR-REPORTS-ONE-REASON | `test_model_finding_clear_collapses_reasons` | assert: clear.unauthorized (tests_differential.py:434) |
+| CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD | `test_finding_core_reports_test_lifecycle_before_fuse_load` | assert: LIFECYCLE reads 0 and debug_grant is 0 (tests_findings.py:136) |
+| CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | `test_finding_cap_reprogramming_a_key_replaces_it` | assert: a 500-byte lookup passed after the capability was reprogrammed to 10 bytes (tests_findings.py:321) |
+| CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | `test_finding_cap_rederived_after_epoch_switch_is_usable` | assert: re-derived capability refused (reason 3): the stale entry shadows it (tests_findings.py:549) |
+| CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO | `test_diff_finding_first_sequence_number_zero` | assert: HALT seq=0 (last 0) [replayed/low seq]: RTL status 4 (bad sequence), model ok (tests_differential.py:267) |
+| CONFORMANCE-FRAME-NOT-LATCHED | `test_finding_mailbox_sequence_never_moves_backwards` | assert: last accepted sequence moved back to 3 (tests_findings.py:452) |
+| CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST | `test_diff_finding_replayed_forged_heartbeat` | assert: HEARTBEAT seq=4 (last 4) [replayed/low seq, bad signature]: RTL status 4 (bad sequence), model heartbeat.bad_signature (tests_differential.py:267) |
+| CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST | `test_diff_finding_heartbeat_signed_as_something_else` | assert: HEARTBEAT seq=1 (last 0) [signed for another command]: RTL status 7 (wrong command), model heartbeat.bad_signature (tests_differential.py:267) |
+| CONFORMANCE-MILLISECOND-TICK-TOO-LONG | `test_finding_heartbeat_expires_on_time` | assert: heartbeat still live after 2,001 us; HB_REMAIN = 1 (tests_findings.py:263) |
+| CONFORMANCE-RUN-STATE-CHECK-ORDER | `test_diff_finding_replayed_request_while_not_running` | assert: REQUEST seq=2 (last 2) [replayed/low seq, not running]: RTL status 4 (bad sequence), model mailbox.governor_not_running (tests_differential.py:267) |
+| CONFORMANCE-RUN-STATE-CHECK-ORDER | `test_diff_finding_stale_request_while_not_running` | assert: REQUEST seq=1 (last 0) [stale epoch, not running]: RTL status 5 (bad epoch), model mailbox.governor_not_running (tests_differential.py:267) |
+| CONFORMANCE-STATUS-TABLE-MISSING-ROW | `test_finding_spec_status_table_lists_status_7` | assert: register map row: / 0x104 / `MBOX_STATUS` / RO / 8 / 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused / (tests_findings.py:462) |
+| CONFORMANCE-SWITCH-OPEN-RUN-ONLY | `test_finding_loop_lost_in_halt_sets_switch_open` | assert: loop_lost in HALT did not set switch_open (tests_findings.py:243) |
+| CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES | `test_finding_cap_refuses_at_zero_budget` | assert: zero budget, zero-byte lookup allowed (reason 0) (tests_findings.py:301) |
 
 First example of each mailbox disagreement class in the random run:
 
-- CONFORMANCE-RUN-STATE-CHECK-ORDER: CAP_REQUEST seq=0 (last 1) [replayed/low seq, not running]: RTL status 4 (bad sequence), model mailbox.governor_not_running
 - CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO: HALT seq=0 (last 0) [replayed/low seq, signed for another command, not running]: RTL status 4 (bad sequence), model mailbox.wrong_command
 - CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST: HEARTBEAT seq=1 (last 1) [replayed/low seq, stale epoch, signed for another command, not running]: RTL status 4 (bad sequence), model heartbeat.bad_signature
+- CONFORMANCE-RUN-STATE-CHECK-ORDER: CAP_REQUEST seq=0 (last 1) [replayed/low seq, not running]: RTL status 4 (bad sequence), model mailbox.governor_not_running
 
 ## Coverage by requirement
 
@@ -105,7 +105,7 @@ First example of each mailbox disagreement class in the random run:
 | REQUIREMENT-FRAME-EPOCH-MUST-MATCH | RTL | mailbox | 5 | 0 | conforms |
 | REQUIREMENT-FRAME-SIGNATURE-CHECKED | RTL | mailbox | 5 | 0 | conforms |
 | REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND | RTL | mailbox | 3 | 0 | DISAGREES CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST |
-| REQUIREMENT-FIRST-FAILURE-IS-REASON | RTL | mailbox vs govsim | 16 | 0 | DISAGREES CONFORMANCE-RUN-STATE-CHECK-ORDER, CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO, CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST, CONFORMANCE-CLEAR-REPORTS-ONE-REASON |
+| REQUIREMENT-FIRST-FAILURE-IS-REASON | RTL | mailbox vs govsim | 16 | 0 | DISAGREES CONFORMANCE-CLEAR-REPORTS-ONE-REASON, CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO, CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST, CONFORMANCE-RUN-STATE-CHECK-ORDER |
 | REQUIREMENT-DISPATCH-AFTER-ALL-CHECKS | RTL | mailbox | 3 | 0 | conforms |
 | REQUIREMENT-SEQUENCE-REGISTER-PER-KEY | RTL | top (MBOX_SEQ), mailbox | 2 | 0 | conforms |
 | REQUIREMENT-MAILBOX-STATUS-CODES | RTL | mailbox, top (MBOX_STATUS) | 6 | 0 | DISAGREES CONFORMANCE-RUN-STATE-CHECK-ORDER, CONFORMANCE-STATUS-TABLE-MISSING-ROW |
@@ -262,7 +262,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_hb_reload_only_on_valid` | REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID | pass | 0.0 |
 | `test_hb_valid_wins_over_tick` | REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID | pass | 0.0 |
 | `test_core_hb_remain_csr` | REQUIREMENT-HEARTBEAT-REMAINING-REGISTER | pass | 0.0 |
-| `test_core_timers_ignore_the_raw_microsecond_tick` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | pass | 0.0 |
+| `test_core_timers_ignore_the_raw_microsecond_tick` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | pass | 0.1 |
 | `test_halt_loop_lost_from_run` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | pass | 0.0 |
 | `test_halt_loop_lost_from_throttle` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | pass | 0.0 |
 | `test_halt_hb_expired_throttles` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | pass | 0.0 |
