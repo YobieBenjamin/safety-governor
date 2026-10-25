@@ -115,7 +115,7 @@ REQUIREMENTS: list[tuple[str, str, str, str, str, str]] = [
     ("REQUIREMENT-CAUSE-REGISTER-LAYOUT", "S", "2", "Bits 2:0 the sequencer's own summary (0 none, 1 loop, 2 local, 3 tamper, 4 command); bit 3 waiting for the first heartbeat, boot window passed; bit 4 excluded; bits 15:8 the firmware's reason code", "top (CAUSE)", RTL),
     ("REQUIREMENT-LOG-WINDOW-FIRMWARE-MAPPED", "S", "2", "firmware-mapped: the log engine is firmware over NVM, so the RTL core does not decode it", "top (LOG_HEAD)", FW_ONLY),
     # ---------------------------------------------------------------- alarms
-    ("REQUIREMENT-ALARM-SET-BY-ANY-SOURCE", "V", "3", "Bits set by any source through set_mask", "alarms", RTL),
+    ("REQUIREMENT-ALARM-BITS-SET-THROUGH-MASK", "V", "3", "Bits set by any source through set_mask", "alarms", RTL),
     ("REQUIREMENT-ALARM-CLEAR-NEEDS-AUTHORIZATION", "V", "3", "cleared only through clear_mask gated by clear_authorized", "alarms", RTL),
     ("REQUIREMENT-STICKY-ALARM-REGISTER", "S", "2", "Sticky alarm bits (monotone; cleared only through the clear path)", "top (ALARMS)", RTL),
     ("REQUIREMENT-ALARMS-MONOTONE", "V", "1", "Alarms are monotone", "alarms", RTL),
@@ -131,7 +131,7 @@ REQUIREMENTS: list[tuple[str, str, str, str, str, str]] = [
     ("REQUIREMENT-AUTHORITY-KEY-SIGNS-HALT", "S", "3", "an authority key (never the heartbeat key)", "halt (cmd_halt, cmd_throttle strobes)", FW),
     ("REQUIREMENT-CLEAR-NEEDS-LOGGED-CHECKPOINT", "S", "3", "Clear the cause if it is in the log and a fabric neighbor has acknowledged the checkpoint that contains it", "halt (clear strobe)", FW),
     ("REQUIREMENT-RACK-WIDE-EPOCH-SWITCH", "S", "3", "Switch the epoch (the rack-wide rule in 02)", "epoch_reg (commit, quorum_ok)", FW),
-    ("REQUIREMENT-ANY-PARTY-RAISES-ALARM", "S", "3", "Raises a sticky alarm (any party may)", "alarms (set_mask)", FW),
+    ("REQUIREMENT-ANY-PARTY-RAISES-STICKY-ALARM", "S", "3", "Raises a sticky alarm (any party may)", "alarms (set_mask)", FW),
     ("REQUIREMENT-ALARM-APPROVER-KEY-CLEARS", "S", "3", "the policy's alarm approver key", "alarms (clear_authorized)", FW),
     ("REQUIREMENT-HOST-PEER-ONLY-ON-PCIE", "S", "3", "The peer host is accepted only on the PCIe point, never on NVSwitch, DPU or storage", "cap_table (ins, mac_ok)", FW),
     ("REQUIREMENT-METER-SLOT-FREEZE", "S", "3", "Freezes the meter slot for that model", "meter (strobe)", FW),

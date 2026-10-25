@@ -6,7 +6,7 @@
 > **Plain-English version:** `10-plain-english-walkthrough.md` §2 to §5.
 > **Backed by:** model `govsim/governor.py`, `govsim/cluster.py` (`build_rack`); hardware
 > `rtl/governor_rtl/top.py` (`GovernorCore`) and the blocks named in the table below; wiring
-> `hw/pcb/rack-integration.md`; tests `tests/test_h01`, `h11`, `h14`, `h16`.
+> `hw/pcb/rack-integration.md`; tests `tests/test_contract_attestation_binds_permissions`, `test_contract_halt_reaches_every_gpu`, `test_contract_partitions_end_safe`, `test_contract_levers_without_gpu_cooperation`.
 
 ## Where the governor lives
 

@@ -11,8 +11,7 @@
 #   tools/agents/run_wave.sh 1 --detach        # same, in the background; log in .agents/wave-1/launcher.log
 #   tools/agents/run_wave.sh 1 --check         # preflight only: gh, claude, python, baseline tests
 #   tools/agents/run_wave.sh 1 --dry-run       # write the briefs and print the commands; start nothing
-# Registered name: WAVE-TRACE-CONFORMANCE-REPLAY (old ID L4 is kept because code matches on it)
-#   tools/agents/run_wave.sh 1 --only L4       # one issue
+#   tools/agents/run_wave.sh 1 --only L4       # one issue (WAVE-TRACE-CONFORMANCE-REPLAY (old: L4))
 #   START_AT=23:00 tools/agents/run_wave.sh 1 --detach    # start at 23:00 (tonight, or tomorrow if past)
 #
 # Knobs, as environment variables (defaults chosen for a Claude subscription, see docs/21):

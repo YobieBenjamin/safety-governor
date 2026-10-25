@@ -16,7 +16,7 @@ quorum (``verify_policy``), and picks the rule for a request (``select_rule``, `
 Rules and the register: a rule relies on inputs. They are the lists its constraints name, the observer
 verdict its lane needs, and the budget key it spends from, plus anything it declares. ``check_register``
 returns the inputs that have no register row. ``check_budget_owners`` returns the budget keys that have no
-owner. A governor refuses an image where either list is not empty (CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE, REQUIREMENT-ONE-LEDGER-OWNS-BUDGET; tests/test_h07_register.py).
+owner. A governor refuses an image where either list is not empty (CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE, REQUIREMENT-ONE-LEDGER-OWNS-BUDGET; tests/test_contract_assumptions_register_complete.py).
 
 What it guarantees: a governor accepts an image only when at least k distinct valid signatures from the keys
 in force cover the image's epoch, the threshold is in range, and the register and budget owners are

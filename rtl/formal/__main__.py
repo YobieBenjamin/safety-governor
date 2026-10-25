@@ -136,8 +136,7 @@ def solvers() -> list:
     return _SOLVERS
 
 
-# Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
-SPLICE = "// L7-SPLICE"
+SPLICE = "// L7-SPLICE"  # WAVE-FORMAL-PROOFS-ON-VERILOG (old: L7)
 
 
 def smt(work: str, top: str, yosys_extra: str = "") -> str | None:

@@ -6,8 +6,8 @@ Start with `COMPLIANCE-MATRIX.md` if you build servers or work with NVIDIA. Star
 |---|---|
 | `COMPLIANCE-MATRIX.md` | every requirement, its public source, status (tested / designed / open / members-only / NDA), and the evidence file. Generated from `compliance_matrix.csv` |
 | `PLAIN-ENGLISH.md` | the same, for a non-engineer, with everything that did not work |
-| `01-dcscm-dcsci-ltpi.md` | OCP DC-SCM 2.x slot, DC-SCI pins, LTPI; REQ-LTPI-FS-1 |
-| `02-pcie-cem-sideband.md` | PERST#, PWRBRK#, WAKE#, SMBus, 3.3Vaux timing against the RTL; REQ-CEM-FAIL-1 |
+| `01-dcscm-dcsci-ltpi.md` | OCP DC-SCM 2.x slot, DC-SCI pins, LTPI; REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS |
+| `02-pcie-cem-sideband.md` | PERST#, PWRBRK#, WAKE#, SMBus, 3.3Vaux timing against the RTL; REQUIREMENT-LOCAL-POWER-FAIL-DRIVES-PERST |
 | `03-spdm.md` | the governor as an SPDM responder, interop with DMTF's tools |
 | `04-nvtrust.md` | NVIDIA GPU evidence into VERIFY_GPU |
 | `sources.csv` | every document used or tried, with URL, access level and how it was read |

@@ -21,17 +21,17 @@ Estimated tokens are for the build agent (input plus output), not the review. De
 
 | Wave | Issue | Repository | Builder | Est. tokens | Depends on | Owns |
 |---|---|---|---|---|---|---|
-| 1 | WAVE-TRACE-CONFORMANCE-REPLAY trace conformance | safety-governor | cloud, mid-tier | 150k | WAVE-CORE-INVARIANTS-BY-INDUCTION, WAVE-COMMIT-POINT-PROTOCOL-PROOF (done) | `govsim/trace.py`, `proofs/replay.py`, `tests/test_h19_conformance.py` |
-| 1 | WAVE-DIFFERENTIAL-GATE-TEST differential test against the reference stack | safety-governor | cloud, mid-tier | 150k | none | `tests/test_h21_differential.py`, `pyproject.toml` (one dependency) |
+| 1 | WAVE-TRACE-CONFORMANCE-REPLAY trace conformance | safety-governor | cloud, mid-tier | 150k | EXPERIMENT-CORE-INVARIANTS-BY-INDUCTION, EXPERIMENT-COMMIT-POINT-PROTOCOL-PROOF (done) | `govsim/trace.py`, `proofs/replay.py`, `tests/test_trace_conformance.py` |
+| 1 | WAVE-DIFFERENTIAL-GATE-TEST differential test against the reference stack | safety-governor | cloud, mid-tier | 150k | none | `tests/test_differential_gates.py`, `pyproject.toml` (one dependency) |
 | 1 | WAVE-LANES-CONFORMANCE-SUITE lanes conformance suite and the catalogue as data | safety-governor | cloud, mid-tier | 100k | none | `lanes/`, `catalogue/`, `Makefile` (one target) |
 | 1 | WAVE-OBSERVER-EVALUATION-SET observer evaluation set | safety | cloud, mid-tier, then local repair | 150k | none | `observer/bench/set.jsonl`, `observer/bench/score.py` |
 | 2 | WAVE-WIDEN-ABSTRACT-MACHINE widen the proofs | safety-governor | cloud, mid-tier | 120k | WAVE-TRACE-CONFORMANCE-REPLAY | `proofs/budgets.py`, `approvals.py`, `buffer_classes.py`, `egress.py`, `loop.py` |
-| 2 | WAVE-EXIT-REGISTER the exit register | safety-governor | cloud, mid-tier, with web | 120k | none | `docs/research/exit-register.md`, `tests/test_h20_exits.py` |
+| 2 | WAVE-EXIT-REGISTER the exit register | safety-governor | cloud, mid-tier, with web | 120k | none | `docs/research/exit-register.md`, `tests/test_exit_register.py` |
 | 2 | WAVE-DEPLOYMENT-OVERHEAD-SIMULATION deployment overhead | safety-governor | cloud, mid-tier | 100k | none | `govsim/deploy.py`, `docs/12-deployment-overhead.md` |
 | 2 | WAVE-OBSERVER-INDEPENDENCE observer independence (code) | safety | cloud, mid-tier; run local | 80k | WAVE-OBSERVER-EVALUATION-SET | `observer/bench/independence.py` |
 | 2 | WAVE-CHIP-VISIBLE-VITALS chip-visible vitals (code, pre-registered) | safety | cloud, mid-tier; run local | 100k | none | `algorithms/chip-visible-vitals/` |
 | 2 | WAVE-MUTATION-TESTING-GATE mutation gate | safety-governor | local orchestrator | 60k cloud to set up | WAVE-TRACE-CONFORMANCE-REPLAY | `tools/mutants/`, `results/mutants.md` |
-| 2 | WAVE-POST-QUANTUM-SIGNATURE-COST post-quantum cost; WAVE-COVERT-CHANNEL-BUDGET covert-channel budget | safety-governor | cloud, mid-tier (one agent, both small) | 140k | none | `govsim/bench.py` (one constant), `tests/test_h10_leakage.py` |
+| 2 | WAVE-POST-QUANTUM-SIGNATURE-COST post-quantum cost; WAVE-COVERT-CHANNEL-BUDGET covert-channel budget | safety-governor | cloud, mid-tier (one agent, both small) | 140k | none | `govsim/bench.py` (one constant), `tests/test_contract_leakage_within_budget.py` |
 | 3 | WAVE-OBSERVER-QUORUM-ARITHMETIC quorum arithmetic | safety | cloud, mid-tier | 60k | WAVE-OBSERVER-EVALUATION-SET, WAVE-OBSERVER-INDEPENDENCE | `observer/bench/quorum.py`, register rows in `safety-governor/docs/06` |
 | 3 | WAVE-VERDICT-LATENCY-IN-WINDOWS verdict latency; WAVE-USE-CASES-WITH-REAL-WITNESS use cases with the real witness | both | cloud, mid-tier, one agent with both clones | 170k | WAVE-LANES-CONFORMANCE-SUITE, WAVE-OBSERVER-EVALUATION-SET | `observer/bench/latency.py`, `usecases.py`; `govsim/cli.py` (`--observer lanes`), `govsim/cluster.py` (effector map) |
 | 3 | WAVE-FALSE-HALT-RATE-MODEL false-halt model | safety-governor | cloud, mid-tier | 100k | none | `docs/07` section 5, `govsim/faults.py` |

@@ -193,7 +193,7 @@ def test_compliance_report_lists_every_epoch_and_survives_a_restart_and_refuses_
 
 # ---------------------------------------------------------------- 10. the hypotheses hold at every tier
 @pytest.mark.parametrize("tier", ["rack", "board", "integrated"])
-def test_h17_and_h18_probes_pass_at_every_tier(tier):
+def test_ticket_and_oversight_probes_pass_at_every_tier(tier):
     r = build_rack(4, tier)
     r.bring_up()
     assert probe_h17(r) == "pass"

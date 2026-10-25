@@ -1628,7 +1628,7 @@ def test_core_mono_csr_low_and_high_words():
 
 
 # ================================================================ alarms
-@conformance("REQUIREMENT-ALARM-SET-BY-ANY-SOURCE", "REQUIREMENT-ALARMS-MONOTONE", "REQUIREMENT-ANY-PARTY-RAISES-ALARM")
+@conformance("REQUIREMENT-ALARM-BITS-SET-THROUGH-MASK", "REQUIREMENT-ALARMS-MONOTONE", "REQUIREMENT-ANY-PARTY-RAISES-STICKY-ALARM")
 def test_alarm_any_source_sets():
     """Any bit presented on set_mask becomes and stays set."""
     dut = B.Alarms(width=8)

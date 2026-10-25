@@ -88,7 +88,7 @@ Findings (F-nn) are the tests that reproduce a disagreement; see `FINDINGS.md`.
 | REQUIREMENT-SILICON-ID-REGISTER | S §2 | Silicon id and revision | top (ID) | RTL | `test_core_id_register` |  |
 | REQUIREMENT-CAUSE-REGISTER-LAYOUT | S §2 | Bits 2:0 the sequencer's own summary (0 none, 1 loop, 2 local, 3 tamper, 4 command); bit 3 waiting for the first heartbeat, boot window passed; bit 4 excluded; bits 15:8 the firmware's reason code | top (CAUSE) | RTL | `test_core_state_and_cause_csrs` |  |
 | REQUIREMENT-LOG-WINDOW-FIRMWARE-MAPPED | S §2 | firmware-mapped: the log engine is firmware over NVM, so the RTL core does not decode it | top (LOG_HEAD) | FW-ONLY | `test_core_log_window_is_not_decoded` |  |
-| REQUIREMENT-ALARM-SET-BY-ANY-SOURCE | V §3 | Bits set by any source through set_mask | alarms | RTL | `test_alarm_any_source_sets` |  |
+| REQUIREMENT-ALARM-BITS-SET-THROUGH-MASK | V §3 | Bits set by any source through set_mask | alarms | RTL | `test_alarm_any_source_sets` |  |
 | REQUIREMENT-ALARM-CLEAR-NEEDS-AUTHORIZATION | V §3 | cleared only through clear_mask gated by clear_authorized | alarms | RTL | `test_alarm_clear_needs_authorization`<br>`test_alarm_set_beats_clear_in_the_same_cycle` |  |
 | REQUIREMENT-STICKY-ALARM-REGISTER | S §2 | Sticky alarm bits (monotone; cleared only through the clear path) | top (ALARMS) | RTL | `test_core_alarms_csr` |  |
 | REQUIREMENT-ALARMS-MONOTONE | V §1 | Alarms are monotone | alarms | RTL | `test_alarm_any_source_sets`<br>`test_alarm_set_beats_clear_in_the_same_cycle`<br>`test_alarm_monotone_without_authorization_random` |  |
@@ -102,7 +102,7 @@ Findings (F-nn) are the tests that reproduce a disagreement; see `FINDINGS.md`.
 | REQUIREMENT-AUTHORITY-KEY-SIGNS-HALT | S §3 | an authority key (never the heartbeat key) | halt (cmd_halt, cmd_throttle strobes) | FW | `test_fw_heartbeat_key_cannot_sign_a_halt` |  |
 | REQUIREMENT-CLEAR-NEEDS-LOGGED-CHECKPOINT | S §3 | Clear the cause if it is in the log and a fabric neighbor has acknowledged the checkpoint that contains it | halt (clear strobe) | FW | `test_model_clear_handler_reports_the_mailbox_reason`<br>`test_model_finding_clear_collapses_reasons` (CONFORMANCE-CLEAR-REPORTS-ONE-REASON) |  |
 | REQUIREMENT-RACK-WIDE-EPOCH-SWITCH | S §3 | Switch the epoch (the rack-wide rule in 02) | epoch_reg (commit, quorum_ok) | FW | `test_core_epoch_switch_kills_every_old_capability` | 3 |
-| REQUIREMENT-ANY-PARTY-RAISES-ALARM | S §3 | Raises a sticky alarm (any party may) | alarms (set_mask) | FW | `test_alarm_any_source_sets` |  |
+| REQUIREMENT-ANY-PARTY-RAISES-STICKY-ALARM | S §3 | Raises a sticky alarm (any party may) | alarms (set_mask) | FW | `test_alarm_any_source_sets` |  |
 | REQUIREMENT-ALARM-APPROVER-KEY-CLEARS | S §3 | the policy's alarm approver key | alarms (clear_authorized) | FW | `test_alarm_clear_needs_authorization` |  |
 | REQUIREMENT-HOST-PEER-ONLY-ON-PCIE | S §3 | The peer host is accepted only on the PCIe point, never on NVSwitch, DPU or storage | cap_table (ins, mac_ok) | FW | `test_fw_host_peer_only_on_pcie` |  |
 | REQUIREMENT-METER-SLOT-FREEZE | S §3 | Freezes the meter slot for that model | meter (strobe) | FW | `test_meter_frozen_slot_stays_put_without_strobes` |  |
@@ -151,6 +151,9 @@ Findings (F-nn) are the tests that reproduce a disagreement; see `FINDINGS.md`.
 The 75-attack, 12-baseline catalogue in `hardware-and-silicon` (`hardware_ref`, `hardware-and-silicon/results/report.json`).
 Every row runs against the reference software stack, so in the catalogue every row is decided by the
 reference gate. The owner column says which layer of the governor would decide the same thing.
+A row name starts with the reference-stack layer it tests: L0 (Silicon Root), L2 (Provenance), L3 (Observers),
+L4 (Control Plane) or L5 (Governance Root); EP, AU, NV and TX rows test endpoints, the audit trail, the NVIDIA
+path and transactional authorization.
 
 | Row | Governor-side owner | Requirements |
 |---|---|---|

@@ -145,7 +145,7 @@ Two agents, six blocks each, every block proven four ways: a bounded check, k-in
 
 **What it found that I don't like.**
 
-- If the governor dies, the management link (LTPI) holds every signal in its last state, so a dead governor leaves its GPUs running. A guard who faints holding the door open. The agent wrote requirement REQ-LTPI-FS-1: the motherboard must pull the brakes itself when the link drops. That's a rule for server makers; our chip can't enforce it alone.
+- If the governor dies, the management link (LTPI) holds every signal in its last state, so a dead governor leaves its GPUs running. A guard who faints holding the door open. The agent wrote requirement REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS: the motherboard must pull the brakes itself when the link drops. That's a rule for server makers; our chip can't enforce it alone.
 - The docs say PCIe reset is released after slot power is good; the circuit releases it on the same clock edge it turns the power on.
 - The pinout is missing three kinds of pins this design needs (a reset input for the governor's own PCIe link, a power-good input per slot, the second LTPI link). Proposed, not added yet.
 

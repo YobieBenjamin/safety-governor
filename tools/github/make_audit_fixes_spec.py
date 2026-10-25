@@ -143,7 +143,7 @@ add("F06", "high", "safety-governor", 1,
     "**Claim.** Installed authority must not outlive its freshness rules.\n\n"
     "**Read first.** `govsim/governor.py:282-291`, `:821-836`, `:1306-1336`, `:244-245`; "
     "`govsim/policy.py:248-258`; `docs/25-the-rulebook-and-the-board.md:229-231`; "
-    "`tests/test_h07_register.py:25-30`.\n\n"
+    "`tests/test_contract_assumptions_register_complete.py:25-30`.\n\n"
     "**Concrete failure.** Install a genuinely signed recipient registry for A expiring at t+1. "
     "Installation computes `stale=False`. At t+2 a message to A still takes the auto path, because "
     "the rule consults the cached boolean, not the clock. The customer registry has the same defect. "
@@ -163,7 +163,7 @@ add("F10", "high", "safety-governor", 1,
     "python3 -m pytest -q tests/test_f10_response_commitment.py",
     "**Claim.** One unsampled response ID must not suppress all later random audit draws.\n\n"
     "**Read first.** `govsim/governor.py:1032-1044`, `:674-676`, `:732-738`, `:769-773`; "
-    "`govsim/cluster.py:420-424` and `:450-455`; `tests/test_h18_oversight.py:22-65`.\n\n"
+    "`govsim/cluster.py:420-424` and `:450-455`; `tests/test_contract_oversight_survives_model.py:22-65`.\n\n"
     "**Concrete failure.** Find a response ID that released without an escrow receipt. Submit "
     "different response bytes under that same ID: `_record_stream()` overwrites hashes but keeps the "
     "earlier `sampled=False` (it uses `setdefault()` and only draws when unset), so no receipt is "
@@ -268,8 +268,7 @@ add("F12", "high", "safety-governor", 2,
     "**Claim.** A finite-byte containment ceiling must account for every externally observable "
     "channel, including message bodies and other permitted parameters.\n\n"
     "**Read first.** `govsim/containment.py:43-64`, `govsim/cluster.py:162-164` and `:219-225`, "
-    # Registered name: WAVE-COVERT-CHANNEL-BUDGET (old ID P3 is kept because code matches on it)
-    "`govsim/governor.py:704-725`, `audit/wave-2/P3.revise-2.comment.md:9-18`, "
+    "`govsim/governor.py:704-725`, `audit/wave-2/P3.revise-2.comment.md:9-18` (the review record of WAVE-COVERT-CHANNEL-BUDGET (old: P3)), "
     "`results/containment.md:35-40`.\n\n"
     "**Concrete failure.** While RUN, consume the output allowance, then send `message.send` to a "
     "listed recipient with an arbitrary string in an unconstrained body. The auto rule bounds the "
@@ -287,13 +286,12 @@ add("F12", "high", "safety-governor", 2,
     "channel is bounded, and hold once it is.")
 
 add("F13", "high", "safety-governor", 2,
-    # Registered name: EXPERIMENT-EGRESS-CONTAINMENT (old ID P3b is kept because code matches on it)
     "F13 - EXPERIMENT-EGRESS-CONTAINMENT must install the policies it names and measure delivered bytes",
-    "python3 -m pytest -q tests/test_f13_p3b_policy_and_egress.py",
+    "python3 -m pytest -q tests/test_f13_policy_and_egress.py",
     "**Claim.** The containment experiment must measure the policies it claims and bytes actually "
     "released, not signing calls under the default policy.\n\n"
     "**Read first.** `govsim/containment.py:32-64` and `:91-110`, `govsim/cluster.py:89-104`, "
-    "`:268-277`, `:420-468`, `results/containment.md:11-33`, `tests/test_p3b_containment.py:6-15`.\n\n"
+    "`:268-277`, `:420-468`, `results/containment.md:11-33`, `tests/test_egress_containment.py:6-15`.\n\n"
     "**Concrete failure.** `egress_ceiling()` builds the rack (whose constructor already signed and "
     "loaded a policy), then changes `r.policy_kw` and calls `bring_up()`, which does not replace the "
     "policy, so both the supposed sandbox and busy-service cases run the reference policy. The "
@@ -303,7 +301,7 @@ add("F13", "high", "safety-governor", 2,
     "and assert the installed policy identity and each limit. Measure deliveries at the enforced "
     "boundary through the complete release path. Attempt every claimed prohibited action. Retract the "
     "50-year/centuries/11-day interpretations pending corrected measurement.\n\n"
-    "**Discriminating test** (`tests/test_f13_p3b_policy_and_egress.py`). Three deliberately distinct "
+    "**Discriminating test** (`tests/test_f13_policy_and_egress.py`). Three deliberately distinct "
     "policies, with the live policy identity and limits asserted; the 4,096-byte case never exceeds "
     "its signed allowance; an actual sandbox peer request is attempted; a signature with no egress "
     "release contributes zero delivered bytes.")
@@ -315,7 +313,7 @@ add("F23", "high", "safety-governor", 2,
     "ticket, not only the batched record signatures.\n\n"
     "**Read first.** `govsim/bench.py:21-36` and `:48-72`, `govsim/governor.py:880-889` and "
     "`:992-994`, `govsim/cluster.py:445-468`, `docs/04-specification.md:296-299`, "
-    "`blog/08-the-chip-that-says-no-7-scaling-no.md:23` (HS), `tests/test_h09_overhead.py:1-20`.\n\n"
+    "`blog/08-the-chip-that-says-no-7-scaling-no.md:23` (HS), `tests/test_contract_governor_overhead_bounded.py:1-20`.\n\n"
     "**Concrete failure.** The benchmark calls `sign_output()` and prices batched record signatures, "
     "but never follows the response-release path, which requests a ticket for every response and "
     "signs every ticket (counted as `ops[\"ticket\"]`, not `ops[\"sign\"]`). Including those tickets, "
@@ -332,7 +330,6 @@ add("F23", "high", "safety-governor", 2,
     "the release-ticket signatures.")
 
 add("F04-audit", "high", "safety-governor", 2,
-    # Registered name: EXPERIMENT-ROAD-REACHABILITY (old ID A1 is kept because code matches on it)
     "F04-audit - EXPERIMENT-ROAD-REACHABILITY must not call an enum a destination boundary",
     "python3 -m pytest -q tests/test_f04_audit_reachability.py",
     "**Claim.** The reachability audit must not classify a rule as confined because a currency enum "

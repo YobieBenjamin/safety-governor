@@ -286,8 +286,7 @@ def main() -> int:
     ends = {v for v in tiny if v.startswith(("g", "e", "u", "v"))}
     f, _ = min_vertex_cut(tiny, S, T, protected=ends)
     b = brute_min_cut(tiny, S, T, protected=ends)
-    # Registered name: INVARIANT-MAX-FLOW-MATCHES-BRUTE-FORCE (old ID K0 is kept because code matches on it)
-    report("K0", f == b, f"max-flow min cut ({f}) equals the brute-force min cut ({b}) on the tiny instance")
+    report("K0", f == b, f"max-flow min cut ({f}) equals the brute-force min cut ({b}) on the tiny instance")  # INVARIANT-MAX-FLOW-MATCHES-BRUTE-FORCE (old: K0)
 
     n_i, n_e, core, k = 12, 10, 60, 6
     g = build(n_instances=n_i, n_effectors=n_e, core=core, k=k, n_users=20, n_services=20)
@@ -304,46 +303,38 @@ def main() -> int:
     ends = computes | controllers
     first_hop = {c for e in ends for c in g[e] if c.startswith("c")}
     deep_flow, _ = min_vertex_cut(g, net_S, net_T, protected=ends | users | services | first_hop)
-    # Registered name: INVARIANT-NO-DEEP-NETWORK-SEPARATOR (old ID K1a is kept because code matches on it)
-    report("K1a", deep_flow >= INF, f"no separator exists that stays out of the access nodes next to the ends: there is no switch in the deep network "
+    report("K1a", deep_flow >= INF, f"no separator exists that stays out of the access nodes next to the ends: there is no switch in the deep network "  # INVARIANT-NO-DEEP-NETWORK-SEPARATOR (old: K1a)
            f"(a thin check on this instance: only {core - len(first_hop)} of its {core} core nodes are more than one hop from an end)")
     mid_flow, mid_cut = min_vertex_cut(g, net_S, net_T, protected=ends | users | services)
-    # Registered name: INVARIANT-CHEAPEST-CUT-AT-ACCESS-LAYER (old ID K1b is kept because code matches on it)
-    report("K1b", mid_cut <= first_hop and mid_flow >= k and mid_flow > max(n_i, n_e),
+    report("K1b", mid_cut <= first_hop and mid_flow >= k and mid_flow > max(n_i, n_e),  # INVARIANT-CHEAPEST-CUT-AT-ACCESS-LAYER (old: K1b)
            f"the cheapest network-side separator has {mid_flow} vertices, all of them access nodes one hop from an end (k={k}; {n_i} instances, {n_e} effectors)")
 
     # INVARIANT-NETWORK-CUT-HITS-BYSTANDERS: that cut takes bystanders with it; the end cuts do not
     pairs = [(u, v) for u in sorted(users) for v in sorted(services)]
     severed = sum(1 for u, v in pairs if separated(g, {u}, {v}, mid_cut))
-    # Registered name: INVARIANT-NETWORK-CUT-HITS-BYSTANDERS (old ID K2 is kept because code matches on it)
-    report("K2", len(mid_cut) / core >= 0.5 and severed > 0,
+    report("K2", len(mid_cut) / core >= 0.5 and severed > 0,  # INVARIANT-NETWORK-CUT-HITS-BYSTANDERS (old: K2)
            f"that separator removes {len(mid_cut)} of {core} core nodes ({len(mid_cut) / core:.0%}) and severs {severed} of {len(pairs)} user-to-service pairs ({severed / len(pairs):.0%}) that had nothing to do with AI")
 
     # INVARIANT-LOCAL-PAIR-SURVIVES-CUT: the local pair does not care about the network
     k3 = not separated(g, {"m_local"}, {"a_local"}, {v for v in g if v.startswith("c")})
-    # Registered name: INVARIANT-LOCAL-PAIR-SURVIVES-CUT (old ID K3 is kept because code matches on it)
-    report("K3", k3, "removing the entire core still leaves the local instance wired to its local actuator")
+    report("K3", k3, "removing the entire core still leaves the local instance wired to its local actuator")  # INVARIANT-LOCAL-PAIR-SURVIVES-CUT (old: K3)
 
     # INVARIANT-EFFECTOR-ENDS-FORM-SEPARATOR: the ends
     e_flow, e_cut = min_vertex_cut(g, S, T, protected=users | services | computes)
     g_flow, g_cut = min_vertex_cut(g, S, T, protected=users | services | controllers)
-    # Registered name: INVARIANT-CONTROLLER-CUT-ONE-PER-EFFECTOR (old ID K4a is kept because code matches on it)
-    report("K4a", e_flow == len(controllers) and e_cut == controllers and not separated(g, users, services, e_cut),
+    report("K4a", e_flow == len(controllers) and e_cut == controllers and not separated(g, users, services, e_cut),  # INVARIANT-CONTROLLER-CUT-ONE-PER-EFFECTOR (old: K4a)
            f"cutting at the effector controllers separates every instance from every actuator with {e_flow} vertices, one per effector, and users still reach services")
-    # Registered name: INVARIANT-COMPUTE-CUT-ONE-PER-INSTANCE (old ID K4b is kept because code matches on it)
-    report("K4b", g_flow == len(computes) and g_cut == computes and not separated(g, users, services, g_cut),
+    report("K4b", g_flow == len(computes) and g_cut == computes and not separated(g, users, services, g_cut),  # INVARIANT-COMPUTE-CUT-ONE-PER-INSTANCE (old: K4b)
            f"cutting at the compute separates them with {g_flow} vertices, one per instance, and users still reach services")
     any_flow, any_cut = min_vertex_cut(g, S, T, protected=users | services)
-    # Registered name: INVARIANT-NO-CUT-BEATS-SMALLER-END (old ID K4c is kept because code matches on it)
-    report("K4c", any_flow == min(len(S), len(T)) and any_flow == e_flow,
+    report("K4c", any_flow == min(len(S), len(T)) and any_flow == e_flow,  # INVARIANT-NO-CUT-BEATS-SMALLER-END (old: K4c)
            f"letting the cut fall anywhere but on bystanders, the smallest separator in the whole graph has {any_flow} vertices, "
            f"the smaller end's count ({len(S)} instances, {len(T)} actuators, the local pair included): nothing anywhere beats one per machine at the smaller end")
 
     # INVARIANT-ONLY-IRREVERSIBLE-NEED-GATE: only irreversible effectors need the gate
     irreversible = {f"a{j}" for j in range(n_e) if j % 2 == 0} | {"a_local"}
     r_flow, r_cut = min_vertex_cut(g, S, irreversible, protected=users | services | computes)
-    # Registered name: INVARIANT-ONLY-IRREVERSIBLE-NEED-GATE (old ID K5 is kept because code matches on it)
-    report("K5", r_flow == len(irreversible) and r_cut == {f"e{a[1:]}" for a in irreversible},
+    report("K5", r_flow == len(irreversible) and r_cut == {f"e{a[1:]}" for a in irreversible},  # INVARIANT-ONLY-IRREVERSIBLE-NEED-GATE (old: K5)
            f"gating only the {len(irreversible)} irreversible effectors needs {r_flow} vertices, their own controllers; the reversible ones are audited instead")
 
     # INVARIANT-TWO-HUB-NO-KILL: the two-hub counterexample. This is why Claim 2 cannot read the per-pair bound as a claim about
@@ -355,8 +346,7 @@ def main() -> int:
     th, th_S, th_T = build_two_hub(n_sources=12, n_targets=10, n_hubs=2)
     th_pair, _ = min_vertex_cut(th, {"m0"}, {"e0"}, protected=th_S | th_T)
     th_agg, th_cut = min_vertex_cut(th, th_S, th_T, protected=th_S | th_T)
-    # Registered name: INVARIANT-TWO-HUB-NO-KILL (old ID K6 is kept because code matches on it)
-    report("K6", th_pair == 2 and th_agg == 2 and th_cut == {"h0", "h1"} and th_agg < min(len(th_S), len(th_T)),
+    report("K6", th_pair == 2 and th_agg == 2 and th_cut == {"h0", "h1"} and th_agg < min(len(th_S), len(th_T)),  # INVARIANT-TWO-HUB-NO-KILL (old: K6)
            f"two shared hubs: every source-target pair has {th_pair} vertex-disjoint paths, yet {th_agg} vertices (the hubs) separate all "
            f"{len(th_S)} sources from all {len(th_T)} targets, under min(|S|,|T|)={min(len(th_S), len(th_T))}: the per-pair bound does not imply a large cut, "
            f"and the corrected Claim 2 excludes this graph because its sides carry only {th_agg} disjoint paths")
@@ -365,8 +355,7 @@ def main() -> int:
     sc, sc_S, sc_T = build_two_hub(n_sources=12, n_targets=10, n_hubs=1)
     sc_pair, _ = min_vertex_cut(sc, {"m0"}, {"e0"}, protected=sc_S | sc_T)
     sc_agg, sc_cut = min_vertex_cut(sc, sc_S, sc_T, protected=sc_S | sc_T)
-    # Registered name: INVARIANT-SHARED-CONTROLLER-NO-KILL (old ID K7 is kept because code matches on it)
-    report("K7", sc_pair == 1 and sc_agg == 1 and sc_cut == {"h0"},
+    report("K7", sc_pair == 1 and sc_agg == 1 and sc_cut == {"h0"},  # INVARIANT-SHARED-CONTROLLER-NO-KILL (old: K7)
            f"one shared controller: each pair is joined through {sc_pair} vertex, so {sc_agg} vertex separates all {len(sc_S)} sources from all "
            f"{len(sc_T)} targets; the per-pair bound is silent about a shared vertex, and the corrected Claim 2 excludes this graph too")
 

@@ -13,7 +13,7 @@ Worst case, 317 µs from the switch opening to the last halt output, against a b
 > **Plain-English version:** `10-plain-english-walkthrough.md` §6.
 > **Backed by:** generator `hw/loop/loop_netlist.py`, sweep `hw/loop/run_loop.py` (`make loop`),
 > generated results `hw/loop/results.md`; tests `hw/loop/test_loop.py` (ngspice, skipped when
-> ngspice is absent) and `tests/test_h11_halt_loop.py` (functional model); the loop's rules in
+> ngspice is absent) and `tests/test_contract_halt_reaches_every_gpu.py` (functional model); the loop's rules in
 > `02-safety-fabric.md` §1, the wiring in `hw/pcb/rack-integration.md` §4, the timing row in
 > `04-specification.md` §9. The bench measurement in Phase 2 replaces every number here.
 
@@ -179,7 +179,7 @@ supply droop, or a switch that fails short. A comparator offset or a noisy pair 
 governor sample "current present" during a real loss or "lost" during a real run; the
 debounce exists for the second case and the threshold margin (100 mV below nominal, 100 mV
 above zero) for both, and neither margin is validated here. The functional model's
-`tests/test_h11_halt_loop.py` checks the rules of the loop, not its electronics. The bench
+`tests/test_contract_halt_reaches_every_gpu.py` checks the rules of the loop, not its electronics. The bench
 measurement of the prototype rack in Phase 2 (`04-specification.md` §9: "design targets
 measured in Phase 2") replaces this document's numbers; until then they are design targets
 with a simulation behind them, not results.

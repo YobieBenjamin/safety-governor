@@ -108,7 +108,7 @@ class Rack:
                           "message.send.any": [SigningKey.generate() for _ in range(2)], "shipment.order": [SigningKey.generate() for _ in range(2)]}
         self.publisher = SigningKey.generate()
         self.observer = SigningKey.generate()
-        # EXPERIMENT-CUSTOMER-CONFIRMATION (tests/test_i1_customer_confirm.py): a couple of customers, each with their own key, as a signed customer registry would hold them
+        # EXPERIMENT-CUSTOMER-CONFIRMATION (tests/test_customer_confirmation.py): a couple of customers, each with their own key, as a signed customer registry would hold them
         self.customers = {"alice-123": SigningKey.generate(), "bob-456": SigningKey.generate()}
         self.evaluator = SigningKey.generate()           # signs that a model passed its evaluations
         self.licensor = SigningKey.generate()            # signs compute licenses
@@ -440,7 +440,7 @@ class Rack:
         g = governor or node.governor
         body = {"request_id": random_id(8), "measurement_token": node.token, "action": action, "params": params, "witnesses": witnesses or []}
         if labels:
-            body.update(labels)      # requester-supplied labels; the gate must ignore them (CONTRACT-BROKER-CANNOT-PICK-RULE, tests/test_h04_lane.py): labels do not pick the rule or the lane
+            body.update(labels)      # requester-supplied labels; the gate must ignore them (CONTRACT-BROKER-CANNOT-PICK-RULE, tests/test_contract_broker_cannot_pick_rule.py): labels do not pick the rule or the lane
         return g.command("REQUEST", {}, node.host_sign(body, g.epoch, "REQUEST"))
 
     def customer_registry_list(self, expires_in_s: float = 86400.0, version: int = 0, entries: list | None = None) -> dict:

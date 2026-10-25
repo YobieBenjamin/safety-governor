@@ -1,5 +1,4 @@
-// Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
-// L7-SPLICE: python -m rtl.formal pastes this text into module ticket_store (rtl/gen/ticket_store.v) just before
+// L7-SPLICE: python -m rtl.formal pastes this text into module ticket_store (rtl/gen/ticket_store.v) just before (WAVE-FORMAL-PROOFS-ON-VERILOG (old: L7))
 // endmodule. The block's logic is not touched.
 //
 // Rules (docs/07-verification-plan.md section 3 ticket_store row; the block docstring; govsim/endpoints.py

@@ -212,7 +212,7 @@ long-lived slot serving a busy model can reach. The wrap looks like the counter 
 alarm), or use 64 bits in the product.
 
 **Closed.** The WAVE-FORMAL-PROOFS-ON-VERILOG group B proofs found the same bug independently (one big add could move a counter down) and the
-meter now saturates at its maximum (merge `acce09f`, regression in `rtl/tests/test_l7b_regressions.py`). The
+meter now saturates at its maximum (merge `acce09f`, regression in `rtl/tests/test_formal_proof_regressions.py`). The
 reproducer above now passes and stays in the suite as a guard. The alarm on saturation is not added yet.
 
 ## CONFORMANCE-MONOTONIC-COUNTER-WRAPS: Monotonic counter wraps from an all-ones high-water mark (closed)

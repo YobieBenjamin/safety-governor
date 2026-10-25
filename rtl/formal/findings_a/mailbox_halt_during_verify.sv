@@ -1,5 +1,4 @@
-// Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
-// L7-SPLICE block: mailbox. FINDINGS-a.md RTL-MAILBOX-FRAME-NOT-HELD (second half). Expected to FAIL by assertion. Rule: a run-only command
+// L7-SPLICE block: mailbox. FINDINGS-a.md RTL-MAILBOX-FRAME-NOT-HELD (second half). Expected to FAIL by assertion. Rule: a run-only command (WAVE-FORMAL-PROOFS-ON-VERILOG (old: L7))
 // is never dispatched while the governor is not running. Even with the frame fields held still, `running` is sampled
 // only at the doorbell, so a halt that lands while the signature is being checked does not stop the dispatch.
   reg f_init = 1;

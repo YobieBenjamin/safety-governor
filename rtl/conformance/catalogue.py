@@ -10,6 +10,8 @@ gate. The column that matters here is the governor-side owner:
   firmware         the governor's firmware decides it; any RTL involvement is a strobe
   reference gate   the reference stack's own lane (provenance, OpenShell integration) with no governor counterpart
 The runner cross-checks the row names against hardware-and-silicon/results/report.json when that clone is present.
+A row name is a machine key that starts with the reference-stack layer it tests: L0 (Silicon Root), L2 (Provenance),
+L3 (Observers), L4 (Control Plane) or L5 (Governance Root) (LABELS.md rule on reference-stack layers).
 """
 from __future__ import annotations
 

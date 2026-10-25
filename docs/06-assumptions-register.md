@@ -4,14 +4,14 @@ Trusted hardware does not make a declared fact true. The governor compares a val
 given against a protected rule, and the contract holds exactly as far as the value can be
 trusted. Every deployment ships a register with one row per input any rule or any endpoint
 relies on. The policy loader refuses an image whose rules name an input with no row
-(requirement R-CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE, `tests/test_h07_register.py`).
+(requirement R-CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE, `tests/test_contract_assumptions_register_complete.py`).
 
 In plain words: the list taped to the wall of the security office. Who is allowed to tell us
 this, how old can it be, what do we do when two people disagree, and what can we not check.
 
 > **Plain-English version:** `10-plain-english-walkthrough.md` §11.
 > **Backed by:** model `govsim/policy.py` (`check_register`: an image whose rules name an input
-> with no row does not load); tests `tests/test_h07_register.py`.
+> with no row does not load); tests `tests/test_contract_assumptions_register_complete.py`.
 
 ## Columns
 

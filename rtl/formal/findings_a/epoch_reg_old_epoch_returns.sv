@@ -1,5 +1,4 @@
-// Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
-// L7-SPLICE block: epoch_reg. FINDINGS-a.md RTL-OLD-EPOCH-RECOMMITTED. Expected to FAIL by assertion. Rule (the brief's reading of
+// L7-SPLICE block: epoch_reg. FINDINGS-a.md RTL-OLD-EPOCH-RECOMMITTED. Expected to FAIL by assertion. Rule (the brief's reading of (WAVE-FORMAL-PROOFS-ON-VERILOG (old: L7))
 // anti-rollback): once the epoch has moved on from a value, it never goes back to it. The register has no notion of
 // order: any commit with a quorum is taken, including a re-commit of an earlier, still validly signed image.
   reg f_init = 1;

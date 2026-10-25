@@ -16,7 +16,7 @@ few cycles: `bounded check failed: meter_props: props.sv:31 ... props.sv:41` (ev
 
 **Fix.** The adds saturate (`_sat_add` in `meter.py`): a counter that would pass all ones stays at all ones, which
 reads as over every budget, the safe side. The old adder is kept as a mutant ("the old wrapping add") and is caught
-by assertion. Regression: `rtl/tests/test_l7b_regressions.py::test_meter_counter_cannot_be_moved_down_by_a_large_add`
+by assertion. Regression: `rtl/tests/test_formal_proof_regressions.py::test_meter_counter_cannot_be_moved_down_by_a_large_add`
 fails on the old code by assertion (the counter reads 4 after 5 + 0xFFFF on a 16-bit build).
 
 ## RTL-HEARTBEAT-KEPT-ALIVE-WITHOUT-HEARTBEAT. The heartbeat could be kept alive without a heartbeat (fixed)

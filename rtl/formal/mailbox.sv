@@ -1,5 +1,4 @@
-// Registered name: WAVE-FORMAL-PROOFS-ON-VERILOG (old ID L7 is kept because code matches on it)
-// L7-SPLICE: python -m rtl.formal pastes this text into module mailbox (rtl/gen/mailbox.v) just before endmodule.
+// L7-SPLICE: python -m rtl.formal pastes this text into module mailbox (rtl/gen/mailbox.v) just before endmodule. (WAVE-FORMAL-PROOFS-ON-VERILOG (old: L7))
 // The block's logic is not touched.
 //
 // Rules (docs/07-verification-plan.md section 3 mailbox row; docs/04-specification.md sections 2 and 3; govsim

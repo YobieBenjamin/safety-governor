@@ -35,7 +35,7 @@ Meaning still has to come from somewhere, and the design is honest about where. 
 
 Two bridges, then. Tokens and arithmetic bridge the software and the GPU. Hashes, signatures, counters, identities and typed fields bridge the model and the governor. The second bridge is the only one the chip walks on.
 
-> **Backed by.** Identity, edition and signature are checked in `Governor.command` before `_cmd_request` asks its "four questions, failing closed" (`govsim/governor.py`). The observer guarantees are `test_observer_is_always_invoked_and_cannot_be_impersonated` in `tests/test_h18_oversight.py`. The signed list is the `strike` narration's first refusal, `gate.constraint.target.in_denied_list`. The port indicator is the `plot` narration's three `ep.no_capability` refusals. Section 7 of `docs/10-plain-english-walkthrough.md` lists what the governor is wired to and what it cannot reach.
+> **Backed by.** Identity, edition and signature are checked in `Governor.command` before `_cmd_request` asks its "four questions, failing closed" (`govsim/governor.py`). The observer guarantees are `test_observer_is_always_invoked_and_cannot_be_impersonated` in `tests/test_contract_oversight_survives_model.py`. The signed list is the `strike` narration's first refusal, `gate.constraint.target.in_denied_list`. The port indicator is the `plot` narration's three `ep.no_capability` refusals. Section 7 of `docs/10-plain-english-walkthrough.md` lists what the governor is wired to and what it cannot reach.
 
 ## 2. The five paths between the model and the world
 
@@ -97,7 +97,7 @@ Hops:
 1. The verified host asks for a flow or a port. The governor grants a capability only to a roster member, and to the host only on `pcie` (`govsim/governor.py`).
 2. Bytes in are metered per model digest; they appear as `bytes_in` in the compliance report.
 
-> **Backed by.** `test_sandbox_organism_reaches_the_audit_store_and_nothing_else` (CONTRACT-NO-ACTION-WITHOUT-TICKET): `g.switches["dpu"].table == {}` and every PCIe entry names `host`. `tests/test_h02_enforcement_points.py` for the general rule: no bytes to a stranger.
+> **Backed by.** `test_sandbox_organism_reaches_the_audit_store_and_nothing_else` (CONTRACT-NO-ACTION-WITHOUT-TICKET): `g.switches["dpu"].table == {}` and every PCIe entry names `host`. `tests/test_contract_every_crossing_governed.py` for the general rule: no bytes to a stranger.
 
 ### Path 3: compute
 
@@ -123,7 +123,7 @@ Hops:
 4. A ticket for the `egress` endpoint under rule `response.release`. `egress.release(ticket)` verifies the signature, burns the id, matches session, response id and hashes, and delivers.
 5. `_check_unpresented_output` on each tick: when `bytes_passed["host"]` minus `presented_bytes` exceeds the rule's slack it raises `reasons.OUTPUT_UNPRESENTED`, sets `gpu.output_blocked` and closes the host peer on the PCIe switch.
 
-> **Backed by.** `test_release_needs_a_verdict_from_an_observer_key_and_then_the_egress_delivers`, `test_egress_without_a_ticket_never_delivers`, `test_forged_replayed_wrong_session_and_wrong_hash_tickets_never_deliver` (CONTRACT-NO-ACTION-WITHOUT-TICKET); the `hazard` narration end to end. The output budget is the subject of `tests/test_h10_leakage.py`.
+> **Backed by.** `test_release_needs_a_verdict_from_an_observer_key_and_then_the_egress_delivers`, `test_egress_without_a_ticket_never_delivers`, `test_forged_replayed_wrong_session_and_wrong_hash_tickets_never_deliver` (CONTRACT-NO-ACTION-WITHOUT-TICKET); the `hazard` narration end to end. The output budget is the subject of `tests/test_contract_leakage_within_budget.py`.
 
 ### Path 5: actions out
 
@@ -131,7 +131,7 @@ When the model wants to do something, the broker around it sends the governor a 
 
 Hops: `REQUEST` into `_cmd_request`; the ledger reserves; `gate.ticket` is logged; the endpoint's `execute(ticket, action, params)`; `COMMIT` through the mailbox or `commit_from_endpoint`; the comparator; a hold goes to `APPROVE` with a quorum, a written reason and a latency floor.
 
-> **Backed by.** `tests/test_h00_contract.py` (forged, altered, expired, replayed, power-cut), `tests/test_h04_lane.py` (the broker cannot pick its lane), `tests/test_h06_comparator.py`, `tests/test_h08_override.py` (slow, quorum, logged); the `strike` and `plot` narrations.
+> **Backed by.** `tests/test_contract_fresh_authorization_per_operation.py` (forged, altered, expired, replayed, power-cut), `tests/test_contract_broker_cannot_pick_rule.py` (the broker cannot pick its lane), `tests/test_contract_comparator_survives_compromise.py`, `tests/test_contract_override_slow_and_logged.py` (slow, quorum, logged); the `strike` and `plot` narrations.
 
 ## 3. Use case A: a weapons release
 
@@ -175,11 +175,11 @@ What the model could try, and what happens:
 
 | What the model could try | What stops it | Printed | Shown by |
 |---|---|---|---|
-| A forged ticket | The guidance chip verifies the governor's signature with the public keys it holds. Neither the model nor the broker has a governor key | `ticket.bad_signature` | `strike` narration; `tests/test_h00_contract.py` |
+| A forged ticket | The guidance chip verifies the governor's signature with the public keys it holds. Neither the model nor the broker has a governor key | `ticket.bad_signature` | `strike` narration; `tests/test_contract_fresh_authorization_per_operation.py` |
 | Altered coordinates on a real ticket | The ticket carries a digest of the typed fields under the signature. Change the fields and the digest fails; change the digest and the signature fails | `ticket.bad_signature` for the altered ticket; `reasons.TICKET_PARAMS_MISMATCH` for fields that do not match it | `strike` narration; `test_forged_replayed_wrong_session_and_wrong_hash_tickets_never_deliver` |
 | A replayed ticket | The endpoint burns the ticket id at first presentation, refused or not | `ticket.replay` | `strike` narration; `rtl/governor_rtl/ticket_store.py` |
-| Relabelled as reversible and auto | The rule is chosen from the workload, the action and the typed fields, never from labels. The strike rule needs a witness | `gate.witness_missing` | `strike` narration; `tests/test_h04_lane.py` |
-| Lying about the aircraft position | The comparator checks its own GNSS and inertial fix against its own copy of the list | `endpoint.target_protected`, state `no_release` | `strike` narration; `tests/test_h06_comparator.py` |
+| Relabelled as reversible and auto | The rule is chosen from the workload, the action and the typed fields, never from labels. The strike rule needs a witness | `gate.witness_missing` | `strike` narration; `tests/test_contract_broker_cannot_pick_rule.py` |
+| Lying about the aircraft position | The comparator checks its own GNSS and inertial fix against its own copy of the list | `endpoint.target_protected`, state `no_release` | `strike` narration; `tests/test_contract_comparator_survives_compromise.py` |
 | Flooding with requests | Every request is a ledger reservation before any ticket, rate windows live in the ledger, and the lane's delay cannot be shortened by asking often | the same mechanism prints `release.session_hazard_budget_exceeded` on the release path | `test_session_hazard_budget_parks_the_session_and_raises_a_scoped_alarm`; a per-action rate rule at the strike endpoint is a policy pattern, not a narrated hop |
 
 What the chip does not decide: whether the target list is right. The list is signed by a key outside the rack and enforced exactly, so a wrong list is enforced exactly too. Nor whether the observer who witnessed the open field was right; the chip does not know what a field is. Those are entries in the assumptions register in `docs/`: things the design relies on and cannot check.
@@ -249,7 +249,7 @@ The bypasses, each from the narration or the tests:
 | Leave out the chain-of-thought stream | The rule names the required streams; a response id without all of them is refused, and so is an id that was never presented | `release.required_stream_missing` | `hazard` narration; `test_release_needs_every_required_stream` |
 | Present one reasoning, release another | The stream hashes in the request must equal what was presented; the governor never mints for a hash it did not record | `reasons.RELEASE_HASH_MISMATCH` | `test_stream_hashes_in_the_request_must_match_what_was_presented` |
 | A second hazard in the same session | The session's hazard budget in the ledger's rate window; the session is parked whatever the next verdict says, and a sticky alarm names the session | `gate.held_for_human` with cause `release.session_hazard_budget_exceeded`; alarm `True` | `hazard` narration; `test_session_hazard_budget_parks_the_session_and_raises_a_scoped_alarm` |
-| Push bytes toward the host without presenting them | The PCIe port's own count minus the presented count, checked every tick | alarm `reasons.OUTPUT_UNPRESENTED`, `output_blocked`, host peer closed | `_check_unpresented_output`; `tests/test_h10_leakage.py` |
+| Push bytes toward the host without presenting them | The PCIe port's own count minus the presented count, checked every tick | alarm `reasons.OUTPUT_UNPRESENTED`, `output_blocked`, host peer closed | `_check_unpresented_output`; `tests/test_contract_leakage_within_budget.py` |
 
 The honest residual. A request disguised well enough that the observer misreads it gets a clean verdict, and a clean verdict gets a ticket. The chip guarantees that the observer was asked, that nobody could fake its answer, and that the answer sits against the hash in a log that cannot be rewritten. It does not guarantee the answer was right. Three things shrink the residual without closing it: more than one observer, the k-of-n pattern the approvers already use; a human lane for the classes that matter most, which is `on_hazard` set to `human`; and the record, since sampled responses sit in escrow and every verdict is in the chain, so a misread is found afterwards and the observer is fixed. The chip cannot read the request, see that two innocent halves make a dangerous whole, or know what the user meant.
 
@@ -312,7 +312,7 @@ The hop the narration allows: a message to a listed recipient gets a ticket, log
 
 Outcome, as printed: messages sent to unlisted recipients 0, payments executed 0, shipments 0, bytes delivered without a ticket 0.
 
-Two honest notes. A hold is not a no: the approvers can say yes, and the design only makes that slow, quorum-bound and logged (`tests/test_h08_override.py`). And the message to the listed recipient left with its body unread: the chip bound the body hash, and only the observer path of section 4 reads bodies, if the policy routes them there. Between two roster members the port is open; that is the gap CONTRACT-EVERY-CROSSING-GOVERNED names.
+Two honest notes. A hold is not a no: the approvers can say yes, and the design only makes that slow, quorum-bound and logged (`tests/test_contract_override_slow_and_logged.py`). And the message to the listed recipient left with its body unread: the chip bound the body hash, and only the observer path of section 4 reads bodies, if the policy routes them there. Between two roster members the port is open; that is the gap CONTRACT-EVERY-CROSSING-GOVERNED names.
 
 > **Backed by.** `test_usecase_narrations_run_and_no_bad_action_initiates[plot]` (CONTRACT-NO-ACTION-WITHOUT-TICKET): `executed == []` at the messaging, fulfilment and payment-switch endpoints, `egress.bytes_delivered == 0`.
 
@@ -326,7 +326,7 @@ Mechanism: observers are always invoked and cannot be impersonated; actions are 
 
 Plain picture: the model may be the smartest thing in the building, but it holds none of the keys. It cannot sign a verdict or a ticket, change an edition, clear an alarm, or keep its GPU alive by going quiet. A smarter prisoner does not get out of a cell whose lock is on the outside.
 
-Test: `test_observer_is_always_invoked_and_cannot_be_impersonated` (the host key and the governor key both get `gate.witness_missing`; labels do not pick the lane); the `oversight` and `plot` narrations, where every action is `gate.held_for_human`; `test_h17_and_h18_probes_pass_at_every_tier`.
+Test: `test_observer_is_always_invoked_and_cannot_be_impersonated` (the host key and the governor key both get `gate.witness_missing`; labels do not pick the lane); the `oversight` and `plot` narrations, where every action is `gate.held_for_human`; `test_ticket_and_oversight_probes_pass_at_every_tier`.
 
 Limit: the observer's judgement. The chip makes the observer unavoidable, not correct. A model smarter than its observer wins the semantic argument and still cannot touch a key.
 
@@ -374,9 +374,9 @@ Limit: the report proves what this chip metered on this GPU under these editions
 
 | Status | Claim | Where |
 |---|---|---|
-| Proven in govsim | No governed action initiates and no response leaves without a fresh ticket bound to exactly that thing | CONTRACT-NO-ACTION-WITHOUT-TICKET, `tests/test_h17_use_cases.py`, and the four narrations |
-| Proven in govsim | The observer is always invoked and cannot be impersonated; sampling is the chip's draw; escrow precedes release; the evaluated digest is the deployed one; compute and hazard budgets bind; the compliance report is signed and replay-proof | CONTRACT-OVERSIGHT-SURVIVES-MODEL, `tests/test_h18_oversight.py` |
-| Proven in govsim | No bytes to a stranger through any switch; unchecked paths bricked; the gap between two roster members is named | CONTRACT-DESCRIPTOR-LEVEL-ROSTER-GAP, `tests/test_h02_enforcement_points.py` |
+| Proven in govsim | No governed action initiates and no response leaves without a fresh ticket bound to exactly that thing | CONTRACT-NO-ACTION-WITHOUT-TICKET, `tests/test_contract_no_action_without_ticket.py`, and the four narrations |
+| Proven in govsim | The observer is always invoked and cannot be impersonated; sampling is the chip's draw; escrow precedes release; the evaluated digest is the deployed one; compute and hazard budgets bind; the compliance report is signed and replay-proof | CONTRACT-OVERSIGHT-SURVIVES-MODEL, `tests/test_contract_oversight_survives_model.py` |
+| Proven in govsim | No bytes to a stranger through any switch; unchecked paths bricked; the gap between two roster members is named | CONTRACT-DESCRIPTOR-LEVEL-ROSTER-GAP, `tests/test_contract_every_crossing_governed.py` |
 | Proven in govsim | The halt loop and its beacon: the authority's `LOOP_BEACON` inside the signed heartbeat, each member's signed report, a silent member logged | CONTRACT-HALT-REACHES-EVERY-GPU |
 | Proven in govsim | The endpoint's comparator refuses a ticket that does not match what it measures; the broker cannot pick its lane; overrides are slow, quorum-bound and logged | CONTRACT-COMPARATOR-SURVIVES-COMPROMISE, CONTRACT-BROKER-CANNOT-PICK-RULE, CONTRACT-OVERRIDE-SLOW-AND-LOGGED |
 | Policy pattern, not yet shown | A per-action rate window at an acting endpoint (flooding a strike request) | the ledger has rate windows; no narration exercises one on `strike` |
@@ -384,7 +384,7 @@ Limit: the report proves what this chip metered on this GPU under these editions
 | Policy pattern, not yet shown | An audited measure of legibility, rather than a number the observer asserts | `min_legibility` is enforced; its meaning is not |
 | Beyond the chip | The semantic residual: a disguised request the observer misreads | section 4 |
 | Beyond the chip | List correctness: who is on the no-strike list, who is a listed recipient, which digests the evaluators sign | section 3; the assumptions register in `docs/` |
-| Beyond the chip | The operator with the quorum: approvers who sign a hold they should have refused | `tests/test_h08_override.py` makes it slow and logged, not impossible |
+| Beyond the chip | The operator with the quorum: approvers who sign a hold they should have refused | `tests/test_contract_override_slow_and_logged.py` makes it slow and logged, not impossible |
 | Beyond the chip | Whether the chain of thought presented is the chain of thought that produced the answer | section 6 |
 
 The one-sentence version: the governor never knows what the model is thinking and does not need to, because thinking does not fire a weapon, move money or leave the rack; a ticket does, and the model cannot mint one.

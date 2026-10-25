@@ -52,7 +52,7 @@ With the shaper every rule passes: T_PVPERL measured 100.000 ms, T_PERST 101 us 
 
 When the power-good reaches the governor through LTPI it is up to 19.2 us late (LTPI Table 15). The same scenario with a 20 us hop on power-good fails T_FAIL at 20 us (`test_finding_t_fail_cannot_be_met_through_an_ltpi_hop`). A commanded power cut still passes, because PERST# drops with PWR_EN on the governor side. An uncommanded brown-out does not. So:
 
-**REQ-CEM-FAIL-1.** The HPM-side endpoint ORs the slot's local power-fail into PERST#. The governor's own T_FAIL guarantee holds only where the power-good reaches it directly (the soldered-on-baseboard option, or the prototype board).
+**REQUIREMENT-LOCAL-POWER-FAIL-DRIVES-PERST.** The HPM-side endpoint ORs the slot's local power-fail into PERST#. The governor's own T_FAIL guarantee holds only where the power-good reaches it directly (the soldered-on-baseboard option, or the prototype board).
 
 ## 6. The 1 ms halt bound
 

@@ -11,7 +11,7 @@ that rule fires.
 
 ``LtpiLink`` models what LTPI 1.2 section 2.5.2 says about GPIO on link loss ("LTPI shall
 maintain the state of the GPIOs exposed to the system") and the fail-safe override the
-governor needs on top of it (REQ-LTPI-FS-1). The spec text is the unsafe part: a governor
+governor needs on top of it (REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS). The spec text is the unsafe part: a governor
 whose link drops while its levers are released leaves them released.
 
     python -m govsim.hardware_ref.dcscm      # check the CSV, print the no-public-home list
@@ -216,7 +216,7 @@ def no_public_home(mapping: list[dict] | None = None) -> list[str]:
 @dataclass
 class LtpiLink:
     """GPIO tunnelled SCM to HPM. ``spec`` mode does what LTPI 1.2 2.5.2 says: on Link Lost the
-    HPM side keeps the last GPIO values. ``failsafe`` mode adds REQ-LTPI-FS-1: on Link Lost, and
+    HPM side keeps the last GPIO values. ``failsafe`` mode adds REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS: on Link Lost, and
     before the link first reaches Operational, the HPM endpoint drives every governor lever to
     its asserted value."""
     mode: str = "spec"

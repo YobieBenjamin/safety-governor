@@ -11,8 +11,8 @@ memory budgets and physical targets. The functional model in `govsim/` and the R
 > **Plain-English version:** `10-plain-english-walkthrough.md` §8, §9 and §14.
 > **Backed by:** model `govsim/governor.py` (`command` and one `_cmd_*` handler per mailbox
 > code), `govsim/policy.py` (the policy image, k-of-n), `govsim/ledger.py`, `govsim/crypto.py`,
-> `govsim/bench.py` (the timing budgets priced); tests `tests/test_h00_contract.py`,
-> `test_h03_quorum.py`, `test_h04_lane.py`, `test_h08_override.py`, `test_h09_overhead.py`;
+> `govsim/bench.py` (the timing budgets priced); tests `tests/test_contract_fresh_authorization_per_operation.py`,
+> `test_contract_policy_quorum_no_rollback.py`, `test_contract_broker_cannot_pick_rule.py`, `test_contract_override_slow_and_logged.py`, `test_contract_governor_overhead_bounded.py`;
 > hardware `rtl/governor_rtl/mailbox.py`, `ticket_store.py`, `meter.py`, `top.py` (the CSR
 > window).
 

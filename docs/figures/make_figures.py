@@ -248,7 +248,7 @@ def fig_boot():
         if i < 4:
             arrow(ax, x + 1.75, 3.15, x + 2.0, 3.15, color=INK, lw=1.1)
     box(ax, 0.4, 0.5, 4.3, 1.7, "Key derivation (DICE)", ["CDI_0 = KDF(UDS, MEAS0)         DeviceID key = KDF(CDI_0)", "CDI_1 = KDF(CDI_0, MEAS1)        Alias (signing) key = KDF(CDI_1)",
-                                                           "UDS never leaves the fuse block: it is only ever an input to the KDF.", "govsim/root.py · tests/test_h15_tamper.py (keys follow the firmware) · test_h12 (unapproved firmware cannot join)"],
+                                                           "UDS never leaves the fuse block: it is only ever an input to the KDF.", "govsim/root.py · tests/test_contract_no_debug_in_production.py (keys follow the firmware) · test_contract_only_roster_speaks_once (unapproved firmware cannot join)"],
         kind="gov", title_size=8.4, line_size=6.6)
     box(ax, 5.0, 0.5, 5.0, 1.7, "What comes up halted", ["every slot: power brake and PERST# asserted, PWR_EN low", "every governed switch port closed; loop switch open until the first heartbeat",
                                                           "nothing the governor governs runs before the policy authority has said hello", "and the roster has formed  (docs/01 Boot · hw/pcb/rack-integration.md §5)"],
@@ -291,7 +291,7 @@ def fig_loop():
     box(ax, 0.3, 0.25, 4.6, 1.3, "Opens the loop (everyone halts within the 1 ms bound)", ["this governor: tamper, commanded HALT, boot not finished", "any cut, unplugged tray, dead governor, lost power", "loss is declared after two 100 µs sense periods (debounce); a Phase 2 target"],
         kind="safe", title_size=8, line_size=6.6)
     box(ax, 5.2, 0.25, 4.9, 1.3, "Does not open the loop (local rungs only)", ["heartbeat lost on one governor, its own output budget, an epoch straggler", "those throttle their own slot; the loop is for the rack-wide stop",
-                                                                              "govsim/fabric.py HaltLoop · rtl/governor_rtl/halt_loop.py · tests/test_h11_halt_loop.py"],
+                                                                              "govsim/fabric.py HaltLoop · rtl/governor_rtl/halt_loop.py · tests/test_contract_halt_reaches_every_gpu.py"],
         kind="plain", title_size=8, line_size=6.6)
     save(fig, "fig-halt-loop.png")
 
@@ -317,10 +317,10 @@ def fig_request():
     ax.text(8.55, 3.3, "approved", ha="left", va="center", fontsize=6.4, color=AMBER)
     arrow(ax, 5.85, 2.8, 5.85, 2.1, color=CORAL, lw=1.3, text="no", tsize=6.8, toff=(0.2, 0))
     box(ax, 4.2, 1.1, 3.3, 1.0, "Refusal", ["reason code to the broker, entry in the hash-chained log,", "sticky alarm if the policy says so. Nothing else happens."], kind="nv", title_size=8.2, line_size=6.5)
-    box(ax, 0.3, 1.1, 3.5, 1.9, "The endpoint's comparator", ["the device that acts holds the governors' keys, its own lists and", "its own sensors; it re-checks the ticket and its sensors against", "them (position, amount, port) and refuses on mismatch even if every", "layer above it is compromised.  tests/test_h06_comparator.py"],
+    box(ax, 0.3, 1.1, 3.5, 1.9, "The endpoint's comparator", ["the device that acts holds the governors' keys, its own lists and", "its own sensors; it re-checks the ticket and its sensors against", "them (position, amount, port) and refuses on mismatch even if every", "layer above it is compromised.  tests/test_contract_comparator_survives_compromise.py"],
         kind="safe", title_size=8.2, line_size=6.4)
     label(ax, 0.3, 0.6, "Model: govsim/governor.py (_cmd_request, approvals, commit_from_endpoint) · govsim/ledger.py · govsim/endpoints.py · RTL: rtl/governor_rtl/mailbox.py, ticket_store.py", size=6.6)
-    label(ax, 0.3, 0.38, "Tests: tests/test_h00_contract.py · test_h04_lane.py · test_h06_comparator.py · test_h08_override.py · test_h13_shared_budget.py", size=6.6)
+    label(ax, 0.3, 0.38, "Tests: tests/test_contract_fresh_authorization_per_operation.py · test_contract_broker_cannot_pick_rule.py · test_contract_comparator_survives_compromise.py · test_contract_override_slow_and_logged.py · test_contract_shared_budget_no_overspend.py", size=6.6)
     save(fig, "fig-request.png")
 
 
@@ -443,7 +443,7 @@ def fig_ladder_witnesses():
     ax.text(9.5, 1.42, "nothing moves", ha="left", va="center", fontsize=6.4, color=BLUE, fontweight="bold")
     label(ax, 6.95, 0.8, "One structural check. Its failures are halts and holds,", size=6.5, color=BLUE)
     label(ax, 6.95, 0.64, "which are measurable, not misses.", size=6.5, color=BLUE)
-    label(ax, 0.3, 0.4, "docs/24-the-ladder.md section 4; the witness guarantees are tests/test_h18_oversight.py; the hold is docs/04 section 5", size=6.6)
+    label(ax, 0.3, 0.4, "docs/24-the-ladder.md section 4; the witness guarantees are tests/test_contract_oversight_survives_model.py; the hold is docs/04 section 5", size=6.6)
     save(fig, "fig-ladder-witnesses.png")
 
 
@@ -478,7 +478,7 @@ def fig_ladder_person():
     label(ax, 4.95, 1.35, "No signature, no ticket, nothing moves. The chip does not make the person wiser;", size=6.5, color=BLUE)
     label(ax, 4.95, 1.17, "it makes the person unavoidable, and hands them a form instead of a transcript.", size=6.5, color=BLUE)
     label(ax, 0.3, 0.6, "Persuasion is the residual: a person is an effector no chip gates (docs/18 question 14). Fatigue is the other: the false-halt rate decides whether the hundred-and-first hold gets read.", size=6.5)
-    label(ax, 0.3, 0.38, "docs/24-the-ladder.md rung 5; the human lane is docs/04 section 5; holds and approvals are tested in tests/test_h18_oversight.py", size=6.6)
+    label(ax, 0.3, 0.38, "docs/24-the-ladder.md rung 5; the human lane is docs/04 section 5; holds and approvals are tested in tests/test_contract_oversight_survives_model.py", size=6.6)
     save(fig, "fig-ladder-person.png")
 
 
@@ -548,7 +548,7 @@ def fig_rulebook():
     ax.text(8.75, 2.55, "What never reaches it:", ha="left", va="top", fontsize=6.8, color=CORAL, fontweight="bold")
     wrapped(ax, 8.75, 2.38, "the broker's label for the job, the tenant, the user, the prompt, the words around the fields. select_rule has no parameter they could arrive through (CONTRACT-BROKER-CANNOT-PICK-RULE).", 26, 6.0, color=CORAL, step=0.13)
     label(ax, 0.3, 0.6, "Model: govsim/policy.py (make_policy, make_rule, select_rule, check_constraints) · the rulebook the suite runs: govsim/cluster.py make_policy_image", size=6.6)
-    label(ax, 0.3, 0.38, "Tests: tests/test_h04_lane.py (the fields pick the rule, exact beats wildcard, out of range matches nothing) · test_h07_register.py (lists and the register) · test_h03_quorum.py", size=6.6)
+    label(ax, 0.3, 0.38, "Tests: tests/test_contract_broker_cannot_pick_rule.py (the fields pick the rule, exact beats wildcard, out of range matches nothing) · test_contract_assumptions_register_complete.py (lists and the register) · test_contract_policy_quorum_no_rollback.py", size=6.6)
     save(fig, "fig-rulebook.png")
 
 
@@ -588,7 +588,7 @@ def fig_no_order():
     box(ax, 3.6, yo - 0.5, 2.6, 0.5, "a hold", ["waits the floor; the quorum signs with a reason"], kind="warn", title_size=7.4, line_size=6.2, pad=0.09)
     box(ax, 6.45, yo - 0.5, 3.65, 0.5, "a no", ["a code to the asker and a line in the log nobody rewrites"], kind="nv", title_size=7.4, line_size=6.2, pad=0.09)
     label(ax, 0.3, 0.48, "After the ticket exists the approver, the endpoint, the switch port and the levers each have their own no (docs/25 section 5): approve.*, ticket.*, ep.*, loop.* and halt.*", size=6.5)
-    label(ax, 0.3, 0.28, "Model: govsim/governor.py (command, _check_signed, _cmd_request, _release_gate) · codes: govsim/reasons.py · the mailbox order is pinned in tests/test_h03_quorum.py and rtl/tests/test_blocks.py", size=6.5)
+    label(ax, 0.3, 0.28, "Model: govsim/governor.py (command, _check_signed, _cmd_request, _release_gate) · codes: govsim/reasons.py · the mailbox order is pinned in tests/test_contract_policy_quorum_no_rollback.py and rtl/tests/test_blocks.py", size=6.5)
     save(fig, "fig-no-order.png")
 
 
@@ -644,7 +644,7 @@ def fig_board():
     ax.text(3.0, 2.88, "message fabric", ha="right", va="center", fontsize=5.8, color=BLUE)
     ax.text(3.0, 2.7, "to the other governors, on wires of their own (docs/02)", ha="right", va="center", fontsize=5.6, color=QUIET)
     label(ax, 0.3, 0.58, "Plugs: docs/03-interfaces.md · wiring: hw/pcb/rack-integration.md · pins: hw/pinout/governor_module.csv · the host side on NVIDIA's platform: hardware-and-silicon/docs/NVIDIA.md", size=6.5)
-    label(ax, 0.3, 0.36, "Model: govsim/governor.py (_cmd_verify_gpu, _cmd_verify_host, _cmd_begin_model, _cmd_request, read_meter) · tests/test_h01_attestation.py · test_h16_levers.py · test_h02_enforcement_points.py", size=6.5)
+    label(ax, 0.3, 0.36, "Model: govsim/governor.py (_cmd_verify_gpu, _cmd_verify_host, _cmd_begin_model, _cmd_request, read_meter) · tests/test_contract_attestation_binds_permissions.py · test_contract_levers_without_gpu_cooperation.py · test_contract_every_crossing_governed.py", size=6.5)
     save(fig, "fig-board.png")
 
 
@@ -784,7 +784,7 @@ def fig_prompt_flow(part: str = "all"):
         yy = yend - 0.2
     if part == "all":
         label(ax, 0.3, 0.52, "The chip never reads a word, a byte or a token. It reads signatures, hashes, counters and lists, and the two scenarios in docs/25 section 0 end at the gates above.", size=6.4, color=BLUE)
-        label(ax, 0.3, 0.32, "Model: govsim/governor.py (_cmd_begin_model, _cmd_sign_output, _cmd_request, _release_gate) · narrations and tests: docs/17 §4, tests/test_h17_use_cases.py, test_h18_oversight.py, test_h10_leakage.py", size=6.4)
+        label(ax, 0.3, 0.32, "Model: govsim/governor.py (_cmd_begin_model, _cmd_sign_output, _cmd_request, _release_gate) · narrations and tests: docs/17 §4, tests/test_contract_no_action_without_ticket.py, test_contract_oversight_survives_model.py, test_contract_leakage_within_budget.py", size=6.4)
     elif part == "b":
         label(ax, 0.3, 0.35, "The chip never reads a word, a byte or a token: signatures, hashes, counters and lists. Model: govsim/governor.py (_cmd_begin_model, _cmd_request, _release_gate) · docs/17 §4 · tests CONTRACT-NO-ACTION-WITHOUT-TICKET, CONTRACT-OVERSIGHT-SURVIVES-MODEL, CONTRACT-LEAKAGE-WITHIN-BUDGET", size=6.2, color=BLUE)
     else:

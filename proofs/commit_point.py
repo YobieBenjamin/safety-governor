@@ -5,7 +5,7 @@
 
     python3 proofs/commit_point.py
 
-This is the chip-side answer to hypothesis YB-0039 (extension) in the `safety` repository's
+This is the chip-side answer to the extension of EXPERIMENT-TELEMETRY-PROTOCOL-FORMAL-MODEL (old: YB-0039) in the `safety` repository's
 backlog, which asks for a formal model "including the reviewer, action IDs and commit points"
 and lists five properties. The first three are safety properties and are proven here on an
 abstract machine, by induction, for any number of actions:

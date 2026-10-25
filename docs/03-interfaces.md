@@ -12,7 +12,7 @@ column is the honest part. Nothing here changes the GPU's silicon or CUDA.
 > **Against the real public specifications (DC-SCM, PCIe CEM, SPDM, nvtrust):** `interfaces/COMPLIANCE-MATRIX.md`.
 > **Backed by:** model `govsim/endpoints.py` (switches as enforcement points, the endpoint
 > comparator), `govsim/gpu.py` (`EXITS`, `transfer`, the levers, the attestation report);
-> tests `tests/test_h02_enforcement_points.py`, `test_h06_comparator.py`, `test_h16_levers.py`;
+> tests `tests/test_contract_every_crossing_governed.py`, `test_contract_comparator_survives_compromise.py`, `test_contract_levers_without_gpu_cooperation.py`;
 > hardware `rtl/governor_rtl/cap_table.py`, `halt.py`; pins `hw/pinout/governor_module.csv`;
 > wiring `hw/pcb/rack-integration.md`.
 

@@ -13,8 +13,8 @@ force, who is still on duty.
 > **Plain-English version:** `10-plain-english-walkthrough.md` §6.
 > **Backed by:** model `govsim/fabric.py` (`HaltLoop`, `MessageFabric`), `govsim/governor.py`
 > (`_heartbeat`, `sense_loop`, `on_fabric`, `publish_checkpoint`), `govsim/cluster.py`
-> (`change_epoch`, `exchange_checkpoints`); tests `tests/test_h11_halt_loop.py`,
-> `test_h12_fabric_auth.py`, `test_h13_shared_budget.py`, `test_h14_partition.py`; hardware
+> (`change_epoch`, `exchange_checkpoints`); tests `tests/test_contract_halt_reaches_every_gpu.py`,
+> `test_contract_only_roster_speaks_once.py`, `test_contract_shared_budget_no_overspend.py`, `test_contract_partitions_end_safe.py`; hardware
 > `rtl/governor_rtl/halt_loop.py`, `heartbeat.py`, `epoch_reg.py`; wiring
 > `hw/pcb/rack-integration.md` §4.
 
@@ -70,7 +70,7 @@ the bench in Phase 2; the functional model's "100 µs" is a parameter, not a res
 power brake asserts within 1 ms of the governor's halt output; reset and power cut follow the
 policy's rungs.
 
-**Tested by.** `tests/test_h11_halt_loop.py`: any governor halting halts all; a cut wire
+**Tested by.** `tests/test_contract_halt_reaches_every_gpu.py`: any governor halting halts all; a cut wire
 halts all; no governor clears on its own; propagation stays within the bound.
 
 ## 2. The message fabric
@@ -201,8 +201,8 @@ the neighbors' log books into its own.
 | Rogue device plugged into the fabric | closed | sees traffic | Cannot produce a valid quote; never on a roster; its messages are dropped; its presence is logged |
 | Replay of an old heartbeat | closed | up | Sequence number and window fail; dropped; logged |
 
-**Tested by.** `tests/test_h12_fabric_auth.py`, `tests/test_h13_shared_budget.py`,
-`tests/test_h14_partition.py`.
+**Tested by.** `tests/test_contract_only_roster_speaks_once.py`, `tests/test_contract_shared_budget_no_overspend.py`,
+`tests/test_contract_partitions_end_safe.py`.
 
 ## 4. What the fabric does not do
 
