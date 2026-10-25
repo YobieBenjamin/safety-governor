@@ -37,7 +37,7 @@ Proposed fix, not applied (halt.py is not this branch's): in `HaltSeq`, enter RU
 so an armed core waits for one clean sense sample (at most 100 us). Until then the bench (`host_test.py levers` and
 `soak`) cannot hold RUN and will say so.
 
-**RTL-FPGA-MISSES-50-MHZ. 50 MHz is not met on the ECP5: the design reaches about 38 MHz, limited by the capability table's one-cycle
+**RTL-FPGA-MISSES-TARGET-CLOCK. 50 MHz is not met on the ECP5: the design reaches about 38 MHz, limited by the capability table's one-cycle
 lookup.** The critical path (below) runs from a lookup input of `cap_dpu` through the eight-entry CAM compare, the
 priority select and the 24-bit budget compare and decrement, into the budget register, in one cycle (docs/04
 section 9: "1 cycle at the checker clock"). In the router2 run at seed 1: 26.4 ns, 4.7 ns logic and 21.7 ns routing.
@@ -146,7 +146,7 @@ def write(path: str, seed: str, dirs: list[str]) -> int:
             try:
                 m = json.load(open(mpath, encoding="utf-8"))
                 bit = m.get("bitstream") or {}
-                L.append(f"- Build manifest (`{os.path.basename(c['dir'])}/manifest.json`): fail-closed, source_rev "
+                L.append(f"- Build manifest (`build/{os.path.basename(c['dir'])}/manifest.json`): fail-closed, source_rev "
                          f"`{m.get('source_rev', '')[:16]}`, stages {','.join(m.get('stages', []))}, bitstream sha256 "
                          f"`{(bit.get('sha256') or '')[:16]}`. The verdict is read from this manifest, not from the bitstream's presence.")
             except (ValueError, OSError):

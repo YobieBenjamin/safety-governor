@@ -74,7 +74,7 @@ What "unattended" means, mechanically:
 
 Where the tokens go, measured rather than guessed: the smoke run of the launcher (one two-turn task) cost $0.07 of API-equivalent estimate on the mid-tier model at medium effort; the Claude CLI prints this estimate for every run and the launcher records it per agent and per wave. The subscription is not billed by that figure but by its windows; the figure is still the right thing to minimise, since both scale with the same tokens. The cheapest settings that still do the work are the defaults: mid-tier model, medium effort (`EFFORT`), two agents at a time (`PARALLEL`), and briefs that name the files to read, so the agent does not read the repository to find them. Parallelism does not change the token count of a wave; it only changes how fast the window fills, which is why two, not three, is the default on a plan that is also used during the day.
 
-For the `safety` experiments that must run on the recordings, the cloud agent writes the pre-registered code and opens the pull request; the run itself is `./mine` with the hypothesis's status flipped from `proposed` to `open`, on the machine that holds the data, under `agr/runguard.py`.
+For the `safety` experiments that must run on the recordings, the cloud agent writes the pre-registered code and opens the pull request; the run itself is `./mine` with the hypothesis's status flipped from `proposed` to `open`, on the machine that holds the data, under `safety/agr/runguard.py`.
 
 When a wave's pull requests are in and CI is green, the reviewer (top model, one session) reads `REPORT.md` and the diffs against `docs/20`, merges in the order of the table, updates `EXPERIMENTS.md` with the result lines, and files any finding as a new issue. Then the next wave.
 

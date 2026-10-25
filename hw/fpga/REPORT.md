@@ -6,7 +6,7 @@ Written by `hw/fpga/build.sh` on 2026-10-24 01:07 UTC, nextpnr seed 1, router2. 
 
 - 30 MHz: met, Fmax 36.07 MHz.
 - Bench bitstream: `build/30mhz/governor_ulx3s_85f_30mhz.bit` at 30 MHz. The governor's timers run on a 1 us tick divided from whatever the clock is, so the heartbeat, throttle, halt and loop-sense timings are the same at any of these clocks.
-- Build manifest (`30mhz/manifest.json`): fail-closed, source_rev `5d2dc0094a29bb08`, stages top,pll,synth,pnr,pack,report, bitstream sha256 `477de080ac9bd84a`. The verdict is read from this manifest, not from the bitstream's presence.
+- Build manifest (`build/30mhz/manifest.json`): fail-closed, source_rev `5d2dc0094a29bb08`, stages top,pll,synth,pnr,pack,report, bitstream sha256 `477de080ac9bd84a`. The verdict is read from this manifest, not from the bitstream's presence.
 
 ## Utilisation
 
@@ -88,7 +88,7 @@ Proposed fix, not applied (halt.py is not this branch's): in `HaltSeq`, enter RU
 so an armed core waits for one clean sense sample (at most 100 us). Until then the bench (`host_test.py levers` and
 `soak`) cannot hold RUN and will say so.
 
-**RTL-FPGA-MISSES-50-MHZ. 50 MHz is not met on the ECP5: the design reaches about 38 MHz, limited by the capability table's one-cycle
+**RTL-FPGA-MISSES-TARGET-CLOCK. 50 MHz is not met on the ECP5: the design reaches about 38 MHz, limited by the capability table's one-cycle
 lookup.** The critical path (below) runs from a lookup input of `cap_dpu` through the eight-entry CAM compare, the
 priority select and the 24-bit budget compare and decrement, into the budget register, in one cycle (docs/04
 section 9: "1 cycle at the checker clock"). In the router2 run at seed 1: 26.4 ns, 4.7 ns logic and 21.7 ns routing.

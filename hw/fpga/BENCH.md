@@ -87,7 +87,7 @@ interposer is not designed yet; it is the next hardware item.
    `python3 -m pip install smbus2 spidev` (gpiozero ships with the OS), clone this repo.
 2. **HANDS**: wire as above, plug the ULX3S into a computer by USB, and load the timing-clean bitstream that
    `REPORT.md` names (today `hw/fpga/build/30mhz/governor_ulx3s_85f_30mhz.bit`, because 50 MHz does not close on this
-   part, finding RTL-FPGA-MISSES-50-MHZ) with `openFPGALoader -b ulx3s <file>`. `openFPGALoader` is in most Linux package managers and
+   part, finding RTL-FPGA-MISSES-TARGET-CLOCK) with `openFPGALoader -b ulx3s <file>`. `openFPGALoader` is in most Linux package managers and
    Homebrew. The bitstream comes from `hw/fpga/build.sh`, run anywhere.
 3. `i2cdetect -y 1` should show 0x58. Then `python3 hw/fpga/host_test.py all --hours 168`.
 

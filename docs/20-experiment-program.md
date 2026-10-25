@@ -1,8 +1,8 @@
 # 20. The experiment program: proving or disproving the chip in software, then in design, before any circuit
 
-The rule of the program has not changed: nothing goes to circuitry, tape-out or an add-on chip until the design has been proven in software and then in design. This document turns that rule into experiments, and it attaches every one of them to one of three repositories: `safety-governor` (the chip), `safety` (the Autonomic Graph Regulation research program and the Layer 3 observer) and its public snapshot `autonomic-graph-regulation`. The fourth repository, `hardware-and-silicon`, is used as a source: the software reference stack, the 66-attack catalogue, and the lanes contract (`docs/LANES.md`) that fixes the signed message formats between the layers. New work goes into the three.
+The rule of the program has not changed: nothing goes to circuitry, tape-out or an add-on chip until the design has been proven in software and then in design. This document turns that rule into experiments, and it attaches every one of them to one of three repositories: `safety-governor` (the chip), `safety` (the Autonomic Graph Regulation research program and the Layer 3 observer) and its public snapshot `autonomic-graph-regulation`. The fourth repository, `hardware-and-silicon`, is used as a source: the software reference stack, the 66-attack catalogue, and the lanes contract (`hardware-and-silicon/docs/LANES.md`) that fixes the signed message formats between the layers. New work goes into the three.
 
-Each experiment names the claim it tests, where it lives, what it would take to run, and the result that would count as a disproof. The claims are the five from `docs/19`: L (the logic), P (the physical paths), C (the cryptography), S (the semantics, which the chip delegates to lists and observers), N (the numbers). Where an experiment belongs to the `safety` program it carries a YB number and follows that program's protocol (`docs/PROTOCOL.md` there): pre-registered code, fresh test sets touched once, matched false-alarm rates, no number without an artifact, an independent audit before a claim.
+Each experiment names the claim it tests, where it lives, what it would take to run, and the result that would count as a disproof. The claims are the five from `docs/19`: L (the logic), P (the physical paths), C (the cryptography), S (the semantics, which the chip delegates to lists and observers), N (the numbers). Where an experiment belongs to the `safety` program it carries a YB number and follows that program's protocol (`safety/docs/PROTOCOL.md`): pre-registered code, fresh test sets touched once, matched false-alarm rates, no number without an artifact, an independent audit before a claim.
 
 ## 1. Where the chip meets the organism
 
@@ -44,7 +44,7 @@ Status: **done** exists and passes today; **build** is software to write; **ask*
 | ID | Experiment | Where | Falsified if | Status |
 |---|---|---|---|---|
 | WAVE-NEGATIVE-TESTS-SIGNED-OBJECTS | Negative tests for every signed object: forged, altered, replayed, stale-edition, wrong-endpoint and wrong-key tickets, capabilities, verdicts, approvals and policy images refused with the predicted code | `tests/test_h02`, `h03`, `h06`, `h08`, `h12`, `h17` | any forged or replayed object accepted | done |
-| WAVE-KEY-HYGIENE-NONCE-REPLAY | Key hygiene: a different measurement derives a different key; a quote nonce cannot be replayed | `tests/test_h01`, `test_h18` | a quote accepted twice, or one key for two measurements | done |
+| WAVE-KEY-HYGIENE-NONCE-REPLAY | Key hygiene: a different measurement derives a different key; a quote nonce cannot be replayed | `tests/test_h01_attestation.py`, `tests/test_h18_oversight.py` | a quote accepted twice, or one key for two measurements | done |
 | WAVE-POST-QUANTUM-SIGNATURE-COST | Post-quantum path: cost a hybrid signature (P-384 plus a lattice scheme) in the batching model, since OTBN has no ML-DSA today | `govsim/bench.py` | batched engine utilisation above 100 percent at the modelled load | build |
 
 ### Claim S: the semantics, delegated to lists and observers (`safety`, mirrored to `autonomic-graph-regulation`)
@@ -71,7 +71,7 @@ The chip proves the observer is always invoked, cannot be impersonated and is se
 
 ## 3. The harness the three repositories share
 
-- **A lanes conformance suite in `safety-governor`.** Signed fixtures for every message type the gate consumes (observer assertion, provenance assertion, attestation token, action ticket, audit record, policy image), checked by the governor model; the `safety` observer already pins its subject hash to the gate's (`observer/tests/test_contract.py`). The suite makes a format change in one repository fail the other's build.
+- **A lanes conformance suite in `safety-governor`.** Signed fixtures for every message type the gate consumes (observer assertion, provenance assertion, attestation token, action ticket, audit record, policy image), checked by the governor model; the `safety` observer already pins its subject hash to the gate's (`safety/observer/tests/test_contract.py`). The suite makes a format change in one repository fail the other's build.
 - **The catalogue as data.** The 75 attacks and 12 baselines (the catalogue grew from 66 and 10 with the third and fourth posts; the blog and the README still said the old numbers, which the first wave's agent caught) expressed as fixtures, so one file drives the software gate, the governor model, the RTL simulation and later the FPGA.
 - **A ledger for the chip, `EXPERIMENTS.md`,** in the mine's style: one row per experiment above, with date, result and what it rules in or out. Negative results stay.
 

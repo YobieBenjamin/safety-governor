@@ -97,7 +97,7 @@ def requirements_md() -> str:
         "",
         "## The catalogue, row by row",
         "",
-        "The 75-attack, 12-baseline catalogue in `hardware-and-silicon` (`hardware_ref`, `results/report.json`).",
+        "The 75-attack, 12-baseline catalogue in `hardware-and-silicon` (`hardware_ref`, `hardware-and-silicon/results/report.json`).",
         "Every row runs against the reference software stack, so in the catalogue every row is decided by the",
         "reference gate. The owner column says which layer of the governor would decide the same thing.",
         "",

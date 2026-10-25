@@ -39,7 +39,7 @@ What was wrong and is fixed:
 
 - An expired rulebook is refused at **commit** and at boot, not at stage, and not on every
   request afterwards. `_cmd_policy_propose` checks quorum, rollback, register and budget
-  owners; `policy.expired` lives in `_accept_policy` only, which `test_h03_quorum` pins.
+  owners; `policy.expired` lives in `_accept_policy` only, which `tests/test_h03_quorum.py` pins.
   The per-request expiry claim is gone; the figure `fig-no-order` was renumbered to match.
 - The hazard budget is a **local rate window on each governor's own ledger**
   (`hazard|session`), not a shared budget with one owner over the fabric. Only the payment
@@ -51,7 +51,7 @@ What was wrong and is fixed:
   `select_rule`, after attestation, the token, replay and alarms. Row 1 was deleted and
   `.missing` moved into the rule row.
 - The release gate checks the **hazard budget before the class**, and that order is
-  load-bearing (`test_h17` gets `session_hazard_budget_exceeded` on the third hazard only
+  load-bearing (`tests/test_h17_use_cases.py` gets `session_hazard_budget_exceeded` on the third hazard only
   because of it). Three places and the figure reordered.
 - The mailbox order (sequence, edition, signature) is pinned by
   `tests/test_h03_quorum.py::test_mailbox_reports_the_first_failing_check` and
@@ -106,7 +106,7 @@ unpresented output CONTRACT-LEAKAGE-WITHIN-BUDGET); k per pair, not per machine;
 applies from the next reset today, apply-now is ask 1; the sub-millisecond answer is the
 model's and unmeasured; `gate.not_attested` beside `model.not_evaluated`; one chip per
 baseboard, one instance per slot. `docs/brief/SOURCES.md`: five figure files, the bench call
-needs `actions=0` to give 0.044 percent, the contract tests are named in `tests/test_oasp.py`,
+needs `actions=0` to give 0.044 percent, the contract tests are named in `hardware-and-silicon/tests/test_oasp.py`,
 WAVE-DIFFERENTIAL-GATE-TEST carries no waiting marker.
 
 ## 4. The blog, Parts 5, 6 and 7
@@ -119,7 +119,7 @@ fire loop, a cut halts. Loss of current is declared after two missed samples and
 output follows within about three sense periods, 311 µs on the digital path (the same
 loose phrase was in `02-safety-fabric.md` §1 and is fixed there). The tests run racks of up
 to four GPUs; 72 is the ngspice loop. A jumpered governor is caught the moment its own
-switch opens, and is invisible and harmless until then (by design, `test_h11`). Rebuilding
+switch opens, and is invisible and harmless until then (by design, `tests/test_h11_halt_loop.py`). Rebuilding
 rosters during a partition is in the design's partition table, not in a test. Per-port
 switch control is a firmware ask (docs/03 §9), so "opens only" became "is designed to open
 only" with the ask named. ANSI/ISA-50.00.01 and IEC 60381-1. 100BASE-T1 on the harness.
@@ -215,7 +215,7 @@ over again.
 | GAP-REPLAYER-CHECK-CANNOT-FAIL | The L4 replayer re-encodes the guards and does not drive the Z3 machine; its heartbeat check cannot fail | `audit/wave-1/review/L4`; experiment L4 | The revision L4 is in: install z3 in the agent's environment and drive `core_invariants.py` for real |
 | GAP-KILL-SWITCH-CORE-TOO-SMALL | INVARIANT-NO-DEEP-NETWORK-SEPARATOR is near-vacuous on a 60-node core (three deep nodes) | `proofs/no_global_kill_switch.py`; docs/23 §4; Part 6 | Rebuild with a core large enough that "deep" means something (a few hundred nodes), rerun, and restate the numbers everywhere they appear |
 | GAP-SET-CONNECTIVITY-ASSUMPTION | Claim 3 needs set-to-set connectivity; INVARIANT-NO-CUT-BEATS-SMALLER-END checks it on the instance, the prose assumption is strengthened | docs/23 §3a; Part 6 | Done in the documents; the stronger assumption belongs in the proof script's docstring too (it is) |
-| GAP-GATE-LATENCY-UNMEASURED | The gate's latency inside OpenShell's window is unmeasured | docs/NVIDIA.md; Part 5; deck slide 19 | WAVE-VERDICT-LATENCY-IN-WINDOWS is that experiment; a timing test in `tests/test_oasp.py` would pin the model's half millisecond |
+| GAP-GATE-LATENCY-UNMEASURED | The gate's latency inside OpenShell's window is unmeasured | docs/NVIDIA.md; Part 5; deck slide 19 | WAVE-VERDICT-LATENCY-IN-WINDOWS is that experiment; a timing test in `hardware-and-silicon/tests/test_oasp.py` would pin the model's half millisecond |
 | GAP-PROTOTYPE-SIGNATURE-ENGINE-OVERLOADED | The sky130 prototype at 50 MHz puts a P-384 signature at 34 ms and the batched engine at 68 percent, above the spec's 50 percent bound | docs/04 §9 and §11 | Either a wider batch window at the prototype clock or the product clock stated as the bound's basis |
 | GAP-PARTITION-ROSTER-FORMATION-UNTESTED | Roster formation during a partition is in the design's table and in no test | docs/02 §3; Part 7 | A case in `test_h14_partition.py` that forms a roster in the surviving half before `heal()` |
 | GAP-WAVE-COST-UNCHECKABLE | The wall time and cost of a wave are not in the packet in a form anyone can check (`0 min` per row) | `audit/wave-1/REPORT.md` | `run_wave.sh` records wall time per attempt and the CLI's own cost line into the report |
@@ -260,7 +260,7 @@ was checked by putting the old code back and watching its test fail.
 |---|---|---|---|---|
 | 1 | An unsigned policy with threshold 0 passes propose and commit | Yes: propose ok, commit ok, installed threshold 0 | Section 8, REVIEW-POLICY-THRESHOLD-FROM-IMAGE (fused threshold) | CONTRACT-SIGNATURE-AUTHORIZES-EXACTLY; INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD, INVARIANT-FUSED-THRESHOLD-NEVER-FALLS |
 | 2 | A signed heartbeat clears a halt across the rack | Yes: two of four governors cleared in my run, four in his (his checkpoint exchange satisfied all four neighbours) | Section 8, REVIEW-SIGNED-PURPOSE-UNCHECKED (signed type, chip, expiry; separate authority key) | CONTRACT-SIGNATURE-AUTHORIZES-EXACTLY and the replay sweep; INVARIANT-ONLY-CLEAR-LEAVES-HALT |
-| 3 | The reference gate's signing key is computable from public quotes | Yes: the key derived from the two alias public keys equals the gate's | `SiliconRoot.derive_key` from the secret CDI | hardware-and-silicon `tests/test_audit_2026_10_22.py` |
+| 3 | The reference gate's signing key is computable from public quotes | Yes: the key derived from the two alias public keys equals the gate's | `SiliconRoot.derive_key` from the secret CDI | `hardware-and-silicon/tests/test_audit_2026_10_22.py` |
 | 4 | An old human approval releases a hold the current policy refuses | Yes: $5,000 hold approved and executed after the cap fell to $2,000 | Holds carry their policy; a new policy drops them; approval of a hold from another policy is refused | same file |
 | 5 | A replayed older epoch moves the endpoint back and an old ticket executes | Yes: `ticket.policy_stale`, then executed after the old epoch was replayed | Versioned epochs with a durable high-water mark at the endpoint; the gate refuses to commit a ticket from a replaced policy | same file |
 | 5b | (found while fixing 5) the gate reloads an older governance-signed policy | Yes | Every governance document carries a version; older ones refused; restart reloads the newest | same file |

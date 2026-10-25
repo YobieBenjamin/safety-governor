@@ -98,7 +98,7 @@ version with the same numbers is at the end of `REPORT.md`.
    stuck with 38,495 of 88,079 connections fighting over the same wires, not getting better. The other router in the
    same tool finished in 193 seconds.
 
-7. **The FPGA is too slow for 50 MHz (finding RTL-FPGA-MISSES-50-MHZ).** The real chip is planned at 50 million clock ticks a second. On
+7. **The FPGA is too slow for 50 MHz (finding RTL-FPGA-MISSES-TARGET-CLOCK).** The real chip is planned at 50 million clock ticks a second. On
    this FPGA the design tops out at about 38 million. The slow part is the capability table, which checks eight
    permission slips and deducts from a budget all in one tick, and most of that time is spent on the FPGA's wiring,
    not its logic. The build then automatically makes a second bitstream at a clock it can keep up with
