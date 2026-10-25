@@ -322,7 +322,7 @@ def write_report(outcomes, mut, table, cat_note, total, problems, quick) -> None
         L.append(f"- Mutation sample: {sum(m['status'] == 'assert' for m in mut)}/{len(mut)} one-line mutants caught by "
                  f"assertion, over {len({m['req'] for m in mut})} requirements")
     if diff and diff.extra:
-        L.append(f"- Mailbox differential: {diff.extra['frames']} random frames, classes {diff.extra['classes']}")
+        L.append(f"- Mailbox differential: {diff.extra['frames']} random frames, classes { {NAMES.get(k, k): v for k, v in diff.extra['classes'].items()} }")
     if cap and cap.extra:
         L.append(f"- Capability table differential: {cap.extra}")
     if problems:
@@ -334,7 +334,7 @@ def write_report(outcomes, mut, table, cat_note, total, problems, quick) -> None
     if diff and diff.extra:
         L += ["", "First example of each mailbox disagreement class in the random run:", ""]
         for k, v in sorted(diff.extra["examples"].items()):
-            L.append(f"- {k}: {v}")
+            L.append(f"- {NAMES.get(k, k)}: {v}")
     L += ["", "## Coverage by requirement", "", "| Id | Owner | Block | Conforming tests | Catalogue rows | Verdict |",
           "|---|---|---|---|---|---|"]
     for rid, owner, block, conform, ncat, verdict, _ in table["rows"]:
