@@ -1,6 +1,6 @@
 # RTL spec conformance
 
-`python -m rtl.conformance` on Python 3.13.16. **Result: PASS** (PASS means the suite does what it says: every conforming test passes, every recorded disagreement reproduces by assertion, every mutant is caught). Disagreements with the spec are findings, listed below; they do not fail the run.
+`python -m rtl.conformance` on Python 3.12.15. **Result: PASS** (PASS means the suite does what it says: every conforming test passes, every recorded disagreement reproduces by assertion, every mutant is caught). Disagreements with the spec are findings, listed below; they do not fail the run.
 
 - Requirements: 134 (from docs/04 and docs/07, quotes checked verbatim)
 - Conformance tests: 173; 159 conform, 14 reproduce a disagreement
@@ -218,32 +218,32 @@ First example of each mailbox disagreement class in the random run:
 | `test_mono_counter_is_64_bits` | REQUIREMENT-MONOTONIC-MICROSECOND-COUNTER | pass | 0.0 |
 | `test_mono_advances_once_per_tick` | REQUIREMENT-MONOTONIC-MICROSECOND-COUNTER | pass | 0.0 |
 | `test_mono_decrement_request_refused_and_value_kept` | REQUIREMENT-COUNTER-REFUSES-DECREMENT | pass | 0.0 |
-| `test_mono_never_decreases_under_random_inputs` | REQUIREMENT-COUNTER-REFUSES-DECREMENT | pass | 0.2 |
+| `test_mono_never_decreases_under_random_inputs` | REQUIREMENT-COUNTER-REFUSES-DECREMENT | pass | 0.0 |
 | `test_mono_high_water_mark_raises_the_counter` | REQUIREMENT-COUNTER-FUSE-HIGH-WATER-MARK | pass | 0.0 |
 | `test_mono_lower_high_water_mark_cannot_pull_back` | REQUIREMENT-COUNTER-FUSE-HIGH-WATER-MARK | pass | 0.0 |
 | `test_meas_engine_output_without_request_ignored` | REQUIREMENT-MEASUREMENT-EXTEND-ONLY | pass | 0.0 |
 | `test_meas_extend_latches_engine_result` | REQUIREMENT-MEASUREMENT-EXTEND-ONLY | pass | 0.0 |
 | `test_meas_has_no_write_port` | REQUIREMENT-MEASUREMENT-EXTEND-ONLY | pass | 0.0 |
-| `test_core_meas_csr_windows_read_both_registers` | REQUIREMENT-LOADER-MEASUREMENT-REGISTER, REQUIREMENT-FIRMWARE-MEASUREMENT-REGISTER | pass | 0.1 |
+| `test_core_meas_csr_windows_read_both_registers` | REQUIREMENT-LOADER-MEASUREMENT-REGISTER, REQUIREMENT-FIRMWARE-MEASUREMENT-REGISTER | pass | 0.0 |
 | `test_epoch_commit_without_quorum_ignored` | REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM | pass | 0.0 |
 | `test_epoch_quorum_without_commit_ignored` | REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM | pass | 0.0 |
 | `test_epoch_host_write_has_no_effect` | REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM | pass | 0.0 |
 | `test_epoch_commit_with_quorum_switches` | REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM | pass | 0.0 |
 | `test_epoch_tag_is_low_16_bits` | REQUIREMENT-EPOCH-TAG-LOW-BITS | pass | 0.0 |
-| `test_core_epoch_csr_reads_256_bits` | REQUIREMENT-EPOCH-IS-POLICY-DIGEST | pass | 0.1 |
+| `test_core_epoch_csr_reads_256_bits` | REQUIREMENT-EPOCH-IS-POLICY-DIGEST | pass | 0.0 |
 | `test_lifecycle_never_moves_down_by_advance` | REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG | pass | 0.0 |
 | `test_lifecycle_lower_fuse_load_cannot_move_down` | REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG | pass | 0.0 |
-| `test_lifecycle_monotone_under_random_inputs` | REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG | pass | 0.2 |
+| `test_lifecycle_monotone_under_random_inputs` | REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG | pass | 0.0 |
 | `test_lifecycle_debug_refused_in_production_and_later` | REQUIREMENT-PRODUCTION-HAS-NO-DEBUG, REQUIREMENT-JTAG-REFUSED-AND-LOGGED | pass | 0.0 |
 | `test_lifecycle_debug_granted_before_production` | REQUIREMENT-PRODUCTION-HAS-NO-DEBUG | pass | 0.0 |
-| `test_core_lifecycle_csr_encoding` | REQUIREMENT-LIFECYCLE-REGISTER-ENCODING | pass | 0.1 |
+| `test_core_lifecycle_csr_encoding` | REQUIREMENT-LIFECYCLE-REGISTER-ENCODING | pass | 0.0 |
 | `test_cap_match_requires_point` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH | pass | 0.0 |
 | `test_cap_match_requires_peer` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH | pass | 0.0 |
 | `test_cap_match_requires_direction` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH, REQUIREMENT-CAPABILITY-DIRECTION-FIELD | pass | 0.0 |
 | `test_cap_both_admits_in_and_out` | REQUIREMENT-CAPABILITY-DIRECTION-FIELD | pass | 0.0 |
 | `test_cap_lookup_decrements_by_bytes` | REQUIREMENT-LOOKUP-DECREMENTS-BUDGET | pass | 0.0 |
 | `test_cap_refuses_more_than_remaining_budget` | REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO, REQUIREMENT-BUDGET-NEVER-UNDERFLOWS | pass | 0.0 |
-| `test_cap_budget_never_underflows_random` | REQUIREMENT-BUDGET-NEVER-UNDERFLOWS | pass | 0.1 |
+| `test_cap_budget_never_underflows_random` | REQUIREMENT-BUDGET-NEVER-UNDERFLOWS | pass | 0.0 |
 | `test_cap_refuses_at_expiry_and_drops_entry` | REQUIREMENT-CAPABILITY-REFUSES-ON-EXPIRY | pass | 0.0 |
 | `test_cap_refuses_on_epoch_tag_mismatch` | REQUIREMENT-CAPABILITY-REFUSES-STALE-TAG, REQUIREMENT-SWITCH-RECONFIGURED-AFTER-EVENTS | pass | 0.0 |
 | `test_cap_insert_needs_mac` | REQUIREMENT-MAC-CHECKED-AT-INSERTION | pass | 0.0 |
@@ -252,7 +252,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_cap_lookup_answers_in_the_same_cycle` | REQUIREMENT-LOOKUP-IN-ONE-CYCLE | pass | 0.0 |
 | `test_core_has_one_table_per_point_sized_by_parameter` | REQUIREMENT-TABLE-SIZES-ARE-PARAMETERS, REQUIREMENT-ENFORCEMENT-POINT-NUMBERING | pass | 0.0 |
 | `test_core_default_sizes_are_the_spec_prototype` | REQUIREMENT-PROTOTYPE-DEFAULT-SIZES | pass | 0.0 |
-| `test_core_tables_empty_whenever_not_running` | REQUIREMENT-PORT-OPEN-ONLY-WITH-ENTRY | pass | 0.1 |
+| `test_core_tables_empty_whenever_not_running` | REQUIREMENT-PORT-OPEN-ONLY-WITH-ENTRY | pass | 0.0 |
 | `test_ticket_seen_after_burn` | REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED, REQUIREMENT-BURN-BEFORE-ADMIT | pass | 0.0 |
 | `test_ticket_second_burn_of_same_id_refused` | REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED | pass | 0.0 |
 | `test_ticket_full_store_refuses_burn_and_flags` | REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED | pass | 0.0 |
@@ -261,7 +261,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_hb_expires_on_the_window_th_tick` | REQUIREMENT-HEARTBEAT-EXPIRES-ON-TIME | pass | 0.0 |
 | `test_hb_reload_only_on_valid` | REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID | pass | 0.0 |
 | `test_hb_valid_wins_over_tick` | REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID | pass | 0.0 |
-| `test_core_hb_remain_csr` | REQUIREMENT-HEARTBEAT-REMAINING-REGISTER | pass | 0.1 |
+| `test_core_hb_remain_csr` | REQUIREMENT-HEARTBEAT-REMAINING-REGISTER | pass | 0.0 |
 | `test_core_timers_ignore_the_raw_microsecond_tick` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | pass | 0.1 |
 | `test_halt_loop_lost_from_run` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | pass | 0.0 |
 | `test_halt_loop_lost_from_throttle` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | pass | 0.0 |
@@ -275,7 +275,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_halt_throttle_escalates_after_t_throttle_ticks` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-THROTTLE-AND-HALT-TIMERS | pass | 0.0 |
 | `test_halt_halt_escalates_after_t_halt_ticks` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-THROTTLE-AND-HALT-TIMERS | pass | 0.0 |
 | `test_core_default_timers_are_30s_and_300s` | REQUIREMENT-THROTTLE-AND-HALT-TIMERS | pass | 0.0 |
-| `test_halt_never_descends_without_clear_random` | REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED | pass | 0.6 |
+| `test_halt_never_descends_without_clear_random` | REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED | pass | 0.2 |
 | `test_halt_safe_is_absorbing_without_clear` | REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED | pass | 0.0 |
 | `test_halt_levers_follow_every_rung` | REQUIREMENT-LEVERS-FOLLOW-RUNG | pass | 0.0 |
 | `test_halt_ports_closed_outside_run` | REQUIREMENT-LEVERS-FOLLOW-RUNG | pass | 0.0 |
@@ -288,19 +288,19 @@ First example of each mailbox disagreement class in the random run:
 | `test_halt_cause_codes_match_the_spec` | REQUIREMENT-CAUSE-BITS-NAME-SUMMARY | pass | 0.0 |
 | `test_halt_escalation_keeps_the_cause` | REQUIREMENT-CAUSE-BITS-NAME-SUMMARY | pass | 0.0 |
 | `test_halt_state_codes_match_the_spec` | REQUIREMENT-STATE-REGISTER-CODES | pass | 0.0 |
-| `test_core_state_and_cause_csrs` | REQUIREMENT-STATE-REGISTER-CODES, REQUIREMENT-CAUSE-REGISTER-LAYOUT | pass | 0.1 |
-| `test_core_levers_csr_bits` | REQUIREMENT-LEVERS-REGISTER-BITS | pass | 0.1 |
-| `test_core_boot_state_levers_and_switch` | REQUIREMENT-CORE-BOOTS-HALTED-SAFE | pass | 0.1 |
-| `test_core_reset_from_run_returns_to_boot_rung` | REQUIREMENT-WATCHDOG-RESETS-TO-HALTED | pass | 0.1 |
+| `test_core_state_and_cause_csrs` | REQUIREMENT-STATE-REGISTER-CODES, REQUIREMENT-CAUSE-REGISTER-LAYOUT | pass | 0.0 |
+| `test_core_levers_csr_bits` | REQUIREMENT-LEVERS-REGISTER-BITS | pass | 0.0 |
+| `test_core_boot_state_levers_and_switch` | REQUIREMENT-CORE-BOOTS-HALTED-SAFE | pass | 0.0 |
+| `test_core_reset_from_run_returns_to_boot_rung` | REQUIREMENT-WATCHDOG-RESETS-TO-HALTED | pass | 0.0 |
 | `test_loop_pad_follows_switch_request` | REQUIREMENT-LOOP-PAD-FOLLOWS-SWITCH | pass | 0.0 |
 | `test_loop_one_noisy_sample_is_not_a_loss` | REQUIREMENT-LOOP-LOSS-DEBOUNCE, REQUIREMENT-BOARD-LOSS-DEBOUNCE | pass | 0.0 |
 | `test_loop_two_low_samples_declare_loss` | REQUIREMENT-LOOP-LOSS-DEBOUNCE, REQUIREMENT-BOARD-LOSS-DEBOUNCE | pass | 0.0 |
 | `test_loop_counts_only_on_sample_strobes` | REQUIREMENT-LOOP-LOSS-DEBOUNCE | pass | 0.0 |
-| `test_core_loop_csr_bits` | REQUIREMENT-LOOP-REGISTER-BITS | pass | 0.1 |
+| `test_core_loop_csr_bits` | REQUIREMENT-LOOP-REGISTER-BITS | pass | 0.0 |
 | `test_meter_host_write_refused_and_flagged` | REQUIREMENT-METER-HOST-WRITE-REFUSED | pass | 0.0 |
-| `test_meter_counters_only_increase_random` | REQUIREMENT-METER-ONLY-INCREMENTS | pass | 0.1 |
+| `test_meter_counters_only_increase_random` | REQUIREMENT-METER-ONLY-INCREMENTS | pass | 0.0 |
 | `test_meter_slots_are_independent` | REQUIREMENT-METER-ONLY-INCREMENTS | pass | 0.0 |
-| `test_core_meter_csr_layout` | REQUIREMENT-METER-SLOT-LAYOUT | pass | 0.1 |
+| `test_core_meter_csr_layout` | REQUIREMENT-METER-SLOT-LAYOUT | pass | 0.0 |
 | `test_mbox_good_frame_dispatches_once` | REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED, REQUIREMENT-DISPATCH-AFTER-ALL-CHECKS | pass | 0.0 |
 | `test_mbox_sequence_must_strictly_increase` | REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | pass | 0.0 |
 | `test_mbox_sequence_is_per_key_slot` | REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED, REQUIREMENT-SEQUENCE-REGISTER-PER-KEY | pass | 0.0 |
@@ -311,22 +311,22 @@ First example of each mailbox disagreement class in the random run:
 | `test_mbox_refused_when_not_running` | REQUIREMENT-MAILBOX-STATUS-CODES | pass | 0.0 |
 | `test_mbox_status_codes_match_the_register_map` | REQUIREMENT-MAILBOX-STATUS-CODES | pass | 0.0 |
 | `test_mbox_failed_frames_do_not_consume_sequence` | REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | pass | 0.0 |
-| `test_mbox_no_dispatch_without_all_checks_random` | REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE | pass | 0.6 |
-| `test_core_mbox_status_and_seq_csrs` | REQUIREMENT-SEQUENCE-REGISTER-PER-KEY, REQUIREMENT-MAILBOX-STATUS-CODES | pass | 0.1 |
+| `test_mbox_no_dispatch_without_all_checks_random` | REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE | pass | 0.2 |
+| `test_core_mbox_status_and_seq_csrs` | REQUIREMENT-SEQUENCE-REGISTER-PER-KEY, REQUIREMENT-MAILBOX-STATUS-CODES | pass | 0.0 |
 | `test_core_has_no_csr_write_port` | REQUIREMENT-ONLY-DOORBELL-WRITABLE, REQUIREMENT-NO-CSR-WRITE-PORT | pass | 0.0 |
-| `test_core_csr_reads_have_no_side_effects` | REQUIREMENT-ONLY-DOORBELL-WRITABLE, REQUIREMENT-NO-CSR-WRITE-PORT | pass | 0.1 |
-| `test_core_id_register` | REQUIREMENT-SILICON-ID-REGISTER | pass | 0.1 |
-| `test_core_log_window_is_not_decoded` | REQUIREMENT-LOG-WINDOW-FIRMWARE-MAPPED | pass | 0.1 |
-| `test_core_mono_csr_low_and_high_words` | REQUIREMENT-MONOTONIC-MICROSECOND-COUNTER | pass | 0.1 |
+| `test_core_csr_reads_have_no_side_effects` | REQUIREMENT-ONLY-DOORBELL-WRITABLE, REQUIREMENT-NO-CSR-WRITE-PORT | pass | 0.0 |
+| `test_core_id_register` | REQUIREMENT-SILICON-ID-REGISTER | pass | 0.0 |
+| `test_core_log_window_is_not_decoded` | REQUIREMENT-LOG-WINDOW-FIRMWARE-MAPPED | pass | 0.0 |
+| `test_core_mono_csr_low_and_high_words` | REQUIREMENT-MONOTONIC-MICROSECOND-COUNTER | pass | 0.0 |
 | `test_alarm_any_source_sets` | REQUIREMENT-ALARM-BITS-SET-THROUGH-MASK, REQUIREMENT-ALARMS-MONOTONE, REQUIREMENT-ANY-PARTY-RAISES-STICKY-ALARM | pass | 0.0 |
 | `test_alarm_clear_needs_authorization` | REQUIREMENT-ALARM-CLEAR-NEEDS-AUTHORIZATION, REQUIREMENT-ALARM-APPROVER-KEY-CLEARS | pass | 0.0 |
 | `test_alarm_set_beats_clear_in_the_same_cycle` | REQUIREMENT-ALARM-CLEAR-NEEDS-AUTHORIZATION, REQUIREMENT-ALARMS-MONOTONE | pass | 0.0 |
-| `test_alarm_monotone_without_authorization_random` | REQUIREMENT-ALARMS-MONOTONE | pass | 0.1 |
-| `test_core_alarms_csr` | REQUIREMENT-STICKY-ALARM-REGISTER | pass | 0.1 |
+| `test_alarm_monotone_without_authorization_random` | REQUIREMENT-ALARMS-MONOTONE | pass | 0.0 |
+| `test_core_alarms_csr` | REQUIREMENT-STICKY-ALARM-REGISTER | pass | 0.0 |
 | `test_meter_frozen_slot_stays_put_without_strobes` | REQUIREMENT-METER-SLOT-FREEZE, REQUIREMENT-METER-ONLY-INCREMENTS | pass | 0.0 |
-| `test_core_epoch_switch_kills_every_old_capability` | REQUIREMENT-SWITCH-RECONFIGURED-AFTER-EVENTS, REQUIREMENT-EPOCH-TAG-LOW-BITS, REQUIREMENT-RACK-WIDE-EPOCH-SWITCH | pass | 0.1 |
+| `test_core_epoch_switch_kills_every_old_capability` | REQUIREMENT-SWITCH-RECONFIGURED-AFTER-EVENTS, REQUIREMENT-EPOCH-TAG-LOW-BITS, REQUIREMENT-RACK-WIDE-EPOCH-SWITCH | pass | 0.0 |
 | `test_mbox_self_authenticating_command_rides_on_the_firmware_verdict` | REQUIREMENT-SELF-AUTHENTICATING-COMMANDS, REQUIREMENT-FRAME-EPOCH-MUST-MATCH | pass | 0.0 |
-| `test_diff_mailbox_random_frames_only_known_disagreements` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED, REQUIREMENT-FRAME-EPOCH-MUST-MATCH, REQUIREMENT-FRAME-SIGNATURE-CHECKED, REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND, REQUIREMENT-MAILBOX-STATUS-CODES, REQUIREMENT-WRONG-COMMAND-STATUS | pass | 1.9 |
+| `test_diff_mailbox_random_frames_only_known_disagreements` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED, REQUIREMENT-FRAME-EPOCH-MUST-MATCH, REQUIREMENT-FRAME-SIGNATURE-CHECKED, REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND, REQUIREMENT-MAILBOX-STATUS-CODES, REQUIREMENT-WRONG-COMMAND-STATUS | pass | 0.6 |
 | `test_diff_spec_good_halt` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-DISPATCH-AFTER-ALL-CHECKS | pass | 0.0 |
 | `test_diff_spec_replayed_halt` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | pass | 0.0 |
 | `test_diff_spec_halt_with_stale_epoch_is_exempt` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-FRAME-EPOCH-MUST-MATCH, REQUIREMENT-EPOCH-EXEMPT-COMMANDS | pass | 0.0 |
@@ -358,18 +358,18 @@ First example of each mailbox disagreement class in the random run:
 | `test_level_tamper_with_clear_settles_in_safe` | REQUIREMENT-TAMPER-ZEROIZES-TO-SAFE | pass | 0.0 |
 | `test_model_tamper_is_safe_and_unclearable` | REQUIREMENT-FIRMWARE-TAMPER-ZEROIZE, REQUIREMENT-TAMPER-ZEROIZES-TO-SAFE | pass | 0.0 |
 | `test_finding_lifecycle_debug_before_fuse_load` | REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG, REQUIREMENT-PRODUCTION-HAS-NO-DEBUG | pass | 0.0 |
-| `test_finding_core_reports_test_lifecycle_before_fuse_load` | REQUIREMENT-LIFECYCLE-REGISTER-ENCODING, REQUIREMENT-PRODUCTION-HAS-NO-DEBUG | reproduces CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD | 0.1 |
+| `test_finding_core_reports_test_lifecycle_before_fuse_load` | REQUIREMENT-LIFECYCLE-REGISTER-ENCODING, REQUIREMENT-PRODUCTION-HAS-NO-DEBUG | reproduces CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD | 0.0 |
 | `test_lifecycle_after_load_debug_is_dead` | REQUIREMENT-PRODUCTION-HAS-NO-DEBUG | pass | 0.0 |
 | `test_finding_cmd_halt_in_safe_opens_the_loop` | REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE, REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG | pass | 0.0 |
 | `test_model_finding_halt_in_safe_does_not_descend` | REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED, REQUIREMENT-LEVERS-FOLLOW-RUNG, REQUIREMENT-HALT-IN-SAFE-STAYS-SAFE | pass | 0.0 |
 | `test_cmd_halt_in_throttle_from_local_cause_opens_loop` | REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | pass | 0.0 |
 | `test_finding_loop_lost_in_halt_sets_switch_open` | REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | reproduces CONFORMANCE-SWITCH-OPEN-RUN-ONLY | 0.0 |
-| `test_finding_heartbeat_expires_on_time` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER, REQUIREMENT-HEARTBEAT-EXPIRES-ON-TIME, REQUIREMENT-HEARTBEAT-REMAINING-REGISTER | reproduces CONFORMANCE-MILLISECOND-TICK-TOO-LONG | 0.2 |
-| `test_core_ms_strobe_is_derived_from_the_counter` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | pass | 0.4 |
+| `test_finding_heartbeat_expires_on_time` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER, REQUIREMENT-HEARTBEAT-EXPIRES-ON-TIME, REQUIREMENT-HEARTBEAT-REMAINING-REGISTER | reproduces CONFORMANCE-MILLISECOND-TICK-TOO-LONG | 0.1 |
+| `test_core_ms_strobe_is_derived_from_the_counter` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | pass | 0.1 |
 | `test_finding_cap_refuses_at_zero_budget` | REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO | reproduces CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES | 0.0 |
 | `test_finding_cap_reprogramming_a_key_replaces_it` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH, REQUIREMENT-LOOKUP-DECREMENTS-BUDGET | reproduces CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | 0.0 |
 | `test_model_switch_replaces_on_reprogram` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH, REQUIREMENT-LOOKUP-DECREMENTS-BUDGET | pass | 0.0 |
-| `test_diff_cap_table_random_against_model_switch` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH, REQUIREMENT-LOOKUP-DECREMENTS-BUDGET, REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO, REQUIREMENT-CAPABILITY-REFUSES-ON-EXPIRY, REQUIREMENT-CAPABILITY-REFUSES-STALE-TAG, REQUIREMENT-BUDGET-NEVER-UNDERFLOWS, REQUIREMENT-CAPABILITY-DIRECTION-FIELD | pass | 0.4 |
+| `test_diff_cap_table_random_against_model_switch` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH, REQUIREMENT-LOOKUP-DECREMENTS-BUDGET, REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO, REQUIREMENT-CAPABILITY-REFUSES-ON-EXPIRY, REQUIREMENT-CAPABILITY-REFUSES-STALE-TAG, REQUIREMENT-BUDGET-NEVER-UNDERFLOWS, REQUIREMENT-CAPABILITY-DIRECTION-FIELD | pass | 0.1 |
 | `test_finding_meter_counter_wraps_at_48_bits` | REQUIREMENT-METER-ONLY-INCREMENTS | pass | 0.0 |
 | `test_finding_mono_wraps_from_an_all_ones_high_water_mark` | REQUIREMENT-COUNTER-REFUSES-DECREMENT, REQUIREMENT-COUNTER-FUSE-HIGH-WATER-MARK | pass | 0.0 |
 | `test_finding_mailbox_sequence_never_moves_backwards` | REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | reproduces CONFORMANCE-FRAME-NOT-LATCHED | 0.0 |
@@ -381,10 +381,10 @@ First example of each mailbox disagreement class in the random run:
 | `test_calls_halt_in_safe_from_local_cause_opens_loop_keeps_safe` | REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG, REQUIREMENT-HALT-IN-SAFE-STAYS-SAFE | pass | 0.0 |
 | `test_calls_halt_opens_loop_from_every_rung` | REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG | pass | 0.0 |
 | `test_calls_model_halt_in_safe_stays_safe_and_opens_loop` | REQUIREMENT-HALT-IN-SAFE-STAYS-SAFE, REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED | pass | 0.0 |
-| `test_calls_core_names_the_chip_waiting_for_its_first_heartbeat` | REQUIREMENT-NO-FIRST-HEARTBEAT-ALARM | pass | 0.1 |
-| `test_calls_core_never_raises_no_first_heartbeat_once_armed` | REQUIREMENT-ARMED-CHIP-NEVER-WAITING | pass | 0.1 |
-| `test_calls_firmware_cannot_raise_the_hardware_alarm_bits` | REQUIREMENT-HARDWARE-ALARMS-SEQUENCER-ONLY | pass | 0.1 |
+| `test_calls_core_names_the_chip_waiting_for_its_first_heartbeat` | REQUIREMENT-NO-FIRST-HEARTBEAT-ALARM | pass | 0.0 |
+| `test_calls_core_never_raises_no_first_heartbeat_once_armed` | REQUIREMENT-ARMED-CHIP-NEVER-WAITING | pass | 0.0 |
+| `test_calls_firmware_cannot_raise_the_hardware_alarm_bits` | REQUIREMENT-HARDWARE-ALARMS-SEQUENCER-ONLY | pass | 0.0 |
 | `test_calls_exclude_does_nothing_outside_waiting_for_first_heartbeat` | REQUIREMENT-EXCLUDE-ONLY-WHILE-WAITING | pass | 0.0 |
-| `test_calls_exclude_closes_the_pad_and_keeps_every_lever` | REQUIREMENT-EXCLUDED-CHIP-CLOSES-LOOP | pass | 0.1 |
+| `test_calls_exclude_closes_the_pad_and_keeps_every_lever` | REQUIREMENT-EXCLUDED-CHIP-CLOSES-LOOP | pass | 0.0 |
 | `test_calls_exclusion_ends_by_heartbeat_halt_or_tamper_only` | REQUIREMENT-EXCLUSION-ENDS-ON-EVENTS | pass | 0.0 |
 | `test_calls_model_logs_every_exclude_with_its_signer` | REQUIREMENT-EXCLUDE-LOGGED-WITH-SIGNER | pass | 0.0 |
