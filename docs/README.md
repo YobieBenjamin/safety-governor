@@ -15,14 +15,14 @@ summary and a "backed by" box.
 
 | Doc | What it settles | Plain-English section |
 |---|---|---|
-| `00-objectives.md` | Goals GOAL-ENFORCE-CONTRACT-IN-HARDWARE to GOAL-KEYS-OUT-OF-VENDOR-HANDS, requirements REQUIREMENT-DEVICE-SECRET-IN-FUSES to REQUIREMENT-DEPLOYMENT-OVERHEAD-UNDER-ONE-PERCENT with where each is tested, non-goals GOAL-NOT-UNDERSTANDING-TOKEN-CONTENT to GOAL-NOT-ONLY-SAFETY-LAYER, the three tiers, the acceptance rule | §1, §15 |
+| `00-objectives.md` | Goals (all eight), requirements (all thirty-two) with where each is tested, non-goals (all seven), the three tiers, the acceptance rule | §1, §15 |
 | `01-architecture.md` | Where the governor lives in the rack, the blocks on the die, boot, the job lifecycle, the safe-mode ladder, multi-GPU | §2 to §5 |
 | `02-safety-fabric.md` | The halt loop and the message fabric: rules, message types, roster formation, cluster-atomic epoch change, heartbeat fan-out, shared budgets, cross-linked logs, partitions | §6 |
 | `03-interfaces.md` | Every plug: the GPU, the switches, the host, memory, the DPU, action endpoints, other governors; the asks to NVIDIA; the pin summary | §2, §7 |
 | `04-specification.md` | Register map, mailbox commands, policy image, request and ticket formats, provenance record, crypto suite and key hierarchy, firmware, timing, memory, physical targets | §8, §9, §14 |
 | `05-threat-model.md` | Adversaries; what is stopped (with tests), what is only made expensive, what is not addressed | §10 |
 | `06-assumptions-register.md` | The one-row-per-input register the policy loader demands | §11 |
-| `07-verification-plan.md` | Hypotheses CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION to CONTRACT-LEVERS-WITHOUT-GPU-COOPERATION and what falsifies each; tiers in simulation; RTL invariants; silicon validation; FMEA; proof assumptions | §12 |
+| `07-verification-plan.md` | The seventeen contract tests (hypotheses) and what falsifies each; tiers in simulation; RTL invariants; silicon validation; FMEA; proof assumptions | §12 |
 | `08-silicon-plan.md` | OpenTitan as the base; Leg A on sky130 through LibreLane and a shuttle, with lithography explained; Leg B on 22FDX; Leg C the rack module; schedule and cost classes; the tape-out checklist | §13 |
 | `09-analogies.md` | Every feature as an everyday picture | all |
 | `10-plain-english-walkthrough.md` | The whole design in plain English, cross-referenced | itself |
@@ -73,7 +73,7 @@ regenerate them with `python3 docs/figures/make_figures.py` after a design chang
 | Layer | Where | Run |
 |---|---|---|
 | Functional model of the governor and a simulated rack | `../govsim/` | `python -m govsim.cli demo`, `bench`, `sweep` |
-| Hypothesis tests CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION to CONTRACT-OVERSIGHT-SURVIVES-MODEL (200 tests) | `../tests/` | `python -m pytest tests` |
+| Hypothesis tests for nineteen contracts (200 tests) | `../tests/` | `python -m pytest tests` |
 | Machine-checked proofs: the core invariants and the commit-point protocol (Z3) | `../proofs/` | `make proof` |
 | Hard-core RTL blocks (Amaranth) and their simulations | `../rtl/governor_rtl/`, `../rtl/tests/` | `make rtl`, `python -m pytest rtl/tests` |
 | Generated Verilog | `../rtl/gen/` | checked in; CI regenerates and diffs |

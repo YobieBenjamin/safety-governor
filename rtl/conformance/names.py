@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""Registered names for the requirement and conformance-finding IDs.
+"""Alias table: each old requirement and conformance-finding ID next to its registered name.
 
-Generated from the frozen naming glossary (LABELS.md is the registry). Do not edit by hand.
-The old IDs stay the keys in requirements.py, findings.py and the test registry, because code
-matches on them; the generated Markdown prints these names instead, so a reader sees what each
-item is."""
+The code keys on the registered names themselves (requirements.py, findings.py and the test
+registry, since the naming repair of 2026-10-25). This table only translates an old citation,
+for example one quoted in a dated audit record, into today's name. LABELS.md is the registry;
+this file states the old IDs on purpose, as an alias list, and is recorded as such."""
 
 NAMES = {
     "F-01": "CONFORMANCE-RUN-STATE-CHECK-ORDER",

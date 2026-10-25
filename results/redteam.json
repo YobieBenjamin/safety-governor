@@ -54,7 +54,7 @@
     },
     {
       "name": "non-customer key as payer consent",
-      "finding": "I1",
+      "finding": "EXPERIMENT-CUSTOMER-CONFIRMATION",
       "repelled": true,
       "detail": {
         "request_ok": false,
@@ -63,7 +63,7 @@
     },
     {
       "name": "another customer's consent",
-      "finding": "I1",
+      "finding": "EXPERIMENT-CUSTOMER-CONFIRMATION",
       "repelled": true,
       "detail": {
         "request_ok": false,

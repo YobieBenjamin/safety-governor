@@ -25,7 +25,7 @@ Read in this order. Each one stands alone.
 1. The argument in plain words: *The Chip That Says No*, Parts 1 and 2, in [hardware-and-silicon/blog](https://github.com/YobieBenjamin/hardware-and-silicon/tree/main/blog). The reflex, the referee who is also a player, STOP but never GO, "can you undo it".
 2. The layer model and why only silicon can be the lock: [A Multi-Layer Approach to AI Safety](https://github.com/YobieBenjamin/hardware-and-silicon/blob/main/blog/01-a-multi-layer-approach-to-ai-safety.md).
 3. The whole chip as one story: [docs/10-plain-english-walkthrough.md](docs/10-plain-english-walkthrough.md). Under every section a box names the technical document, the model code, the test and the hardware block behind it. [docs/09-analogies.md](docs/09-analogies.md) is the same vocabulary as a table.
-4. What the design is for and what it refuses to claim: [docs/00-objectives.md](docs/00-objectives.md), goals GOAL-ENFORCE-CONTRACT-IN-HARDWARE to GOAL-KEYS-OUT-OF-VENDOR-HANDS, requirements REQUIREMENT-DEVICE-SECRET-IN-FUSES to REQUIREMENT-DEPLOYMENT-OVERHEAD-UNDER-ONE-PERCENT with where each is tested, non-goals GOAL-NOT-UNDERSTANDING-TOKEN-CONTENT to GOAL-NOT-ONLY-SAFETY-LAYER.
+4. What the design is for and what it refuses to claim: [docs/00-objectives.md](docs/00-objectives.md), goals (all eight), requirements (all thirty-two) with where each is tested, non-goals (all seven).
 5. How solid any of it is: [docs/19-how-solid-is-the-theory.md](docs/19-how-solid-is-the-theory.md).
 6. Why there is no kill switch for AI and why there is one at the exits, with the theorem and the check: [docs/23-there-is-no-kill-switch.md](docs/23-there-is-no-kill-switch.md).
 7. The ladder every safety measure sits on, from a prompt that says "don't" to the chip to a person with a key, with what each rung catches, how it gets removed and the paper that showed it: [docs/24-the-ladder.md](docs/24-the-ladder.md).
@@ -44,7 +44,7 @@ The design documents, numbered, each opening with a plain-words summary and a "b
 | [04-specification.md](docs/04-specification.md) | The register map, the mailbox commands, the policy image, the request and the ticket (§5), the device-provenance record (§6), the crypto suite, timing, memory, physical targets (§11) |
 | [05-threat-model.md](docs/05-threat-model.md) | Adversaries; what is stopped, with the test that shows it; what is only made expensive; what is not addressed |
 | [06-assumptions-register.md](docs/06-assumptions-register.md) | One row per input the gate trusts: who signs it, how fresh it must be, what a failure means, what is not covered |
-| [07-verification-plan.md](docs/07-verification-plan.md) | Hypotheses CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION to CONTRACT-OVERSIGHT-SURVIVES-MODEL and what falsifies each; RTL invariants; silicon validation; FMEA |
+| [07-verification-plan.md](docs/07-verification-plan.md) | The nineteen contract tests (hypotheses) and what falsifies each; RTL invariants; silicon validation; FMEA |
 | [11-loop-timing.md](docs/11-loop-timing.md) | The halt loop as a circuit: ngspice across 72 governors, 39 configurations including cut wires, worst case 317 microseconds against a 1 millisecond bound |
 
 The logic runs. [govsim/](govsim/) is the functional model of a rack of governed GPUs: the governor (`governor.py`, the order of checks is `_cmd_request`), the rulebook (`policy.py`), the ledger, the log, the fabric, the GPU with its levers, the switches as enforcement points. [tests/](tests/) holds one file per hypothesis, `test_h00_contract.py` to `test_h18_oversight.py`, 200 tests; each test is a thing that would knock a claim down. [rtl/](rtl/) holds the hard-core blocks in Amaranth (measurement registers, monotonic counter, epoch register, ticket store, capability table, halt sequencer, heartbeat, mailbox, lifecycle) with 20 simulation tests and generated Verilog. Forty-eight single-point mutations of the model and the RTL were run to confirm the tests bite (see the README).
@@ -87,7 +87,7 @@ Three suites and an attack catalogue, all runnable in minutes without hardware.
 
 | What | Where | Count | Command |
 |---|---|---|---|
-| Governor model: hypotheses CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION to CONTRACT-NAMED-CONTROLS-ENFORCED | `safety-governor/tests/` | 224 tests | `./run.sh` or `make test` |
+| Governor model: the twenty-one contract tests | `safety-governor/tests/` | 224 tests | `./run.sh` or `make test` |
 | RTL blocks | `safety-governor/rtl/tests/` | 20 tests | `make rtl-test` |
 | Halt-loop circuit | `safety-governor/hw/loop/` | 39 ngspice configurations | `make loop` |
 | Reference stack: gate, ledger, endpoints, OASP path, transactional contract | `hardware-and-silicon/tests/` | 56 tests | `./run.sh` |
@@ -100,7 +100,7 @@ A baseline is a legitimate operation that must go through; the catalogue carries
 
 | Grade | What | Where to check |
 |---|---|---|
-| Proven (Z3, by induction) | The core invariants INVARIANT-EDITION-NEVER-NEGATIVE to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED (INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED, added 22 October 2026: the quorum the chip fuses, the clear only a signed CLEAR gives, and nothing executes while halted) and the commit-point properties (1) to (3), on the abstract machine | `make proof`; docs/19 §2 |
+| Proven (Z3, by induction) | The fourteen core invariants (four of them added 22 October 2026, INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD, INVARIANT-FUSED-THRESHOLD-NEVER-FALLS, INVARIANT-ONLY-CLEAR-LEAVES-HALT and INVARIANT-NOTHING-EXECUTES-WHILE-HALTED: the quorum the chip fuses, the clear only a signed CLEAR gives, and nothing executes while halted) and the commit-point properties (1) to (3), on the abstract machine | `make proof`; docs/19 §2 |
 | Tested (every run) | The functional model follows the rules (224 tests); the RTL blocks follow the model (21); the protocol holds against 75 attacks and lets 12 baselines through; OpenShell's shipped middleware contract (5 tests) | `./run.sh` in both repositories |
 | Simulated | The halt loop opens and every governor detects it inside 1 ms, worst case 317 µs | docs/11; `make loop` |
 | Assumed, and written down | Every input the gate trusts: who signs it, how fresh, what failure means | docs/06 |

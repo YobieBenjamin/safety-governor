@@ -13,7 +13,7 @@
 | Project Argus DC-SCM 2.0 module spec, section 9.4 Tables 2 and 3 (`ARGUS`) | Pin numbers, functions, voltages and directions. Argus states its pinout "fully complies with the OCP DC-SCI Rev2.0 Ver1.0 Pin Definition" | WebFetch text extraction |
 | OCP LTPI for DC-SCM 2.2 (`LTPI12`) | GPIO frame (2.2.1.1), link loss (2.5.2), latency (Table 15, Table 16) | WebFetch text extraction |
 
-So the pin numbers in the mapping are a public secondary transcription of the OCP spreadsheet, made by a vendor that built to it. Row `DCSCM-09` of the compliance matrix stays **open** until someone reads the spreadsheet itself. DC-SCM 2.2 changed some names and added alternates relative to 2.0; where the 2.1 change log says a pin gained an alternate (the LTPI2 and SGMII alternates on the OCP bay pins), the mapping says so in its notes.
+So the pin numbers in the mapping are a public secondary transcription of the OCP spreadsheet, made by a vendor that built to it. Row `REQUIREMENT-PINS-CONFIRMED-AGAINST-SPREADSHEET` of the compliance matrix stays **open** until someone reads the spreadsheet itself. DC-SCM 2.2 changed some names and added alternates relative to 2.0; where the 2.1 change log says a pin gained an alternate (the LTPI2 and SGMII alternates on the OCP bay pins), the mapping says so in its notes.
 
 ## 2. The mapping, in one table
 
@@ -59,7 +59,7 @@ For a BMC that is a sensible rule: a glitch should not flap the board's signals.
 
 **REQ-LTPI-FS-1.** The HPM-side LTPI2 endpoint drives every governor lever to its asserted value (PWRBRK# low, PERST# low, PWR_EN low, switch resets asserted) while the link has not reached Operational since power-on, and from the moment Link Lost is declared until the link is Operational again and a fresh frame has arrived. The HPM default for those outputs is the asserted value; they must not depend on pull resistors on the card side.
 
-No public document requires this. It is stricter than LTPI. It needs OEM logic in the HPM CPLD, which is why the matrix row `LTPI-04` is **open**, not designed.
+No public document requires this. It is stricter than LTPI. It needs OEM logic in the HPM CPLD, which is why the matrix row `REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS` is **open**, not designed.
 
 **REQ-CEM-FAIL-1** comes out of the same hop and is explained in `02-pcie-cem-sideband.md`: the HPM endpoint also ORs the slot's own power-fail into PERST#, because a power-good that crosses LTPI arrives up to 19.2 us late and the CEM wants PERST# within 500 ns.
 

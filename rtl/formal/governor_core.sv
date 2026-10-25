@@ -15,7 +15,7 @@
 // Why the small build says something about the big one (size and width independence):
 //  - The cap tables and the ticket store have no path into the sequencer, the heartbeat, the loop or the pins: their
 //    only inputs from the rest of the core are clear_all, now and epoch_tag, and their outputs go only to pins.
-//    The full-size csr/doorbell miters exercise that same wiring. So their entry count cannot change RTL-PINS-FOLLOW-SEQUENCER to RTL-LOOP-STAYS-OPEN.
+//    The full-size csr/doorbell miters exercise that same wiring. So their entry count cannot change the first seven rules listed below.
 //  - The sequencer's timer comparisons (timer + 1 >= t) are proven at full size, 30 000 and 300 000, in
 //    rtl/formal/halt_seq.sv. Here the same comparisons run at 3 and 4 so the solver can reach the top rungs.
 //  - ms_div is a free-running counter of tick modulo 2^ms_shift and tick_ms fires when it is all ones. RTL-EXPIRY-NOT-POSTPONED holds

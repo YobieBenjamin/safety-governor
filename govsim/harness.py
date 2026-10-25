@@ -329,7 +329,7 @@ PROBES = [
     ("H7", "the assumptions register is complete or the policy does not load", probe_h7),
     # Registered name: CONTRACT-OVERRIDE-SLOW-AND-LOGGED (old ID H8 is kept because code matches on it)
     ("H8", "human override is slow and fully logged", probe_h8),
-    # Registered name: CONTRACT-ZERO-PER-TOKEN-OVERHEAD (old ID H9 is kept because code matches on it)
+    # Registered name: CONTRACT-GOVERNOR-OVERHEAD-BOUNDED (old ID H9 is kept because code matches on it)
     ("H9", "zero per-token work; firmware under one percent of GPU time; the signing engine keeps up", probe_h9),
     # Registered name: CONTRACT-LEAKAGE-WITHIN-BUDGET (old ID H10 is kept because code matches on it)
     ("H10", "permitted-channel leakage trips the budget", probe_h10),
@@ -375,7 +375,7 @@ def report(matrix: dict[str, dict[str, str]], out_dir: str = "results") -> str:
     for hid, text, _ in PROBES:
         row = matrix[hid]
         lines.append(f"| {hid} | {text} | {row['rack']} | {row['board']} | {row['integrated']} |")
-    lines += ["", "## Modelled cost (CONTRACT-ZERO-PER-TOKEN-OVERHEAD)", "",
+    lines += ["", "## Modelled cost (CONTRACT-GOVERNOR-OVERHEAD-BOUNDED)", "",
               "A model, not a measurement: operation counts from the functional model priced with the figures in `docs/04-specification.md` §9, against a GPU doing 2,000 tokens per second with 500-token responses. "
               "Firmware time is the share of GPU time spent on action paths. The signing engine (ECDSA P-384 at OpenTitan's published 1,697,985 OTBN cycles, 17 ms at 100 MHz, shared by eight slots) runs beside the GPU and has to keep up; one signature per 50 ms batch window caps it. Record latency is the most a response waits if the runtime insists on its record before release.", "",
               "| Tier | Tokens | Firmware time | GPU time | Firmware share | Engine, one signature per response | Engine, batched | Record latency |", "|---|---|---|---|---|---|---|---|"]

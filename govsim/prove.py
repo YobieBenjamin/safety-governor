@@ -18,7 +18,7 @@ The layers:
   - formal proofs      : the abstract-machine invariants, the commit point, the min-cut argument
   - RTL conformance    : the RTL differential-conformance suite
   - RTL formal         : the RTL formal properties with planted mutants (needs yowasp-yosys)
-  - experiments        : EXPERIMENT-ORIGIN-GATE, EXPERIMENT-CONTAINMENT, EXPERIMENT-ROAD-REACHABILITY, EXPERIMENT-CUSTOMER-CONFIRMATION
+  - experiments        : EXPERIMENT-ORIGIN-GATE, EXPERIMENT-EGRESS-CONTAINMENT, EXPERIMENT-ROAD-REACHABILITY, EXPERIMENT-CUSTOMER-CONFIRMATION
   - discriminating tests: the pytest suite, every fix with a test that fails before and passes after
 
 A component needing a toolchain that is absent (RTL formal without yowasp-yosys) is recorded as
@@ -61,7 +61,7 @@ def components(quick: bool):
         ("conformance", "RTL differential-conformance suite", [sys.executable, "-m", "rtl.conformance"], False),
         ("rtl-formal", "RTL formal properties with planted mutants", [sys.executable, "-m", "rtl.formal"], True),
         ("exp-origin-gate", "EXPERIMENT-ORIGIN-GATE: the origin gate (no key, no model)", [sys.executable, "-m", "govsim.origin_gate"], False),
-        ("exp-containment", "EXPERIMENT-CONTAINMENT: containment measurement", [sys.executable, "-m", "govsim.containment"], False),
+        ("exp-containment", "EXPERIMENT-EGRESS-CONTAINMENT: containment measurement", [sys.executable, "-m", "govsim.containment"], False),
         ("exp-road", "EXPERIMENT-ROAD-REACHABILITY: rulebook reachability audit", [sys.executable, "-m", "govsim.road_reachability"], False),
         ("exp-customer", "EXPERIMENT-CUSTOMER-CONFIRMATION: the payer's own-key confirmation", [sys.executable, "-m", "govsim.customer_confirm"], False),
     ]

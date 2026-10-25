@@ -25,7 +25,7 @@ through them.
 > `test_h00_contract.py`, `test_h01_attestation.py`, `test_h02_enforcement_points.py`,
 > `test_h03_quorum.py` (the mailbox order), `test_h04_lane.py`,
 > `test_h05_alarms.py`, `test_h07_register.py`, `test_h08_override.py`; spec
-> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (INVARIANT-EDITION-NEVER-NEGATIVE to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED).
+> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (the fourteen core invariants).
 
 ## 0. Two scenarios first: a request for a weapon that destroys a city
 
@@ -712,7 +712,7 @@ for labels (CONTRACT-BROKER-CANNOT-PICK-RULE), alarms that anyone may raise and 
 and the register completeness refusal (CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE), the override floor and the quorum (CONTRACT-OVERRIDE-SLOW-AND-LOGGED), output
 that left without being presented (CONTRACT-LEAKAGE-WITHIN-BUDGET), the use cases end to end including the
 hazardous-knowledge release and a stale witness (CONTRACT-NO-ACTION-WITHOUT-TICKET), witness impersonation, the deployment
-gate and the audit sample (CONTRACT-OVERSIGHT-SURVIVES-MODEL), and the core invariants INVARIANT-EDITION-NEVER-NEGATIVE to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED in Z3
+gate and the audit sample (CONTRACT-OVERSIGHT-SURVIVES-MODEL), and the core invariants the fourteen core invariants in Z3
 (`proofs/core_invariants.py`): nothing executes unless a rule allowed it with its witnesses
 present when the ticket was issued (INVARIANT-EXECUTE-ONLY-IF-ALLOWED, INVARIANT-TICKET-ONLY-FOR-ALLOWED-ACTION); no replay (INVARIANT-NO-REPLAY-TICKET-SPENT); no ticket from an edition newer
 than the current one (INVARIANT-TICKET-EDITION-NOT-NEWER); halt is absorbing without a quorum (INVARIANT-HALT-IS-ABSORBING); with the heartbeat lost

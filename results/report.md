@@ -16,7 +16,7 @@ Generated 2026-10-24 00:05 UTC by `govsim sweep`.
 | CONTRACT-COMPARATOR-SURVIVES-COMPROMISE | the comparator holds with every layer above it compromised | pass | pass | pass |
 | CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE | the assumptions register is complete or the policy does not load | pass | pass | pass |
 | CONTRACT-OVERRIDE-SLOW-AND-LOGGED | human override is slow and fully logged | pass | pass | pass |
-| CONTRACT-ZERO-PER-TOKEN-OVERHEAD | zero per-token work; firmware under one percent of GPU time; the signing engine keeps up | pass | pass | pass |
+| CONTRACT-GOVERNOR-OVERHEAD-BOUNDED | zero per-token work; firmware under one percent of GPU time; the signing engine keeps up | pass | pass | pass |
 | CONTRACT-LEAKAGE-WITHIN-BUDGET | permitted-channel leakage trips the budget | pass | pass | pass |
 | CONTRACT-HALT-REACHES-EVERY-GPU | a halt reaches every GPU within the bound; nobody clears alone; a governor jumpered out of the loop is named and the loop opened | pass | pass | pass |
 | CONTRACT-ONLY-ROSTER-SPEAKS-ONCE | only roster members speak on the fabric; forged heartbeats fail | pass | pass | pass |
@@ -27,7 +27,7 @@ Generated 2026-10-24 00:05 UTC by `govsim sweep`.
 | CONTRACT-NO-ACTION-WITHOUT-TICKET | no governed action initiates without a ticket and no governed response leaves the rack without a release ticket | pass | pass | pass |
 | CONTRACT-OVERSIGHT-SURVIVES-MODEL | oversight survives the model: the observer is always invoked and cannot be impersonated, audit sampling is unpredictable, the evaluated model is the deployed model, compute and hazard budgets bind | pass | pass | pass |
 
-## Modelled cost (CONTRACT-ZERO-PER-TOKEN-OVERHEAD)
+## Modelled cost (CONTRACT-GOVERNOR-OVERHEAD-BOUNDED)
 
 A model, not a measurement: operation counts from the functional model priced with the figures in `docs/04-specification.md` §9, against a GPU doing 2,000 tokens per second with 500-token responses. Firmware time is the share of GPU time spent on action paths. The signing engine (ECDSA P-384 at OpenTitan's published 1,697,985 OTBN cycles, 17 ms at 100 MHz, shared by eight slots) runs beside the GPU and has to keep up; one signature per 50 ms batch window caps it. Record latency is the most a response waits if the runtime insists on its record before release.
 

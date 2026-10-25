@@ -3,7 +3,7 @@
 """The small test framework the conformance suite runs on.
 
 Every test is a plain function registered with ``@conformance("R-0xx", ...)``: it names the requirement ids
-it checks. A test that reproduces a finding is registered with ``finding="F-0n"``: it asserts what the spec
+it checks. A test that reproduces a finding is registered with ``finding="CONFORMANCE-..."`` (the finding's registered name): it asserts what the spec
 requires, so on today's RTL it FAILS BY ASSERTION, and the runner reports that as a disagreement, not as a pass.
 If a finding test ever passes, the finding no longer reproduces and the runner fails until FINDINGS.md is
 updated (the record has to stay exact).

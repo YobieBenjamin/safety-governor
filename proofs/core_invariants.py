@@ -33,7 +33,7 @@ What the proof is about, and what it is not about, is the point of the file:
     inputs: an image that set its own threshold to zero passed, and a heartbeat cleared a halt.
     The machine now counts the valid governance signatures against a fused threshold that only
     rises (whatever threshold the image claims), and a clear needs a signature over a CLEAR,
-    for this chip, inside its expiry. INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD to INVARIANT-ONLY-CLEAR-LEAVES-HALT are those properties, and the file also checks
+    for this chip, inside its expiry. INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD, INVARIANT-FUSED-THRESHOLD-NEVER-FALLS and INVARIANT-ONLY-CLEAR-LEAVES-HALT are those properties, and the file also checks
     that the old rules break them, so the proof would have caught both.
   * It is not about the physics (whether the wire really carries no bytes without a ticket),
     the cryptography (signatures are modelled as unforgeable: nobody but the governor can
@@ -231,35 +231,26 @@ def invariant(s: State):
 
 def one_step_properties(s: State, t: State, i: dict):
     """The properties that must hold across one step, as a dict from a label to a formula. Each formula relates the
-    state before the step (``s``), the state after it (``t``) and the step's inputs. The labels INVARIANT-HALT-IS-ABSORBING to INVARIANT-NOTHING-EXECUTES-WHILE-HALTED are the one-step
+    state before the step (``s``), the state after it (``t``) and the step's inputs. The nine labels from INVARIANT-HALT-IS-ABSORBING on in the list above are the one-step
     properties named in this file."""
     return {
-        # Registered name: INVARIANT-HALT-IS-ABSORBING (old ID P5 is kept because code matches on it)
-        "P5  halt is absorbing without an authorized clear: halted, and no signed CLEAR for this chip in date, means still halted":
+        "INVARIANT-HALT-IS-ABSORBING: halt is absorbing without an authorized clear: halted, and no signed CLEAR for this chip in date, means still halted":
             Implies(And(s.halted, Not(clear_auth_of(s, i))), t.halted),
-        # Registered name: INVARIANT-FAIL-CLOSED-WITHOUT-HEARTBEAT (old ID P6 is kept because code matches on it)
-        "P6  fail closed: with the heartbeat lost, no step executes anything":
+        "INVARIANT-FAIL-CLOSED-WITHOUT-HEARTBEAT: fail closed: with the heartbeat lost, no step executes anything":
             Implies(Not(s.heartbeat), t.executed == s.executed),
-        # Registered name: INVARIANT-NO-TICKET-WHILE-HALTED (old ID P7 is kept because code matches on it)
-        "P7  no ticket is issued while halted or while the heartbeat is lost":
+        "INVARIANT-NO-TICKET-WHILE-HALTED: no ticket is issued while halted or while the heartbeat is lost":
             Implies(Or(s.halted, Not(s.heartbeat)), t.ticket == s.ticket),
-        # Registered name: INVARIANT-EDITION-ONLY-MOVES-FORWARD (old ID P8 is kept because code matches on it)
-        "P8  the edition only moves forward":
+        "INVARIANT-EDITION-ONLY-MOVES-FORWARD: the edition only moves forward":
             t.epoch >= s.epoch,
-        # Registered name: INVARIANT-EDITION-CHANGE-NEEDS-QUORUM (old ID P9 is kept because code matches on it)
-        "P9  an edition change needs a quorum":
+        "INVARIANT-EDITION-CHANGE-NEEDS-QUORUM: an edition change needs a quorum":
             Implies(t.epoch != s.epoch, quorum_of(s, i)),
-        # Registered name: INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD (old ID P10 is kept because code matches on it)
-        "P10 an edition change needs the threshold in force of distinct signatures from the keys in force, whatever the image claims":
+        "INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD: an edition change needs the threshold in force of distinct signatures from the keys in force, whatever the image claims":
             Implies(t.epoch != s.epoch, i["sigs"] >= s.kfuse),
-        # Registered name: INVARIANT-FUSED-THRESHOLD-NEVER-FALLS (old ID P11 is kept because code matches on it)
-        "P11 the threshold in force never falls below the manufacture floor, which never moves":
+        "INVARIANT-FUSED-THRESHOLD-NEVER-FALLS: the threshold in force never falls below the manufacture floor, which never moves":
             And(t.kfuse >= t.kfloor, t.kfloor == s.kfloor),
-        # Registered name: INVARIANT-ONLY-CLEAR-LEAVES-HALT (old ID P12 is kept because code matches on it)
-        "P12 nothing but a signature over a CLEAR leaves the halt: a heartbeat, a halt or any other signed command does not":
+        "INVARIANT-ONLY-CLEAR-LEAVES-HALT: nothing but a signature over a CLEAR leaves the halt: a heartbeat, a halt or any other signed command does not":
             Implies(And(s.halted, Not(t.halted)), i["signed_cmd"] == CLEAR_CMD),
-        # Registered name: INVARIANT-NOTHING-EXECUTES-WHILE-HALTED (old ID P13 is kept because code matches on it)
-        "P13 nothing executes while halted, not even against a ticket issued before the halt":
+        "INVARIANT-NOTHING-EXECUTES-WHILE-HALTED: nothing executes while halted, not even against a ticket issued before the halt":
             Implies(s.halted, t.executed == s.executed),
     }
 
@@ -297,21 +288,21 @@ def main() -> int:
     a_step = inputs["a"]
     a_k = Const("a_k", Action)                       # an arbitrary action, for the conclusion
     results = []
-    results.append(prove("INVARIANT-EXECUTE-ONLY-IF-ALLOWED to INVARIANT-TICKET-EDITION-NOT-NEWER, INVARIANT-NO-REPLAY-COUNTED hold in every initial state", invariant_at(s, a_k), [init(s)]))
+    results.append(prove("INVARIANT-EXECUTE-ONLY-IF-ALLOWED, INVARIANT-TICKET-ONLY-FOR-ALLOWED-ACTION, INVARIANT-NO-REPLAY-TICKET-SPENT, INVARIANT-TICKET-EDITION-NOT-NEWER, INVARIANT-NO-REPLAY-COUNTED hold in every initial state", invariant_at(s, a_k), [init(s)]))
     # Induction, one step at a time. Every step touches at most the entry for a_step, so the
     # invariant at a_k after the step follows from the invariant at a_k and at a_step before it.
     # Assuming only those two instances is weaker than assuming the whole invariant, so the
     # proof is sound, and it keeps every query free of quantifiers.
     hyp = [invariant_at(s, a_k), invariant_at(s, a_step)]
     for name, tr in step_list(s, t, inputs):
-        results.append(prove(f"INVARIANT-EXECUTE-ONLY-IF-ALLOWED to INVARIANT-TICKET-EDITION-NOT-NEWER, INVARIANT-NO-REPLAY-COUNTED preserved by step: {name}", invariant_at(t, a_k), hyp + [tr]))
+        results.append(prove(f"INVARIANT-EXECUTE-ONLY-IF-ALLOWED, INVARIANT-TICKET-ONLY-FOR-ALLOWED-ACTION, INVARIANT-NO-REPLAY-TICKET-SPENT, INVARIANT-TICKET-EDITION-NOT-NEWER, INVARIANT-NO-REPLAY-COUNTED preserved by step: {name}", invariant_at(t, a_k), hyp + [tr]))
     for name, claim in one_step_properties(s, t, inputs).items():
         results.append(prove(name, claim, hyp + [step]))
     # the regression check: under the old rules INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD and INVARIANT-ONLY-CLEAR-LEAVES-HALT must fail, or this file could not have caught the defects
     old = old_rules(s, inputs)
     old_step = steps(s, t, inputs, **old)
     props = one_step_properties(s, t, inputs)
-    for key in ("P10", "P12"):
+    for key in ("INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD", "INVARIANT-ONLY-CLEAR-LEAVES-HALT"):
         name = next(n for n in props if n.startswith(key))
         sol = Solver()
         sol.set("timeout", 60_000)
@@ -321,7 +312,7 @@ def main() -> int:
         results.append(caught)
     # an external audit on 22 October asked the solver for: issue a ticket, halt, execute while halted. On the
     # machine as it was, that was satisfiable (execute did not require RUN, though the code's commit always did)
-    name = next(n for n in props if n.startswith("P13"))
+    name = next(n for n in props if n.startswith("INVARIANT-NOTHING-EXECUTES-WHILE-HALTED"))
     sol = Solver()
     sol.set("timeout", 60_000)
     sol.add(*hyp, steps(s, t, inputs, execute_needs_run=False), Not(props[name]))

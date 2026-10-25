@@ -39,10 +39,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 REQ_MD = os.path.join(HERE, "REQUIREMENTS.md")
 FINDINGS_MD = os.path.join(HERE, "FINDINGS.md")
 PLAIN_MD = os.path.join(HERE, "PLAIN-ENGLISH.md")
-# Registered name: CONFORMANCE-RUN-STATE-CHECK-ORDER (old ID F-01 is kept because code matches on it)
-# Registered name: CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO (old ID F-02 is kept because code matches on it)
-# Registered name: CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST (old ID F-03 is kept because code matches on it)
-DIFF_CLASSES = {"agree": 3690, "F-01": 253, "F-02": 3, "F-03": 54}   # the random run's numbers FINDINGS quotes
+DIFF_CLASSES = {"agree": 3690, "CONFORMANCE-RUN-STATE-CHECK-ORDER": 253, "CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO": 3, "CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST": 54}   # the random run's numbers FINDINGS quotes
 RESULT_MD = os.path.join(ROOT, "results", "rtl-conformance.md")
 TARGET = 150
 
@@ -178,7 +175,7 @@ def main(argv: list[str]) -> int:
     # 3. findings file
     # a closed finding keeps its section (the record of what was wrong) but has "(closed)" in its heading;
     # its reproducer has become an ordinary conformance test that guards the fix
-    written = {f for f, rest in re.findall(r"^## (F-\d\d)(.*)$", findings_text.TEXT, re.M) if "(closed)" not in rest}
+    written = {f for f, rest in re.findall(r"^## (CONFORMANCE-[A-Z0-9-]+):?(.*)$", findings_text.TEXT, re.M) if "(closed)" not in rest}
     named = {t.finding for t in REGISTRY if t.finding}
     for f in sorted(named - written):
         problems.append(f"{f} has reproducer tests but no section in FINDINGS.md")

@@ -274,7 +274,7 @@ add("F12", "high", "safety-governor", 2,
     "**Concrete failure.** While RUN, consume the output allowance, then send `message.send` to a "
     "listed recipient with an arbitrary string in an unconstrained body. The auto rule bounds the "
     "recipient but not length/bytes/rate, and the endpoint adds no check, so the model has no finite "
-    "byte ceiling on this channel. EXPERIMENT-CONTAINMENT measures neither this path nor information in other "
+    "byte ceiling on this channel. EXPERIMENT-EGRESS-CONTAINMENT measures neither this path nor information in other "
     "parameters, adds a one-time unpresented allowance to a per-hour rate, and describes a rack "
     "ceiling from a single governor.\n\n"
     "**Fix.** Maintain a complete inventory of observable channels (typed actions and downstream "
@@ -287,8 +287,8 @@ add("F12", "high", "safety-governor", 2,
     "channel is bounded, and hold once it is.")
 
 add("F13", "high", "safety-governor", 2,
-    # Registered name: EXPERIMENT-CONTAINMENT (old ID P3b is kept because code matches on it)
-    "F13 - P3b must install the policies it names and measure delivered bytes",
+    # Registered name: EXPERIMENT-EGRESS-CONTAINMENT (old ID P3b is kept because code matches on it)
+    "F13 - EXPERIMENT-EGRESS-CONTAINMENT must install the policies it names and measure delivered bytes",
     "python3 -m pytest -q tests/test_f13_p3b_policy_and_egress.py",
     "**Claim.** The containment experiment must measure the policies it claims and bytes actually "
     "released, not signing calls under the default policy.\n\n"
@@ -333,7 +333,7 @@ add("F23", "high", "safety-governor", 2,
 
 add("F04-audit", "high", "safety-governor", 2,
     # Registered name: EXPERIMENT-ROAD-REACHABILITY (old ID A1 is kept because code matches on it)
-    "F04-audit - A1 must not call an enum a destination boundary",
+    "F04-audit - EXPERIMENT-ROAD-REACHABILITY must not call an enum a destination boundary",
     "python3 -m pytest -q tests/test_f04_audit_reachability.py",
     "**Claim.** The reachability audit must not classify a rule as confined because a currency enum "
     "contains `in`, and its fixpoint must model external effects.\n\n"

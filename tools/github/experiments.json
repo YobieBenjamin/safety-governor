@@ -116,7 +116,7 @@
       "id": "L1",
       "repo": "safety-governor",
       "wave": "done",
-      "title": "L1 · Core invariants proven by induction on the abstract machine (INVARIANT-EDITION-NEVER-NEGATIVE to INVARIANT-EDITION-CHANGE-NEEDS-QUORUM, non-vacuity) [done]",
+      "title": "WAVE-CORE-INVARIANTS-BY-INDUCTION · Core invariants proven by induction on the abstract machine (the ten original core invariants, non-vacuity) [done]",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -129,7 +129,7 @@
       "id": "L2",
       "repo": "safety-governor",
       "wave": "done",
-      "title": "L2 · Commit-point protocol proven: hold, clearance bound to the action version, all-clear inside the budget, alarm on expiry (YB-0039 ext. 1 to 3) [done]",
+      "title": "WAVE-COMMIT-POINT-PROTOCOL-PROOF · Commit-point protocol proven: hold, clearance bound to the action version, all-clear inside the budget, alarm on expiry (YB-0039 ext. 1 to 3) [done]",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -142,7 +142,7 @@
       "id": "L3",
       "repo": "safety-governor",
       "wave": "2",
-      "title": "L3 · Widen the abstract machine: budgets and rate windows, k-of-n approvals, buffer classes, egress release, loop beacon and clear",
+      "title": "WAVE-WIDEN-ABSTRACT-MACHINE · Widen the abstract machine: budgets and rate windows, k-of-n approvals, buffer classes, egress release, loop beacon and clear",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -167,7 +167,7 @@
       "id": "L4",
       "repo": "safety-governor",
       "wave": "1",
-      "title": "L4 · Trace conformance: replay every govsim trace through the abstract machines and fail on the first step they refuse",
+      "title": "WAVE-TRACE-CONFORMANCE-REPLAY · Trace conformance: replay every govsim trace through the abstract machines and fail on the first step they refuse",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -189,7 +189,7 @@
       "id": "L5",
       "repo": "safety-governor",
       "wave": "1",
-      "title": "L5 · Differential test: the reference stack's gate against govsim on the 75 attacks, the 12 baselines and random requests",
+      "title": "WAVE-DIFFERENTIAL-GATE-TEST · Differential test: the reference stack's gate against govsim on the 75 attacks, the 12 baselines and random requests",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -211,7 +211,7 @@
       "id": "L6",
       "repo": "safety-governor",
       "wave": "2",
-      "title": "L6 · Mutation testing as a standing gate: every check-removing mutant of the governor model must be killed by some test",
+      "title": "WAVE-MUTATION-TESTING-GATE · Mutation testing as a standing gate: every check-removing mutant of the governor model must be killed by some test",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -238,7 +238,7 @@
       "id": "L7",
       "repo": "safety-governor",
       "wave": "done",
-      "title": "L7 · Formal proofs on the Verilog: the invariants restated on the hard-core RTL blocks and proven unbounded; gate-level equivalence [done]",
+      "title": "WAVE-FORMAL-PROOFS-ON-VERILOG · Formal proofs on the Verilog: the invariants restated on the hard-core RTL blocks and proven unbounded; gate-level equivalence [done]",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -246,7 +246,7 @@
         "status:done",
         "agent:cloud"
       ],
-      "body": "**Goal.** Carry claim L from the model to the gates. Under `rtl/formal/`, write SymbiYosys (yosys-smtbmc, k-induction then unbounded where possible) jobs for `ticket_store`, `epoch_reg`, `halt_seq`, `cap_table`, `monotonic_counter`, `mailbox`, each asserting the block's share of INVARIANT-EDITION-NEVER-NEGATIVE to INVARIANT-EDITION-CHANGE-NEEDS-QUORUM and of the commit-point properties as SystemVerilog assertions on the generated Verilog in `rtl/gen/`. Add equivalence checking between `rtl/gen/*.v` and the synthesized netlist from the LibreLane flow.\n\n**Read first.** `rtl/governor_rtl/*.py` (Amaranth sources), `rtl/gen/*.v`, `rtl/tests/test_blocks.py`, `docs/07-verification-plan.md` (the RTL invariants section).\n\n**Acceptance.** `make formal` passes for every block; each assertion maps to a numbered property; the netlist equivalence passes.\n\n**Disproof.** A block admits an input sequence that violates its invariant: a real RTL bug.\n\n**Budget.** One cloud agent, about 200k tokens, plus solver time; tooling (yosys, yosys-smtbmc, z3) is already installed in the program's container.\n\n**Acceptance command (the launcher runs it after the agent).** `make formal`\n\n**Result (23 October 2026, done on main, not on a branch).** Every core block plus the SMBus target proven on the generated Verilog by bounded check and k-induction, most in three solvers (z3, yices, boolector); 101 planted bugs, all caught by assertion; random simulation against independent reference models; 250 spec conformance checks. Five real RTL bugs found and fixed on the way. Not done from the original scope: gate-level equivalence of a signed-off netlist, since the sky130 layout did not finish (docs/26, workstream 4). Run: `python -m rtl.formal`. Record: `docs/26-the-silicon-push.md`, `rtl/formal/`. PR #24 (the program's own WAVE-FORMAL-PROOFS-ON-VERILOG branch) closed as superseded.",
+      "body": "**Goal.** Carry claim L from the model to the gates. Under `rtl/formal/`, write SymbiYosys (yosys-smtbmc, k-induction then unbounded where possible) jobs for `ticket_store`, `epoch_reg`, `halt_seq`, `cap_table`, `monotonic_counter`, `mailbox`, each asserting the block's share of the ten original core invariants and of the commit-point properties as SystemVerilog assertions on the generated Verilog in `rtl/gen/`. Add equivalence checking between `rtl/gen/*.v` and the synthesized netlist from the LibreLane flow.\n\n**Read first.** `rtl/governor_rtl/*.py` (Amaranth sources), `rtl/gen/*.v`, `rtl/tests/test_blocks.py`, `docs/07-verification-plan.md` (the RTL invariants section).\n\n**Acceptance.** `make formal` passes for every block; each assertion maps to a numbered property; the netlist equivalence passes.\n\n**Disproof.** A block admits an input sequence that violates its invariant: a real RTL bug.\n\n**Budget.** One cloud agent, about 200k tokens, plus solver time; tooling (yosys, yosys-smtbmc, z3) is already installed in the program's container.\n\n**Acceptance command (the launcher runs it after the agent).** `make formal`\n\n**Result (23 October 2026, done on main, not on a branch).** Every core block plus the SMBus target proven on the generated Verilog by bounded check and k-induction, most in three solvers (z3, yices, boolector); 101 planted bugs, all caught by assertion; random simulation against independent reference models; 250 spec conformance checks. Five real RTL bugs found and fixed on the way. Not done from the original scope: gate-level equivalence of a signed-off netlist, since the sky130 layout did not finish (docs/26, workstream 4). Run: `python -m rtl.formal`. Record: `docs/26-the-silicon-push.md`, `rtl/formal/`. PR #24 (the program's own WAVE-FORMAL-PROOFS-ON-VERILOG branch) closed as superseded.",
       "accept": "make formal",
       "backend": "cloud",
       "depends": [
@@ -262,7 +262,7 @@
       "id": "P2",
       "repo": "safety-governor",
       "wave": "2",
-      "title": "P2 · The exit register: every path by which bytes, requests, responses, weights, power, reset or clock reach or leave a GPU on an HGX baseboard and an NVL72 tray, each governed, bricked or unaccounted, with a source",
+      "title": "WAVE-EXIT-REGISTER · The exit register: every path by which bytes, requests, responses, weights, power, reset or clock reach or leave a GPU on an HGX baseboard and an NVL72 tray, each governed, bricked or unaccounted, with a source",
       "labels": [
         "experiment",
         "claim:P-physical-paths",
@@ -285,7 +285,7 @@
       "id": "P3",
       "repo": "safety-governor",
       "wave": "2",
-      "title": "P3 · Covert-channel budget: the maximum rate at which weights could leak through permitted traffic under the byte and rate budgets, as a number per hour",
+      "title": "WAVE-COVERT-CHANNEL-BUDGET · Covert-channel budget: the maximum rate at which weights could leak through permitted traffic under the byte and rate budgets, as a number per hour",
       "labels": [
         "experiment",
         "claim:P-physical-paths",
@@ -307,7 +307,7 @@
       "id": "C3",
       "repo": "safety-governor",
       "wave": "2",
-      "title": "C3 · Post-quantum path: the cost of a hybrid signature (P-384 plus a lattice scheme) in the batching model, since OTBN has no ML-DSA today",
+      "title": "WAVE-POST-QUANTUM-SIGNATURE-COST · Post-quantum path: the cost of a hybrid signature (P-384 plus a lattice scheme) in the batching model, since OTBN has no ML-DSA today",
       "labels": [
         "experiment",
         "claim:C-cryptography",
@@ -329,7 +329,7 @@
       "id": "N1",
       "repo": "safety-governor",
       "wave": "2",
-      "title": "N1 · Whole-deployment overhead: 72 GPUs, batching, tail latency, logging and revocation in a discrete-event simulation (docs/12)",
+      "title": "WAVE-DEPLOYMENT-OVERHEAD-SIMULATION · Whole-deployment overhead: 72 GPUs, batching, tail latency, logging and revocation in a discrete-event simulation (docs/12)",
       "labels": [
         "experiment",
         "claim:N-numbers",
@@ -351,7 +351,7 @@
       "id": "N2",
       "repo": "safety-governor",
       "wave": "3",
-      "title": "N2 · False-halt rate model: component failure rates, debounce, beacon windows and heartbeat loss combined into expected false halts per rack-year",
+      "title": "WAVE-FALSE-HALT-RATE-MODEL · False-halt rate model: component failure rates, debounce, beacon windows and heartbeat loss combined into expected false halts per rack-year",
       "labels": [
         "experiment",
         "claim:N-numbers",
@@ -373,7 +373,7 @@
       "id": "H1",
       "repo": "safety-governor",
       "wave": "1",
-      "title": "H1 · Lanes conformance suite and the catalogue as data: signed fixtures for every message the gate consumes, checked in every repository's CI",
+      "title": "WAVE-LANES-CONFORMANCE-SUITE · Lanes conformance suite and the catalogue as data: signed fixtures for every message the gate consumes, checked in every repository's CI",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -397,7 +397,7 @@
       "id": "YB-0052",
       "repo": "safety",
       "wave": "1",
-      "title": "YB-0052 · Observer evaluation set: measured miss and false-alarm rates per signal family for the Layer 3 observer, at matched false-alarm budgets",
+      "title": "WAVE-OBSERVER-EVALUATION-SET · Observer evaluation set: measured miss and false-alarm rates per signal family for the Layer 3 observer, at matched false-alarm budgets",
       "labels": [
         "experiment",
         "claim:S-semantics",
@@ -419,7 +419,7 @@
       "id": "YB-0053",
       "repo": "safety",
       "wave": "2",
-      "title": "YB-0053 · Observer independence: do the inputs that defeat the model's own refusal also defeat the regulator, the Layer 3 observer and a Sentry-shaped filter?",
+      "title": "WAVE-OBSERVER-INDEPENDENCE · Observer independence: do the inputs that defeat the model's own refusal also defeat the regulator, the Layer 3 observer and a Sentry-shaped filter?",
       "labels": [
         "experiment",
         "claim:S-semantics",
@@ -445,7 +445,7 @@
       "id": "YB-0054",
       "repo": "safety",
       "wave": "3",
-      "title": "YB-0054 · Quorum arithmetic for the gate: from measured miss rates and correlations to the policy's observer list and max_risk per hazard class, or \"none\"",
+      "title": "WAVE-OBSERVER-QUORUM-ARITHMETIC · Quorum arithmetic for the gate: from measured miss rates and correlations to the policy's observer list and max_risk per hazard class, or \"none\"",
       "labels": [
         "experiment",
         "claim:S-semantics",
@@ -470,7 +470,7 @@
       "id": "YB-0055",
       "repo": "safety",
       "wave": "2",
-      "title": "YB-0055 · Chip-visible vitals: can a regulator restricted to tier-0 signals the governor reads out of band (token rate, latency, cycles, bytes, board power) catch wrong answers in time?",
+      "title": "WAVE-CHIP-VISIBLE-VITALS · Chip-visible vitals: can a regulator restricted to tier-0 signals the governor reads out of band (token rate, latency, cycles, bytes, board power) catch wrong answers in time?",
       "labels": [
         "experiment",
         "claim:S-semantics",
@@ -486,14 +486,14 @@
       "backend": "cloud+local",
       "owns": [
         "agr/bench/**",
-        "algorithms/YB-0055-chip-visible-vitals/**"
+        "algorithms/chip-visible-vitals/**"
       ]
     },
     {
       "id": "YB-0056",
       "repo": "safety",
       "wave": "3",
-      "title": "YB-0056 · Verdict latency inside the gate's windows: the regulator's and the observer's time-to-verdict against the ticket freshness window and the 50 ms release batch",
+      "title": "WAVE-VERDICT-LATENCY-IN-WINDOWS · Verdict latency inside the gate's windows: the regulator's and the observer's time-to-verdict against the ticket freshness window and the 50 ms release batch",
       "labels": [
         "experiment",
         "claim:S-semantics",
@@ -519,7 +519,7 @@
       "id": "YB-0057",
       "repo": "safety",
       "wave": "3",
-      "title": "YB-0057 · The chip's four use cases run with the real witness: the Layer 3 observer over the lanes contract, the regulator's effectors mapped onto the governor's levers",
+      "title": "WAVE-USE-CASES-WITH-REAL-WITNESS · The chip's four use cases run with the real witness: the Layer 3 observer over the lanes contract, the regulator's effectors mapped onto the governor's levers",
       "labels": [
         "experiment",
         "claim:S-semantics",
@@ -544,7 +544,7 @@
       "id": "AGR-track",
       "repo": "autonomic-graph-regulation",
       "wave": "1",
-      "title": "Chip program: the experiments on the observer lane (WAVE-OBSERVER-EVALUATION-SET to WAVE-USE-CASES-WITH-REAL-WITNESS) are tracked in YobieBenjamin/safety and reach this snapshot through publish.sh",
+      "title": "Chip program: the experiments on the observer lane (WAVE-OBSERVER-EVALUATION-SET, WAVE-OBSERVER-INDEPENDENCE, WAVE-OBSERVER-QUORUM-ARITHMETIC, WAVE-CHIP-VISIBLE-VITALS, WAVE-VERDICT-LATENCY-IN-WINDOWS and WAVE-USE-CASES-WITH-REAL-WITNESS) are tracked in YobieBenjamin/safety and reach this snapshot through publish.sh",
       "labels": [
         "experiment",
         "claim:S-semantics",
@@ -556,7 +556,7 @@
       "id": "G1",
       "repo": "safety-governor",
       "wave": "open",
-      "title": "G1 · Who reads the log: a read-access policy for log contents, with the integrity checkpoints staying public",
+      "title": "WAVE-WHO-READS-THE-LOG · Who reads the log: a read-access policy for log contents, with the integrity checkpoints staying public",
       "labels": [
         "experiment",
         "claim:G-governance",
@@ -571,7 +571,7 @@
       "id": "G2",
       "repo": "safety-governor",
       "wave": "open",
-      "title": "G2 · How an affected party contests: a signed objection lane that holds a ticket for a separate quorum, without becoming a denial-of-service lever",
+      "title": "WAVE-AFFECTED-PARTY-CONTEST-LANE · How an affected party contests: a signed objection lane that holds a ticket for a separate quorum, without becoming a denial-of-service lever",
       "labels": [
         "experiment",
         "claim:G-governance",
@@ -586,7 +586,7 @@
       "id": "W1",
       "repo": "safety-governor",
       "wave": "open",
-      "title": "W1 · The origin gate: weights sealed to governed hardware, the key released by the governor only to an attested GPU while the rulebook lists the model",
+      "title": "EXPERIMENT-ORIGIN-GATE · The origin gate: weights sealed to governed hardware, the key released by the governor only to an attested GPU while the rulebook lists the model",
       "labels": [
         "experiment",
         "claim:C-cryptography",
@@ -601,7 +601,7 @@
       "id": "A1",
       "repo": "safety-governor",
       "wave": "open",
-      "title": "A1 · An agent that adds roads: a simulated planner, whose only moves are gated actions, searching for a route to an ungated effector",
+      "title": "EXPERIMENT-ROAD-REACHABILITY · An agent that adds roads: a simulated planner, whose only moves are gated actions, searching for a route to an ungated effector",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -615,7 +615,7 @@
       "id": "I1",
       "repo": "safety-governor",
       "wave": "open",
-      "title": "I1 · The wire the customer never meant: a payment rule whose witness must be the payer's own key, tested against an agent sending unintended wires",
+      "title": "EXPERIMENT-CUSTOMER-CONFIRMATION · The wire the customer never meant: a payment rule whose witness must be the payer's own key, tested against an agent sending unintended wires",
       "labels": [
         "experiment",
         "claim:L-logic",
@@ -630,7 +630,7 @@
       "id": "R1",
       "repo": "safety-governor",
       "wave": "open",
-      "title": "R1 · Replication by packets: does destination-and-volume gating, with no content inspection, keep a model's weights inside a governed rack?",
+      "title": "EXPERIMENT-EGRESS-CONTAINMENT · Replication by packets: does destination-and-volume gating, with no content inspection, keep a model's weights inside a governed rack?",
       "labels": [
         "experiment",
         "claim:P-physical-paths",

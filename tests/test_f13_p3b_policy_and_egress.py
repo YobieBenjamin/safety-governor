@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""F13: EXPERIMENT-CONTAINMENT must measure the policy it installed, at the egress boundary, not signing calls.
+"""F13: EXPERIMENT-EGRESS-CONTAINMENT must measure the policy it installed, at the egress boundary, not signing calls.
 
 The external audit found that ``egress_ceiling`` built the rack (whose constructor already signed and loaded a
 policy), then changed ``r.policy_kw`` and called ``bring_up()``, which does not reload the policy. Both the named

@@ -79,11 +79,11 @@
     },
     {
       "key": "exp-containment",
-      "description": "EXPERIMENT-CONTAINMENT: containment measurement",
+      "description": "EXPERIMENT-EGRESS-CONTAINMENT: containment measurement",
       "command": "python -m govsim.containment",
       "status": "pass",
       "returncode": 0,
-      "last_line": "EXPERIMENT-CONTAINMENT: every check holds"
+      "last_line": "EXPERIMENT-EGRESS-CONTAINMENT: every check holds"
     },
     {
       "key": "exp-road",

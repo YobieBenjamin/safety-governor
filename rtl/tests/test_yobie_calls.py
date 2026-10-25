@@ -8,7 +8,7 @@ feature. Operators should have some verbose warning / signal / notice.").
 2. A chip that never gets its first heartbeat keeps holding the rack, but raises the hardware alarm
    NO_FIRST_HEARTBEAT once the boot window passes (ALARMS bit 31, CAUSE bit 3, BOOT_WAIT), and an authorized EXCLUDE
    closes its loop switch while its own levers stay asserted (ALARMS bit 30, CAUSE bit 4).
-The formal versions are in rtl/formal/halt_seq.sv (X, N and H rules) and rtl/formal/governor_core.sv (RTL-HALT-REACHES-PINS, RTL-LOOP-STAYS-OPEN to RTL-ALARMS-HARDWARE-OWNED).
+The formal versions are in rtl/formal/halt_seq.sv (X, N and H rules) and rtl/formal/governor_core.sv (RTL-HALT-REACHES-PINS, RTL-LOOP-STAYS-OPEN, RTL-EXCLUDED-LEVERS-SAFE and RTL-ALARMS-HARDWARE-OWNED).
 """
 import os
 import sys

@@ -29,7 +29,7 @@ Estimated tokens are for the build agent (input plus output), not the review. De
 | 2 | WAVE-EXIT-REGISTER the exit register | safety-governor | cloud, mid-tier, with web | 120k | none | `docs/research/exit-register.md`, `tests/test_h20_exits.py` |
 | 2 | WAVE-DEPLOYMENT-OVERHEAD-SIMULATION deployment overhead | safety-governor | cloud, mid-tier | 100k | none | `govsim/deploy.py`, `docs/12-deployment-overhead.md` |
 | 2 | WAVE-OBSERVER-INDEPENDENCE observer independence (code) | safety | cloud, mid-tier; run local | 80k | WAVE-OBSERVER-EVALUATION-SET | `observer/bench/independence.py` |
-| 2 | YB-0055 chip-visible vitals (code, pre-registered) | safety | cloud, mid-tier; run local | 100k | none | `algorithms/YB-0055-chip-visible-vitals/` |
+| 2 | WAVE-CHIP-VISIBLE-VITALS chip-visible vitals (code, pre-registered) | safety | cloud, mid-tier; run local | 100k | none | `algorithms/chip-visible-vitals/` |
 | 2 | WAVE-MUTATION-TESTING-GATE mutation gate | safety-governor | local orchestrator | 60k cloud to set up | WAVE-TRACE-CONFORMANCE-REPLAY | `tools/mutants/`, `results/mutants.md` |
 | 2 | WAVE-POST-QUANTUM-SIGNATURE-COST post-quantum cost; WAVE-COVERT-CHANNEL-BUDGET covert-channel budget | safety-governor | cloud, mid-tier (one agent, both small) | 140k | none | `govsim/bench.py` (one constant), `tests/test_h10_leakage.py` |
 | 3 | WAVE-OBSERVER-QUORUM-ARITHMETIC quorum arithmetic | safety | cloud, mid-tier | 60k | WAVE-OBSERVER-EVALUATION-SET, WAVE-OBSERVER-INDEPENDENCE | `observer/bench/quorum.py`, register rows in `safety-governor/docs/06` |
@@ -60,7 +60,7 @@ tail -f ~/safety-governor/.agents/wave-1/launcher.log           # or open .agent
 
 ```bash
 cd ~/safety-governor && tools/agents/run_wave.sh 1 --check      # preflight only: gh, claude, pytest, the baseline tests
-cd ~/safety-governor && tools/agents/run_wave.sh 1 --only L4    # one issue, in the foreground
+cd ~/safety-governor && tools/agents/run_wave.sh 1 --only L4    # one issue (L4 is the runner id of WAVE-TRACE-CONFORMANCE-REPLAY), in the foreground
 ```
 
 What "unattended" means, mechanically:
@@ -85,7 +85,7 @@ The Mac mini has a Qwen3 model of its own, and Ollama serves it through an Anthr
 | Backend in `experiments.json` | Who does what | Issues |
 |---|---|---|
 | `local` | The local model does the whole issue. Work that is mechanical and fully decided by its acceptance command. | WAVE-MUTATION-TESTING-GATE (generate mutants, run the tests, record the survivors) |
-| `cloud+local` | The cloud agent builds; the launcher runs the acceptance command; if it fails, the local model gets one repair pass in the same worktree against the failing output, then acceptance again; the pull request opens either way, saying which it was. | WAVE-WIDEN-ABSTRACT-MACHINE, WAVE-TRACE-CONFORMANCE-REPLAY, WAVE-DIFFERENTIAL-GATE-TEST, WAVE-LANES-CONFORMANCE-SUITE, WAVE-COVERT-CHANNEL-BUDGET, WAVE-POST-QUANTUM-SIGNATURE-COST, WAVE-DEPLOYMENT-OVERHEAD-SIMULATION, WAVE-OBSERVER-EVALUATION-SET to WAVE-USE-CASES-WITH-REAL-WITNESS |
+| `cloud+local` | The cloud agent builds; the launcher runs the acceptance command; if it fails, the local model gets one repair pass in the same worktree against the failing output, then acceptance again; the pull request opens either way, saying which it was. | WAVE-WIDEN-ABSTRACT-MACHINE, WAVE-TRACE-CONFORMANCE-REPLAY, WAVE-DIFFERENTIAL-GATE-TEST, WAVE-LANES-CONFORMANCE-SUITE, WAVE-COVERT-CHANNEL-BUDGET, WAVE-POST-QUANTUM-SIGNATURE-COST, WAVE-DEPLOYMENT-OVERHEAD-SIMULATION, WAVE-OBSERVER-EVALUATION-SET, WAVE-OBSERVER-INDEPENDENCE, WAVE-OBSERVER-QUORUM-ARITHMETIC, WAVE-CHIP-VISIBLE-VITALS, WAVE-VERDICT-LATENCY-IN-WINDOWS and WAVE-USE-CASES-WITH-REAL-WITNESS |
 | `cloud` | Cloud only: judgment about sources, arithmetic with a paper trail, proofs on the Verilog. | WAVE-FORMAL-PROOFS-ON-VERILOG, WAVE-EXIT-REGISTER, WAVE-FALSE-HALT-RATE-MODEL |
 
 Two more rules keep it honest and cheap: one local run at a time on the machine (a lock shared by the two repositories' launchers, so the model never serves two agents at once), and the local pass counts only through the same acceptance command and the same reviewer as the cloud pass. When Ollama is not running, `cloud+local` runs as `cloud` and `local` issues are skipped with a note; `LOCAL_URL=cloud` puts the cheapest cloud model in the local tier instead, which is how the repair pass was tested end to end before the launcher reached the Mac (the cloud agent wrote one word, the acceptance wanted two, the stand-in fixed it in five turns for a cent).

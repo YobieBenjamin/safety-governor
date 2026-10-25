@@ -261,7 +261,7 @@ def percolation(g: dict[str, set[str]], trials: int = 40, seed: int = 1) -> list
 
 
 def main() -> int:
-    """Run the checks INVARIANT-MAX-FLOW-MATCHES-BRUTE-FORCE to INVARIANT-SHARED-CONTROLLER-NO-KILL on the instances built here, and print HOLDS or FAILS for each. With ``--percolation`` it
+    """Run every kill-switch check listed above on the instances built here, and print HOLDS or FAILS for each. With ``--percolation`` it
     prints the percolation table as CSV instead, and returns 0. Returns 0 only when every check holds."""
     if "--percolation" in sys.argv:
         g = build(n_instances=12, n_effectors=10, core=60, k=6, n_users=20, n_services=20)

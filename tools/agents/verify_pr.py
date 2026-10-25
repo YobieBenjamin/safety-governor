@@ -4,7 +4,7 @@
 """Deterministic checks on an agent's branch before any model is asked about it. No judgment here:
 everything is a rule a script can apply, and a failed rule names the file and line.
 
-    verify_pr.py --repo DIR --branch exp/l4 --base main --spec experiments.json --id L4 [--accept CMD] [--json]
+    verify_pr.py --repo DIR --branch exp/l4 --base main --spec experiments.json --id L4 [--accept CMD]   (L4: the runner id of WAVE-TRACE-CONFORMANCE-REPLAY) [--json]
 
 Checks (each a finding with a severity; "block" findings stop a merge, "warn" findings go to the reviewer):
   block  an existing test file was deleted

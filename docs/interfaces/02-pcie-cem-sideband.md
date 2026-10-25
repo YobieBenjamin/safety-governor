@@ -58,7 +58,7 @@ When the power-good reaches the governor through LTPI it is up to 19.2 us late (
 
 The sequencer asserts the brake one clock after `loop_lost` (20 ns at 50 MHz, `brake_latency_cycles`). The loop timing work assumes 10 us for "lever assertion" and gets a 317.15 us worst case; 20 ns fits inside the assumption. Over LTPI the pin sees it at 336.35 us. Both are well under 1 ms.
 
-What the 1 ms does **not** cover: the GPU's own reaction to PWRBRK#. NVML says the brake cuts core clocks "by a factor of 2 or more" (`NVML`). How fast, NVIDIA does not publish. The only public figure I found is a patent from a server maker saying 5 ms. Until NVIDIA's number is public, `docs/02-safety-fabric.md`'s line "the GPU's power brake asserts within 1 ms of the governor's halt output" should be read as the pin, not the clocks. Matrix row `CEM-06` is **members-only**.
+What the 1 ms does **not** cover: the GPU's own reaction to PWRBRK#. NVML says the brake cuts core clocks "by a factor of 2 or more" (`NVML`). How fast, NVIDIA does not publish. The only public figure I found is a patent from a server maker saying 5 ms. Until NVIDIA's number is public, `docs/02-safety-fabric.md`'s line "the GPU's power brake asserts within 1 ms of the governor's halt output" should be read as the pin, not the clocks. Matrix row `REQUIREMENT-GPU-SLOWDOWN-AFTER-BRAKE` is **members-only**.
 
 ## 7. The other sideband pins
 

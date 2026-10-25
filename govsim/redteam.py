@@ -269,9 +269,8 @@ ATTACKS = [
     ("forged ticket (non-governor key)", "reference-monitor", a_forged_ticket),
     ("unlisted beneficiary", "F04", a_unlisted_beneficiary),
     ("no payer consent", "F05", a_no_payer_consent),
-    # Registered name: EXPERIMENT-CUSTOMER-CONFIRMATION (old ID I1 is kept because code matches on it)
-    ("non-customer key as payer consent", "I1", a_wrong_key_consent),
-    ("another customer's consent", "I1", a_another_customers_consent),
+    ("non-customer key as payer consent", "EXPERIMENT-CUSTOMER-CONFIRMATION", a_wrong_key_consent),
+    ("another customer's consent", "EXPERIMENT-CUSTOMER-CONFIRMATION", a_another_customers_consent),
     ("NaN amount", "F03", a_nan_amount),
     ("over-budget via small rule", "budget", a_over_budget),
     ("parameter tamper after mint", "binding", a_params_tamper),

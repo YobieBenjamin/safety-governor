@@ -113,7 +113,7 @@ alone and never opens the loop to its neighbours. What the integrated RTL does, 
 - heartbeat, meter, alarms, measure_reg, loop_io: the full-size blocks as checked in, bounded check plus k-induction
   (every reachable state), in yices, z3 and boolector. Plus thousands of random cycles each against a spec model in
   amaranth.sim. Every mutant caught by assertion.
-- governor_core: RTL-PINS-FOLLOW-SEQUENCER to RTL-LOOP-STAYS-OPEN proven by k-induction (every reachable state) on the small build of the same `top.py`
+- governor_core: RTL-PINS-FOLLOW-SEQUENCER, RTL-BOOTS-SAFE, RTL-HALT-REACHES-PINS, RTL-HALTED-STAYS-HALTED, RTL-EXPIRY-NOT-POSTPONED, RTL-LOSS-ALWAYS-SEEN and RTL-LOOP-STAYS-OPEN proven by k-induction (every reachable state) on the small build of the same `top.py`
   (2 entries per point, 2 tickets, 3 ms and 4 ms timers, a 4-tick millisecond), in yices, z3 and boolector. The
   design facts and the small-build miters run in yices only (minutes each in yices, far longer in the others on this
   shared machine). The randomized core simulation (3000 cycles, every rung visited, `load_hwm` hammered half the

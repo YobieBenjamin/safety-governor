@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""CONTRACT-ZERO-PER-TOKEN-OVERHEAD: the governor's work is zero per token, one lookup per transfer, one signature per
+"""CONTRACT-GOVERNOR-OVERHEAD-BOUNDED: the governor's work is zero per token, one lookup per transfer, one signature per
 response. This module counts operations in the functional model for a reference workload
 and prices them with the figures in ``docs/04-specification.md`` §9. It is a model, not a
 measurement; the Phase 2 measurement on real hardware replaces it.
