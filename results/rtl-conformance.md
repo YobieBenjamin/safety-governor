@@ -4,7 +4,7 @@
 
 - Requirements: 134 (from docs/04 and docs/07, quotes checked verbatim)
 - Conformance tests: 173; 159 conform, 14 reproduce a disagreement
-- Catalogue: 87 rows mapped; hardware-and-silicon clone not found (set HARDWARE_AND_SILICON); name cross-check skipped
+- Catalogue: 87 rows mapped; matches hardware-and-silicon/results/report.json (75/75 attacks blocked, 12/12 baselines allowed, passed=True)
 - Catalogue rows + conformance tests: 260 (target 150)
 - Mutation sample: 30/30 one-line mutants caught by assertion, over 30 requirements
 - Mailbox differential: 4000 random frames, classes {'agree': 3690, 'CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO': 3, 'CONFORMANCE-RUN-STATE-CHECK-ORDER': 253, 'CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST': 54}
@@ -311,7 +311,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_mbox_refused_when_not_running` | REQUIREMENT-MAILBOX-STATUS-CODES | pass | 0.0 |
 | `test_mbox_status_codes_match_the_register_map` | REQUIREMENT-MAILBOX-STATUS-CODES | pass | 0.0 |
 | `test_mbox_failed_frames_do_not_consume_sequence` | REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | pass | 0.0 |
-| `test_mbox_no_dispatch_without_all_checks_random` | REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE | pass | 0.1 |
+| `test_mbox_no_dispatch_without_all_checks_random` | REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE | pass | 0.2 |
 | `test_core_mbox_status_and_seq_csrs` | REQUIREMENT-SEQUENCE-REGISTER-PER-KEY, REQUIREMENT-MAILBOX-STATUS-CODES | pass | 0.0 |
 | `test_core_has_no_csr_write_port` | REQUIREMENT-ONLY-DOORBELL-WRITABLE, REQUIREMENT-NO-CSR-WRITE-PORT | pass | 0.0 |
 | `test_core_csr_reads_have_no_side_effects` | REQUIREMENT-ONLY-DOORBELL-WRITABLE, REQUIREMENT-NO-CSR-WRITE-PORT | pass | 0.0 |
@@ -326,7 +326,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_meter_frozen_slot_stays_put_without_strobes` | REQUIREMENT-METER-SLOT-FREEZE, REQUIREMENT-METER-ONLY-INCREMENTS | pass | 0.0 |
 | `test_core_epoch_switch_kills_every_old_capability` | REQUIREMENT-SWITCH-RECONFIGURED-AFTER-EVENTS, REQUIREMENT-EPOCH-TAG-LOW-BITS, REQUIREMENT-RACK-WIDE-EPOCH-SWITCH | pass | 0.0 |
 | `test_mbox_self_authenticating_command_rides_on_the_firmware_verdict` | REQUIREMENT-SELF-AUTHENTICATING-COMMANDS, REQUIREMENT-FRAME-EPOCH-MUST-MATCH | pass | 0.0 |
-| `test_diff_mailbox_random_frames_only_known_disagreements` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED, REQUIREMENT-FRAME-EPOCH-MUST-MATCH, REQUIREMENT-FRAME-SIGNATURE-CHECKED, REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND, REQUIREMENT-MAILBOX-STATUS-CODES, REQUIREMENT-WRONG-COMMAND-STATUS | pass | 0.5 |
+| `test_diff_mailbox_random_frames_only_known_disagreements` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED, REQUIREMENT-FRAME-EPOCH-MUST-MATCH, REQUIREMENT-FRAME-SIGNATURE-CHECKED, REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND, REQUIREMENT-MAILBOX-STATUS-CODES, REQUIREMENT-WRONG-COMMAND-STATUS | pass | 0.6 |
 | `test_diff_spec_good_halt` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-DISPATCH-AFTER-ALL-CHECKS | pass | 0.0 |
 | `test_diff_spec_replayed_halt` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | pass | 0.0 |
 | `test_diff_spec_halt_with_stale_epoch_is_exempt` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-FRAME-EPOCH-MUST-MATCH, REQUIREMENT-EPOCH-EXEMPT-COMMANDS | pass | 0.0 |
