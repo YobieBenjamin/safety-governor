@@ -10,7 +10,7 @@ import pytest
 from govsim import reasons
 from govsim.cluster import MODEL_70B, build_rack
 from govsim.crypto import SigningKey, VerifyKey, digest, verify_object
-from govsim.harness import probe_h17, probe_h18
+from govsim.harness import probe_no_action_without_ticket, probe_oversight_survives_model
 
 BIG = {"output_queries": 10 ** 6, "output_bytes": 10 ** 12}
 
@@ -196,7 +196,7 @@ def test_compliance_report_lists_every_epoch_and_survives_a_restart_and_refuses_
 def test_ticket_and_oversight_probes_pass_at_every_tier(tier):
     r = build_rack(4, tier)
     r.bring_up()
-    assert probe_h17(r) == "pass"
+    assert probe_no_action_without_ticket(r) == "pass"
     r = build_rack(4, tier)
     r.bring_up()
-    assert probe_h18(r) == "pass"
+    assert probe_oversight_survives_model(r) == "pass"

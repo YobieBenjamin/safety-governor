@@ -1,6 +1,6 @@
 # Sweep report
 
-Generated 2026-10-24 00:05 UTC by `govsim sweep`.
+Generated 2026-10-26 04:26 UTC by `govsim sweep`.
 
 `pass`: the hypothesis held. `gap`: it failed exactly as the design predicts for that tier (the recorded residual). `FAIL`: it failed in a way the design does not predict.
 

@@ -32,11 +32,11 @@ DMTF's spdm-emu (`SPDMEMU`, commit f7fa1836) built from source here with mbedtls
 
 | Run | What | Result |
 |---|---|---|
-| EXPERIMENT-SPDM-INTEROP-EARLIER-VERSION | libspdm requester to the governor responder, 1.1 | pass |
+| EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION | libspdm requester to the governor responder, 1.1 | pass |
 | EXPERIMENT-SPDM-INTEROP-RAW-MEASUREMENTS | same, 1.2, raw measurements, a signature on every GET_MEASUREMENTS | pass |
-| EXPERIMENT-SPDM-FLIPPED-CHALLENGE-SIGNATURE | EXPERIMENT-SPDM-INTEROP-EARLIER-VERSION with one CHALLENGE_AUTH signature bit flipped | libspdm rejects (`do_authentication_via_spdm - 80020001`) |
-| EXPERIMENT-SPDM-FLIPPED-MEASUREMENT-SIGNATURE | EXPERIMENT-SPDM-INTEROP-EARLIER-VERSION with one MEASUREMENTS signature bit flipped | libspdm rejects (`do_measurement_via_spdm - 80010004`) |
-| EXPERIMENT-SPDM-REQUESTER-TRUSTS-SAMPLE-ROOT | EXPERIMENT-SPDM-INTEROP-EARLIER-VERSION with libspdm trusting its own sample root | libspdm logs `LIBSPDM_STATUS_VERIF_NO_AUTHORITY` and **exits 0** |
+| EXPERIMENT-SPDM-FLIPPED-CHALLENGE-SIGNATURE | EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION with one CHALLENGE_AUTH signature bit flipped | libspdm rejects (`do_authentication_via_spdm - 80020001`) |
+| EXPERIMENT-SPDM-FLIPPED-MEASUREMENT-SIGNATURE | EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION with one MEASUREMENTS signature bit flipped | libspdm rejects (`do_measurement_via_spdm - 80010004`) |
+| EXPERIMENT-SPDM-REQUESTER-TRUSTS-SAMPLE-ROOT | EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION with libspdm trusting its own sample root | libspdm logs `LIBSPDM_STATUS_VERIF_NO_AUTHORITY` and **exits 0** |
 | B | DMTF SPDM-Responder-Validator to the governor responder | 781 assertions pass, 0 fail |
 | EXPERIMENT-SPDM-GOVERNOR-REQUESTS-EARLIER-VERSION, EXPERIMENT-SPDM-GOVERNOR-REQUESTS-LATER-VERSION | the governor's requester to libspdm's responder, 1.1 and 1.2 | pass, all 8 of libspdm's measurement blocks verified |
 | EXPERIMENT-SPDM-GOVERNOR-TRUSTS-WRONG-ROOT | the governor's requester trusting the wrong root | rejected |

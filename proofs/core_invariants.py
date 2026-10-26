@@ -326,21 +326,21 @@ def main() -> int:
     u, w = State("u"), State("w")
     inv0 = invariant_at(s, a_step)                       # start from any invariant-respecting state
     issue_r = dict(step_list(s, t, inputs))["issue"]
-    exec_r1 = dict(step_list(t, u, inputs, execute_needs_fresh_ticket=False))["execute"]
-    exec_r2 = dict(step_list(u, w, inputs, execute_needs_fresh_ticket=False))["execute"]
+    exec_replay_first = dict(step_list(t, u, inputs, execute_needs_fresh_ticket=False))["execute"]
+    exec_replay_second = dict(step_list(u, w, inputs, execute_needs_fresh_ticket=False))["execute"]
     sol = Solver()
     sol.set("timeout", 60_000)
-    sol.add(inv0, issue_r, exec_r1, exec_r2, w.n_spent[a_step] > w.n_issued[a_step])
+    sol.add(inv0, issue_r, exec_replay_first, exec_replay_second, w.n_spent[a_step] > w.n_issued[a_step])
     caught = sol.check() == sat
     print(("OK      " if caught else "FAILED  ") + "INVARIANT-NO-REPLAY-COUNTED fails without the fresh-ticket guard: issue, execute, execute replays one ticket into two effects (the proof catches replay)")
     results.append(caught)
     # and the honest machine, same three steps WITH the guard, cannot replay: the property is specific
     # to the removed guard, not to any execution happening twice.
-    exec_h1 = dict(step_list(t, u, inputs))["execute"]
-    exec_h2 = dict(step_list(u, w, inputs))["execute"]
+    exec_guarded_first = dict(step_list(t, u, inputs))["execute"]
+    exec_guarded_second = dict(step_list(u, w, inputs))["execute"]
     sol = Solver()
     sol.set("timeout", 60_000)
-    sol.add(inv0, issue_r, exec_h1, exec_h2, w.n_spent[a_step] > w.n_issued[a_step])
+    sol.add(inv0, issue_r, exec_guarded_first, exec_guarded_second, w.n_spent[a_step] > w.n_issued[a_step])
     blocked = sol.check() == unsat
     print(("OK      " if blocked else "FAILED  ") + "with the fresh-ticket guard the same issue, execute, execute cannot overspend one ticket (replay is blocked, not merely flagged)")
     results.append(blocked)

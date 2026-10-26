@@ -18,12 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
 
 
-def _d18():
+def _viability_doc_text():
     return (DOCS / "18-viability-and-open-questions.md").read_text(encoding="utf-8").lower()
 
 
 def test_docs18_carries_the_acceptance_budget_table():
-    d = _d18()
+    d = _viability_doc_text()
     assert "acceptance envelope" in d
     # the five separate budgets
     for budget in ("false hold", "false halt", "legitimate denial", "recovery time", "lost useful work"):
@@ -31,7 +31,7 @@ def test_docs18_carries_the_acceptance_budget_table():
 
 
 def test_docs18_carries_the_failure_domain_and_square_law_and_review_arithmetic():
-    d = _d18()
+    d = _viability_doc_text()
     assert "72 gpus" in d or "72-gpu" in d
     assert "square of the domain" in d
     assert "smallest safe failure domain" in d or "smallest region" in d
@@ -40,7 +40,7 @@ def test_docs18_carries_the_failure_domain_and_square_law_and_review_arithmetic(
 
 
 def test_docs18_names_the_measurements_and_the_poisson_caveat():
-    d = _d18()
+    d = _viability_doc_text()
     assert "rack trial" in d
     assert "staffed gateway pilot" in d
     assert "poisson upper bound" in d or "poisson" in d
@@ -48,7 +48,7 @@ def test_docs18_names_the_measurements_and_the_poisson_caveat():
 
 
 def test_docs18_marks_the_figures_as_not_measured():
-    d = _d18()
+    d = _viability_doc_text()
     # the envelope must say, in its own section, that these figures are not measurements
     assert "not a measurement" in d or "none of the figures above is a measurement" in d or "not yet measured" in d
 
