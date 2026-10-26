@@ -262,7 +262,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_hb_reload_only_on_valid` | REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID | pass | 0.0 |
 | `test_hb_valid_wins_over_tick` | REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID | pass | 0.0 |
 | `test_core_hb_remain_csr` | REQUIREMENT-HEARTBEAT-REMAINING-REGISTER | pass | 0.0 |
-| `test_core_timers_ignore_the_raw_microsecond_tick` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | pass | 0.1 |
+| `test_core_timers_ignore_the_raw_microsecond_tick` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | pass | 0.0 |
 | `test_halt_loop_lost_from_run` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | pass | 0.0 |
 | `test_halt_loop_lost_from_throttle` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | pass | 0.0 |
 | `test_halt_hb_expired_throttles` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | pass | 0.0 |
@@ -369,7 +369,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_finding_cap_refuses_at_zero_budget` | REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO | reproduces CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES | 0.0 |
 | `test_finding_cap_reprogramming_a_key_replaces_it` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH, REQUIREMENT-LOOKUP-DECREMENTS-BUDGET | reproduces CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | 0.0 |
 | `test_model_switch_replaces_on_reprogram` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH, REQUIREMENT-LOOKUP-DECREMENTS-BUDGET | pass | 0.0 |
-| `test_diff_cap_table_random_against_model_switch` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH, REQUIREMENT-LOOKUP-DECREMENTS-BUDGET, REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO, REQUIREMENT-CAPABILITY-REFUSES-ON-EXPIRY, REQUIREMENT-CAPABILITY-REFUSES-STALE-TAG, REQUIREMENT-BUDGET-NEVER-UNDERFLOWS, REQUIREMENT-CAPABILITY-DIRECTION-FIELD | pass | 0.1 |
+| `test_diff_cap_table_random_against_model_switch` | REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH, REQUIREMENT-LOOKUP-DECREMENTS-BUDGET, REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO, REQUIREMENT-CAPABILITY-REFUSES-ON-EXPIRY, REQUIREMENT-CAPABILITY-REFUSES-STALE-TAG, REQUIREMENT-BUDGET-NEVER-UNDERFLOWS, REQUIREMENT-CAPABILITY-DIRECTION-FIELD | pass | 0.2 |
 | `test_finding_meter_counter_wraps_at_48_bits` | REQUIREMENT-METER-ONLY-INCREMENTS | pass | 0.0 |
 | `test_finding_mono_wraps_from_an_all_ones_high_water_mark` | REQUIREMENT-COUNTER-REFUSES-DECREMENT, REQUIREMENT-COUNTER-FUSE-HIGH-WATER-MARK | pass | 0.0 |
 | `test_finding_mailbox_sequence_never_moves_backwards` | REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | reproduces CONFORMANCE-FRAME-NOT-LATCHED | 0.0 |
