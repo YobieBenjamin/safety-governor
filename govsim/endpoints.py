@@ -45,8 +45,10 @@ BRICKED = ("display", "jtag", "debug")
 class Switch:
     """A governed switch: NVSwitch, PCIe switch, DPU flow table or the storage path.
 
-    ``program`` is the only way to open a port or flow, and it verifies the governor's MAC.
-    There is no host write path: the governor is the only master on the management bus.
+    ``program`` is the only way to open a port or flow in this model, and it verifies the governor's MAC. That
+    assumes the governor is the only master on the switch's management path. On a bare-metal HGX host today, root can
+    reprogram NVSwitch routing and PCIe switch ports in band (docs/research/nvswitch-management.md); closing that is a
+    board and firmware requirement, not something this model shows (docs/research/switch-management-lockdown.md).
     """
 
     def __init__(self, kind: str, owner_chip_id: str, cap_key: bytes, log: Callable[[str, dict], None]):
@@ -150,7 +152,8 @@ class ActionEndpoint:
 
     def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], store: Store | None = None,
                  safe_transition: str = "no_action", lists: dict[str, Any] | None = None,
-                 sensors: dict[str, Any] | None = None, heartbeat_expiry_s: float = 5.0):
+                 sensors: dict[str, Any] | None = None, heartbeat_expiry_s: float = 5.0,
+                 governance_hashes: list[str] | None = None, governance_floor: int | None = None):
         """Create one endpoint. ``governor_keys`` maps each governor's key id to its public key, for every governor
         that may mint a ticket for this device. ``safe_transition`` is what the endpoint does when it refuses
         (the rack's endpoints use ``no_release``, ``decline`` or ``hold``). ``sensors`` are the device's own inputs at
@@ -179,6 +182,15 @@ class ActionEndpoint:
         self.refused: list[tuple[str, str]] = []
         self.state = "ARMED"
         self.checks: list[Callable[[dict, dict], tuple[bool, str]]] = []   # device-specific re-checks
+        # The edition in force, verified by the endpoint itself against the governance keys fused into the device at
+        # manufacture (audit 2026-10-26: a ticket signed by any one governor key used to be enough). With an edition the
+        # endpoint re-checks every ticket against the rulebook, so one governor key, extracted or lying, can authorize
+        # only what some rule of the current edition allows, and nothing once the edition revokes that governor.
+        self.governance_hashes = governance_hashes
+        self.governance_floor = governance_floor
+        self.trusted: dict | None = None      # the governance keys and k of the edition in force (they authorize the next)
+        self.edition: dict | None = None
+        self.revoked: set[str] = set()
 
     # --- inputs from the governor ---------------------------------------------
     def set_epoch(self, signed_epoch: dict) -> bool:
@@ -189,6 +201,48 @@ class ActionEndpoint:
         self.epoch = signed_epoch["payload"]["epoch"]
         self.policy_expires_at = signed_epoch["payload"].get("expires_at")     # F30: None when the edition names no expiry
         return True
+
+    def install_edition(self, image: dict) -> bool:
+        """Install a governance-signed edition after checking it here: its signatures against the governance keys in
+        force (the fused key hashes for the first one), and no rollback of the version. Returns True when installed."""
+        if self.governance_hashes is None:
+            return False
+        from .policy import policy_epoch, verify_policy
+        ok, _ = verify_policy(image, self.governance_hashes, self.governance_floor, trusted=self.trusted)
+        if not ok or (self.edition is not None and image["version"] < self.edition["version"]):
+            return False
+        self.edition = image
+        self.trusted = {"keys": list(image["governance_keys"]), "threshold": int(image["threshold"])}
+        self.revoked = set(image.get("revocations", []))
+        self._edition_epoch = policy_epoch(image)
+        return True
+
+    def _check_against_edition(self, ticket: dict, t: dict, action: str, params: dict) -> tuple[bool, str]:
+        """The ticket's governor is not revoked, and the rule it names exists in the edition in force and allows this
+        action, at this endpoint, for this workload, with these fields (typed limits; list checks stay at the
+        governor, which holds the signed lists)."""
+        if self.edition is None:
+            return False, reasons.TICKET_NO_EDITION
+        if ticket.get("signer") in self.revoked or t.get("governor") in self.revoked:
+            return False, reasons.TICKET_REVOKED_GOVERNOR
+        if t.get("policy_epoch") != self._edition_epoch:
+            return False, reasons.TICKET_STALE_EPOCH
+        rule = next((r for r in self.edition.get("rules", []) if r.get("id") == t.get("rule")), None)
+        if rule is None:
+            return False, reasons.TICKET_NO_RULE
+        if rule.get("action") != action or (rule.get("endpoint") and rule["endpoint"] != self.name) \
+                or rule.get("measurement") not in ("*", t.get("measurement")) \
+                or (rule.get("requirement") or {}).get("mode") == "deny":
+            return False, reasons.TICKET_RULE_MISMATCH
+        from .policy import check_constraints
+        typed = {**rule, "constraints": {k: c for k, c in (rule.get("constraints") or {}).items()
+                                         if "in_list" not in c and "not_in_list" not in c}}
+        ok, why = check_constraints(typed, params, {})
+        if not ok:
+            return False, reasons.TICKET_RULE_MISMATCH + "." + why
+        if rule.get("budget") and not (t.get("reservation") and t.get("budget_owner")):
+            return False, reasons.TICKET_RULE_MISMATCH + ".no_reservation"
+        return True, reasons.OK
 
     def heartbeat(self, now: float) -> None:
         """Renew the heartbeat timer. ``execute`` refuses to act once the timer has run out."""
@@ -220,6 +274,10 @@ class ActionEndpoint:
             return False, reasons.POLICY_EXPIRED     # F30: the edition has expired, whatever the governor's tick has or has not done
         if t["policy_epoch"] != self.epoch:
             return False, reasons.TICKET_STALE_EPOCH
+        if self.governance_hashes is not None:
+            ok, why = self._check_against_edition(ticket, t, action, params)
+            if not ok:
+                return False, why
         if now < t.get("valid_from", 0.0):
             return False, reasons.TICKET_NOT_YET_VALID
         if now >= t["expires_at"]:
@@ -353,14 +411,17 @@ def strike_checks(protected_list_id: str = "protected-sites") -> list[Callable]:
         return True, reasons.OK
 
     def not_protected(params: dict, sensors: dict) -> tuple[bool, str]:
-        """The target position (from the satellite reading) must not be on the protected-site list. A missing or stale
-        list is a denial. Coordinates are compared rounded to three decimal places."""
+        """Neither the requested target nor the position the device's own satellite reading gives may be on the
+        protected-site list. A missing or stale list is a denial. Positions match within the denylist tolerance
+        (about 100 m), whatever their container type (audit 2026-10-26: this check used to read only a fixed sensor
+        and compared exact rounded tuples, so the requested target was never checked here)."""
+        from .policy import denylist_hit
         lst = sensors.get("lists", {}).get(protected_list_id)
         if lst is None or lst.get("stale"):
             return False, reasons.ENDPOINT_LIST_STALE
-        target = (round(sensors["nav_gnss"][0], 3), round(sensors["nav_gnss"][1], 3))
-        if target in {tuple(e) for e in lst["entries"]}:
-            return False, reasons.ENDPOINT_TARGET_PROTECTED
+        for pos in (params.get("target"), sensors.get("nav_gnss")):
+            if pos is not None and denylist_hit(pos, lst["entries"]):
+                return False, reasons.ENDPOINT_TARGET_PROTECTED
         return True, reasons.OK
 
     return [nav_agree, not_protected]

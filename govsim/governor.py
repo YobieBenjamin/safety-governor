@@ -47,6 +47,9 @@ from .store import Store
 
 HALTED_INITIAL, RUN, THROTTLE, HALT, SAFE = "HALTED_INITIAL", "RUN", "THROTTLE", "HALT", "SAFE"
 RUNG_ORDER = {RUN: 0, THROTTLE: 1, HALT: 2, SAFE: 3}
+# The hard core's escalation timers (rtl/governor_rtl/top.py GovernorCore t_throttle_ms, t_halt_ms): the longest an
+# edition may make them. A THROTTLE becomes a HALT, and a HALT becomes SAFE (slot power off), within these bounds.
+MAX_T_THROTTLE_S, MAX_T_HALT_S = 30.0, 300.0
 STATE_CODES = {HALTED_INITIAL: 0, RUN: 1, THROTTLE: 2, HALT: 3, SAFE: 4}      # the STATE register encoding
 TIERS = ("rack", "board", "integrated")
 TOKEN_TTL_S = 3600.0
@@ -61,6 +64,8 @@ SESSION_SCOPED_ALARMS = {reasons.SESSION_HAZARD_BUDGET}
 # Operator-status alarms: loud and sticky, but they say why a chip is not running, so they do not
 # park the gate of a chip (or a neighbour) that is running.
 STATUS_ALARMS = {reasons.NO_FIRST_HEARTBEAT, reasons.EXCLUDED}
+# Alarms that say the safety fabric itself was tampered with: clearing one needs two approvers of the alarms rule.
+TWO_APPROVER_ALARMS = {reasons.LOOP_JUMPERED, reasons.LOOP_BROKEN, reasons.OUTPUT_UNPRESENTED}
 
 # docs/04 section 3: the mailbox command codes, one handler per code (``_cmd_<name>``).
 MAILBOX_CODES = {
@@ -172,6 +177,8 @@ class Governor:
         self.checkers: dict[str, DescriptorChecker] = {}
         self.roster: dict | None = None
         self.roster_keys: dict[str, VerifyKey] = {}
+        self.reservation_holder: dict[str, str] = {}      # budget owner: reservation id -> the member that reserved it
+        self.fleet_ledger = None                            # set when the rack belongs to a fleet (govsim/fleet.py)
         signed_roster = self.store.get("roster")                 # the roster outlives a power loss until it expires
         if signed_roster and signed_roster["payload"]["expires_at"] > self.clock.now():
             self.roster = signed_roster["payload"]
@@ -298,6 +305,13 @@ class Governor:
             ok, why = self._verify_policy(image)
         if not ok:
             return False, why
+        floor = int(getattr(self.fuses, "governance_class_floor", 0) or 0)
+        if floor > 0:
+            classes = {VerifyKey.from_hex(h).key_id: c for h, c in (image.get("governance_classes") or {}).items()}
+            keyed = {VerifyKey.from_hex(h).key_id for h in image["governance_keys"]}
+            if int(image.get("governance_class_quorum") or 0) < floor or not keyed <= set(classes) \
+                    or len({classes[k] for k in keyed}) < floor:
+                return False, reasons.POLICY_CLASS_QUORUM
         # no rollback: an older edition is refused, even after a restart, because the fused version floor only moves up
         if image["version"] < self.fuses.policy_version or (self.policy and image["version"] <= self.policy["version"] and not at_boot):
             return False, reasons.POLICY_ROLLBACK
@@ -411,7 +425,7 @@ class Governor:
         if cls == "authority":
             hexes = p.get("authority_keys", [])     # HALT and CLEAR only; an image without them cannot be commanded to stop or clear by message (the loop still stops it)
         elif cls == "heartbeat":
-            hexes = [p["heartbeat_key"]]
+            hexes = [p["heartbeat_key"]] + list(p.get("heartbeat_cosigners", []))
         elif cls == "governance":
             hexes = p["governance_keys"]
         elif cls == "approver":
@@ -473,6 +487,23 @@ class Governor:
             self.raise_alarm(reasons.COMPUTE_BUDGET, "governor", {"model": model, "cycles": cycles, "allowed": allowed})
             self.enter_safe_mode(reasons.COMPUTE_BUDGET, rung=THROTTLE)
 
+    def _quorum(self, env: dict, cls: str) -> bool:
+        """True when ``env`` and the cosignatures it carries (each a signature by a different key of the same role over
+        the same payload) reach the role's threshold in the edition in force: ``authority_threshold`` for HALT, CLEAR
+        and EXCLUDE, ``heartbeat_threshold`` for heartbeats. An edition without a threshold needs one signature."""
+        need = int((self.policy or {}).get(cls + "_threshold", 1) or 1)
+        keys = self._keys(cls)
+        signers = set()
+        k = verify_any(env, keys)
+        if k is not None:
+            signers.add(k.key_id)
+        for c in env.get("cosignatures", []) or []:
+            if isinstance(c, dict) and c.get("payload") == env.get("payload"):
+                k = verify_any(c, keys)
+                if k is not None:
+                    signers.add(k.key_id)
+        return len(signers) >= need
+
     def _check_signed(self, env: dict | None, cls: str, cmd: str, rule_id: str | None = None) -> tuple[bool, str]:
         """The mailbox checks, in order: sequence number, epoch, signature, then what was signed. The first
         failure is reported. A good signature is not enough: the signed payload has to name this command
@@ -493,6 +524,8 @@ class Governor:
         if p.get("type") != cmd.lower():
             return False, reasons.MBOX_WRONG_COMMAND
         if cls == "authority":
+            if not self._quorum(env, "authority"):
+                return False, reasons.MBOX_BAD_SIGNATURE + ".authority_quorum"
             if p.get("chip_id") != self.chip_id:
                 return False, reasons.MBOX_WRONG_COMMAND
             exp = p.get("expires_at")   # a HALT or CLEAR must expire within AUTHORITY_TTL_S, so a captured one stops working soon
@@ -510,6 +543,8 @@ class Governor:
             self.ops["mailbox"] += 1
             if self.fuses.zeroized:
                 return {"ok": False, "why": reasons.TAMPER_ZEROIZED}
+            if self.gpu is not None:
+                self.gpu.keepalive()            # a live governor answering its mailbox is alive: renew the board interlock
             handler = getattr(self, "_cmd_" + cmd.lower(), None) if cmd in MAILBOX_CODES.values() else None
             if handler is None:
                 return {"ok": False, "why": reasons.MBOX_UNKNOWN_COMMAND}
@@ -528,8 +563,19 @@ class Governor:
         self.read_meter()
         compliance = {"models": {m: {k: v for k, v in slot.items() if k != "final"} for m, slot in self.meter.items()},
                       "epochs": list(self.epoch_history), "log_head": self.log.head, "log_size": self.log.size}
-        return {"ok": True, "why": reasons.OK, "quote": self.root.quote(nonce, {"epoch": self.epoch, "state": self.state, "compliance": compliance}),
+        # The quote names the GPU wired to this governor's levers (read over the sideband) and whether it is present and
+        # the levers answer, so a verifier can tell a governor in front of a server's GPUs from one on a bench
+        # (adversarial audit 2026-10-26). A regulator matches the named GPU against the server's own GPU attestation.
+        wired = {"gpu_chip_id": self.sideband_gpu_id(), "gpu_present": self.gpu is not None,
+                 "gpu_power": self.gpu.power if self.gpu is not None else None}
+        return {"ok": True, "why": reasons.OK, "quote": self.root.quote(nonce, {"epoch": self.epoch, "state": self.state, "compliance": compliance,
+                                                                             "wired": wired}),
                 "device_cert": self.device_cert, "alias_cert": self.alias_cert}
+
+    def sideband_gpu_id(self) -> str | None:
+        """The identity of the GPU wired to this governor's levers, as the governor reads it over its private sideband.
+        None when no GPU is wired (a governor on a bench)."""
+        return self.gpu.chip_id if self.gpu is not None else None
 
     def nonce(self) -> str:
         """A fresh random value (a nonce is a value used once) for an attestation check. The governor remembers
@@ -564,6 +610,12 @@ class Governor:
             self.verified.pop("gpu", None)
             return self._deny("verify_gpu", reasons.ATTEST_REVOKED, chip_id=cert["payload"]["chip_id"])
         p = report["payload"]
+        # The report must come from the GPU wired to this governor's levers. The governor reads that GPU's identity over
+        # its own sideband (SMBPBI on the slot's SMBus, which the host does not carry), so a host that relays another
+        # genuine GPU's report is refused (adversarial audit 2026-10-26: a relayed report used to be accepted).
+        wired = self.sideband_gpu_id()
+        if wired is not None and p.get("chip_id") != wired:
+            return self._deny("verify_gpu", reasons.ATTEST_NOT_THIS_GPU, chip_id=p.get("chip_id"))
         if p.get("nonce") not in self.nonces:
             return self._deny("verify_gpu", reasons.ATTEST_BAD_NONCE)
         self.nonces.discard(p["nonce"])
@@ -622,6 +674,9 @@ class Governor:
         if self.tier == "integrated" and self.model_digest:
             # the NVIDIA report has no model-manifest field (the first ask in docs/03 section 9)
             return self._deny("verify_gpu", reasons.ATTEST_BAD_SIGNATURE + ".manifest_mismatch")
+        wired = self.sideband_gpu_id()
+        if wired is not None and ev.chip_id != wired:
+            return self._deny("verify_gpu", reasons.ATTEST_NOT_THIS_GPU, chip_id=ev.chip_id)
         fw = hashlib.sha256(b"".join(ev.report.measurements[i] for i in sorted(ev.report.measurements))).hexdigest()
         self.verified["gpu"] = {"chip_id": ev.chip_id, "firmware_digest": fw, "expires_at": now + TOKEN_TTL_S}
         self.log.append("verify.gpu", {"chip_id": ev.chip_id, "firmware": fw, "format": nvtrust.FORMAT, "driver": driver, "vbios": vbios})
@@ -1052,6 +1107,14 @@ class Governor:
         owner = self.policy["budget_owners"].get(key)
         if owner is None:
             return False, None, reasons.POLICY_BUDGET_OWNER_MISSING
+        if owner == "fleet":
+            # A fleet-wide budget is counted once for the whole fleet, at the fleet ledger (govsim/fleet.py). Without a
+            # reachable fleet ledger the request is refused: never a rack-local count, which would give every rack the cap.
+            fl = self.fleet_ledger
+            rid = fl.reserve(key, amount, limit, window_s, now, ttl, reserver=self.chip_id) if fl is not None else None
+            if rid:
+                return True, rid, reasons.OK
+            return False, None, (reasons.GATE_BUDGET if fl is not None and fl.reachable else reasons.GATE_BUDGET_OWNER_UNREACHABLE)
         if owner == self.chip_id:
             rid = self.ledger.reserve(key, amount, limit, window_s, now, ttl)
             return (True, rid, reasons.OK) if rid else (False, None, reasons.GATE_BUDGET)
@@ -1089,6 +1152,19 @@ class Governor:
         if body.get("hazardous"):
             self.ledger.rate_mark(body["key"], now)
         return {"ok": True, "count": self.ledger.rate_count(body["key"], float(body["window_s"]), now)}
+
+    def _mint_blocked(self, now: float) -> str | None:
+        """Why no ticket may be minted now, or None. A ticket is minted only while the chip is in RUN, its edition is in
+        force, the workload is attested, and no blocking alarm stands (session-scoped and status alarms do not block)."""
+        if self.state != RUN:
+            return reasons.MBOX_NOT_RUNNING
+        if self._policy_expired(now):
+            return reasons.POLICY_EXPIRED
+        if not self._attested():
+            return reasons.GATE_NOT_ATTESTED
+        if any(code not in SESSION_SCOPED_ALARMS and code not in STATUS_ALARMS for code in self.alarms):
+            return reasons.GATE_ALARM
+        return None
 
     def _mint(self, rhash: str, action: str, params: dict, fp: str, rule: dict, reservation: dict | None, now: float) -> dict:
         """``issued_at`` is the governor's monotonic counter; ``valid_from``/``expires_at`` are endpoint clock seconds."""
@@ -1135,6 +1211,13 @@ class Governor:
         floor = max(10.0, float(self.policy.get("override_floor_s", 60.0)))
         if now < hold["created_at"] + floor:
             return {"ok": False, "why": reasons.APPROVE_TOO_FAST, "earliest": hold["created_at"] + floor}
+        # An approval releases a hold into a ticket only under the same conditions a new request needs: the chip is
+        # running, its edition is in force, the workload is attested, and no blocking alarm stands. Approvals given
+        # while the chip is halted or alarmed are kept, and the hold stays parked until those conditions hold again
+        # (the abstract machine's INVARIANT-NO-TICKET-WHILE-HALTED, enforced here as well as for REQUEST).
+        blocked = self._mint_blocked(now)
+        if blocked:
+            return self._deny("approve", blocked, hold_id=hold_id, approvals_kept=len(self.approvals[hold_id]))
         # F05: operator approval and payer consent are conjunctive. If this hold carried a payer confirmation, it is
         # revalidated against the current registry and clock before the ticket is minted; a confirmation that expired
         # during the hold forces reauthorization and the operator quorum alone cannot release it.
@@ -1195,7 +1278,9 @@ class Governor:
             ok = True
             if t.get("reservation"):
                 owner = t.get("budget_owner") or self.chip_id
-                if owner == self.chip_id:
+                if owner == "fleet":
+                    ok = self.fleet_ledger is not None and self.fleet_ledger.commit(t["budget_key"], t["reservation"], self.clock.now(), reserver=self.chip_id)
+                elif owner == self.chip_id:
                     ok = self.ledger.commit(t["budget_key"], t["reservation"], self.clock.now())
                 else:
                     res = self.fabric_send("COMMIT", {"key": t["budget_key"], "rid": t["reservation"]}, to=owner) if self.fabric else []
@@ -1230,6 +1315,19 @@ class Governor:
         if not ok:
             return self._deny("alarm_clear", reasons.ALARM_CLEAR_UNAUTHORIZED)
         code = env["payload"].get("code")
+        if code in TWO_APPROVER_ALARMS:
+            # An alarm that says the safety fabric itself was tampered with (a jumpered loop member, output that left
+            # without being presented, a broken loop) needs two different approvers of the alarms rule, each signing the
+            # same clear (adversarial audit 2026-10-26: one approver key used to clear any alarm).
+            keys = self._keys("approver", "alarms")
+            signers = {k.key_id for k in [verify_any(env, keys)] if k is not None}
+            for c in env.get("cosignatures", []) or []:
+                if isinstance(c, dict) and c.get("payload") == env.get("payload"):
+                    k = verify_any(c, keys)
+                    if k is not None:
+                        signers.add(k.key_id)
+            if len(signers) < 2:
+                return self._deny("alarm_clear", reasons.ALARM_CLEAR_UNAUTHORIZED + ".needs_two_approvers", code=code)
         if code in self.alarms:
             self.alarms.pop(code)
             self.store.save()
@@ -1496,6 +1594,10 @@ class Governor:
                 return self._deny("cap_request", reasons.EP_NOT_ON_ROSTER, peer=peer, point=kind)
         elif peer not in {m["gpu_chip_id"] for m in self.roster["members"]}:
             return self._deny("cap_request", reasons.EP_NOT_ON_ROSTER, peer=peer)
+        if kind == "storage" and direction in ("out", "both"):
+            # F31: nothing leaves storage on a standing entry; an export needs its own single-use grant
+            # (grant_storage_export). The host cannot ask for one here (audit 2026-10-26: it used to get one).
+            return self._deny("cap_request", reasons.EP_NOT_ON_ROSTER + ".storage_out_needs_export_grant", peer=peer, point=kind)
         sw = self.switches.get(kind) or self.checkers.get(kind)
         if sw is None:
             return self._deny("cap_request", reasons.EP_UNCHECKED, point=kind)
@@ -1526,6 +1628,8 @@ class Governor:
         to RUN. A heartbeat this chip has not seen before is relayed on the fabric, up to ``max_hops``."""
         if env is None or verify_any(env, self._keys("heartbeat")) is None:
             return self._deny("heartbeat", reasons.HEARTBEAT_BAD_SIGNATURE)
+        if not self._quorum(env, "heartbeat"):
+            return self._deny("heartbeat", reasons.HEARTBEAT_BAD_SIGNATURE + ".quorum")
         p = env["payload"]
         if p.get("type") != "heartbeat":                # the heartbeat key signs heartbeats and nothing else, but check what it signed
             return self._deny("heartbeat", reasons.HEARTBEAT_BAD_SIGNATURE)
@@ -1664,6 +1768,8 @@ class Governor:
         the loop beacon's collection window."""
         with self.lock:
             now = self.clock.now()
+            if self.gpu is not None and not self.fuses.zeroized:
+                self.gpu.keepalive()            # the board interlock's keep-alive: only a live governor renews it
             elapsed_us = int(round((now - self.last_tick_t) * 1e6))
             if elapsed_us > 0:
                 self.root.counter.tick(elapsed_us)
@@ -1679,14 +1785,23 @@ class Governor:
             if self.state == RUN and now > self.hb_expiry:
                 stale = self.staged is not None and not self._staged_epoch_live(now)
                 self.enter_safe_mode(reasons.EPOCH_STRAGGLER if stale else reasons.HEARTBEAT_LOST)
+                if self.state != RUN:
+                    self.rung_entered_at = min(self.rung_entered_at, self.hb_expiry)   # the timer starts when the heartbeat lapsed
             sm = (self.policy or {}).get("safe_mode", {})
-            if self.state == THROTTLE and self.cause and now - self.rung_entered_at >= sm.get("T_throttle_s", 30.0):
-                self.rung_entered_at = now
+            # The escalation timers are fixed in the hard core at synthesis (rtl/governor_rtl/top.py: 30 s and 300 s). An
+            # edition may shorten them, never lengthen them (audit 2026-10-26: a signed edition set them to 1e12 s and kept
+            # GPUs powered for a day without any heartbeat).
+            t_throttle = min(float(sm.get("T_throttle_s", MAX_T_THROTTLE_S)), MAX_T_THROTTLE_S)
+            t_halt = min(float(sm.get("T_halt_s", MAX_T_HALT_S)), MAX_T_HALT_S)
+            # Every rung whose timer ran out during this step is taken, at the moment it ran out, as the hard core's
+            # counters do; one long step does not stop at the first rung.
+            if self.state == THROTTLE and self.cause and now - self.rung_entered_at >= t_throttle:
+                self.rung_entered_at += t_throttle
                 self.log.append("halt.escalate", {"to": HALT, "cause": self.cause})
                 self.cause_entry = self.log.size - 1
                 self._apply_rung(HALT, opens_loop=self.cause_opens_loop)
-            elif self.state == HALT and self.cause and now - self.rung_entered_at >= sm.get("T_halt_s", 300.0):
-                self.rung_entered_at = now
+            if self.state == HALT and self.cause and now - self.rung_entered_at >= t_halt:
+                self.rung_entered_at += t_halt
                 self.log.append("halt.escalate", {"to": SAFE, "cause": self.cause})
                 self.cause_entry = self.log.size - 1
                 self._apply_rung(SAFE, opens_loop=self.cause_opens_loop)
@@ -1787,6 +1902,8 @@ class Governor:
             return self._deny("policy_commit", why)
         self.log.append("policy.committed", {"old": old, "new": self.epoch})
         for ep in self.endpoints.values():
+            if hasattr(ep, "install_edition"):
+                ep.install_edition(image)      # the endpoint checks the edition itself before it trusts it
             ep.set_epoch(self.signed_epoch())
         if self.roster is not None and self.state == RUN:
             self.open_ports_for_roster()
@@ -1798,6 +1915,8 @@ class Governor:
         if ok:
             self.log.append("policy.loaded", {"epoch": self.epoch, "version": image["version"]})
             for ep in self.endpoints.values():
+                if hasattr(ep, "install_edition"):
+                    ep.install_edition(image)
                 ep.set_epoch(self.signed_epoch())
         return ok, why
 
@@ -1880,9 +1999,15 @@ class Governor:
         self.announce(job_id)
         return {"ok": True, "why": reasons.OK}
 
+    def _revoked_governor(self, chip_id: str, key: VerifyKey | None) -> bool:
+        """True when the edition in force revokes this governor, by chip id or by key (audit 2026-10-26: a revoked
+        governor used to be admitted to new rosters)."""
+        revoked = set((self.policy or {}).get("revocations", []))
+        return chip_id in revoked or (key is not None and key.key_id in revoked)
+
     def build_roster(self, job_id: str, expected: list[str], ttl_s: float = 3600.0) -> dict | None:
-        """The leader (lowest chip id among valid quotes) signs the roster."""
-        quotes = self.pending_quotes.get(job_id, {})
+        """The leader (lowest chip id among valid quotes) signs the roster. A governor the edition revokes is left out."""
+        quotes = {c: q for c, q in self.pending_quotes.get(job_id, {}).items() if not self._revoked_governor(c, q.get("key"))}
         members = sorted(c for c in expected if c in quotes)
         if not members or min(quotes) != self.chip_id:
             return None
@@ -1908,6 +2033,8 @@ class Governor:
             for m in r["members"]:
                 if m["chip_id"] not in quotes or quotes[m["chip_id"]]["key"].hex != m["key"]:
                     return False, reasons.ROSTER_QUOTE_INVALID
+                if self._revoked_governor(m["chip_id"], quotes[m["chip_id"]]["key"]):
+                    return False, reasons.ROSTER_QUOTE_INVALID + ".revoked"
         except (KeyError, TypeError):
             return False, reasons.ROSTER_BAD_SIGNATURE
         self.roster = r
@@ -1993,17 +2120,33 @@ class Governor:
         owner = self.policy["budget_owners"].get(body["key"])
         if owner != self.chip_id:
             return {"ok": False, "why": reasons.GATE_BUDGET_OWNER_UNREACHABLE}
-        rid = self.ledger.reserve(body["key"], body["amount"], body["limit"], body["window_s"], self.clock.now(), body["ttl"])
+        # The owner enforces the limit and window of the edition in force, never the ones the requester states (audit
+        # 2026-10-26: the owner used to reserve against the requester's limit). The tightest rule that spends from this
+        # key sets them; a key no rule spends from reserves nothing.
+        spends = [r["budget"] for r in self.policy["rules"] if (r.get("budget") or {}).get("key") == body["key"]]
+        amount = body.get("amount")
+        if not spends or not finite_number(amount) or amount <= 0:
+            return {"ok": False, "rid": None, "why": reasons.GATE_BUDGET}
+        limit = min(float(b["limit"]) for b in spends)
+        window_s = max(float(b["window_s"]) for b in spends)
+        rid = self.ledger.reserve(body["key"], amount, limit, window_s, self.clock.now(), body["ttl"])
+        if rid:
+            self.reservation_holder[rid] = sender        # only this member may commit or release it
         self.ops["shared_reserve"] += 1
         return {"ok": rid is not None, "rid": rid, "why": reasons.OK if rid else reasons.GATE_BUDGET}
 
     def _on_commit(self, sender: str, body: dict):
         """Budget owner side of COMMIT. Commits a reservation at the owner, so that it counts against the budget."""
+        if self.reservation_holder.get(body.get("rid"), sender) != sender:
+            return {"ok": False, "why": reasons.GATE_BUDGET + ".not_the_reserver"}
         return {"ok": self.ledger.commit(body["key"], body["rid"], self.clock.now()), "why": reasons.OK}
 
     def _on_release(self, sender: str, body: dict):
         """Budget owner side of RELEASE. Gives back a reservation that was not spent."""
+        if self.reservation_holder.get(body.get("rid"), sender) != sender:
+            return {"ok": False, "why": reasons.GATE_BUDGET + ".not_the_reserver"}
         self.ledger.release(body["key"], body["rid"])
+        self.reservation_holder.pop(body.get("rid"), None)
         return {"ok": True, "why": reasons.OK}
 
     def _on_alarm(self, sender: str, body: dict):

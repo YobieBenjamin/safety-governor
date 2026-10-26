@@ -27,7 +27,7 @@ def _kdf_engine(uds: bytes):
 
 class Fuses:
     def __init__(self, chip_id: str | None = None, governance_key_hashes: list[str] | None = None, uds: bytes | None = None,
-                 governance_threshold: int | None = None):
+                 governance_threshold: int | None = None, governance_class_floor: int = 0):
         self.chip_id = chip_id or secrets.token_hex(8)
         self._kdf = _kdf_engine(uds or secrets.token_bytes(32))   # no attribute holds the secret
         self.rollback = 0                      # firmware version; thermometer-coded in silicon
@@ -42,6 +42,10 @@ class Fuses:
         self.governance_threshold = int(governance_threshold) if governance_threshold is not None else max(1, n // 2 + 1)
         if self.governance_threshold < 1:
             raise ValueError(reasons.POLICY_QUORUM)
+        # Audit 2026-10-26 (capture): the least number of distinct principal classes (organisations or roles) that every
+        # edition must enrol among its governance keys and require in its class quorum. Fused at manufacture; no edition
+        # can lower it, so one validly signed edition cannot hand governance to a single party for good.
+        self.governance_class_floor = int(governance_class_floor)
         self.trusted_governance: dict | None = None   # set by the first rulebook the fused key hashes admit; see record_governance
         self.zeroized = False
 

@@ -11,7 +11,7 @@ that the host cannot write these records. It is not a software fix."""
 from govsim import reasons
 from govsim.cluster import build_rack
 
-P = {"target": [10.0, 10.0]}
+P = {"target": [10.0, 10.0], "munition": "gbu-39"}   # fields a strike rule allows: the endpoint now checks them against the edition
 
 
 def _strike_ticket():

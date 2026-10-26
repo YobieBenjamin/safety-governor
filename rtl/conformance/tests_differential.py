@@ -110,6 +110,13 @@ class ModelSide:
         if f.cmd == "HEARTBEAT":
             payload.update(window_start=now - 1, window_end=now + 5)
         env = self.key_for(f.cmd).sign(payload)
+        # a HALT, CLEAR or EXCLUDE needs two of three authority keys and a heartbeat two of three heartbeat signers
+        # (adversarial audit 2026-10-26). The second signature rides along; in the chip the signature engine checks the
+        # quorum before it raises sig_ok, so the mailbox sees one verdict either way.
+        if SIGNED[f.cmd][0] == "authority":
+            env["cosignatures"] = [self.rack.authority_cosigners[0].sign(payload)]
+        elif f.cmd == "HEARTBEAT":
+            env["cosignatures"] = [self.rack.heartbeat_cosigners[0].sign(payload)]
         if not f.sig_ok:
             s = env["sig"]
             env["sig"] = ("0" if s[0] != "0" else "1") + s[1:]
@@ -455,7 +462,7 @@ def test_fw_authority_expiry_ceiling_is_60s():
     assert AUTHORITY_TTL_S == 60.0
     m = ModelSide()
     now = m.rack.clock.now()
-    env = m.rack.authority_key.sign({"seq": 1, "epoch": m.g.epoch, "type": "halt", "chip_id": m.g.chip_id, "expires_at": now + 61})
+    env = m.rack.sign_authority({"seq": 1, "epoch": m.g.epoch, "type": "halt", "chip_id": m.g.chip_id, "expires_at": now + 61})
     assert m.g._check_signed(env, "authority", "HALT") == (False, reasons.MBOX_EXPIRED)
 
 
@@ -475,7 +482,7 @@ def test_fw_heartbeat_window_is_clamped_to_policy_expiry():
     m = ModelSide()
     g, now = m.g, m.rack.clock.now()
     limit = float(g.policy["fabric"].get("heartbeat_expiry_s", 5.0))
-    env = m.rack.heartbeat_key.sign({"type": "heartbeat", "seq": 99, "epoch": g.epoch, "window_start": now - 1,
+    env = m.rack.sign_heartbeat({"type": "heartbeat", "seq": 99, "epoch": g.epoch, "window_start": now - 1,
                                      "window_end": now + 10 * limit})
     assert g.command("HEARTBEAT", {}, env)["ok"]
     assert g.hb_expiry <= now + limit

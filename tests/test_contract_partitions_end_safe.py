@@ -60,7 +60,7 @@ def test_tickets_from_the_old_epoch_die_everywhere(rack):
 def test_heartbeat_for_the_wrong_epoch_is_refused(rack):
     g = rack.nodes[0].governor
     now = rack.clock.now()
-    env = rack.heartbeat_key.sign({"type": "heartbeat", "seq": 10_000, "epoch": "00" * 32, "window_start": now - 1, "window_end": now + 3600})
+    env = rack.sign_heartbeat({"type": "heartbeat", "seq": 10_000, "epoch": "00" * 32, "window_start": now - 1, "window_end": now + 3600})
     r = g.command("HEARTBEAT", {}, env)
     assert not r["ok"] and r["why"] == reasons.POLICY_STALE_EPOCH
 
@@ -141,7 +141,7 @@ def test_an_old_heartbeat_after_a_restart_is_dropped(rack1):
     node = rack1.nodes[0]
     g = node.governor
     now = rack1.clock.now()
-    old = rack1.heartbeat_key.sign({"type": "heartbeat", "seq": 1, "epoch": rack1.epoch, "window_start": now - 1, "window_end": now + 3600})
+    old = rack1.sign_heartbeat({"type": "heartbeat", "seq": 1, "epoch": rack1.epoch, "window_start": now - 1, "window_end": now + 3600})
     assert g.command("HEARTBEAT", {}, old)["why"] == reasons.HEARTBEAT_REPLAY
     g.restart()
     r = g.command("HEARTBEAT", {}, old)
@@ -155,7 +155,7 @@ def test_heartbeat_outside_its_window_is_refused(rack1):
     expiry_before = g.hb_expiry
     for start, end in ((now - 10, now - 1), (now + 10, now + 20)):               # already over, or not yet valid
         rack1.hb_seq += 1
-        env = rack1.heartbeat_key.sign({"type": "heartbeat", "seq": rack1.hb_seq, "epoch": rack1.epoch, "window_start": start, "window_end": end})
+        env = rack1.sign_heartbeat({"type": "heartbeat", "seq": rack1.hb_seq, "epoch": rack1.epoch, "window_start": start, "window_end": end})
         r = g.command("HEARTBEAT", {}, env)
         assert not r["ok"] and r["why"] == reasons.HEARTBEAT_EXPIRED
     assert g.hb_expiry == expiry_before

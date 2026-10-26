@@ -24,9 +24,18 @@ EXITS = {
 
 class GPU:
     def __init__(self, name: str, clock, vendor_key: SigningKey, firmware_digest: str,
-                 levers: dict | None = None, direct_nvlink: bool = False):
+                 levers: dict | None = None, direct_nvlink: bool = False, board_watchdog_s: float | None = 5.0):
         self.name = name
         self.clock = clock
+        # The fail-safe board interlock (adversarial audit 2026-10-26: a dead or unlinked governor used to leave its GPU
+        # running). The slot's power enable is held on only while the governor keeps renewing a keep-alive; when the
+        # keep-alive stops for ``board_watchdog_s``, the board drops PWR_EN by itself, so the GPU stops and every
+        # byte path from it closes. This is a requirement on the board (a watchdog in the HPM CPLD or the slot's power
+        # controller, defaulting to off, that LTPI cannot override), not something the governor can do once it is dead:
+        # see docs/research/fail-safe-board-interlock.md. None models a board without the interlock.
+        self.board_watchdog_s = board_watchdog_s
+        self.output_seal_key: bytes | None = None      # set by the rack: output is sealed to the egress endpoint
+        self.keepalive_at = clock.now()
         self.chip_id = "gpu-" + digest(name)[:12]
         self.firmware_digest = firmware_digest
         self.device_key = SigningKey.generate()
@@ -92,6 +101,16 @@ class GPU:
             self.pwr_en = on
             self._apply()
 
+    def keepalive(self) -> None:
+        """The governor's keep-alive to the board interlock. Only a live governor sends it."""
+        self.keepalive_at = self.clock.now()
+
+    def _board_failsafe(self) -> None:
+        """The board interlock: no keep-alive for ``board_watchdog_s`` drops slot power, whatever the levers say."""
+        if self.board_watchdog_s is not None and self.pwr_en and self.clock.now() - self.keepalive_at > self.board_watchdog_s:
+            self.pwr_en = False
+            self._apply()
+
     def _apply(self) -> None:
         if not self.pwr_en:
             self.power, self.clock_state, self.job = "OFF", "OFF", None
@@ -113,6 +132,7 @@ class GPU:
 
     @property
     def running(self) -> bool:
+        self._board_failsafe()
         return self.power == "ON" and self.job is not None and self.clock_state in ("FULL", "LIMITED")
 
     # --- work --------------------------------------------------------------------
@@ -196,8 +216,14 @@ class GPU:
         self.dek, self.lease, self.weights_plain = None, None, None
 
     def run_tokens(self, n: int, cycles_per_token: int = 1000) -> int:
-        if not self.running:
+        """Tokens of work done. A braked GPU still computes (PWRBRK cuts the clock by about half; the board-lever
+        register, LEVER-NVIDIA-POWER-BRAKE-INPUT), so THROTTLE slows the work and only HALT (reset) or SAFE (power off)
+        stops it (adversarial audit 2026-10-26: the model used to count a braked GPU as doing nothing)."""
+        braked = self.power == "ON" and self.job is not None and self.clock_state == "BRAKED"
+        if not self.running and not braked:
             return 0
+        if braked:
+            n = n // 2
         if self.sealed:
             # no key or an expired lease: the weights are wiped, nothing runs. The GPU enforces its own lease, so a
             # governor that goes silent (cut off, powered down, halted) stops the model within one lease period
@@ -221,6 +247,17 @@ class GPU:
         self.bytes_out += len(data)
         if self.output_hook:
             self.output_hook(stream, data)
+        if self.output_seal_key is not None:
+            # Adversarial audit 2026-10-26: the untrusted host used to receive every response in clear before the release
+            # gate decided, and could send it out through its own NICs. With a seal key the GPU encrypts what it emits to
+            # the egress endpoint (a confidential-computing session between the GPU and the DPU's egress, keyed at
+            # attestation), so the host carries only ciphertext; the cleartext exists only inside the GPU and the egress,
+            # and leaves only on a release ticket. This depends on NVIDIA confidential computing and on an egress inside
+            # a trusted execution boundary: see docs/research/output-sealed-to-egress.md.
+            import os
+            from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+            nonce = os.urandom(12)
+            return nonce + AESGCM(self.output_seal_key).encrypt(nonce, data, stream.encode())
         return data
 
     def transfer(self, exit_name: str, peer: str, direction: str, nbytes: int, buffer_class: str = "activations") -> tuple[bool, str]:
@@ -228,6 +265,7 @@ class GPU:
         class is what a descriptor names; only a checker (integrated tier) can see it, a switch cannot."""
         from . import reasons
         now = self.clock.now()
+        self._board_failsafe()
         if not self.running and direction == "out":
             return False, "gpu.not_running"
         if exit_name in ("display", "jtag", "debug"):

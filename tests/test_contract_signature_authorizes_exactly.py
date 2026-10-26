@@ -87,12 +87,17 @@ def test_the_current_quorum_can_rotate_the_governance_keys(rack1):
     g = rack1.nodes[0].governor
     old = rack1.governance
     new = [SigningKey.generate() for _ in range(5)]
-    rotated = _image(rack1, rack1.policy_version + 1, governance_keys=[k.public.hex for k in new], threshold=3)
+    # the new keys are enrolled in classes too: every edition must span the fused floor of two principal classes
+    classes = {k.public.hex: c for k, c in zip(new, ["operator", "operator", "standards-body", "standards-body", "regulator"])}
+    rotated = _image(rack1, rack1.policy_version + 1, governance_keys=[k.public.hex for k in new], threshold=3,
+                     governance_classes=classes, governance_class_quorum=2)
     assert _commit(rack1, rotated, old[:3])
     assert g.fuses.trusted_governance["keys"] == [k.public.hex for k in new]
-    by_old = sign_policy(_image(rack1, rack1.policy_version + 1, governance_keys=[k.public.hex for k in new]), old[:5])
+    by_old = sign_policy(_image(rack1, rack1.policy_version + 1, governance_keys=[k.public.hex for k in new],
+                                governance_classes=classes, governance_class_quorum=2), old[:5])
     assert g.command("POLICY_PROPOSE", {"image": by_old})["why"] == reasons.POLICY_QUORUM      # retired keys count for nothing
-    by_new = sign_policy(_image(rack1, rack1.policy_version + 1, governance_keys=[k.public.hex for k in new]), new[:3])
+    by_new = sign_policy(_image(rack1, rack1.policy_version + 1, governance_keys=[k.public.hex for k in new],
+                                governance_classes=classes, governance_class_quorum=2), new[:3])
     assert g.command("POLICY_PROPOSE", {"image": by_new})["ok"]
     g.restart()
     assert g.policy["version"] == rotated["version"]                                            # the rotated edition reloads
@@ -127,7 +132,7 @@ def test_the_fused_threshold_only_goes_up(rack1):
 def _heartbeat_env(rack, seq_bump=1):
     rack.hb_seq += seq_bump
     now = rack.clock.now()
-    return rack.heartbeat_key.sign({"type": "heartbeat", "seq": rack.hb_seq, "epoch": rack.epoch, "window_start": now - 1, "window_end": now + 5})
+    return rack.sign_heartbeat({"type": "heartbeat", "seq": rack.hb_seq, "epoch": rack.epoch, "window_start": now - 1, "window_end": now + 5})
 
 
 def _halted_and_clearable(rack, g):

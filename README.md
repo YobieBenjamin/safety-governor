@@ -47,8 +47,8 @@ If you came to check the work rather than read about it, [`START-HERE.md`](START
 |---|---|---|
 | [`docs/`](docs/) | The design: objectives, architecture, the safety fabric, interfaces to the GPU and the rack, the specification, the threat model, the assumptions register, the verification plan, the plan to put it on silicon through lithography, the analogies, and the plain-English walkthrough; figures in `docs/figures/` are drawn by `docs/figures/make_figures.py` from the same facts the text states | read |
 | [`govsim/`](govsim/) | A functional model of the governor, the rack's switches as enforcement points, the halt loop and the message fabric, across a simulated rack of GPUs | `./run.sh` |
-| [`tests/`](tests/) | One test file per hypothesis, the twenty-one contract tests (224 tests). A hypothesis is a claim the blog makes; a test is what would knock it down. Forty-eight single-point mutations of the model and the RTL were run against the suite in the October 2026 audit; the ones that survived got tests | `./run.sh` |
-| [`rtl/`](rtl/) | The hard-core digital blocks in [Amaranth HDL](https://amaranth-lang.org/), simulated (20 block tests), with generated Verilog in `rtl/gen/` | `make rtl` |
+| [`tests/`](tests/) | One test file per hypothesis, the twenty-one contract tests and the regression tests of every audit finding (443 tests as of 26 October 2026). A hypothesis is a claim the blog makes; a test is what would knock it down. Forty-eight single-point mutations of the model and the RTL were run against the suite in the October 2026 audit; the ones that survived got tests | `./run.sh` |
+| [`rtl/`](rtl/) | The hard-core digital blocks in [Amaranth HDL](https://amaranth-lang.org/), simulated (57 block tests), with generated Verilog in `rtl/gen/` | `make rtl` |
 | [`hw/`](hw/) | The LibreLane flow for a SkyWater sky130 shuttle run, the pinout, and the rack integration reference (module, baseboard signals, switch management) | `make gds` on a machine with Docker |
 | [`results/`](results/) | The last sweep: which hypotheses hold at which tier of the design | `./run.sh` writes it |
 | [`proofs/`](proofs/) | The machine-checked part: the core invariants and the commit point proven by induction in Z3, and the kill-switch cuts checked by max-flow; `z3-solver` comes with `pip install -e ".[dev]"`, which `./run.sh` does | `make proof` |
@@ -71,8 +71,10 @@ its own copy of the signed rulebook, and its own log. It verifies the GPU's
 confidential-computing attestation locally against pinned reference values, releases the
 model's decryption key only to a verified enclave, mints the one-time tickets that endpoints
 demand before they act, keeps the budgets, counts the tokens, and signs what the verified
-runtime presents. It has three physical levers over its GPU that need nothing from the GPU
-vendor: the power-brake input, the reset pin, and the slot's power enable. It has authority
+runtime presents. It has three physical levers over its GPU, which need nothing from the GPU vendor where the board
+wires them to the governor: the power-brake input, the reset pin, and the slot's power enable. On today's
+public NVIDIA boards that wiring is coarser (HGX resets are grouped, the brake is board-level, GB200 trays put
+the levers behind the BMC; docs/research/board-lever-register.md), so per-GPU levers are a board requirement. It has authority
 over the three places on the board where the GPU's traffic already passes a switch: the
 NVSwitch ports (NVLink to other GPUs), the PCIe switch ports and ACS (the host, peers,
 storage), and the DPU's filter tables (RDMA across nodes). All governors in a rack share two

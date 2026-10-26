@@ -29,6 +29,7 @@ Terms used here:
 """
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from . import reasons
@@ -101,9 +102,11 @@ class Rack:
         self.governance = [SigningKey.generate() for _ in range(5)]    # the governance root: 5 keys
         self.threshold = 3                                              # 3 of those 5 must sign a policy
         self.heartbeat_key = SigningKey.generate()
+        self.heartbeat_cosigners = [SigningKey.generate() for _ in range(2)]   # 2 of the 3 heartbeat signers must sign a heartbeat
         self.authority_key = SigningKey.generate()      # HALT and CLEAR; never the heartbeat key, so a heartbeat cannot halt or clear
+        self.authority_cosigners = [SigningKey.generate() for _ in range(2)]   # 2 of the 3 authority keys must sign a HALT or CLEAR
         self.approvers = {"strike": [SigningKey.generate() for _ in range(3)], "payments.transfer.large": [SigningKey.generate() for _ in range(3)],
-                          "alarms": [SigningKey.generate()], "sandbox": [SigningKey.generate() for _ in range(2)],
+                          "alarms": [SigningKey.generate() for _ in range(2)], "sandbox": [SigningKey.generate() for _ in range(2)],
                           "response.release": [SigningKey.generate() for _ in range(2)], "weights.write.any": [SigningKey.generate() for _ in range(2)],
                           "message.send.any": [SigningKey.generate() for _ in range(2)], "shipment.order": [SigningKey.generate() for _ in range(2)]}
         self.publisher = SigningKey.generate()
@@ -136,7 +139,8 @@ class Rack:
         gov_hashes = [digest(k.public.hex) for k in self.governance]
         for i in range(n):
             gpu = GPU(f"gpu{i}", self.clock, self.gpu_vendor, GPU_FW, levers=levers, direct_nvlink=direct_nvlink)
-            fuses = Fuses(chip_id=f"gov{i:02d}", governance_key_hashes=gov_hashes, governance_threshold=self.threshold)   # the chip's fixed trust anchors
+            fuses = Fuses(chip_id=f"gov{i:02d}", governance_key_hashes=gov_hashes, governance_threshold=self.threshold,
+                          governance_class_floor=2)   # the chip's fixed trust anchors
             store = Store(f"{store_dir}/gov{i:02d}.json" if store_dir else None)
             g = Governor(f"governor{i}", self.clock, tier=tier, fuses=fuses, store=store,
                          loader_digest=GOV_LOADER, firmware_digest=GOV_FW, firmware_version=GOV_FW_VERSION,
@@ -157,6 +161,12 @@ class Rack:
         # the budget owner for the shared payments key is governor 0 (policy says so)
 
     # ------------------------------------------------------------------ policy
+    def default_governance_classes(self) -> dict[str, str]:
+        """The rack's governance keys enrolled in three independent principal classes (two operator keys, two
+        standards-body keys, one regulator key). Any three of the five keys span at least two classes."""
+        names = ["operator", "operator", "standards-body", "standards-body", "regulator"]
+        return {k.public.hex: c for k, c in zip(self.governance, names)}
+
     def make_policy_image(self, version: int, *, pay_small_limit: float = 2000.0, strike_mode: str = "observer",
                           override_floor_s: float = 60.0, drop_register_row: str | None = None, expires_in_s: float = 30 * 86400,
                           output_queries: int = 50, output_bytes: int = 200_000, unpresented_bytes: int = 1 << 20,
@@ -168,7 +178,8 @@ class Rack:
                           sealed_models: list[str] | None = None, key_lease_s: float = 60.0,
                           payer_confirm_payments: bool = False,
                           message_max_bytes: int | None = None, message_rate: dict | None = None,
-                          governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0) -> dict:
+                          governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0,
+                          fleet_budget: bool = False) -> dict:
         """Build one unsigned policy image: the reference values, the rules, the registers, the endpoints
         and the keys the governors will trust. The keyword arguments change one part at a time (for example
         ``pay_small_limit``, ``sandbox`` or ``drop_register_row``). Output: a dict. ``__init__`` and
@@ -251,15 +262,17 @@ class Rack:
             version=version, issued_at=now, expires_at=now + expires_in_s,
             governance_keys=[k.public for k in self.governance], threshold=self.threshold,
             approver_keys=approver_keys,
-            heartbeat_key=self.heartbeat_key.public, authority_keys=[self.authority_key.public], publisher_keys=[self.publisher.public], observer_keys=[self.observer.public],
+            heartbeat_key=self.heartbeat_key.public, authority_keys=[self.authority_key.public] + [k.public for k in self.authority_cosigners],
+            heartbeat_cosigners=[k.public for k in self.heartbeat_cosigners], heartbeat_threshold=2, authority_threshold=2, publisher_keys=[self.publisher.public], observer_keys=[self.observer.public],
             reference_values=refs, endpoints=endpoints,
-            budget_owners={"pay-usd-hourly": "gov00", "hazard": "gov00"},
+            budget_owners={"pay-usd-hourly": "fleet" if fleet_budget else "gov00", "hazard": "gov00"},   # "fleet": counted once for the whole fleet (govsim/fleet.py)
             rules=rules, assumptions=rows, override_floor_s=override_floor_s,
             buffer_classes=buffer_classes, buffer_policy=buffer_policy,      # None: the defaults in govsim/policy.py
             audit=audit, streams_required=streams_required, eval_keys=[self.evaluator.public], deployment_gate=deployment_gate,
             compute_budget={"cycles": compute_cycles, "license_keys": [self.licensor.public.hex]}, sandbox=sandbox,
             sealed_models=sealed_models, key_lease_s=key_lease_s,
-            governance_classes=governance_classes, governance_class_quorum=governance_class_quorum,
+            governance_classes=governance_classes if governance_classes is not None else self.default_governance_classes(),
+            governance_class_quorum=governance_class_quorum if governance_classes is not None else 2,
         )
 
     def signed_list(self, list_id: str, entries: list, expires_in_s: float = 86400.0, version: int = 0, signer: SigningKey | None = None) -> dict:
@@ -276,22 +289,26 @@ class Rack:
         them. A commit goes back to the governor whose key signed the ticket (``_commit_route``)."""
         g0 = self.nodes[0].governor
         keys = {kid: g.key.public for kid, g in self.by_key.items()}
+        gov = {"governance_hashes": [digest(k.public.hex) for k in self.governance], "governance_floor": self.threshold}
         protected = {"entries": [tuple(e) for e in PROTECTED_SITES], "stale": False}
         # the strike endpoint gets the sensor readings and the protected list that its checks read
         strike = ActionEndpoint("strike-guidance", self.clock, keys, safe_transition="no_release",
-                                sensors={"nav_gnss": (37.0, -122.0), "nav_inertial": (37.0, -122.0), "lists": {"protected-sites": protected}})
+                                sensors={"nav_gnss": (37.0, -122.0), "nav_inertial": (37.0, -122.0), "lists": {"protected-sites": protected}}, **gov)
         strike.checks = strike_checks()
-        pay = ActionEndpoint("payment-switch", self.clock, keys, safe_transition="decline")
-        messaging = ActionEndpoint("messaging", self.clock, keys, safe_transition="hold")
-        fulfilment = ActionEndpoint("fulfilment", self.clock, keys, safe_transition="hold")
+        pay = ActionEndpoint("payment-switch", self.clock, keys, safe_transition="decline", **gov)
+        messaging = ActionEndpoint("messaging", self.clock, keys, safe_transition="hold", **gov)
+        fulfilment = ActionEndpoint("fulfilment", self.clock, keys, safe_transition="hold", **gov)
         self.audit_store = AuditStore("audit-store", self.clock, keys, self.endpoint_keys["audit-store"])
         for ep in (strike, pay, messaging, fulfilment, self.audit_store):
             ep.commit = self._commit_route
+            ep.install_edition(g0.policy)
             ep.set_epoch(g0.signed_epoch())
             self.endpoints[ep.name] = ep
             g0.endpoints[ep.name] = ep
         for node in self.nodes:                      # the DPU's egress to the user: one per node
             node.egress = EgressEndpoint("egress", self.clock, keys)
+            node.gpu.output_seal_key = os.urandom(32)   # the GPU-to-egress session key: the host sees only ciphertext
+            node.egress.output_seal_key = node.gpu.output_seal_key
             node.egress.commit = self._commit_route
             node.egress.set_epoch(node.governor.signed_epoch())
             node.governor.endpoints["egress"] = node.egress
@@ -307,8 +324,23 @@ class Rack:
         """A HALT or CLEAR names its command, the one chip it is for and when it stops being good. The expiry
         keeps an old authority command from being replayed later."""
         self.authority_seq += 1
-        return self.authority_key.sign({"seq": self.authority_seq, "epoch": self.epoch, "chip_id": governor.chip_id,
-                                        "expires_at": self.clock.now() + ttl_s, **payload})
+        body = {"seq": self.authority_seq, "epoch": self.epoch, "chip_id": governor.chip_id,
+                "expires_at": self.clock.now() + ttl_s, **payload}
+        env = self.authority_key.sign(body)
+        env["cosignatures"] = [self.authority_cosigners[0].sign(body)]        # the second of the 2-of-3 authority signers
+        return env
+
+    def sign_heartbeat(self, payload: dict) -> dict:
+        """A heartbeat signed by two of the three heartbeat signers (the heartbeat key and its first cosigner)."""
+        env = self.heartbeat_key.sign(payload)
+        env["cosignatures"] = [self.heartbeat_cosigners[0].sign(payload)]
+        return env
+
+    def sign_authority(self, payload: dict) -> dict:
+        """A HALT, CLEAR or EXCLUDE signed by two of the three authority keys."""
+        env = self.authority_key.sign(payload)
+        env["cosignatures"] = [self.authority_cosigners[0].sign(payload)]
+        return env
 
     def loop_beacon(self) -> dict:
         """The LOOP_BEACON body: the loop the authority wired and who it expects on it. It rides inside the
@@ -324,6 +356,7 @@ class Rack:
         if beacon:
             payload["loop_beacon"] = self.loop_beacon()
         env = self.heartbeat_key.sign(payload)
+        env["cosignatures"] = [self.heartbeat_cosigners[0].sign(payload)]     # the second of the 2-of-3 heartbeat signers
         r = (to or self.entry).command("HEARTBEAT", {}, env)
         self.loop.propagate()                   # one sense period: armed governors see the closed loop and run
         return r

@@ -69,7 +69,7 @@ def test_forged_heartbeat_is_refused_everywhere(rack):
 
 def test_replayed_heartbeat_does_not_extend_life(rack):
     now = rack.clock.now()
-    env = rack.heartbeat_key.sign({"type": "heartbeat", "seq": rack.hb_seq, "epoch": rack.epoch, "window_start": now - 1, "window_end": now + 3600})
+    env = rack.sign_heartbeat({"type": "heartbeat", "seq": rack.hb_seq, "epoch": rack.epoch, "window_start": now - 1, "window_end": now + 3600})
     r = rack.nodes[0].governor.command("HEARTBEAT", {}, env)     # same seq as the last real one
     assert not r["ok"] and r["why"] == reasons.HEARTBEAT_REPLAY
 
@@ -116,7 +116,7 @@ def test_heartbeat_relay_signature_and_hop_limit(rack):
     a, b = rack.nodes[1].governor, rack.nodes[2].governor
     now = rack.clock.now()
     rack.hb_seq += 1
-    env = rack.heartbeat_key.sign({"type": "heartbeat", "seq": rack.hb_seq, "epoch": rack.epoch, "window_start": now - 1, "window_end": now + 5})
+    env = rack.sign_heartbeat({"type": "heartbeat", "seq": rack.hb_seq, "epoch": rack.epoch, "window_start": now - 1, "window_end": now + 5})
     forged = SigningKey.generate().sign({"type": "HEARTBEAT", "from": a.chip_id, "seq": a.fabric_seq + 1, "epoch": a.epoch, "time": 0,
                                          "body": {"authority": env, "hops": 1}})
     res = rack.fabric.send(a.chip_id, forged, to=b.chip_id)

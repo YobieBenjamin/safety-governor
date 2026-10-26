@@ -129,15 +129,15 @@ def test_exclude_needs_the_authority_bound_to_this_chip_and_fresh():
     for env, why in (
         (rack.heartbeat_key.sign(payload), reasons.MBOX_BAD_SIGNATURE),                    # never the heartbeat key
         (SigningKey.generate().sign(payload), reasons.MBOX_BAD_SIGNATURE),
-        (rack.authority_key.sign({**payload, "type": "clear"}), reasons.MBOX_WRONG_COMMAND),  # typed
-        (rack.authority_key.sign({**payload, "chip_id": other.chip_id}), reasons.MBOX_WRONG_COMMAND),  # bound to the chip
-        (rack.authority_key.sign({**payload, "expires_at": rack.clock.now() - 1}), reasons.MBOX_EXPIRED),
-        (rack.authority_key.sign({k: v for k, v in payload.items() if k != "expires_at"}), reasons.MBOX_EXPIRED),
+        (rack.sign_authority({**payload, "type": "clear"}), reasons.MBOX_WRONG_COMMAND),  # typed
+        (rack.sign_authority({**payload, "chip_id": other.chip_id}), reasons.MBOX_WRONG_COMMAND),  # bound to the chip
+        (rack.sign_authority({**payload, "expires_at": rack.clock.now() - 1}), reasons.MBOX_EXPIRED),
+        (rack.sign_authority({k: v for k, v in payload.items() if k != "expires_at"}), reasons.MBOX_EXPIRED),
     ):
         r = stuck.command("EXCLUDE", {}, env)
         assert not r["ok"] and r["why"] == why, (r, why)
         assert not stuck.excluded and stuck.loop_switch_open
-    good = rack.authority_key.sign(payload)
+    good = rack.sign_authority(payload)
     assert stuck.command("EXCLUDE", {}, good)["ok"]
     r = stuck.command("EXCLUDE", {}, good)                     # a replay is refused
     assert not r["ok"] and r["why"] == reasons.MBOX_BAD_SEQUENCE

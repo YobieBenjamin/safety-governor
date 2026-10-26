@@ -107,7 +107,9 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
                 eval_keys: list[VerifyKey] | None = None, deployment_gate: bool = False,
                 compute_budget: dict | None = None, sandbox: bool = False, authority_keys: list[VerifyKey] | None = None,
                 sealed_models: list[str] | None = None, key_lease_s: float = 60.0,
-                governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0) -> dict:
+                governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0,
+                heartbeat_cosigners: list[VerifyKey] | None = None, heartbeat_threshold: int = 1,
+                authority_threshold: int = 1) -> dict:
     """Assemble an unsigned policy image from its parts. The keyword arguments set the defaults for the timers, the
     buffer policy, the audit sampling and the escrow classes. The result is a dict with a version, an expiry, the keys,
     the rules and the register. It is not in force until it is signed with ``sign_policy`` and a governor accepts it
@@ -124,6 +126,14 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
         "governance_class_quorum": int(governance_class_quorum),
         "approver_keys": {rid: [k.hex for k in ks] for rid, ks in approver_keys.items()},
         "heartbeat_key": heartbeat_key.hex,
+        # Audit 2026-10-26: one heartbeat key and one authority key were single points of failure and of capture (one
+        # key's silence stopped every rack that trusted it; one key could halt any rack). A heartbeat now counts only with
+        # ``heartbeat_threshold`` distinct signers among the heartbeat key and its cosigners, and a HALT, CLEAR or EXCLUDE
+        # only with ``authority_threshold`` distinct authority signers. With 2 of 3, one signer going silent stops
+        # nothing, and one stolen key can neither halt a rack nor keep a stale rack alive.
+        "heartbeat_cosigners": [k.hex for k in (heartbeat_cosigners or [])],
+        "heartbeat_threshold": int(heartbeat_threshold),
+        "authority_threshold": int(authority_threshold),
         "authority_keys": [k.hex for k in (authority_keys or [])],          # HALT and CLEAR; a different key from the heartbeat's, so a key that only says "alive" can never say "stop" or "go"
         "publisher_keys": [k.hex for k in publisher_keys],
         "observer_keys": [k.hex for k in (observer_keys or [])],
@@ -292,6 +302,35 @@ def select_rule(image: dict, measurement: str, action: str, params: dict, lists:
     return None, last
 
 
+# A denylist entry is matched by meaning, not by exact bytes (audit 2026-10-26: a protected site written as a tuple, or
+# one micro-degree off, was not "in" the list). Sequences of numbers (coordinates) match when every component is within
+# the tolerance, whatever the container type; strings match after trimming and case folding.
+DENYLIST_TOLERANCE = 1e-3          # degrees for coordinates: about 100 m
+
+
+def _as_numbers(v: Any) -> list[float] | None:
+    if isinstance(v, (list, tuple)) and v and all(finite_number(x) for x in v):
+        return [float(x) for x in v]
+    return None
+
+
+def denylist_hit(v: Any, entries: Any, tolerance: float = DENYLIST_TOLERANCE) -> bool:
+    """True when ``v`` matches any entry of a denylist: numeric sequences within ``tolerance`` per component,
+    strings ignoring case and surrounding space, anything else by equality."""
+    nv = _as_numbers(v)
+    for e in entries:
+        ne = _as_numbers(e)
+        if nv is not None and ne is not None:
+            if len(nv) == len(ne) and all(abs(a - b) <= tolerance for a, b in zip(nv, ne)):
+                return True
+        elif isinstance(v, str) and isinstance(e, str):
+            if v.strip().casefold() == e.strip().casefold():
+                return True
+        elif v == e:
+            return True
+    return False
+
+
 def check_constraints(rule: dict, params: dict, lists: dict[str, Any]) -> tuple[bool, str]:
     """Typed limits. ``lists`` are the signed lists the governor holds (by list id)."""
     for name, c in rule["constraints"].items():
@@ -321,7 +360,7 @@ def check_constraints(rule: dict, params: dict, lists: dict[str, Any]) -> tuple[
             lst = lists.get(c["not_in_list"])
             if lst is None or lst.get("stale"):
                 return False, f"{reasons.GATE_CONSTRAINT}.{name}.list_unavailable"
-            if v in lst["entries"]:
+            if denylist_hit(v, lst["entries"], c.get("tolerance", DENYLIST_TOLERANCE)):
                 return False, f"{reasons.GATE_CONSTRAINT}.{name}.in_denied_list"
         if "in_list" in c:
             lst = lists.get(c["in_list"])

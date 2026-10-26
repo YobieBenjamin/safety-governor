@@ -91,7 +91,7 @@ property is small enough, a formal statement for a bounded model checker:
 
 | Failure | Effect | Detection | Mitigation |
 |---|---|---|---|
-| Governor loses power | Loop opens | Immediate | Domain halts; the dead governor's GPU is powered down by the slot's default-safe PWR_EN where the board has per-slot power control, and held in reset otherwise |
+| Governor loses power | Loop opens | Immediate | Domain halts. The dead governor's own GPU stops only on a board with the fail-safe interlock: a watchdog that drops the slot's PWR_EN when the governor's keep-alive stops, which LTPI cannot override (docs/research/fail-safe-board-interlock.md; an OEM requirement, open). Without it, LTPI holds a dead governor's levers released and its GPU keeps running (docs/interfaces/01-dcscm-dcsci-ltpi.md) |
 | Governor firmware hang | Heartbeat not consumed; no tickets | Watchdog | Watchdog resets the governor into HALTED_INITIAL; loop opens |
 | Fuse read failure | Keys cannot derive | Boot | Boot refused; the sequencer never leaves HALTED_INITIAL |
 | NVM corruption | Policy or ledger unreadable | Authentication tag | Refuse to RUN; request a fresh policy image; reservations are rebuilt from the roster |

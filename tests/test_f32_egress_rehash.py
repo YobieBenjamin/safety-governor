@@ -11,7 +11,9 @@ from govsim.cluster import build_rack
 
 
 def _held_response():
-    r = build_rack(1, "rack")
+    # audit sampling off: a 5 percent random audit draw would otherwise hold this response for an escrow receipt now
+    # and then, and these tests are about the egress re-hash, not about the draw (the Mac run of 26 October hit it)
+    r = build_rack(1, "rack", policy_kw={"audit": {"sample_rate": 0.0, "escrow_classes": ["hazard"], "store": "audit-store"}})
     r.bring_up()
     node = r.nodes[0]
     pres = r.present(node, "s", "rW", b"committed-bytes")
