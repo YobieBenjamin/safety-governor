@@ -63,7 +63,7 @@ alone and never opens the loop to its neighbours. What the integrated RTL does, 
    ("a halt command opens the loop in every state, SAFE included, unless an authorized CLEAR took that cycle", and
    in SAFE "it stays SAFE, power off, cause command unless tamper"); governor_core.sv, RTL-HALT-REACHES-PINS, the same at the pins. The
    old behaviour is a planted mutant ("a HALT to a chip in SAFE leaves the loop closed") and is caught; the
-   reproducer `test_finding_cmd_halt_in_safe_opens_the_loop` (conformance CONFORMANCE-HALT-TO-SAFE-CHIP, also closed) and
+   reproducer `test_finding_cmd_halt_in_safe_opens_the_loop` (conformance CONFORMANCE-HALT-IN-SAFE-MISHANDLED, also closed) and
    `rtl/tests/test_yobie_calls.py::test_halt_to_a_chip_in_safe_opens_its_loop_and_stays_safe` are guards, and both
    fail by assertion on the old sequencer. Was: a signed HALT to a chip that is already in SAFE does not open the
    loop either. The sequencer obeys

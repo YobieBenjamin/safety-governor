@@ -52,10 +52,10 @@ BLOCKS = {
         ("a halt command is ignored once throttled",
          "with m.Elif(self.cmd_halt):", "with m.Elif(self.cmd_halt & (self.state != THROTTLE)):"),
         # Yobie's calls, 23 October 2026: HALT in SAFE opens the loop; EXCLUDE; NO_FIRST_HEARTBEAT
-        ("a HALT to a chip in SAFE leaves the loop closed (the old behaviour, CONFORMANCE-HALT-TO-SAFE-CHIP)",
+        ("a HALT to a chip in SAFE leaves the loop closed (the old behaviour, CONFORMANCE-HALT-IN-SAFE-MISHANDLED)",
          "            m.d.sync += self.switch_open.eq(1)\n        with m.Elif(self.cmd_halt):",
          "            pass\n        with m.Elif(self.cmd_halt):"),
-        ("a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old CONFORMANCE-HALT-TO-SAFE-CHIP)",
+        ("a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old CONFORMANCE-HALT-IN-SAFE-MISHANDLED)",
          "with m.Elif(self.cmd_halt & (self.state == SAFE)):", "with m.Elif(self.cmd_halt & (self.state == SAFE) & 0):"),
         ("EXCLUDE closes the loop of a chip halted by loop loss, a command or tamper",
          "with m.Elif(self.cmd_exclude & (self.state == HALTED_INITIAL) & (self.cause == C_NONE)):",

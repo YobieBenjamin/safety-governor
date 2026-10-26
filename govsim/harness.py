@@ -52,7 +52,7 @@ def probe_h1(rack):
     return "pass" if a and b else "FAIL"
 
 
-def probe_h2_link(rack):
+def probe_link_level_containment(rack):
     node = rack.nodes[0]
     peer = rack.nodes[1].gpu.chip_id
     ok_peer = node.gpu.transfer("nvswitch", peer, "out", MB)[0]
@@ -63,7 +63,7 @@ def probe_h2_link(rack):
     return "pass" if (ok_peer and blocked and bricked) else "FAIL"
 
 
-def probe_h2_descriptor(rack):
+def probe_descriptor_level_roster_gap(rack):
     """Two roster members exchanging bytes the buffer policy would not allow: the weights, over the
     copy engine. The rack and board tiers have no checker in the path (EP_UNCHECKED: the recorded gap).
     The integrated tier's checker is keyed per buffer class: weights are refused and logged
@@ -311,8 +311,8 @@ def probe_h18(rack):
 PROBES = [
     ("H0", "every protected operation needs a fresh, exact, single-use authorization", probe_h0),  # CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION (old: H0)
     ("H1", "attestation binds permissions to firmware, model and policy", probe_h1),  # CONTRACT-ATTESTATION-BINDS-PERMISSIONS (old: H1)
-    ("H2a", "link-level: no bytes to a non-roster peer; unchecked paths bricked", probe_h2_link),  # CONTRACT-LINK-LEVEL-CONTAINMENT (old: H2a)
-    ("H2b", "descriptor-level: a transfer between two roster members the buffer policy would not allow", probe_h2_descriptor),  # CONTRACT-DESCRIPTOR-LEVEL-ROSTER-GAP (old: H2b)
+    ("H2a", "link-level: no bytes to a non-roster peer; unchecked paths bricked", probe_link_level_containment),  # CONTRACT-LINK-LEVEL-CONTAINMENT (old: H2a)
+    ("H2b", "descriptor-level: a transfer between two roster members the buffer policy would not allow", probe_descriptor_level_roster_gap),  # CONTRACT-DESCRIPTOR-LEVEL-ROSTER-GAP (old: H2b)
     ("H3", "policy changes only with a quorum, never backwards", probe_h3),  # CONTRACT-POLICY-QUORUM-NO-ROLLBACK (old: H3)
     ("H4", "the broker cannot choose its rule or lane", probe_h4),  # CONTRACT-BROKER-CANNOT-PICK-RULE (old: H4)
     ("H5", "alarms are monotone", probe_h5),  # CONTRACT-ALARMS-ARE-MONOTONE (old: H5)

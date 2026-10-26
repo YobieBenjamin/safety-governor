@@ -9,12 +9,12 @@ quietly.
 - **RTL-DEBUG-WINDOW-AFTER-RESET, lifecycle: a debug window after every reset.** The register reset to TEST and
   `debug_grant = debug_req & (state < PRODUCTION)`, so a chip whose fuses said PRODUCTION answered debug from reset
   release until firmware strobed `load`. Fix: a `loaded` flag; debug needs a fuse load since the last reset.
-  Regression: `test_f1_no_debug_window_after_reset_on_a_production_chip` (rtl/tests/test_blocks_a.py), plus the first
+  Regression: `test_no_debug_window_after_reset_on_a_production_chip` (rtl/tests/test_blocks_a.py), plus the first
   lifecycle mutant, which puts the window back. One existing test expected debug straight after reset; it now loads
   the fuses first. This is the same bug the conformance suite found as its CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD.
 - **RTL-COUNTER-WRAPPED-TO-ZERO, monotonic_counter: wrap to zero.** `value + 1` wrapped to 0, and the top was reachable in two cycles by
   loading an all-ones high-water mark through `load_hwm`. Fix: saturate. Regression:
-  `test_f2_counter_saturates_instead_of_wrapping`, plus the first monotonic mutant. Same bug as conformance CONFORMANCE-MONOTONIC-COUNTER-WRAPS.
+  `test_counter_saturates_instead_of_wrapping`, plus the first monotonic mutant. Same bug as conformance CONFORMANCE-MONOTONIC-COUNTER-WRAPS.
 
 ## Open
 

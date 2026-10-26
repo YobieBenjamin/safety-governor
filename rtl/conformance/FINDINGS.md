@@ -17,7 +17,7 @@ reachable case), **low** (edge case, unreachable in practice, or a reporting dif
 | CONFORMANCE-CLEAR-REPORTS-ONE-REASON | low | Model's CLEAR handler reports one reason for every failure | model vs spec |
 | CONFORMANCE-CLEAR-BEATS-TAMPER | high, **closed** | CLEAR and tamper in the same cycle: CLEAR wins, the tamper is lost (fixed: tamper outranks CLEAR, branch fix/halt) | RTL vs spec and model (lead a) |
 | CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD | high, **half closed** | Lifecycle reads TEST and grants debug before the fuse load (debug half fixed by a `loaded` flag, WAVE-FORMAL-PROOFS-ON-VERILOG group A; the register still reads TEST until the load) | RTL vs spec (lead b) |
-| CONFORMANCE-HALT-TO-SAFE-CHIP | medium, **closed** | A signed HALT to a governor already in SAFE (fixed: a HALT opens the loop on every rung and SAFE stays SAFE, Yobie's call of 23 October 2026, branch feat/yobie-calls) | RTL vs spec; model vs spec, differently |
+| CONFORMANCE-HALT-IN-SAFE-MISHANDLED | medium, **closed** | A signed HALT to a governor already in SAFE (fixed: a HALT opens the loop on every rung and SAFE stays SAFE, Yobie's call of 23 October 2026, branch feat/yobie-calls) | RTL vs spec; model vs spec, differently |
 | CONFORMANCE-MILLISECOND-TICK-TOO-LONG | low | The "millisecond" tick is 1,024 microseconds | RTL vs spec |
 | CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES | low | A zero-byte lookup passes at zero budget | RTL and model vs spec |
 | CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | medium | Capability table holds two entries for one key | RTL vs spec and model |
@@ -141,7 +141,7 @@ the OTP state has been read and decoded).
 
 **Half closed** (23 October 2026). The dangerous half is fixed: debug needs a fuse load since the last reset (a `loaded` flag, found independently by the WAVE-FORMAL-PROOFS-ON-VERILOG proofs as their RTL-DEBUG-WINDOW-AFTER-RESET); the block-level reproducer now passes as a guard. The other half is open: until the load, the LIFECYCLE register still reads TEST (0), so software that reads it in that window is told the chip is a test part. Fix: reset the register to the most locked state, or report a distinct NOT_LOADED value. The core-level reproducer `test_finding_core_reports_test_lifecycle_before_fuse_load` still fails, on that half.
 
-## CONFORMANCE-HALT-TO-SAFE-CHIP: A signed HALT to a governor already in SAFE (closed)
+## CONFORMANCE-HALT-IN-SAFE-MISHANDLED: A signed HALT to a governor already in SAFE (closed)
 
 A governor whose heartbeat lapsed climbs THROTTLE, HALT, SAFE on its timers with its loop switch closed, which is
 right: local causes do not stop the rack. Now the authority sends that governor a signed HALT, a loop-opening cause

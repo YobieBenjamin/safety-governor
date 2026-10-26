@@ -21,8 +21,8 @@ from amaranth import ClockDomain, Elaboratable, Module, Signal
 from amaranth.sim import Simulator
 
 RTL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CYCLES = int(os.environ.get("L7_SIM_CYCLES", "20000"))          # on the real block
-MUTANT_CYCLES = int(os.environ.get("L7_SIM_MUTANT_CYCLES", "4000"))
+CYCLES = int(os.environ.get("FORMAL_SIM_CYCLES", "20000"))          # on the real block
+MUTANT_CYCLES = int(os.environ.get("FORMAL_SIM_MUTANT_CYCLES", "4000"))
 M64 = (1 << 64) - 1
 
 

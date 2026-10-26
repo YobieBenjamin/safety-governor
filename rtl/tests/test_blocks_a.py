@@ -32,7 +32,7 @@ def run(top, testbench):
     sim.run()
 
 
-def test_f1_no_debug_window_after_reset_on_a_production_chip():
+def test_no_debug_window_after_reset_on_a_production_chip():
     dut = Lifecycle()
     top = _WithReset(dut)
 
@@ -58,7 +58,7 @@ def test_f1_no_debug_window_after_reset_on_a_production_chip():
     run(top, tb)
 
 
-def test_f2_counter_saturates_instead_of_wrapping():
+def test_counter_saturates_instead_of_wrapping():
     dut = MonotonicCounter()
 
     async def tb(ctx):

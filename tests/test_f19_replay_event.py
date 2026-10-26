@@ -128,8 +128,8 @@ def test_old_boolean_only_property_could_not_see_replay():
     executed[a] => used[a] still holds across the replay trace, even though a second effect
     occurred. A Boolean cannot witness replay; only the count can."""
     (s, t, u, w), trace, a = _replay_trace(fresh_ticket_guard=False)
-    old_p3_after = z3.Implies(w.executed[a], w.used[a])
+    old_no_replay_after = z3.Implies(w.executed[a], w.used[a])
     # the old property is never violated by the replay trace (it is blind to the second effect)
-    assert _solve(trace + [z3.Not(old_p3_after)]) == z3.unsat
+    assert _solve(trace + [z3.Not(old_no_replay_after)]) == z3.unsat
     # yet on the very same trace the counted property IS violated
     assert _solve(trace + [w.n_events[a] > w.n_issued[a]]) == z3.sat
