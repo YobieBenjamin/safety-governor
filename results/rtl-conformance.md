@@ -3,10 +3,10 @@
 `python -m rtl.conformance` on Python 3.12.15. **Result: PASS** (PASS means the suite does what it says: every conforming test passes, every recorded disagreement reproduces by assertion, every mutant is caught). Disagreements with the spec are findings, listed below; they do not fail the run.
 
 - Requirements: 134 (from docs/04 and docs/07, quotes checked verbatim)
-- Conformance tests: 173; 159 conform, 14 reproduce a disagreement
+- Conformance tests: 174; 160 conform, 14 reproduce a disagreement
 - Catalogue: 87 rows mapped; matches hardware-and-silicon/results/report.json (75/75 attacks blocked, 12/12 baselines allowed, passed=True)
-- Catalogue rows + conformance tests: 260 (target 150)
-- Mutation sample: 30/30 one-line mutants caught by assertion, over 30 requirements
+- Catalogue rows + conformance tests: 261 (target 150)
+- Mutation sample: 32/32 one-line mutants caught by assertion, over 30 requirements
 - Mailbox differential: 4000 random frames, classes {'agree': 3690, 'CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO': 3, 'CONFORMANCE-RUN-STATE-CHECK-ORDER': 253, 'CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST': 54}
 - Capability table differential: {'lookups': 1280, 'allowed': 269, 'inserts': 99}
 
@@ -15,19 +15,19 @@
 | Finding | Reproducer | What the RTL or model did |
 |---|---|---|
 | CONFORMANCE-CLEAR-REPORTS-ONE-REASON | `test_model_finding_clear_collapses_reasons` | assert: clear.unauthorized (tests_differential.py:441) |
-| CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD | `test_finding_core_reports_test_lifecycle_before_fuse_load` | assert: LIFECYCLE reads 0 and debug_grant is 0 (tests_findings.py:136) |
-| CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | `test_finding_cap_reprogramming_a_key_replaces_it` | assert: a 500-byte lookup passed after the capability was reprogrammed to 10 bytes (tests_findings.py:321) |
-| CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | `test_finding_cap_rederived_after_epoch_switch_is_usable` | assert: re-derived capability refused (reason 3): the stale entry shadows it (tests_findings.py:549) |
+| CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD | `test_finding_core_reports_test_lifecycle_before_fuse_load` | assert: LIFECYCLE reads 0 and debug_grant is 0 (tests_findings.py:142) |
+| CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | `test_finding_cap_reprogramming_a_key_replaces_it` | assert: a 500-byte lookup passed after the capability was reprogrammed to 10 bytes (tests_findings.py:328) |
+| CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES | `test_finding_cap_rederived_after_epoch_switch_is_usable` | assert: re-derived capability refused (reason 3): the stale entry shadows it (tests_findings.py:556) |
 | CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO | `test_diff_finding_first_sequence_number_zero` | assert: HALT seq=0 (last 0) [replayed/low seq]: RTL status 4 (bad sequence), model ok (tests_differential.py:274) |
-| CONFORMANCE-FRAME-NOT-LATCHED | `test_finding_mailbox_sequence_never_moves_backwards` | assert: last accepted sequence moved back to 3 (tests_findings.py:452) |
+| CONFORMANCE-FRAME-NOT-LATCHED | `test_finding_mailbox_sequence_never_moves_backwards` | assert: last accepted sequence moved back to 3 (tests_findings.py:459) |
 | CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST | `test_diff_finding_replayed_forged_heartbeat` | assert: HEARTBEAT seq=4 (last 4) [replayed/low seq, bad signature]: RTL status 4 (bad sequence), model heartbeat.bad_signature (tests_differential.py:274) |
 | CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST | `test_diff_finding_heartbeat_signed_as_something_else` | assert: HEARTBEAT seq=1 (last 0) [signed for another command]: RTL status 7 (wrong command), model heartbeat.bad_signature (tests_differential.py:274) |
-| CONFORMANCE-MILLISECOND-TICK-TOO-LONG | `test_finding_heartbeat_expires_on_time` | assert: heartbeat still live after 2,001 us; HB_REMAIN = 1 (tests_findings.py:263) |
+| CONFORMANCE-MILLISECOND-TICK-TOO-LONG | `test_finding_heartbeat_expires_on_time` | assert: heartbeat still live after 2,001 us; HB_REMAIN = 1 (tests_findings.py:270) |
 | CONFORMANCE-RUN-STATE-CHECK-ORDER | `test_diff_finding_replayed_request_while_not_running` | assert: REQUEST seq=2 (last 2) [replayed/low seq, not running]: RTL status 4 (bad sequence), model mailbox.governor_not_running (tests_differential.py:274) |
 | CONFORMANCE-RUN-STATE-CHECK-ORDER | `test_diff_finding_stale_request_while_not_running` | assert: REQUEST seq=1 (last 0) [stale epoch, not running]: RTL status 5 (bad epoch), model mailbox.governor_not_running (tests_differential.py:274) |
-| CONFORMANCE-STATUS-TABLE-MISSING-ROW | `test_finding_spec_status_table_lists_status_7` | assert: register map row: / 0x104 / `MBOX_STATUS` / RO / 8 / 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused / (tests_findings.py:462) |
-| CONFORMANCE-SWITCH-OPEN-RUN-ONLY | `test_finding_loop_lost_in_halt_sets_switch_open` | assert: loop_lost in HALT did not set switch_open (tests_findings.py:243) |
-| CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES | `test_finding_cap_refuses_at_zero_budget` | assert: zero budget, zero-byte lookup allowed (reason 0) (tests_findings.py:301) |
+| CONFORMANCE-STATUS-TABLE-MISSING-ROW | `test_finding_spec_status_table_lists_status_7` | assert: register map row: / 0x104 / `MBOX_STATUS` / RO / 8 / 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused / (tests_findings.py:469) |
+| CONFORMANCE-SWITCH-OPEN-RUN-ONLY | `test_finding_loop_lost_in_halt_sets_switch_open` | assert: loop_lost in HALT did not set switch_open (tests_findings.py:250) |
+| CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES | `test_finding_cap_refuses_at_zero_budget` | assert: zero budget, zero-byte lookup allowed (reason 0) (tests_findings.py:308) |
 
 First example of each mailbox disagreement class in the random run:
 
@@ -72,7 +72,7 @@ First example of each mailbox disagreement class in the random run:
 | REQUIREMENT-HEARTBEAT-REMAINING-REGISTER | RTL | top (HB_REMAIN) | 1 | 0 | DISAGREES CONFORMANCE-MILLISECOND-TICK-TOO-LONG |
 | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | RTL | top | 2 | 0 | DISAGREES CONFORMANCE-MILLISECOND-TICK-TOO-LONG |
 | REQUIREMENT-HEARTBEAT-WINDOW-CLAMPED | FW | heartbeat (window input) | 1 | 0 | conforms |
-| REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | RTL | halt | 11 | 0 | conforms |
+| REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | RTL | halt | 12 | 0 | conforms |
 | REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED | RTL | halt | 6 | 0 | conforms |
 | REQUIREMENT-LEVERS-FOLLOW-RUNG | RTL | halt | 4 | 0 | conforms |
 | REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED | RTL | halt | 5 | 0 | conforms |
@@ -192,24 +192,26 @@ First example of each mailbox disagreement class in the random run:
 | 12 | REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED | ticket_store.py | `m.d.comb += self.seen.eq(match)` to `m.d.comb += self.seen.eq(0)` | `test_ticket_seen_after_burn` | caught by assertion |
 | 13 | REQUIREMENT-HEARTBEAT-EXPIRES-ON-TIME | heartbeat.py | `m.d.sync += self.remaining.eq(self.remaining - 1)` to `m.d.sync += self.remaining.eq(self.remaining - 0)` | `test_hb_expires_on_the_window_th_tick` | caught by assertion |
 | 14 | REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID | heartbeat.py | `with m.If(self.hb_valid):` to `with m.If(self.hb_valid \| (self.window != 0)):` | `test_hb_reload_only_on_valid` | caught by assertion |
-| 15 | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | halt.py | `with m.Elif((self.hb_expired \| self.local_trip \| self.cmd_throttle) & (self.state == RUN)):` to `with m.Elif((self.hb_expired \| self.cmd_throttle) & (self.state == RUN)):` | `test_halt_local_trip_throttles` | caught by assertion |
-| 16 | REQUIREMENT-LEVERS-FOLLOW-RUNG | halt.py | `self.perst.eq((self.state == HALTED_INITIAL) \| (self.state == HALT) \| (self.state == SAFE)),` to `self.perst.eq((self.state == HALTED_INITIAL) \| (self.state == HALT)),` | `test_halt_levers_follow_every_rung` | caught by assertion |
-| 17 | REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED | halt.py | `with m.Elif((self.state == HALTED_INITIAL) & (self.cause == C_NONE) & self.hb_ok):` to `with m.Elif((self.state == HALTED_INITIAL) & (self.cause == C_NONE)):` | `test_halt_no_arming_without_heartbeat` | caught by assertion |
-| 18 | REQUIREMENT-CLEAR-KEEPS-SWITCH-OPEN | halt.py | `m.d.sync += [self.state.eq(HALTED_INITIAL), self.cause.eq(C_NONE), self.timer.eq(0)]` to `m.d.sync += [self.state.eq(HALTED_INITIAL), self.cause.eq(C_NONE), self.timer.eq(0), self.switch_open.eq(0)]` | `test_halt_clear_does_not_close_the_switch_until_armed` | caught by assertion |
-| 19 | REQUIREMENT-CORE-BOOTS-HALTED-SAFE | halt.py | `self.switch_open = Signal(init=1)` to `self.switch_open = Signal(init=0)` | `test_core_boot_state_levers_and_switch` | caught by assertion |
-| 20 | REQUIREMENT-LOOP-LOSS-DEBOUNCE | halt_loop.py | `self.loop_lost.eq(self.count >= self.debounce)` to `self.loop_lost.eq(self.count >= 1)` | `test_loop_one_noisy_sample_is_not_a_loss` | caught by assertion |
-| 21 | REQUIREMENT-METER-HOST-WRITE-REFUSED | meter.py | `self.host_wr_refused.eq(self.host_wr)]` to `self.host_wr_refused.eq(0)]` | `test_meter_host_write_refused_and_flagged` | caught by assertion |
-| 22 | REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | mailbox.py | `m.d.comb += seq_ok.eq(self.frame_seq > self.last_seq[self.key_slot])` to `m.d.comb += seq_ok.eq(self.frame_seq >= self.last_seq[self.key_slot])` | `test_mbox_good_frame_dispatches_once` | caught by assertion |
-| 23 | REQUIREMENT-FRAME-EPOCH-MUST-MATCH | mailbox.py | `with m.Elif(~(self.epoch_match \| self.epoch_exempt)):` to `with m.Elif(~self.epoch_match):` | `test_mbox_stale_epoch_refused_unless_exempt` | caught by assertion |
-| 24 | REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND | mailbox.py | `with m.If(self.sig_ok & (self.signed_cmd == self.cmd)):` to `with m.If(self.sig_ok):` | `test_mbox_signed_for_another_command_is_status_7` | caught by assertion |
-| 25 | REQUIREMENT-SEQUENCE-REGISTER-PER-KEY | top.py | `self.csr_rdata.eq(self.mbox.last_seq[0])` to `self.csr_rdata.eq(self.mbox.last_seq[1])` | `test_core_mbox_status_and_seq_csrs` | caught by assertion |
-| 26 | REQUIREMENT-MAILBOX-STATUS-CODES | mailbox.py | `with m.Elif(self.needs_run & ~self.running):` to `with m.Elif(0):` | `test_mbox_refused_when_not_running` | caught by assertion |
-| 27 | REQUIREMENT-ALARM-CLEAR-NEEDS-AUTHORIZATION | alarms.py | `m.d.comb += cleared.eq(self.alarms & ~(self.clear_mask & self.clear_authorized.replicate(len(self.alarms))))` to `m.d.comb += cleared.eq(self.alarms & ~self.clear_mask)` | `test_alarm_clear_needs_authorization` | caught by assertion |
-| 28 | REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG | halt.py | `            m.d.sync += self.switch_open.eq(1)
+| 15 | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | halt.py | `with m.Elif((self.local_trip \| self.cmd_throttle) & (self.state == RUN)):` to `with m.Elif(self.cmd_throttle & (self.state == RUN)):` | `test_halt_local_trip_throttles` | caught by assertion |
+| 16 | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | halt.py | `m.d.sync += [self.state.eq(HALT), self.cause.eq(C_LOCAL), self.timer.eq(0)]` to `m.d.sync += [self.state.eq(THROTTLE), self.cause.eq(C_LOCAL), self.timer.eq(0)]` | `test_halt_hb_expired_halts` | caught by assertion |
+| 17 | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | halt.py | `with m.Elif(self.hb_expired & in_run):` to `with m.Elif(self.hb_expired & (self.state == RUN)):` | `test_halt_hb_expired_from_throttle_halts` | caught by assertion |
+| 18 | REQUIREMENT-LEVERS-FOLLOW-RUNG | halt.py | `self.perst.eq((self.state == HALTED_INITIAL) \| (self.state == HALT) \| (self.state == SAFE)),` to `self.perst.eq((self.state == HALTED_INITIAL) \| (self.state == HALT)),` | `test_halt_levers_follow_every_rung` | caught by assertion |
+| 19 | REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED | halt.py | `with m.Elif((self.state == HALTED_INITIAL) & (self.cause == C_NONE) & self.hb_ok):` to `with m.Elif((self.state == HALTED_INITIAL) & (self.cause == C_NONE)):` | `test_halt_no_arming_without_heartbeat` | caught by assertion |
+| 20 | REQUIREMENT-CLEAR-KEEPS-SWITCH-OPEN | halt.py | `m.d.sync += [self.state.eq(HALTED_INITIAL), self.cause.eq(C_NONE), self.timer.eq(0)]` to `m.d.sync += [self.state.eq(HALTED_INITIAL), self.cause.eq(C_NONE), self.timer.eq(0), self.switch_open.eq(0)]` | `test_halt_clear_does_not_close_the_switch_until_armed` | caught by assertion |
+| 21 | REQUIREMENT-CORE-BOOTS-HALTED-SAFE | halt.py | `self.switch_open = Signal(init=1)` to `self.switch_open = Signal(init=0)` | `test_core_boot_state_levers_and_switch` | caught by assertion |
+| 22 | REQUIREMENT-LOOP-LOSS-DEBOUNCE | halt_loop.py | `self.loop_lost.eq(self.count >= self.debounce)` to `self.loop_lost.eq(self.count >= 1)` | `test_loop_one_noisy_sample_is_not_a_loss` | caught by assertion |
+| 23 | REQUIREMENT-METER-HOST-WRITE-REFUSED | meter.py | `self.host_wr_refused.eq(self.host_wr)]` to `self.host_wr_refused.eq(0)]` | `test_meter_host_write_refused_and_flagged` | caught by assertion |
+| 24 | REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | mailbox.py | `m.d.comb += seq_ok.eq(self.frame_seq > self.last_seq[self.key_slot])` to `m.d.comb += seq_ok.eq(self.frame_seq >= self.last_seq[self.key_slot])` | `test_mbox_good_frame_dispatches_once` | caught by assertion |
+| 25 | REQUIREMENT-FRAME-EPOCH-MUST-MATCH | mailbox.py | `with m.Elif(~(self.epoch_match \| self.epoch_exempt)):` to `with m.Elif(~self.epoch_match):` | `test_mbox_stale_epoch_refused_unless_exempt` | caught by assertion |
+| 26 | REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND | mailbox.py | `with m.If(self.sig_ok & (self.signed_cmd == self.cmd)):` to `with m.If(self.sig_ok):` | `test_mbox_signed_for_another_command_is_status_7` | caught by assertion |
+| 27 | REQUIREMENT-SEQUENCE-REGISTER-PER-KEY | top.py | `self.csr_rdata.eq(self.mbox.last_seq[0][:32])` to `self.csr_rdata.eq(self.mbox.last_seq[1][:32])` | `test_core_mbox_status_and_seq_csrs` | caught by assertion |
+| 28 | REQUIREMENT-MAILBOX-STATUS-CODES | mailbox.py | `with m.Elif(self.needs_run & ~self.running):` to `with m.Elif(0):` | `test_mbox_refused_when_not_running` | caught by assertion |
+| 29 | REQUIREMENT-ALARM-CLEAR-NEEDS-AUTHORIZATION | alarms.py | `m.d.comb += cleared.eq(self.alarms & ~(self.clear_mask & self.clear_authorized.replicate(len(self.alarms))))` to `m.d.comb += cleared.eq(self.alarms & ~self.clear_mask)` | `test_alarm_clear_needs_authorization` | caught by assertion |
+| 30 | REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG | halt.py | `            m.d.sync += self.switch_open.eq(1)
         with m.Elif(self.cmd_halt):` to `            pass
         with m.Elif(self.cmd_halt):` | `test_calls_halt_opens_loop_from_every_rung` | caught by assertion |
-| 29 | REQUIREMENT-EXCLUDE-ONLY-WHILE-WAITING | halt.py | `with m.Elif(self.cmd_exclude & (self.state == HALTED_INITIAL) & (self.cause == C_NONE)):` to `with m.Elif(self.cmd_exclude):` | `test_calls_exclude_does_nothing_outside_waiting_for_first_heartbeat` | caught by assertion |
-| 30 | REQUIREMENT-HARDWARE-ALARMS-SEQUENCER-ONLY | top.py | `HW_ALARMS = (1 << ALARM_NO_FIRST_HEARTBEAT) \| (1 << ALARM_EXCLUDED)` to `HW_ALARMS = (1 << ALARM_EXCLUDED)` | `test_calls_firmware_cannot_raise_the_hardware_alarm_bits` | caught by assertion |
+| 31 | REQUIREMENT-EXCLUDE-ONLY-WHILE-WAITING | halt.py | `with m.Elif(self.cmd_exclude & (self.state == HALTED_INITIAL) & (self.cause == C_NONE)):` to `with m.Elif(self.cmd_exclude):` | `test_calls_exclude_does_nothing_outside_waiting_for_first_heartbeat` | caught by assertion |
+| 32 | REQUIREMENT-HARDWARE-ALARMS-SEQUENCER-ONLY | top.py | `HW_ALARMS = (1 << ALARM_NO_FIRST_HEARTBEAT) \| (1 << ALARM_EXCLUDED)` to `HW_ALARMS = (1 << ALARM_EXCLUDED)` | `test_calls_firmware_cannot_raise_the_hardware_alarm_bits` | caught by assertion |
 
 ## Every test
 
@@ -262,10 +264,11 @@ First example of each mailbox disagreement class in the random run:
 | `test_hb_reload_only_on_valid` | REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID | pass | 0.0 |
 | `test_hb_valid_wins_over_tick` | REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID | pass | 0.0 |
 | `test_core_hb_remain_csr` | REQUIREMENT-HEARTBEAT-REMAINING-REGISTER | pass | 0.0 |
-| `test_core_timers_ignore_the_raw_microsecond_tick` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | pass | 0.1 |
+| `test_core_timers_ignore_the_raw_microsecond_tick` | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | pass | 0.0 |
 | `test_halt_loop_lost_from_run` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | pass | 0.0 |
 | `test_halt_loop_lost_from_throttle` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | pass | 0.0 |
-| `test_halt_hb_expired_throttles` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | pass | 0.0 |
+| `test_halt_hb_expired_halts` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | pass | 0.0 |
+| `test_halt_hb_expired_from_throttle_halts` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | pass | 0.0 |
 | `test_halt_local_trip_throttles` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | pass | 0.0 |
 | `test_halt_cmd_throttle_throttles` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | pass | 0.0 |
 | `test_halt_cmd_halt_from_run` | REQUIREMENT-RUNG-CLIMBS-ON-CAUSES, REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE | pass | 0.0 |
@@ -326,7 +329,7 @@ First example of each mailbox disagreement class in the random run:
 | `test_meter_frozen_slot_stays_put_without_strobes` | REQUIREMENT-METER-SLOT-FREEZE, REQUIREMENT-METER-ONLY-INCREMENTS | pass | 0.0 |
 | `test_core_epoch_switch_kills_every_old_capability` | REQUIREMENT-SWITCH-RECONFIGURED-AFTER-EVENTS, REQUIREMENT-EPOCH-TAG-LOW-BITS, REQUIREMENT-RACK-WIDE-EPOCH-SWITCH | pass | 0.0 |
 | `test_mbox_self_authenticating_command_rides_on_the_firmware_verdict` | REQUIREMENT-SELF-AUTHENTICATING-COMMANDS, REQUIREMENT-FRAME-EPOCH-MUST-MATCH | pass | 0.0 |
-| `test_diff_mailbox_random_frames_only_known_disagreements` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED, REQUIREMENT-FRAME-EPOCH-MUST-MATCH, REQUIREMENT-FRAME-SIGNATURE-CHECKED, REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND, REQUIREMENT-MAILBOX-STATUS-CODES, REQUIREMENT-WRONG-COMMAND-STATUS | pass | 0.7 |
+| `test_diff_mailbox_random_frames_only_known_disagreements` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED, REQUIREMENT-FRAME-EPOCH-MUST-MATCH, REQUIREMENT-FRAME-SIGNATURE-CHECKED, REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND, REQUIREMENT-MAILBOX-STATUS-CODES, REQUIREMENT-WRONG-COMMAND-STATUS | pass | 0.6 |
 | `test_diff_spec_good_halt` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-DISPATCH-AFTER-ALL-CHECKS | pass | 0.0 |
 | `test_diff_spec_replayed_halt` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED | pass | 0.0 |
 | `test_diff_spec_halt_with_stale_epoch_is_exempt` | REQUIREMENT-FIRST-FAILURE-IS-REASON, REQUIREMENT-FRAME-EPOCH-MUST-MATCH, REQUIREMENT-EPOCH-EXEMPT-COMMANDS | pass | 0.0 |
