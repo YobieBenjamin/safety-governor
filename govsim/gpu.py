@@ -15,11 +15,23 @@ from __future__ import annotations
 from .crypto import SigningKey, digest
 
 EXITS = {
-    # name: (governed at rack tier?, checked only at integrated tier?)
+    # Every path by which bytes can leave the GPU, and who governs it (GOAL.md requirement 4, "See every action").
+    #   True     a governor-programmed switch sits on this exit at the rack tier
+    #   False    inside the GPU: governed by a descriptor checker at the integrated tier only
+    #   None     bricked by policy: nothing passes
+    #   "host"   a host-side exit (adversarial audit 3, 2026-10-26). On GB200 the Grace CPU reaches GPU memory over
+    #            NVLink-C2C, and the host's NICs and the BMC's NIC can reach whatever the host holds (GPUDirect RDMA
+    #            reads GPU memory straight into a NIC). None of these has a switch of its own, so all of them are
+    #            metered against the ONE host allowance on the pcie point (output budget plus a small slack), and
+    #            output is sealed to the egress endpoint before it leaves the GPU, so the host only ever holds
+    #            ciphertext. In silicon this needs a C2C governance point and a confidential-computing session that
+    #            ends at the egress endpoint: a dependency on NVIDIA (docs/research/host-side-exits.md).
     "nvswitch": True, "pcie": True, "dpu": True, "storage": True,
-    "copy_engine": False, "peer_mmu": False,       # inside the GPU: integrated tier only
-    "display": None, "jtag": None, "debug": None,  # bricked by policy
+    "copy_engine": False, "peer_mmu": False,
+    "display": None, "jtag": None, "debug": None,
+    "nvlink_c2c": "host", "host_nic": "host", "bmc_nic": "host",
 }
+HOST_SIDE_EXITS = tuple(name for name, how in EXITS.items() if how == "host")
 
 
 class GPU:
@@ -100,6 +112,16 @@ class GPU:
         if self.levers_available.get("pwr_en"):
             self.pwr_en = on
             self._apply()
+
+    def sense_brake(self) -> bool:
+        """The GPU's own report, over the governor's private sideband (SMBPBI), of whether its hardware power brake
+        is engaged. It follows the PWRBRK# net only if that net actually reaches the GPU."""
+        return bool(self.pwrbrk)
+
+    def sense_lever_net(self, lever: str) -> bool:
+        """Continuity of one lever net from the governor to the GPU connector, read on the board's loopback sense
+        line (a requirement on the board: docs/research/lever-loopback-sense.md). False when the trace is cut."""
+        return bool(self.levers_available.get(lever))
 
     def keepalive(self) -> None:
         """The governor's keep-alive to the board interlock. Only a live governor sends it."""
@@ -272,6 +294,12 @@ class GPU:
             if exit_name in self.open_paths:
                 return True, reasons.EP_UNCHECKED
             return False, reasons.EP_BRICKED
+        if exit_name in HOST_SIDE_EXITS:
+            # Host-side exits share the host allowance on the pcie point; a board that cannot seal output to the
+            # egress endpoint has no safe host-side exit at all, so nothing leaves that way.
+            if direction == "out" and self.output_seal_key is None:
+                return False, reasons.EP_OUTPUT_NOT_SEALED
+            exit_name, peer = "pcie", "host"
         if exit_name == "nvswitch" and self.direct_nvlink:
             self.gap_log.append({"exit": exit_name, "peer": peer, "bytes": nbytes, "why": "direct NVLink, no switch"})
             return True, reasons.EP_UNCHECKED

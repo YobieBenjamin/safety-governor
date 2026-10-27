@@ -32,7 +32,8 @@ it is the list the assumptions register and the human layers exist for.
 | Forged, altered, expired, replayed ticket | Signature under the governor's DICE key; params digest; expiry; durable used-ticket set | CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION |
 | Broker chooses its own lane ("this is reversible") | The rulebook selects the rule from fingerprint, action and limited fields only | CONTRACT-BROKER-CANNOT-PICK-RULE |
 | Modified GPU firmware, swapped model, changed policy, with permissions carried over | Fingerprint covers all three; permissions keyed on the fingerprint | CONTRACT-ATTESTATION-BINDS-PERMISSIONS |
-| Policy loosened by one operator | k-of-n signatures checked by the governor itself | CONTRACT-POLICY-QUORUM-NO-ROLLBACK |
+| Policy loosened by one operator | k-of-n signatures checked by the governor itself, on the rulebook and, since adversarial audit 3, on every signed list a rule depends on (beneficiaries, protected sites, recipients) | CONTRACT-POLICY-QUORUM-NO-ROLLBACK, tests/test_adversarial_audit_3.py |
+| Policy loosened or captured by a full quorum (stolen or coerced) | A fused rule floor no edition can remove; a fused delay before a loosening edition acts (set in production fuses); a version step bound; a fused recovery quorum that can always take a chip back | tests/test_adversarial_audit_3.py |
 | Policy rollback to an older, looser image | Anti-rollback counter in fuses tracks the policy version | CONTRACT-POLICY-QUORUM-NO-ROLLBACK |
 | Alarm cleared by the model, the host or a lone operator | Alarms are sticky; clearing needs a rule or an approver key | CONTRACT-ALARMS-ARE-MONOTONE |
 | Everything above the comparator compromised | Comparator re-checks against its own sensors and lists | CONTRACT-COMPARATOR-SURVIVES-COMPROMISE |

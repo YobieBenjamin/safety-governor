@@ -14,7 +14,14 @@
 //   RTL-MAILBOX-DISPATCH-FULLY-CHECKED a dispatch carries a sequence number above the slot's last accepted one, a good epoch, and, for a run-only
 //      command, a governor that was running when the doorbell rang. It then records the sequence for that slot
 //      only, sets cmd_out to the command and status to ok (2).
-//   RTL-MAILBOX-SEQUENCE-NEVER-DOWN every key slot's last accepted sequence number never goes down and changes only on a dispatch for that slot.
+//   RTL-MAILBOX-SEQUENCE-NEVER-DOWN within an epoch, every key slot's last accepted sequence number never goes down and changes only on a
+//      dispatch for that slot (adversarial audit 3: "within an epoch"; before that there was no epoch reset).
+//   RTL-MAILBOX-SEQUENCE-EPOCH-RESET every key slot returns to exactly 0 in the cycle after epoch_advanced (the strobe the core drives when
+//      the epoch register commits a new epoch), and on nothing else; an epoch advance outranks a dispatch in the same
+//      cycle. Replay inside an epoch stays impossible: between two epoch advances RTL-MAILBOX-SEQUENCE-NEVER-DOWN holds, so every
+//      dispatch carries a sequence number above every one accepted before it in that epoch on that slot.
+//   RTL-MAILBOX-SEQUENCE-WIDE the sequence registers (and frame_seq) are 64 bits wide (adversarial audit 3: 32 bits could be ended by one
+//      frame at 2**32 - 1; 64 bits at a million commands a second last about 584,000 years).
 // Assumption RTL-MAILBOX-FRAME-HELD-STILL, an obligation on whoever drives this block: while the mailbox is in VERIFY, frame_seq, key_slot,
 // cmd, epoch_match, epoch_exempt and needs_run hold the values they had at the doorbell. The block does not latch
 // them; without RTL-MAILBOX-FRAME-HELD-STILL a frame can be checked with one sequence number and recorded with another (FINDINGS-a.md RTL-MAILBOX-FRAME-NOT-HELD,
@@ -22,19 +29,21 @@
 // allowed, and RTL-MAILBOX-DISPATCH-FULLY-CHECKED is stated about the doorbell cycle, which is what the RTL checks (RTL-MAILBOX-FRAME-NOT-HELD again).
 // Reset: only in the first cycle. A reset zeroes every sequence register, so a mid-run reset re-opens every old
 // sequence number (RTL-RESET-ZEROES-MAILBOX-SEQUENCES, reproduced by findings_a/mailbox_reset_replay.sv).
-// Widths are the real ones: 8 key slots of 32-bit sequence numbers, 8-bit commands. Nothing is parameterized down.
+// Widths are the real ones: 8 key slots of 64-bit sequence numbers, 8-bit commands. Nothing is parameterized down.
 // Strengthening invariants for k-induction: RTL-MAILBOX-VERIFY-SEQUENCE-ABOVE in VERIFY the frame's sequence is above the slot's last accepted;
 // RTL-MAILBOX-VERIFY-EPOCH-PASSED in VERIFY the epoch check passed; RTL-MAILBOX-VERIFY-SAW-RUNNING in VERIFY a run-only command saw `running` at the doorbell (shadow
 // f_runok); RTL-MAILBOX-VERIFY-STATUS-BUSY in VERIFY the status is busy.
   reg f_init = 1;
   always @(posedge clk) f_init <= 0;
-  wire [255:0] f_seq = {seq7, seq6, seq5, seq4, seq3, seq2, seq1, seq0};
-  wire [31:0] f_cur = f_seq[32*key_slot +: 32];
+  wire [511:0] f_seq = {seq7, seq6, seq5, seq4, seq3, seq2, seq1, seq0};
+  wire [63:0] f_cur = f_seq[64*key_slot +: 64];
   reg f_runok = 0;
   always @(posedge clk) if (!fsm_state && doorbell) f_runok <= running;
   always @(*) begin
     assume(rst == f_init);
     if (!f_init) begin
+      // RTL-MAILBOX-SEQUENCE-WIDE
+      assert($bits(seq0) == 64 && $bits(seq7) == 64 && $bits(frame_seq) == 64);
       assert(verify_req == fsm_state);
       // RTL-MAILBOX-COMMAND-TYPE-BINDING
       assert(dispatch == (fsm_state && sig_done && sig_ok && signed_cmd == cmd));
@@ -45,18 +54,23 @@
   end
   // RTL-MAILBOX-FRAME-HELD-STILL, written combinationally over last cycle's values: yosys registers a check inside always @(posedge clk), so
   // an assume written there constrains the cycle before, and the newest cycle of a trace would go unconstrained
-  reg [31:0] q_seq; reg [2:0] q_slot; reg [7:0] q_cmd; reg q_em, q_ex, q_nr;
+  reg [63:0] q_seq; reg [2:0] q_slot; reg [7:0] q_cmd; reg q_em, q_ex, q_nr;
   always @(posedge clk) begin q_seq <= frame_seq; q_slot <= key_slot; q_cmd <= cmd; q_em <= epoch_match; q_ex <= epoch_exempt; q_nr <= needs_run; end
   always @(*) if (!f_init && fsm_state)
     assume(frame_seq == q_seq && key_slot == q_slot && cmd == q_cmd && epoch_match == q_em && epoch_exempt == q_ex && needs_run == q_nr);
-  integer f_i; reg [255:0] p_seq;
+  integer f_i; reg [511:0] p_seq;
   always @(posedge clk) p_seq <= f_seq;
   always @(posedge clk) if (!f_init && !$past(f_init)) begin
-    // RTL-MAILBOX-SEQUENCE-NEVER-DOWN
     for (f_i = 0; f_i < 8; f_i = f_i + 1) begin
-      assert(f_seq[32*f_i +: 32] >= p_seq[32*f_i +: 32]);
-      if (!($past(dispatch) && $past(key_slot) == f_i)) assert(f_seq[32*f_i +: 32] == p_seq[32*f_i +: 32]);
-      else assert(f_seq[32*f_i +: 32] == $past(frame_seq));
+      if ($past(epoch_advanced)) begin
+        // RTL-MAILBOX-SEQUENCE-EPOCH-RESET
+        assert(f_seq[64*f_i +: 64] == 64'd0);
+      end else begin
+        // RTL-MAILBOX-SEQUENCE-NEVER-DOWN (within the epoch)
+        assert(f_seq[64*f_i +: 64] >= p_seq[64*f_i +: 64]);
+        if (!($past(dispatch) && $past(key_slot) == f_i)) assert(f_seq[64*f_i +: 64] == p_seq[64*f_i +: 64]);
+        else assert(f_seq[64*f_i +: 64] == $past(frame_seq));
+      end
     end
     if (!$past(dispatch)) assert(cmd_out == $past(cmd_out));
     if (!$past(fsm_state)) begin

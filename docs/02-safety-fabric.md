@@ -32,8 +32,9 @@ senses loop current.
 
 - Any governor opens its switch on a loop-opening cause: a signed HALT from the authority, a
   detected tamper, or loss of loop current itself (`01-architecture.md`, safe-mode machine).
-  Local causes (a lost heartbeat, a stale epoch, an exhausted output budget) throttle and
-  halt that governor's own slot without opening the loop.
+  Local causes (a lost heartbeat, a stale epoch, an exhausted output budget) stop that
+  governor's own slot without opening the loop: a lost heartbeat or a stale epoch at once to
+  HALT (brake and reset), an output budget by braking first (adversarial audit 3).
   A signed HALT opens the switch on every rung, SAFE included: a governor that already climbed
   to SAFE on a local cause opens its switch when the HALT arrives and stays in SAFE (decided
   by Yobie, 23 October 2026; pulling the fire alarm rings on every floor, even on a floor
@@ -151,7 +152,10 @@ epoch moves in two phases, and the heartbeat enforces the outcome:
    policy names for that cause.
 
 No governor is left running on the old rules; the ones the authority could not reach, or
-could not finish with, stop. Analogy: the new edition of the rulebook is handed out,
+could not finish with, stop. A straggler stops at the first heartbeat that carries the new
+epoch, not at its heartbeat expiry, and every endpoint receives the new edition from the
+authority directly, so the straggler's own endpoints refuse its old-epoch tickets at once
+(adversarial audit 3: a straggler used to keep minting and releasing until its timer ran out). Analogy: the new edition of the rulebook is handed out,
 everyone initials receipt, and the manager says "from now" to those who did. Anyone who did
 not initial, or initialled and then missed the word, is sent home, not left working from the
 old book.
@@ -197,7 +201,7 @@ the neighbors' log books into its own.
 | One governor loses power | opens | silent | Domain halts; CLEAR after the cause is understood |
 | Fabric link cut, loop intact | closed | partitioned | Segment without the authority halts at heartbeat expiry; segment with the authority continues; roster rebuilt |
 | Loop cut, fabric intact | open | up | Domain halts at once; `HALT_CAUSE` says "loop break at governor N" |
-| Authority key unreachable | stays closed | up, no heartbeats | Every governor throttles at expiry and climbs its own rungs on the policy timers (availability cost, by design); the loop is for the rack-wide stop, not for this |
+| Authority key unreachable | stays closed | up, no heartbeats | Every governor of that data center halts its own GPU at expiry and climbs its own rungs on the policy timers (availability cost, by design); the loop is for the rack-wide stop, not for this. Heartbeat signers belong to one data center (the edition's `site`), so their silence stops that site and no other (adversarial audit 3) |
 | Rogue device plugged into the fabric | closed | sees traffic | Cannot produce a valid quote; never on a roster; its messages are dropped; its presence is logged |
 | Replay of an old heartbeat | closed | up | Sequence number and window fail; dropped; logged |
 

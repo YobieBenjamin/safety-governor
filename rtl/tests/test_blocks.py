@@ -275,9 +275,11 @@ def test_halt_sequencer_rungs_and_clear():
         await ctx.tick()
         assert ctx.get(dut.state) == RUN and levers(ctx, dut) == (0, 0, 1) and ctx.get(dut.ports_closed) == 0
         assert ctx.get(dut.switch_open) == 0
-        ctx.set(dut.hb_expired, 1)
+        # a local trip throttles (a lost heartbeat now goes straight to HALT: adversarial audit 3, see
+        # rtl/tests/test_adversarial_audit_3_rtl.py)
+        ctx.set(dut.local_trip, 1)
         await ctx.tick()
-        ctx.set(dut.hb_expired, 0)
+        ctx.set(dut.local_trip, 0)
         assert ctx.get(dut.state) == THROTTLE and levers(ctx, dut) == (1, 0, 1) and ctx.get(dut.switch_open) == 0
         assert ctx.get(dut.cause) == C_LOCAL
         ctx.set(dut.tick, 1)
@@ -291,8 +293,10 @@ def test_halt_sequencer_rungs_and_clear():
         await ctx.tick()
         assert ctx.get(dut.state) == SAFE                     # no way up without clear
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)                      # an authorized clear (adversarial audit 3)
         await ctx.tick()
         ctx.set(dut.clear, 0)
+        ctx.set(dut.clear_authorized, 0)
         assert ctx.get(dut.state) == HALTED_INITIAL and ctx.get(dut.cause) == 0 and levers(ctx, dut) == (1, 1, 0)
         await ctx.tick()
         assert ctx.get(dut.state) == RUN
@@ -578,18 +582,15 @@ def test_governor_core_timers_run_on_the_millisecond_tick():
         for _ in range(1024):
             await ctx.tick()
         await ctx.tick()
-        assert ctx.get(dut.hb.expired) == 1 and ctx.get(dut.halt.state) == THROTTLE
-        for _ in range(2 * 1024):                                 # T_throttle = 2 ms
-            await ctx.tick()
-        await ctx.tick()
-        assert ctx.get(dut.halt.state) == HALT
+        # a lost heartbeat is HALT at once (adversarial audit 3; it used to be THROTTLE, the brake alone)
+        assert ctx.get(dut.hb.expired) == 1 and ctx.get(dut.halt.state) == HALT
         for _ in range(3 * 1024):                                 # T_halt = 3 ms
             await ctx.tick()
         await ctx.tick()
         assert ctx.get(dut.halt.state) == SAFE
         ctx.set(dut.tick, 0)
         ctx.set(dut.csr_addr, 0x070)
-        assert ctx.get(dut.csr_rdata) == 7 * 1024 + 3             # MONO_LO counts every microsecond tick
+        assert ctx.get(dut.csr_rdata) == 5 * 1024 + 2             # MONO_LO counts every microsecond tick
 
     run(dut, tb)
 

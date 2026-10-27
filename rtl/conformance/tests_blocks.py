@@ -14,7 +14,7 @@ from amaranth import Signal
 from amaranth.hdl import ResetInserter
 
 from rtl.governor_rtl.cap_table import R_BUDGET, R_EXPIRED, R_NO_CAP, R_OK, R_STALE_EPOCH
-from rtl.governor_rtl.halt import (C_COMMAND, C_LOCAL, C_LOOP, C_NONE, C_TAMPER, HALT, HALTED_INITIAL, RUN, SAFE,
+from rtl.governor_rtl.halt import (C_COMMAND, C_LOCAL, C_LOOP, C_NONE, C_PERSIST, C_TAMPER, HALT, HALTED_INITIAL, RUN, SAFE,
                                    THROTTLE)
 from rtl.governor_rtl.lifecycle import DECOMMISSIONED, PRODUCTION, PROVISIONED, TEST
 from rtl.governor_rtl.mailbox import S_BAD_EPOCH, S_BAD_SEQ, S_BAD_SIG, S_BUSY, S_IDLE, S_OK, S_REFUSED, S_WRONG_CMD
@@ -846,9 +846,16 @@ def test_halt_loop_lost_from_throttle():
 
 
 @conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES")
-def test_halt_hb_expired_throttles():
-    """hb_expired in RUN: THROTTLE, cause local, loop stays closed."""
-    _cause_test("hb_expired", RUN, THROTTLE, C_LOCAL, 0)
+def test_halt_hb_expired_halts():
+    """hb_expired in RUN: HALT (brake and reset), cause local, loop stays closed. Adversarial audit 3: it used to be
+    THROTTLE, the brake alone, but a braked GPU still computes at half clock (govsim policy: HEARTBEAT_LOST is HALT)."""
+    _cause_test("hb_expired", RUN, HALT, C_LOCAL, 0)
+
+
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES")
+def test_halt_hb_expired_from_throttle_halts():
+    """hb_expired in THROTTLE: HALT at once (not after T_throttle), cause local, loop stays closed (adversarial audit 3)."""
+    _cause_test("hb_expired", THROTTLE, HALT, C_LOCAL, 0)
 
 
 @conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES")
@@ -1079,8 +1086,10 @@ def test_halt_clear_does_not_close_the_switch_until_armed():
         ctx.set(dut.loop_lost, 0)
         ctx.set(dut.hb_ok, 0)
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)                  # an authorized clear: a verified CLEAR frame dispatching
         await ctx.tick()
         ctx.set(dut.clear, 0)
+        ctx.set(dut.clear_authorized, 0)
         assert (ctx.get(dut.state), ctx.get(dut.cause), ctx.get(dut.switch_open)) == (HALTED_INITIAL, C_NONE, 1)
         await ctx.tick()
         assert ctx.get(dut.switch_open) == 1
@@ -1095,6 +1104,7 @@ def test_halt_clear_in_boot_rung_is_a_no_op():
     """A clear while already in HALTED_INITIAL changes nothing."""
     async def body(ctx, dut):
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)
         await ctx.tick()
         assert (ctx.get(dut.state), ctx.get(dut.cause), ctx.get(dut.switch_open)) == (HALTED_INITIAL, C_NONE, 1)
     _halt(body)
@@ -1102,8 +1112,10 @@ def test_halt_clear_in_boot_rung_is_a_no_op():
 
 @conformance("REQUIREMENT-CAUSE-BITS-NAME-SUMMARY")
 def test_halt_cause_codes_match_the_spec():
-    """The cause encoding is 0 none, 1 loop, 2 local, 3 tamper, 4 command."""
+    """The cause encoding is 0 none, 1 loop, 2 local, 3 tamper, 4 command, and (adversarial audit 3) 5 for a rung
+    restored from the non-volatile record after a reset."""
     assert (C_NONE, C_LOOP, C_LOCAL, C_TAMPER, C_COMMAND) == (0, 1, 2, 3, 4)
+    assert C_PERSIST == 5
     assert len(B.HaltSeq().cause) == 3
 
 
@@ -1551,6 +1563,8 @@ def test_core_mbox_status_and_seq_csrs():
         assert ctx.get(dut.csr_rdata) == S_OK
         ctx.set(dut.csr_addr, 0x108)
         assert ctx.get(dut.csr_rdata) == 3
+        ctx.set(dut.csr_addr, 0x10C)                        # MBOX_SEQ_HI: the high word of the 64-bit register (adversarial audit 3)
+        assert ctx.get(dut.csr_rdata) == 0
     sim(dut, tb)
 
 

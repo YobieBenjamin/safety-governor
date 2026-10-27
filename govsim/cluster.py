@@ -48,6 +48,12 @@ GPU_FW = "nvidia-gpu-fw-2026.10"   # the GPU firmware digest the policy's refere
 HOST_FW = "host-enclave-fw-1"      # the host enclave firmware digest the reference values accept
 GOV_LOADER, GOV_FW, GOV_FW_VERSION = digest("loader-v1"), digest("governor-fw-v1"), 1   # governor boot loader, firmware, firmware version
 PROTECTED_SITES = [[34.052, -118.244], [48.857, 2.351], [31.769, 35.216]]   # schools, in the model's world (the strike rule must not target these)
+
+# The rule floor fused into every governor of the model rack (adversarial audit 3): no edition, however many keys
+# sign it, may let a strike rule drop the typed protected-site check or run without an observer or a human.
+STRIKE_RULE_FLOOR = [{"action": "strike", "constraints": {"target": {"type": "geo", "not_in_list": "protected-sites"}},
+                      "forbidden_modes": ["auto"]}]
+RECOVERY_KEYS, RECOVERY_THRESHOLD = 5, 4         # the fused recovery quorum: more keys, and more of them, than governance
 MODEL_70B = digest(["model-70b", 1])                                            # the shipped model's manifest digest
 WORKLOAD_70B = digest([GPU_FW, HOST_FW, MODEL_70B])                            # the shipped workload: GPU, host and model together; rules that name it match only this exact workload
 LISTED_RECIPIENTS = ["recipient-a", "recipient-b"]                              # the signed recipient registry, in the model's world
@@ -88,7 +94,9 @@ class Rack:
     docstring)."""
 
     def __init__(self, n: int = 4, tier: str = "rack", clock: SimClock | None = None, direct_nvlink: bool = False,
-                 levers: dict | None = None, store_dir: str | None = None, policy_kw: dict | None = None, rng_seed: int | None = None):
+                 levers: dict | None = None, store_dir: str | None = None, policy_kw: dict | None = None, rng_seed: int | None = None,
+                 site: str | None = None, site_heartbeat: tuple | None = None, loosen_delay_s: float = 0.0,
+                 jurisdictions: list[str] | None = None):
         """Build ``n`` nodes and load one signed policy into each governor. Inputs: the tier (``rack`` or
         the integrated tier), an optional clock, GPU options (``levers``, ``direct_nvlink``), an optional
         directory where each governor keeps its state (so restarts can be tested), keyword options for
@@ -97,12 +105,23 @@ class Rack:
         self.clock = clock or SimClock()
         self.tier = tier
         self.policy_kw = dict(policy_kw or {})
+        self.n_nodes = n
         self.rng_seed = rng_seed
         # parties
         self.governance = [SigningKey.generate() for _ in range(5)]    # the governance root: 5 keys
         self.threshold = 3                                              # 3 of those 5 must sign a policy
-        self.heartbeat_key = SigningKey.generate()
-        self.heartbeat_cosigners = [SigningKey.generate() for _ in range(2)]   # 2 of the 3 heartbeat signers must sign a heartbeat
+        self.recovery = [SigningKey.generate() for _ in range(RECOVERY_KEYS)]   # held apart from governance (audit 3)
+        self.loosen_delay_s = float(loosen_delay_s)
+        # Further rulebook authorities fused into every chip, each with its own 2-of-3 keys (adversarial audit 3).
+        self.jurisdiction_keys = {name: [SigningKey.generate() for _ in range(3)] for name in (jurisdictions or [])}
+        # The heartbeat signers belong to the data center (``site``), not to the world: racks of one site share them
+        # (``site_heartbeat`` = (key, [cosigners])), and racks of another site have their own.
+        self.site = site
+        if site_heartbeat is not None:
+            self.heartbeat_key, self.heartbeat_cosigners = site_heartbeat[0], list(site_heartbeat[1])
+        else:
+            self.heartbeat_key = SigningKey.generate()
+            self.heartbeat_cosigners = [SigningKey.generate() for _ in range(2)]   # 2 of the 3 heartbeat signers must sign a heartbeat
         self.authority_key = SigningKey.generate()      # HALT and CLEAR; never the heartbeat key, so a heartbeat cannot halt or clear
         self.authority_cosigners = [SigningKey.generate() for _ in range(2)]   # 2 of the 3 authority keys must sign a HALT or CLEAR
         self.approvers = {"strike": [SigningKey.generate() for _ in range(3)], "payments.transfer.large": [SigningKey.generate() for _ in range(3)],
@@ -140,7 +159,11 @@ class Rack:
         for i in range(n):
             gpu = GPU(f"gpu{i}", self.clock, self.gpu_vendor, GPU_FW, levers=levers, direct_nvlink=direct_nvlink)
             fuses = Fuses(chip_id=f"gov{i:02d}", governance_key_hashes=gov_hashes, governance_threshold=self.threshold,
-                          governance_class_floor=2)   # the chip's fixed trust anchors
+                          governance_class_floor=2, rule_floor=STRIKE_RULE_FLOOR, loosen_delay_s=self.loosen_delay_s,
+                          recovery_key_hashes=[digest(k.public.hex) for k in self.recovery],
+                          recovery_threshold=RECOVERY_THRESHOLD,
+                          jurisdiction_roots={n: {"key_hashes": [digest(k.public.hex) for k in ks], "threshold": 2}
+                                              for n, ks in self.jurisdiction_keys.items()})   # the chip's fixed trust anchors
             store = Store(f"{store_dir}/gov{i:02d}.json" if store_dir else None)
             g = Governor(f"governor{i}", self.clock, tier=tier, fuses=fuses, store=store,
                          loader_digest=GOV_LOADER, firmware_digest=GOV_FW, firmware_version=GOV_FW_VERSION,
@@ -179,7 +202,7 @@ class Rack:
                           payer_confirm_payments: bool = False,
                           message_max_bytes: int | None = None, message_rate: dict | None = None,
                           governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0,
-                          fleet_budget: bool = False) -> dict:
+                          fleet_budget: bool = False, fleet_ledger: dict | None = None) -> dict:
         """Build one unsigned policy image: the reference values, the rules, the registers, the endpoints
         and the keys the governors will trust. The keyword arguments change one part at a time (for example
         ``pay_small_limit``, ``sandbox`` or ``drop_register_row``). Output: a dict. ``__init__`` and
@@ -195,7 +218,7 @@ class Rack:
         rules = [
             # strike guidance: the target must not be on the protected list, and the munition must be on the fixed list
             make_rule("strike", "strike", mode=strike_mode, observers=[self.observer.key_id], max_risk=0.5, approvers_quorum=2,
-                      constraints={"target": {"not_in_list": "protected-sites"}, "munition": {"in": ["gbu-39", "hellfire"]}},
+                      constraints={"target": {"type": "geo", "not_in_list": "protected-sites"}, "munition": {"in": ["gbu-39", "hellfire"]}},
                       endpoint="strike-guidance", inputs=["protected-sites", "navigation-fix", "observer-verdict"], delay_s=2.0),
             make_rule("payments.transfer.small", "payments.transfer", constraints={"amount": {"min": 0, "max": 1000}, "currency": {"in": ["USD"]}},
                       budget={"key": "pay-usd-hourly", "param": "amount", "limit": pay_small_limit, "window_s": 3600},
@@ -263,9 +286,9 @@ class Rack:
             governance_keys=[k.public for k in self.governance], threshold=self.threshold,
             approver_keys=approver_keys,
             heartbeat_key=self.heartbeat_key.public, authority_keys=[self.authority_key.public] + [k.public for k in self.authority_cosigners],
-            heartbeat_cosigners=[k.public for k in self.heartbeat_cosigners], heartbeat_threshold=2, authority_threshold=2, publisher_keys=[self.publisher.public], observer_keys=[self.observer.public],
+            heartbeat_cosigners=[k.public for k in self.heartbeat_cosigners], heartbeat_threshold=2, authority_threshold=2, list_threshold=2, site=self.site, fleet_ledger=fleet_ledger, publisher_keys=[self.publisher.public], observer_keys=[self.observer.public],
             reference_values=refs, endpoints=endpoints,
-            budget_owners={"pay-usd-hourly": "fleet" if fleet_budget else "gov00", "hazard": "gov00"},   # "fleet": counted once for the whole fleet (govsim/fleet.py)
+            budget_owners={"pay-usd-hourly": "fleet" if fleet_budget else self._rack_budget_owner(), "hazard": "gov00"},   # "fleet": counted once for the whole fleet (govsim/fleet.py)
             rules=rules, assumptions=rows, override_floor_s=override_floor_s,
             buffer_classes=buffer_classes, buffer_policy=buffer_policy,      # None: the defaults in govsim/policy.py
             audit=audit, streams_required=streams_required, eval_keys=[self.evaluator.public], deployment_gate=deployment_gate,
@@ -279,8 +302,13 @@ class Rack:
         """Sign a named list (for example ``protected-sites`` or ``recipient-registry``). The default signer is
         governance key 0, and the default life is one day. The list carries its expiry. A list past its expiry
         is a denial, not a warning (F06, tests/test_f06_registry_aging.py)."""
-        return (signer or self.governance[0]).sign({"type": "list", "list_id": list_id, "entries": entries, "version": version,
-                                                    "expires_at": self.clock.now() + expires_in_s})
+        payload = {"type": "list", "list_id": list_id, "entries": entries, "version": version,
+                   "expires_at": self.clock.now() + expires_in_s}
+        first = signer or self.governance[0]
+        env = first.sign(payload)
+        second = self.governance[1] if first is not self.governance[1] else self.governance[2]
+        env["cosignatures"] = [second.sign(payload)]       # a rule-input list needs two governance signers
+        return env
 
     def _make_endpoints(self) -> None:
         """Create the endpoints and wire them to the governors. The strike, payment, messaging, fulfilment and
@@ -289,7 +317,8 @@ class Rack:
         them. A commit goes back to the governor whose key signed the ticket (``_commit_route``)."""
         g0 = self.nodes[0].governor
         keys = {kid: g.key.public for kid, g in self.by_key.items()}
-        gov = {"governance_hashes": [digest(k.public.hex) for k in self.governance], "governance_floor": self.threshold}
+        gov = {"governance_hashes": [digest(k.public.hex) for k in self.governance], "governance_floor": self.threshold,
+               "recovery_hashes": [digest(k.public.hex) for k in self.recovery], "recovery_threshold": RECOVERY_THRESHOLD}
         protected = {"entries": [tuple(e) for e in PROTECTED_SITES], "stale": False}
         # the strike endpoint gets the sensor readings and the protected list that its checks read
         strike = ActionEndpoint("strike-guidance", self.clock, keys, safe_transition="no_release",
@@ -306,9 +335,11 @@ class Rack:
             self.endpoints[ep.name] = ep
             g0.endpoints[ep.name] = ep
         for node in self.nodes:                      # the DPU's egress to the user: one per node
-            node.egress = EgressEndpoint("egress", self.clock, keys)
+            node.egress = EgressEndpoint("egress", self.clock, keys, **gov)
+            node.egress.install_edition(node.governor.policy)
             node.gpu.output_seal_key = os.urandom(32)   # the GPU-to-egress session key: the host sees only ciphertext
             node.egress.output_seal_key = node.gpu.output_seal_key
+            node.egress.mac_key = node.governor.egress_mac_key = os.urandom(32)   # release tickets: MAC, not P-384
             node.egress.commit = self._commit_route
             node.egress.set_epoch(node.governor.signed_epoch())
             node.governor.endpoints["egress"] = node.egress
@@ -329,6 +360,16 @@ class Rack:
         env = self.authority_key.sign(body)
         env["cosignatures"] = [self.authority_cosigners[0].sign(body)]        # the second of the 2-of-3 authority signers
         return env
+
+    def _rack_budget_owner(self):
+        """The rack's payment budget is counted by three governors, and every one of them must reserve, when the rack
+        has three or more; a smaller rack has one owner (adversarial audit 3: one lying owner voided the cap). All of
+        them, not a majority: with independent counters a 2-of-3 rule lets concurrent requests land on different pairs
+        and spend up to one and a half times the cap, while with all three every allowed request is counted by every
+        honest owner. A lying owner can then only refuse, which fails closed."""
+        if getattr(self, "n_nodes", 0) >= 3:
+            return {"owners": ["gov00", "gov01", "gov02"], "threshold": 3}       # chip ids are gov00, gov01, ... (below)
+        return "gov00"
 
     def sign_heartbeat(self, payload: dict) -> dict:
         """A heartbeat signed by two of the three heartbeat signers (the heartbeat key and its first cosigner)."""
@@ -352,7 +393,7 @@ class Rack:
         carries the loop beacon (a lower rate is a policy choice; ``beacon=False`` shows the loop alone)."""
         self.hb_seq += 1
         now = self.clock.now()
-        payload = {"type": "heartbeat", "seq": self.hb_seq, "epoch": self.epoch, "window_start": now - 1.0, "window_end": now + window_s}   # the window opens 1 s before now (a fixed offset in this model)
+        payload = {"type": "heartbeat", "seq": self.hb_seq, "epoch": self.epoch, "site": self.site, "window_start": now - 1.0, "window_end": now + window_s}   # the window opens 1 s before now (a fixed offset in this model)
         if beacon:
             payload["loop_beacon"] = self.loop_beacon()
         env = self.heartbeat_key.sign(payload)
@@ -480,8 +521,7 @@ class Rack:
         """EXPERIMENT-CUSTOMER-CONFIRMATION: the signed account -> customer-key registry the payer-confirm rule names. ``entries`` replaces the
         default list, so a test can install a wrong one."""
         entries = entries if entries is not None else [{"account": acct, "key": k.public.hex} for acct, k in self.customers.items()]
-        return self.governance[0].sign({"type": "list", "list_id": "customer-registry", "entries": entries, "version": version,
-                                        "expires_at": self.clock.now() + expires_in_s})
+        return self.signed_list("customer-registry", entries, expires_in_s=expires_in_s, version=version)
 
     def pay(self, node: Node, amount: float, from_account: str, confirm_as: str | None = None,
             confirm_request_id: str | None = None, confirm_ttl_s: float = 60.0, governor: Governor | None = None) -> dict:
@@ -612,10 +652,11 @@ class Rack:
         """EXCLUDE (docs/04 section 3): the authority's signed, logged way past a chip that never got its first heartbeat."""
         return governor.command("EXCLUDE", {}, self._authority_env({"type": "exclude"}, governor))
 
-    def halt(self, governor: Governor, rung: str = "HALT") -> dict:
+    def halt(self, governor: Governor, rung: str = "HALT", via: Governor | None = None) -> dict:
         """Send a HALT (or another rung, passed in ``rung``) to one governor, signed by the authority key with the
-        chip id and a short expiry. A HALT also opens that governor's loop switch."""
-        return governor.command("HALT", {}, self._authority_env({"type": "halt", "rung": rung}, governor))
+        chip id and a short expiry. A HALT also opens that governor's loop switch. ``via`` delivers it through
+        another governor's mailbox instead, which relays it over the fabric (for when the target's host drops it)."""
+        return (via or governor).command("HALT", {}, self._authority_env({"type": "halt", "rung": rung}, governor))
 
     # ------------------------------------------------------------------ epoch change
     def new_policy(self, **kw) -> dict:
@@ -624,6 +665,24 @@ class Rack:
         self.policy_version += 1
         image = self.make_policy_image(self.policy_version, **{**self.policy_kw, **kw})
         return sign_policy(image, self.governance[: self.threshold])
+
+    def jurisdiction_edition(self, name: str, governs: list[str], rules: list[dict], version: int = 1,
+                             signers: list[SigningKey] | None = None) -> dict:
+        """An edition for one jurisdiction, signed by 2 of its 3 keys (or by ``signers``)."""
+        from .policy import make_jurisdiction_edition
+        keys = self.jurisdiction_keys[name]
+        image = make_jurisdiction_edition(jurisdiction=name, version=version, issued_at=self.clock.now(),
+                                          expires_at=self.clock.now() + 30 * 86400, keys=[k.public for k in keys],
+                                          threshold=2, governs=governs, rules=rules)
+        return sign_policy(image, signers if signers is not None else keys[:2])
+
+    def recovery_policy(self, **kw) -> dict:
+        """The next edition, signed by the fused recovery quorum instead of governance: the way back for a chip whose
+        governance quorum was stolen and rotated (adversarial audit 3)."""
+        self.policy_version += 1
+        image = self.make_policy_image(self.policy_version, **{**self.policy_kw, **kw})
+        image["recovery_keys"] = [k.public.hex for k in self.recovery]
+        return sign_policy(image, self.recovery[:RECOVERY_THRESHOLD])
 
     def change_epoch(self, image: dict, silent: list[str] | None = None) -> dict:
         """Two-phase epoch change. The authority proposes to every governor it can reach from its
@@ -651,6 +710,11 @@ class Rack:
                     committed.append(g.chip_id)
         if committed:
             self.policy, self.epoch = image, new_epoch
+            # The authority announces the committed edition to every endpoint directly (over the network, not through
+            # any one governor or host), so a straggler's own endpoints refuse its old-epoch tickets at once.
+            for ep in list(self.endpoints.values()) + [n.egress for n in self.nodes if n.egress is not None]:
+                if hasattr(ep, "install_edition"):
+                    ep.install_edition(image)
         return {"acks": sorted(acks), "committed": sorted(committed), "stragglers": sorted(stragglers), "epoch": new_epoch}
 
     # ------------------------------------------------------------------ red team helpers

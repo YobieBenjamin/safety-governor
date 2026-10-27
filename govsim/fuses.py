@@ -25,13 +25,21 @@ def _kdf_engine(uds: bytes):
     return derive
 
 
+POLICY_FUSE_BITS = 256          # one-time bits in the policy anti-rollback thermometer (docs/04 section 10)
+POLICY_FUSE_STRIDE = 64         # edition versions per burned bit; the NVM counter covers versions within a stride
+
+
 class Fuses:
     def __init__(self, chip_id: str | None = None, governance_key_hashes: list[str] | None = None, uds: bytes | None = None,
-                 governance_threshold: int | None = None, governance_class_floor: int = 0):
+                 governance_threshold: int | None = None, governance_class_floor: int = 0,
+                 rule_floor: list[dict] | None = None, loosen_delay_s: float = 0.0,
+                 recovery_key_hashes: list[str] | None = None, recovery_threshold: int | None = None,
+                 jurisdiction_roots: dict[str, dict] | None = None):
         self.chip_id = chip_id or secrets.token_hex(8)
         self._kdf = _kdf_engine(uds or secrets.token_bytes(32))   # no attribute holds the secret
         self.rollback = 0                      # firmware version; thermometer-coded in silicon
-        self.policy_version = 0                # policy image version; a second thermometer
+        self.policy_version = 0                # policy anti-rollback fuse bits burned (thermometer, at most POLICY_FUSE_BITS)
+        self.nvm_policy_version = 0            # the exact edition version, in a monotonic NVM counter beside the fuses
         self.lifecycle = TEST
         self.governance_key_hashes = list(governance_key_hashes or [])
         # the k of k-of-n, fused at provisioning beside the key hashes. A policy image may raise it and
@@ -46,6 +54,19 @@ class Fuses:
         # edition must enrol among its governance keys and require in its class quorum. Fused at manufacture; no edition
         # can lower it, so one validly signed edition cannot hand governance to a single party for good.
         self.governance_class_floor = int(governance_class_floor)
+        # Adversarial audit 3 (capture by a validly signed edition, and permanent capture by a stolen quorum).
+        # rule_floor: rules no edition may remove or weaken, fused at manufacture (govsim/policy.py floor_violations).
+        # loosen_delay_s: an edition that loosens the rules in force takes effect only after this delay from its issue
+        #   time, so it is public before it acts and can be answered (0 in the model racks; set in production fuses).
+        # recovery_key_hashes / recovery_threshold: a separate, higher quorum, fused, that can always sign an edition
+        #   over whatever governance is in force, so a stolen governance quorum cannot keep a chip.
+        # jurisdiction_roots: further rulebook authorities, each with its own key hashes and threshold; an action a
+        #   jurisdiction governs must be allowed by that jurisdiction's edition too (one cannot weaken another's).
+        self.rule_floor = [dict(x) for x in (rule_floor or [])]
+        self.loosen_delay_s = float(loosen_delay_s)
+        self.recovery_key_hashes = list(recovery_key_hashes or [])
+        self.recovery_threshold = int(recovery_threshold) if recovery_threshold is not None else len(self.recovery_key_hashes)
+        self.jurisdiction_roots = {k: dict(v) for k, v in (jurisdiction_roots or {}).items()}
         self.trusted_governance: dict | None = None   # set by the first rulebook the fused key hashes admit; see record_governance
         self.zeroized = False
 
@@ -67,10 +88,30 @@ class Fuses:
             raise ValueError(reasons.POLICY_ROLLBACK)
         self.rollback = to
 
-    def bump_policy(self, to: int) -> None:
-        if to < self.policy_version:
+    def bump_policy(self, to: int) -> bool:
+        """Advance the policy anti-rollback state to version ``to``. Returns False, changing nothing, when ``to`` is
+        older than what is recorded or when the fused thermometer cannot hold it.
+
+        Adversarial audit 3: the specification fuses 256 one-time bits as a thermometer, but the model counted
+        without limit, so one edition with a huge version, or five years of weekly editions, would end rollback
+        protection or freeze the chip. Now: the exact version lives in a monotonic NVM counter (``nvm_policy_version``,
+        modelled here beside the fuses), and the fuses record only ``version // POLICY_FUSE_STRIDE`` as burned bits
+        (``policy_version``), so a rollback below the fused floor is impossible even if the NVM counter is attacked.
+        With the per-edition version step bounded (governor MAX_EDITION_STEP), 256 bits of stride 64 cover 16,384
+        editions: over 300 years of weekly editions."""
+        if to < self.nvm_policy_version:
             raise ValueError(reasons.POLICY_ROLLBACK)
-        self.policy_version = to
+        bits = to // POLICY_FUSE_STRIDE
+        if bits > POLICY_FUSE_BITS:
+            return False
+        self.nvm_policy_version = to
+        self.policy_version = max(self.policy_version, bits)
+        return True
+
+    @property
+    def policy_floor_version(self) -> int:
+        """The lowest edition version the burned fuses still allow."""
+        return self.policy_version * POLICY_FUSE_STRIDE
 
     def record_governance(self, keys: list[str], threshold: int, image_epoch: str,
                           classes: dict[str, str] | None = None, class_quorum: int = 0) -> None:

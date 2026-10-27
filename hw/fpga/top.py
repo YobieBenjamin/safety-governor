@@ -11,7 +11,8 @@ What is in it:
 - The firmware stand-in, BENCH ONLY. On the chip the Ibex firmware and the crypto engines drive the core's
   firmware-side ports (heartbeat verdicts, clears, capability inserts, hash results). The FPGA has neither, so:
     * four discrete pins carry the halt-path verdicts the soak test needs: FW_HB (a valid heartbeat, rising edge,
-      loads a 5,000 ms window, the policy expiry of docs/04 section 9), FW_CLEAR (an authorized clear), FW_HALT
+      loads a 5,000 ms window, the policy expiry of docs/04 section 9), FW_CLEAR (the firmware's approval of a clear,
+      a level; since adversarial audit 3 the clear lands only when a verified CLEAR frame dispatches), FW_HALT
       (an authorized halt command), TAMPER_N (the enclosure switch, low = tripped);
     * every other firmware-side input of the core sits on a shift chain (FW_SCK, FW_SDI, FW_CS_N, FW_SDO: SPI mode 0,
       a Raspberry Pi's SPI0). The rising edge of FW_CS_N applies the shifted vector: level ports hold their value
@@ -138,7 +139,10 @@ class BenchTop(Elaboratable):
             self.loop_closed.eq(~gov.loop_out_open), gov.loop_sense.eq(sense),
             core.hb.window.eq(HB_WINDOW_MS),
             core.hb.hb_valid.eq(rising(hb)),
-            core.halt.clear.eq(rising(clr)),
+            # adversarial audit 3: FW_CLEAR is now the firmware's approval, held as a level; the core releases a halt
+            # only in the cycle the mailbox dispatches a verified CLEAR frame (doorbell over SMBus, then sig_done and
+            # sig_ok with cmd and signed_cmd 0x10 on the chain), so a pulse on this pin alone no longer clears
+            core.halt.clear.eq(clr),
             core.halt.cmd_halt.eq(rising(hlt)),
             core.halt.tamper.eq(~tamper_n),
         ]

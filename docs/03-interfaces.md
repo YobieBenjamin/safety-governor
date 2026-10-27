@@ -78,7 +78,10 @@ The host operating system, the hypervisor, the BMC and the scheduler are untrust
 deliver messages to the mailbox and they can stop delivering them. They cannot forge a
 signature, roll back the epoch, clear an alarm, reopen a port, or stop the governor from
 halting the GPU. If the host stops relaying heartbeats, the governor halts at expiry; the host
-cannot keep the GPU alive by silence.
+cannot keep the GPU alive by silence. If the host drops a HALT meant for its own governor, the
+authority hands the same signed HALT to any other governor, which relays it over the fabric
+(adversarial audit 3; before that a dropped HALT was never applied while neighbours kept relaying
+heartbeats). A host can still delay a HALT by the time the authority takes to notice and resend it.
 
 ## 5. Memory
 

@@ -35,6 +35,9 @@ def setup():
                "budget_key": None, "reservation": None, "budget_owner": None, "governor": g.chip_id,
                "issued_at": g.mono(), "valid_from": now, "expires_at": now + 300}
     ticket = g.key.sign(payload)
+    # Built here rather than through a request, so record it the way the governor's mint does: a commit is accepted
+    # only for a ticket in the governor's minted record (adversarial audit 3).
+    g.minted_tickets[TID] = {"digest": digest(payload), "expires_at": payload["expires_at"]}
     assert payload["reservation"] is None          # this ticket has no budget reservation to make it single-use
     return r, node, g, ep, ticket
 

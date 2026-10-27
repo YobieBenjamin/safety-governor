@@ -1,7 +1,7 @@
 
 (* top =  1  *)
-module halt_seq(hb_expired, tamper, cmd_halt, cmd_throttle, local_trip, clear, cmd_exclude, hb_ok, loop_sense, tick, clk, rst, state, pwrbrk, perst, pwr_en, switch_open, ports_closed, cause, timer, hb_seen
-, boot_timer, no_first_hb, excluded, loop_lost);
+module halt_seq(hb_expired, tamper, cmd_halt, cmd_throttle, local_trip, clear, clear_authorized, cmd_exclude, hb_ok, loop_sense, tick, clk, rst, state, pwrbrk, perst, pwr_en, switch_open, ports_closed, cause, timer
+, hb_seen, boot_timer, no_first_hb, excluded, rung_nv, rung_nv_safe, loop_lost);
   reg \$auto$verilog_backend.cc:2355:dump_module$1  = 0;
   wire \$1 ;
   wire \$10 ;
@@ -23,26 +23,26 @@ module halt_seq(hb_expired, tamper, cmd_halt, cmd_throttle, local_trip, clear, c
   wire \$25 ;
   wire \$26 ;
   wire \$27 ;
-  wire [20:0] \$28 ;
+  wire \$28 ;
   wire \$29 ;
   wire \$3 ;
-  wire [20:0] \$30 ;
-  wire [20:0] \$31 ;
+  wire \$30 ;
+  wire \$31 ;
   wire \$32 ;
-  wire [20:0] \$33 ;
+  wire \$33 ;
   wire \$34 ;
   wire \$35 ;
   wire \$36 ;
   wire \$37 ;
-  wire \$38 ;
+  wire [20:0] \$38 ;
   wire \$39 ;
   wire \$4 ;
-  wire \$40 ;
-  wire \$41 ;
+  wire [20:0] \$40 ;
+  wire [20:0] \$41 ;
   wire \$42 ;
-  wire \$43 ;
+  wire [20:0] \$43 ;
   wire \$44 ;
-  wire [16:0] \$45 ;
+  wire \$45 ;
   wire \$46 ;
   wire \$47 ;
   wire \$48 ;
@@ -52,15 +52,27 @@ module halt_seq(hb_expired, tamper, cmd_halt, cmd_throttle, local_trip, clear, c
   wire \$51 ;
   wire \$52 ;
   wire \$53 ;
-  reg [2:0] \$54 ;
-  reg [2:0] \$55 ;
-  reg \$56 ;
-  reg [19:0] \$57 ;
-  reg \$58 ;
-  reg \$59 ;
+  wire \$54 ;
+  wire [16:0] \$55 ;
+  wire \$56 ;
+  wire \$57 ;
+  wire \$58 ;
+  wire \$59 ;
   wire \$6 ;
-  reg [15:0] \$60 ;
+  wire \$60 ;
+  wire \$61 ;
+  wire \$62 ;
+  wire \$63 ;
+  reg \$64 ;
+  reg \$65 ;
+  reg [2:0] \$66 ;
+  reg [2:0] \$67 ;
+  reg \$68 ;
+  reg [19:0] \$69 ;
   wire \$7 ;
+  reg \$70 ;
+  reg \$71 ;
+  reg [15:0] \$72 ;
   wire \$8 ;
   wire \$9 ;
   output [15:0] boot_timer;
@@ -69,6 +81,8 @@ module halt_seq(hb_expired, tamper, cmd_halt, cmd_throttle, local_trip, clear, c
   reg [2:0] cause = 3'h0;
   input clear;
   wire clear;
+  input clear_authorized;
+  wire clear_authorized;
   input clk;
   wire clk;
   input cmd_exclude;
@@ -103,6 +117,10 @@ module halt_seq(hb_expired, tamper, cmd_halt, cmd_throttle, local_trip, clear, c
   wire pwrbrk;
   input rst;
   wire rst;
+  output rung_nv;
+  reg rung_nv = 1'h0;
+  output rung_nv_safe;
+  reg rung_nv_safe = 1'h0;
   output [2:0] state;
   reg [2:0] state = 3'h0;
   output switch_open;
@@ -113,233 +131,323 @@ module halt_seq(hb_expired, tamper, cmd_halt, cmd_throttle, local_trip, clear, c
   wire tick;
   output [19:0] timer;
   reg [19:0] timer = 20'h00000;
-  assign \$40  = ~ hb_ok;
-  assign \$41  = \$39  & \$40 ;
-  assign \$42  = \$41  & tick;
-  assign \$43  = boot_timer != 16'hffff;
-  assign \$44  = \$42  & \$43 ;
-  assign \$45  = boot_timer + 1'h1;
-  assign \$46  = ~ hb_seen;
-  assign \$47  = boot_timer >= 13'h1388;
-  assign no_first_hb = \$46  & \$47 ;
+  assign \$28  = cmd_exclude & \$27 ;
+  assign \$29  = ! cause;
+  assign \$30  = \$28  & \$29 ;
+  assign \$31  = state == 2'h2;
+  assign \$32  = tick & \$31 ;
+  assign \$33  = state == 2'h3;
+  assign \$34  = tick & \$33 ;
+  assign \$35  = cause != 2'h3;
+  assign \$36  = ~ loop_lost;
+  assign \$37  = loop_sense & \$36 ;
+  assign \$38  = timer + 1'h1;
+  assign \$39  = \$38  >= 15'h7530;
+  assign \$40  = timer + 1'h1;
+  assign \$41  = timer + 1'h1;
+  assign \$42  = \$41  >= 19'h493e0;
+  assign \$43  = timer + 1'h1;
+  assign \$44  = tamper | cmd_halt;
+  assign \$45  = ~ hb_seen;
+  assign \$46  = ! state;
+  assign \$47  = \$45  & \$46 ;
+  assign \$48  = ! cause;
+  assign \$49  = \$47  & \$48 ;
+  assign \$50  = ~ hb_ok;
+  assign \$51  = \$49  & \$50 ;
+  assign \$52  = \$51  & tick;
+  assign \$53  = boot_timer != 16'hffff;
+  assign \$54  = \$52  & \$53 ;
+  assign \$55  = boot_timer + 1'h1;
+  assign \$56  = ~ hb_seen;
+  assign \$57  = boot_timer >= 13'h1388;
+  assign no_first_hb = \$56  & \$57 ;
   assign pwrbrk = state != 1'h1;
-  assign \$48  = ! state;
-  assign \$49  = state == 2'h3;
-  assign \$50  = \$48  | \$49 ;
-  assign \$51  = state == 3'h4;
-  assign perst = \$50  | \$51 ;
-  assign \$52  = | state;
-  assign \$53  = state != 3'h4;
-  assign pwr_en = \$52  & \$53 ;
+  assign \$58  = ! state;
+  assign \$59  = state == 2'h3;
+  assign \$60  = \$58  | \$59 ;
+  assign \$61  = state == 3'h4;
+  assign perst = \$60  | \$61 ;
+  assign \$62  = | state;
+  assign \$63  = state != 3'h4;
+  assign pwr_en = \$62  & \$63 ;
   assign ports_closed = state != 1'h1;
   always @(posedge clk)
-    state <= \$54 ;
+    rung_nv <= \$64 ;
   always @(posedge clk)
-    cause <= \$55 ;
+    rung_nv_safe <= \$65 ;
   always @(posedge clk)
-    switch_open <= \$56 ;
+    state <= \$66 ;
   always @(posedge clk)
-    timer <= \$57 ;
+    cause <= \$67 ;
   always @(posedge clk)
-    hb_seen <= \$58 ;
+    switch_open <= \$68 ;
   always @(posedge clk)
-    excluded <= \$59 ;
+    timer <= \$69 ;
   always @(posedge clk)
-    boot_timer <= \$60 ;
-  assign \$1  = | state;
-  assign \$2  = clear & \$1 ;
-  assign \$3  = state == 1'h1;
-  assign \$4  = state == 2'h2;
-  assign \$5  = \$3  | \$4 ;
-  assign \$6  = loop_lost & \$5 ;
-  assign \$7  = state == 3'h4;
-  assign \$8  = cmd_halt & \$7 ;
-  assign \$9  = hb_expired | local_trip;
-  assign \$10  = \$9  | cmd_throttle;
-  assign \$11  = state == 1'h1;
-  assign \$12  = \$10  & \$11 ;
-  assign \$13  = ! state;
-  assign \$14  = ! cause;
-  assign \$15  = \$13  & \$14 ;
-  assign \$16  = \$15  & hb_ok;
-  assign \$17  = ! state;
-  assign \$18  = cmd_exclude & \$17 ;
-  assign \$19  = ! cause;
-  assign \$20  = \$18  & \$19 ;
-  assign \$21  = state == 2'h2;
-  assign \$22  = tick & \$21 ;
-  assign \$23  = state == 2'h3;
-  assign \$24  = tick & \$23 ;
-  assign \$25  = cause != 2'h3;
-  assign \$26  = ~ loop_lost;
-  assign \$27  = loop_sense & \$26 ;
-  assign \$28  = timer + 1'h1;
-  assign \$29  = \$28  >= 15'h7530;
-  assign \$30  = timer + 1'h1;
-  assign \$31  = timer + 1'h1;
-  assign \$32  = \$31  >= 19'h493e0;
-  assign \$33  = timer + 1'h1;
-  assign \$34  = tamper | cmd_halt;
-  assign \$35  = ~ hb_seen;
-  assign \$36  = ! state;
-  assign \$37  = \$35  & \$36 ;
-  assign \$38  = ! cause;
-  assign \$39  = \$37  & \$38 ;
+    hb_seen <= \$70 ;
+  always @(posedge clk)
+    excluded <= \$71 ;
+  always @(posedge clk)
+    boot_timer <= \$72 ;
+  assign \$1  = state == 2'h3;
+  assign \$2  = state == 3'h4;
+  assign \$3  = \$1  | \$2 ;
+  assign \$4  = state == 3'h4;
+  assign \$5  = clear & clear_authorized;
+  assign \$6  = | state;
+  assign \$7  = \$5  & \$6 ;
+  assign \$8  = ! state;
+  assign \$9  = rung_nv & \$8 ;
+  assign \$10  = state == 1'h1;
+  assign \$11  = state == 2'h2;
+  assign \$12  = \$10  | \$11 ;
+  assign \$13  = loop_lost & \$12 ;
+  assign \$14  = state == 3'h4;
+  assign \$15  = cmd_halt & \$14 ;
+  assign \$16  = state == 1'h1;
+  assign \$17  = state == 2'h2;
+  assign \$18  = \$16  | \$17 ;
+  assign \$19  = hb_expired & \$18 ;
+  assign \$20  = local_trip | cmd_throttle;
+  assign \$21  = state == 1'h1;
+  assign \$22  = \$20  & \$21 ;
+  assign \$23  = ! state;
+  assign \$24  = ! cause;
+  assign \$25  = \$23  & \$24 ;
+  assign \$26  = \$25  & hb_ok;
+  assign \$27  = ! state;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$54  = state;
+    \$64  = rung_nv;
+    if (\$3 ) begin
+      \$64  = 1'h1;
+    end
     if (tamper) begin
-      \$54  = 3'h4;
-    end else if (\$2 ) begin
-      \$54  = 3'h0;
-    end else if (\$6 ) begin
-      \$54  = 3'h3;
-    end else if (\$8 ) begin
+      \$64  = 1'h1;
+    end else if (\$7 ) begin
+      \$64  = 1'h0;
+    end else if (\$9 ) begin
+    end else if (\$13 ) begin
+      \$64  = 1'h1;
+    end else if (\$15 ) begin
     end else if (cmd_halt) begin
-      \$54  = 3'h3;
-    end else if (\$12 ) begin
-      \$54  = 3'h2;
-    end else if (\$16 ) begin
-      if (\$27 ) begin
-        \$54  = 3'h1;
-      end
-    end else if (\$20 ) begin
+      \$64  = 1'h1;
+    end else if (\$19 ) begin
+      \$64  = 1'h1;
     end else if (\$22 ) begin
-      if (\$29 ) begin
-        \$54  = 3'h3;
+    end else if (\$26 ) begin
+    end else if (\$30 ) begin
+    end else if (\$32 ) begin
+      if (\$39 ) begin
+        \$64  = 1'h1;
       end
-    end else if (\$24 ) begin
-      if (\$32 ) begin
-        \$54  = 3'h4;
-      end
-    end
-    if (rst) begin
-      \$54  = 3'h0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$55  = cause;
+    \$65  = rung_nv_safe;
+    if (\$4 ) begin
+      \$65  = 1'h1;
+    end
     if (tamper) begin
-      \$55  = 3'h3;
-    end else if (\$2 ) begin
-      \$55  = 3'h0;
-    end else if (\$6 ) begin
-      \$55  = 3'h1;
-    end else if (\$8 ) begin
-      if (\$25 ) begin
-        \$55  = 3'h4;
-      end
+      \$65  = 1'h1;
+    end else if (\$7 ) begin
+      \$65  = 1'h0;
+    end else if (\$9 ) begin
+    end else if (\$13 ) begin
+    end else if (\$15 ) begin
     end else if (cmd_halt) begin
-      \$55  = 3'h4;
-    end else if (\$12 ) begin
-      \$55  = 3'h2;
-    end
-    if (rst) begin
-      \$55  = 3'h0;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$56  = switch_open;
-    if (tamper) begin
-      \$56  = 1'h1;
-    end else if (\$2 ) begin
-    end else if (\$6 ) begin
-      \$56  = 1'h1;
-    end else if (\$8 ) begin
-      \$56  = 1'h1;
-    end else if (cmd_halt) begin
-      \$56  = 1'h1;
-    end else if (\$12 ) begin
-    end else if (\$16 ) begin
-      \$56  = 1'h0;
-    end else if (\$20 ) begin
-      \$56  = 1'h0;
-    end
-    if (rst) begin
-      \$56  = 1'h1;
-    end
-  end
-  always @* begin
-    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$57  = timer;
-    if (tamper) begin
-    end else if (\$2 ) begin
-      \$57  = 20'h00000;
-    end else if (\$6 ) begin
-      \$57  = 20'h00000;
-    end else if (\$8 ) begin
-    end else if (cmd_halt) begin
-      \$57  = 20'h00000;
-    end else if (\$12 ) begin
-      \$57  = 20'h00000;
-    end else if (\$16 ) begin
-    end else if (\$20 ) begin
+    end else if (\$19 ) begin
     end else if (\$22 ) begin
-      (* full_case = 32'd1 *)
-      if (\$29 ) begin
-        \$57  = 20'h00000;
-      end else begin
-        \$57  = \$30 [19:0];
-      end
-    end else if (\$24 ) begin
-      (* full_case = 32'd1 *)
-      if (\$32 ) begin
-        \$57  = 20'h00000;
-      end else begin
-        \$57  = \$33 [19:0];
+    end else if (\$26 ) begin
+    end else if (\$30 ) begin
+    end else if (\$32 ) begin
+    end else if (\$34 ) begin
+      if (\$42 ) begin
+        \$65  = 1'h1;
       end
     end
-    if (rst) begin
-      \$57  = 20'h00000;
-    end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$58  = hb_seen;
+    \$66  = state;
     if (tamper) begin
-    end else if (\$2 ) begin
-    end else if (\$6 ) begin
-    end else if (\$8 ) begin
+      \$66  = 3'h4;
+    end else if (\$7 ) begin
+      \$66  = 3'h0;
+    end else if (\$9 ) begin
+      (* full_case = 32'd1 *)
+      if (rung_nv_safe) begin
+        \$66  = 3'h4;
+      end else begin
+        \$66  = 3'h3;
+      end
+    end else if (\$13 ) begin
+      \$66  = 3'h3;
+    end else if (\$15 ) begin
     end else if (cmd_halt) begin
-    end else if (\$12 ) begin
-    end else if (\$16 ) begin
-      \$58  = 1'h1;
+      \$66  = 3'h3;
+    end else if (\$19 ) begin
+      \$66  = 3'h3;
+    end else if (\$22 ) begin
+      \$66  = 3'h2;
+    end else if (\$26 ) begin
+      if (\$37 ) begin
+        \$66  = 3'h1;
+      end
+    end else if (\$30 ) begin
+    end else if (\$32 ) begin
+      if (\$39 ) begin
+        \$66  = 3'h3;
+      end
+    end else if (\$34 ) begin
+      if (\$42 ) begin
+        \$66  = 3'h4;
+      end
     end
     if (rst) begin
-      \$58  = 1'h0;
+      \$66  = 3'h0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$59  = excluded;
+    \$67  = cause;
     if (tamper) begin
-    end else if (\$2 ) begin
-    end else if (\$6 ) begin
-    end else if (\$8 ) begin
+      \$67  = 3'h3;
+    end else if (\$7 ) begin
+      \$67  = 3'h0;
+    end else if (\$9 ) begin
+      \$67  = 3'h5;
+    end else if (\$13 ) begin
+      \$67  = 3'h1;
+    end else if (\$15 ) begin
+      if (\$35 ) begin
+        \$67  = 3'h4;
+      end
     end else if (cmd_halt) begin
-    end else if (\$12 ) begin
-    end else if (\$16 ) begin
-      \$59  = 1'h0;
-    end else if (\$20 ) begin
-      \$59  = 1'h1;
-    end
-    if (\$34 ) begin
-      \$59  = 1'h0;
+      \$67  = 3'h4;
+    end else if (\$19 ) begin
+      \$67  = 3'h2;
+    end else if (\$22 ) begin
+      \$67  = 3'h2;
     end
     if (rst) begin
-      \$59  = 1'h0;
+      \$67  = 3'h0;
     end
   end
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$60  = boot_timer;
+    \$68  = switch_open;
+    if (tamper) begin
+      \$68  = 1'h1;
+    end else if (\$7 ) begin
+    end else if (\$9 ) begin
+      \$68  = 1'h1;
+    end else if (\$13 ) begin
+      \$68  = 1'h1;
+    end else if (\$15 ) begin
+      \$68  = 1'h1;
+    end else if (cmd_halt) begin
+      \$68  = 1'h1;
+    end else if (\$19 ) begin
+    end else if (\$22 ) begin
+    end else if (\$26 ) begin
+      \$68  = 1'h0;
+    end else if (\$30 ) begin
+      \$68  = 1'h0;
+    end
+    if (rst) begin
+      \$68  = 1'h1;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$69  = timer;
+    if (tamper) begin
+    end else if (\$7 ) begin
+      \$69  = 20'h00000;
+    end else if (\$9 ) begin
+      \$69  = 20'h00000;
+    end else if (\$13 ) begin
+      \$69  = 20'h00000;
+    end else if (\$15 ) begin
+    end else if (cmd_halt) begin
+      \$69  = 20'h00000;
+    end else if (\$19 ) begin
+      \$69  = 20'h00000;
+    end else if (\$22 ) begin
+      \$69  = 20'h00000;
+    end else if (\$26 ) begin
+    end else if (\$30 ) begin
+    end else if (\$32 ) begin
+      (* full_case = 32'd1 *)
+      if (\$39 ) begin
+        \$69  = 20'h00000;
+      end else begin
+        \$69  = \$40 [19:0];
+      end
+    end else if (\$34 ) begin
+      (* full_case = 32'd1 *)
+      if (\$42 ) begin
+        \$69  = 20'h00000;
+      end else begin
+        \$69  = \$43 [19:0];
+      end
+    end
+    if (rst) begin
+      \$69  = 20'h00000;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$70  = hb_seen;
+    if (tamper) begin
+    end else if (\$7 ) begin
+    end else if (\$9 ) begin
+    end else if (\$13 ) begin
+    end else if (\$15 ) begin
+    end else if (cmd_halt) begin
+    end else if (\$19 ) begin
+    end else if (\$22 ) begin
+    end else if (\$26 ) begin
+      \$70  = 1'h1;
+    end
+    if (rst) begin
+      \$70  = 1'h0;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$71  = excluded;
+    if (tamper) begin
+    end else if (\$7 ) begin
+    end else if (\$9 ) begin
+    end else if (\$13 ) begin
+    end else if (\$15 ) begin
+    end else if (cmd_halt) begin
+    end else if (\$19 ) begin
+    end else if (\$22 ) begin
+    end else if (\$26 ) begin
+      \$71  = 1'h0;
+    end else if (\$30 ) begin
+      \$71  = 1'h1;
+    end
     if (\$44 ) begin
-      \$60  = \$45 [15:0];
+      \$71  = 1'h0;
     end
     if (rst) begin
-      \$60  = 16'h0000;
+      \$71  = 1'h0;
+    end
+  end
+  always @* begin
+    if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
+    \$72  = boot_timer;
+    if (\$54 ) begin
+      \$72  = \$55 [15:0];
+    end
+    if (rst) begin
+      \$72  = 16'h0000;
     end
   end
 endmodule

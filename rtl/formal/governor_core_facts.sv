@@ -16,7 +16,8 @@ module governor_core_facts_props(input clk, input rst);
     if (!init) begin
       if (halt_cause == 2) assert(!halt_switch_open && !loop_out_open);          // RTL-LOCAL-CAUSE-KEEPS-LOOP-CLOSED
       // strengthening, the sequencer's own invariants
-      assert(halt_state <= 4); assert(halt_cause <= 4);
+      assert(halt_state <= 4); assert(halt_cause <= 5);     // cause 5: the restored rung (adversarial audit 3)
+      if (halt_cause == 5) assert(halt_state == 3 || halt_state == 4);
       if (halt_state == 2) assert(halt_cause == 2);
       if (halt_state == 1) assert(halt_cause == 0 && !halt_switch_open);
       if (halt_state == 0) assert(halt_cause == 0);

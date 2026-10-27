@@ -29,6 +29,8 @@ COST_S = {
     "heartbeat": 5e-6,
     "shared_reserve": 10e-6,
     "output_bytes": 0.0,       # the hash runs at line rate; no governor time per byte
+    "ticket_mac": 20e-6,       # a release ticket: same firmware path as a ticket; its MAC runs on the hash engine
+    "fabric_mac": 2e-6,        # one pairwise MAC per recipient (hash engine; firmware only queues it)
 }
 OTBN_P384_SIGN_CYCLES = 1_697_985          # opentitan.org, OTBN performance table, ECDSA-P384 sign, constant time
 OTBN_CLOCK_HZ = 100e6                      # Earl Grey core clock
@@ -36,6 +38,10 @@ SIGN_S = OTBN_P384_SIGN_CYCLES / OTBN_CLOCK_HZ    # 17 ms
 BATCH_WINDOW_S = 0.05                      # docs/04 §9: one signature per window over a Merkle root of the records
 SLOTS_PER_CHIP = 8                         # an HGX baseboard: the engine serves eight GPUs
 GPU_SECONDS_PER_TOKEN = 1 / 2000.0         # a modest 2,000 tokens per second per GPU
+# ASSUMPTION (stated, not measured): an HMAC-SHA256 over a short message on the hash engine takes about 2 microseconds,
+# and a P-384 verify costs about what a sign does (17 ms on OTBN). Phase 2 measurement replaces both.
+MAC_S = 2e-6
+VERIFY_S = SIGN_S
 
 
 def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_request: int = 500, actions: int = 50,
@@ -98,32 +104,65 @@ def run_full_path(tier: str = "rack", gpus: int = 2, responses: int = 100, token
                            escrow=True, response_id=f"resp-{i}")
         if res["released"][0]:
             delivered += 1
-        verifications += 1                       # the egress verified exactly one release ticket for this response
+        verifications += 1                       # the egress checked exactly one release ticket for this response
     for j in range(actions):
         rack.request(node, "payments.transfer", {"amount": 1, "currency": "USD", "destination": "acct-1"})
     ops = dict(node.governor.ops)
     gpu_s = total_tokens * GPU_SECONDS_PER_TOKEN
     firmware_s = sum(COST_S.get(k, 0.0) * v for k, v in ops.items() if k != "sign")
     record_sigs = ops.get("sign", 0)                 # one provenance record per response (rack tier)
-    release_tickets = ops.get("ticket", 0) - actions  # the per-response release tickets (minted on response.release)
-    action_tickets = actions
+    # Adversarial audit 3: release tickets are MACed under the key the governor shares with its own egress (one per
+    # response, on the hash engine); only action tickets are P-384 signatures on the signing engine.
+    release_tickets = ops.get("ticket_mac", 0)
+    action_tickets = ops.get("ticket", 0)
 
     # the engine serves every slot on the chip, each producing the same stream
     record_sigs_chip = record_sigs * slots_per_chip
-    ticket_sigs_chip = ops.get("ticket", 0) * slots_per_chip      # release + action tickets, each a full signature
+    action_sigs_chip = action_tickets * slots_per_chip
+    release_macs_chip = release_tickets * slots_per_chip
     windows = gpu_s / batch_window_s if batch_window_s > 0 else float("inf")
     records_batched = min(record_sigs_chip, windows)             # records collapse to one signature per window
     util = lambda n: 100.0 * n * SIGN_S / gpu_s if gpu_s else 0.0
+    mac_util = 100.0 * release_macs_chip * MAC_S / gpu_s if gpu_s else 0.0
     return {"tier": tier, "responses": responses, "actions": actions, "tokens": total_tokens, "gpu_seconds": gpu_s,
             "ops": ops, "firmware_seconds": firmware_s,
-            "signatures": record_sigs, "tickets": ops.get("ticket", 0), "release_tickets": release_tickets,
+            "signatures": record_sigs, "tickets": release_tickets + action_tickets, "release_tickets": release_tickets,
             "action_tickets": action_tickets, "verifications": verifications, "releases": delivered,
             "slots_per_chip": slots_per_chip,
-            "records_batched": records_batched, "release_ticket_signatures": ticket_sigs_chip,
-            # the old (incomplete) figure: batched provenance records only
+            "records_batched": records_batched, "release_ticket_signatures": 0, "release_ticket_macs": release_macs_chip,
             "engine_utilization_records_only_pct": util(records_batched),
-            # the honest figure: batched records PLUS every per-item release/action ticket signature
-            "engine_utilization_full_path_pct": util(records_batched + ticket_sigs_chip)}
+            # the full path as built: batched records, signed action tickets, MACed release tickets (hash engine)
+            "engine_utilization_full_path_pct": util(records_batched + action_sigs_chip) + mac_util,
+            # the design audit 3 measured, kept for comparison: every release ticket a P-384 signature
+            "engine_utilization_signed_release_pct": util(records_batched + action_sigs_chip + release_macs_chip)}
+
+
+def roll_call_load(members: int, beacons_per_s: float = 1.0, fabric_auth: str = "mac") -> dict:
+    """The loop roll call (adversarial audit 3, catalog row 19): each beacon, every member sends one LOOP_REPORT to
+    every other member and checks the reports of all the others, and every member checks the heartbeat's two
+    authority signatures. ``fabric_auth`` is "sign" (one P-384 signature per report, verified by every receiver: the
+    design audit 3 priced) or "mac" (pairwise HMAC keys from an attested X25519 exchange at roster formation, as
+    govsim now does). Output: the share of one signing engine per member chip."""
+    hb_verifies = 2 * beacons_per_s * VERIFY_S                      # the heartbeat's 2-of-3 quorum, every member
+    if fabric_auth == "sign":
+        per_s = beacons_per_s * (SIGN_S + (members - 1) * VERIFY_S) + hb_verifies
+        hash_s = 0.0
+    else:
+        per_s = hb_verifies
+        hash_s = beacons_per_s * 2 * (members - 1) * MAC_S          # MAC every outgoing copy, check every incoming one
+    return {"members": members, "fabric_auth": fabric_auth, "engine_pct": 100.0 * per_s,
+            "hash_engine_pct": 100.0 * hash_s}
+
+
+def measured_fabric_auth(members: int = 4) -> dict:
+    """Run one beacon round in the model and count how the roster's fabric messages were authenticated."""
+    rack = build_rack(members, "rack")
+    rack.bring_up()
+    for n in rack.nodes:
+        n.governor.ops.clear()
+    rack.heartbeat()
+    ops = [dict(n.governor.ops) for n in rack.nodes]
+    return {"fabric_sign": sum(o.get("fabric_sign", 0) for o in ops), "fabric_mac": sum(o.get("fabric_mac", 0) for o in ops)}
 
 
 def main() -> None:
@@ -137,14 +176,23 @@ def main() -> None:
     short = run("rack", requests=1000, tokens_per_request=100)
     print(f"short responses (100 tokens): engine {short['engine_utilization_unbatched_pct']:.0f}% unbatched, which cannot keep up, "
           f"-> {short['engine_utilization_pct']:.0f}% batched (why the spec batches, docs/04 §9)")
-    print("full request-to-effect path (F23): the real path requests and signs a release ticket per response; those "
-          "per-item signatures are NOT batchable like the records, so they must be priced too:")
+    print("full request-to-effect path (F23, adversarial audit 3): every response gets a release ticket; it is now MACed "
+          "for the node's own egress instead of signed, and priced here with the records and action tickets:")
     for toks in (500, 100):
         f = run_full_path("rack", responses=100, tokens_per_response=toks, actions=0)
         over = "" if f["engine_utilization_full_path_pct"] <= 100 else "  OVER ONE ENGINE"
-        print(f"  {toks:>3}-token responses: records-only {f['engine_utilization_records_only_pct']:.0f}% -> "
-              f"full path (incl. release tickets) {f['engine_utilization_full_path_pct']:.0f}%{over}  "
-              f"(signs={f['signatures']}, tickets={f['tickets']}, releases={f['releases']})")
+        print(f"  {toks:>3}-token responses: full path {f['engine_utilization_full_path_pct']:.0f}%{over} with MACed release "
+              f"tickets (was {f['engine_utilization_signed_release_pct']:.0f}% with a signature per release ticket)  "
+              f"(signs={f['signatures']}, release MACs={f['release_tickets']}, releases={f['releases']})")
+    head = 50.0 - run_full_path("rack", responses=100, tokens_per_response=100, actions=0)["engine_utilization_full_path_pct"]
+    cap = head / 100.0 / SIGN_S
+    print(f"  signed action tickets that fit under half an engine beside 100-token serving: about {cap:.0f} per second per "
+          f"governor chip ({cap / SLOTS_PER_CHIP:.1f} per GPU at {SLOTS_PER_CHIP} GPUs per chip)")
+    print("loop roll call per member chip (one beacon a second; P-384 verify priced as a sign):")
+    for n in (9, 72):
+        a, b = roll_call_load(n, fabric_auth="sign"), roll_call_load(n, fabric_auth="mac")
+        print(f"  {n:>2} members: signed fabric {a['engine_pct']:.0f}% of one engine -> pairwise MACs {b['engine_pct']:.0f}% "
+              f"(+{b['hash_engine_pct']:.2f}% of the hash engine)")
 
 
 if __name__ == "__main__":

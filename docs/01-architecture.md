@@ -173,9 +173,11 @@ completes its controlled withdrawal, then reset.
 
 Which causes open the loop is also deliberate. Loop-opening causes (the loop itself opening,
 a detected tamper, a signed HALT) stop the whole domain. Local causes (a lost heartbeat, a
-stale epoch, an exhausted output budget) throttle this governor's own slot and climb the
-rungs on the policy's timers without opening the loop, so one governor's lost heartbeat does
-not stop the rack. The open cause and the rung are durable: a power cycle brings the governor
+stale epoch, an exhausted output budget) stop this governor's own slot without opening the loop,
+so one governor's lost heartbeat does not stop the rack. A lost heartbeat or a stale epoch goes
+straight to HALT (brake and reset): a brake alone leaves the GPU computing at about half clock
+(adversarial audit 3). An exhausted output budget brakes (THROTTLE) and climbs the rungs on the
+policy's timers. The open cause and the rung are durable: a power cycle brings the governor
 back on the same rung.
 
 No rung can be climbed back up by the governor alone. CLEAR is a signed command from the

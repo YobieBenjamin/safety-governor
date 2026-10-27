@@ -149,7 +149,8 @@ def test_a_restarted_sender_is_not_a_replay(rack):
     rack.recover(rack.nodes[1])
     rack.form_roster("job-again")
     res = a.fabric_send("ALARM", {"code": "after"}, to=b.chip_id)
-    assert res[0][1]["ok"] and "after" in b.alarms
+    # accepted (not a replay); one member's alarm is a report until a second member reports it (adversarial audit 3)
+    assert res[0][1]["ok"] and b.log.has("alarm.reported", code="after")
 
 
 def test_genuine_chip_with_unapproved_firmware_cannot_join(rack):

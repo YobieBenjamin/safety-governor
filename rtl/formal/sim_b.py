@@ -55,8 +55,9 @@ def sim_heartbeat(cycles: int = 4000, seed: int = 1, cls=None) -> tuple[bool, st
             ctx.set(dut.hb_valid, hv); ctx.set(dut.window, win); ctx.set(dut.tick, tick)
             _check(ctx.get(dut.remaining) == rem, seed, c, f"remaining {ctx.get(dut.remaining)} != {rem}")
             _check(ctx.get(dut.expired) == (rem == 0), seed, c, "expired is not 'nothing left'")
-            # spec: reloads only on a valid heartbeat, to the window given; otherwise one tick takes one off
-            rem = win if hv else (rem - 1 if tick and rem else rem)
+            # spec: reloads only on a valid heartbeat, to the window given clamped to the 5000 ms policy maximum
+            # (docs/04 section 9, adversarial audit 3); otherwise one tick takes one off
+            rem = min(win, 5000) if hv else (rem - 1 if tick and rem else rem)
             await ctx.tick()
         return f"{cycles} random cycles match the spec model (seed {seed})"
     return _run(dut, bench)
@@ -177,32 +178,45 @@ class SeqRef:
     row), and Yobie's two calls of 23 October 2026 (docs/04 sections 2 and 3, docs/02 section 1): a HALT opens the loop
     on every rung, SAFE included (SAFE stays SAFE, the command is the cause unless it is tamper); a chip never armed
     since reset raises NO_FIRST_HEARTBEAT once it has waited t_boot milliseconds; an authorized EXCLUDE closes the
-    switch of a chip in HALTED_INITIAL with no cause and no live heartbeat, and nothing else."""
+    switch of a chip in HALTED_INITIAL with no cause and no live heartbeat, and nothing else.
+
+    Adversarial audit 3: a clear counts only with clear_authorized in the same cycle; a lost heartbeat in RUN or
+    THROTTLE is HALT with the local cause (loop closed); the non-volatile rung record (nv, nv_safe) is set in or on
+    entry to HALT or SAFE, cleared only by an authorized clear, survives reset, and while it is set a chip in
+    HALTED_INITIAL goes back to HALT (SAFE) with cause 5 and the loop open instead of arming."""
 
     def __init__(self, t_throttle, t_halt, t_boot):
         self.tt, self.th, self.tb = t_throttle, t_halt, t_boot
         self.state, self.cause, self.sw_open, self.timer = HALTED_INITIAL, 0, True, 0
         self.hb_seen, self.boot, self.excluded = False, 0, False
+        self.nv, self.nv_safe = False, False                 # the non-volatile record (no reset clears it)
 
     def no_first_hb(self):
         return (not self.hb_seen) and self.boot >= self.tb
 
     def step(self, i):
-        """i: tamper, clear, lost, cmd_halt, hb_expired, local_trip, cmd_throttle, hb_ok, loop_sense, tick, cmd_exclude."""
+        """i: tamper, clear, clear_authorized, lost, cmd_halt, hb_expired, local_trip, cmd_throttle, hb_ok, loop_sense,
+        tick, cmd_exclude."""
         s, run_like = self.state, self.state in (RUN, THROTTLE)
         ns, nc, nsw, nt = s, self.cause, self.sw_open, self.timer
         seen, exc = self.hb_seen, self.excluded
+        nv, nv_safe = self.nv, self.nv_safe
         if i["tamper"]:                                       # tamper outranks CLEAR (CONFORMANCE-CLEAR-BEATS-TAMPER, fixed 23 October)
             ns, nc, nsw = SAFE, 3, True
-        elif i["clear"] and s != HALTED_INITIAL:
+        elif i["clear"] and i["clear_authorized"] and s != HALTED_INITIAL:
             ns, nc, nt = HALTED_INITIAL, 0, 0                # clear does not touch the switch
+            nv = nv_safe = False                             # the only way the record is erased
+        elif self.nv and s == HALTED_INITIAL:                 # back from a reset with an uncleared halt on record
+            ns, nc, nsw, nt = (SAFE if self.nv_safe else HALT), 5, True, 0
         elif i["lost"] and run_like:
             ns, nc, nsw, nt = HALT, 1, True, 0
         elif i["cmd_halt"] and s == SAFE:                     # Yobie's call 1: SAFE stays SAFE, the loop opens
             nc, nsw = (3 if self.cause == 3 else 4), True
         elif i["cmd_halt"]:
             ns, nc, nsw, nt = HALT, 4, True, 0
-        elif (i["hb_expired"] or i["local_trip"] or i["cmd_throttle"]) and s == RUN:
+        elif i["hb_expired"] and run_like:                    # adversarial audit 3: HALT, local cause, loop stays closed
+            ns, nc, nt = HALT, 2, 0
+        elif (i["local_trip"] or i["cmd_throttle"]) and s == RUN:
             ns, nc, nt = THROTTLE, 2, 0
         elif s == HALTED_INITIAL and self.cause == 0 and i["hb_ok"]:
             nsw, seen, exc = False, True, False               # armed: ends any exclusion
@@ -216,18 +230,22 @@ class SeqRef:
             ns, nt = (SAFE, 0) if self.timer + 1 >= self.th else (s, self.timer + 1)
         if i["tamper"] or i["cmd_halt"]:
             exc = False
+        if not (i["clear"] and i["clear_authorized"] and s != HALTED_INITIAL and not i["tamper"]):
+            nv = nv or ns in (HALT, SAFE) or s in (HALT, SAFE)
+            nv_safe = nv_safe or ns == SAFE or s == SAFE
         waiting = not self.hb_seen and s == HALTED_INITIAL and self.cause == 0 and not i["hb_ok"]
         nb = self.boot + 1 if waiting and i["tick"] and self.boot != 0xFFFF else self.boot
         self.state, self.cause, self.sw_open, self.timer = ns, nc, nsw, nt
         self.hb_seen, self.boot, self.excluded = seen, nb, exc
+        self.nv, self.nv_safe = nv, nv_safe
 
 
 def sim_halt_seq(cycles: int = 4000, seed: int = 11, cls=None) -> tuple[bool, str]:
     """Several fresh power-ons (a new DUT each), so the boot window and EXCLUDE are visited often."""
     from rtl.governor_rtl import HaltSeq
     rng = random.Random(seed)
-    names = ("tamper", "clear", "loop_lost", "cmd_halt", "hb_expired", "local_trip", "cmd_throttle", "hb_ok",
-             "loop_sense", "tick", "cmd_exclude")
+    names = ("tamper", "clear", "clear_authorized", "loop_lost", "cmd_halt", "hb_expired", "local_trip", "cmd_throttle",
+             "hb_ok", "loop_sense", "tick", "cmd_exclude")
     stats = {"seen": set(), "excl": 0, "nfh": 0}
     seg = 500
 
@@ -238,19 +256,22 @@ def sim_halt_seq(cycles: int = 4000, seed: int = 11, cls=None) -> tuple[bool, st
 
         async def bench(ctx):
             for c in range(base, base + seg):
-                i = {"tamper": rng.random() < 0.004, "clear": rng.random() < 0.02, "loop_lost": rng.random() < 0.05,
+                i = {"tamper": rng.random() < 0.004, "clear": rng.random() < 0.03, "clear_authorized": rng.random() < 0.6,
+                     "loop_lost": rng.random() < 0.05,
                      "cmd_halt": rng.random() < 0.02, "hb_expired": rng.random() < 0.05, "local_trip": rng.random() < 0.01,
                      "cmd_throttle": rng.random() < 0.01, "hb_ok": rng.random() < (0.01 if quiet_hb else 0.08),
                      "loop_sense": rng.random() < 0.9, "tick": rng.random() < 0.7, "cmd_exclude": rng.random() < 0.05}
                 for k in names:
                     ctx.set(getattr(dut, k), i[k])
                 got = {k: ctx.get(getattr(dut, k)) for k in ("state", "cause", "switch_open", "timer", "hb_seen",
-                                                              "boot_timer", "excluded", "no_first_hb", "pwr_en", "perst", "pwrbrk")}
+                                                              "boot_timer", "excluded", "no_first_hb", "pwr_en", "perst", "pwrbrk",
+                                                              "rung_nv", "rung_nv_safe")}
                 s = ref.state
                 want = {"state": s, "cause": ref.cause, "switch_open": int(ref.sw_open), "timer": ref.timer,
                         "hb_seen": int(ref.hb_seen), "boot_timer": ref.boot, "excluded": int(ref.excluded),
                         "no_first_hb": int(ref.no_first_hb()), "pwr_en": int(s not in (HALTED_INITIAL, SAFE)),
-                        "perst": int(s in (HALTED_INITIAL, HALT, SAFE)), "pwrbrk": int(s != RUN)}
+                        "perst": int(s in (HALTED_INITIAL, HALT, SAFE)), "pwrbrk": int(s != RUN),
+                        "rung_nv": int(ref.nv), "rung_nv_safe": int(ref.nv_safe)}
                 _check(got == want, seed, c, f"{got} != {want}")
                 stats["seen"].add(s); stats["excl"] += ref.excluded; stats["nfh"] += ref.no_first_hb()
                 ref.step({**i, "lost": i["loop_lost"]})
@@ -292,8 +313,12 @@ class CoreRef:
         lost = len(self.samples) == 2 and not any(self.samples)
         hw = (int(self.seq.no_first_hb()) << 31) | (int(self.seq.excluded) << 30)
         self.alarms |= hw | (i["set_mask"] & ~(3 << 30))     # firmware cannot raise the hardware bits
-        self.seq.step({**i, "lost": lost, "hb_expired": expired, "hb_ok": not expired, "tick": tick_ms})
-        self.rem = i["window"] if i["hb_valid"] else (self.rem - 1 if tick_ms and self.rem else self.rem)
+        # adversarial audit 3: the core authorizes a clear only in the cycle the mailbox dispatches a CLEAR (0x10) frame;
+        # the bench reads the dispatch (the mailbox has its own proof) and passes it in as clear_dispatch
+        self.seq.step({**i, "lost": lost, "hb_expired": expired, "hb_ok": not expired, "tick": tick_ms,
+                       "clear_authorized": i["clear_dispatch"]})
+        # adversarial audit 3: the heartbeat window is clamped to the 5000 ms policy maximum
+        self.rem = min(i["window"], 5000) if i["hb_valid"] else (self.rem - 1 if tick_ms and self.rem else self.rem)
         if i["tick"]:
             self.div = (self.div + 1) % self.ms
         if i["sample"]:
@@ -315,8 +340,8 @@ def sim_governor_core(cycles: int = 3000, seed: int = 6, cls=None) -> tuple[bool
             # rare causes, so the ladder gets climbed instead of being reset every few cycles
             i = {"tick": rng.random() < 0.8, "sample": rng.random() < 0.3, "loop_sense": rng.random() < 0.85,
                  "hb_valid": rng.random() < 0.03, "window": rng.randrange(0, 12),
-                 "tamper": rng.random() < 0.003, "cmd_halt": rng.random() < 0.004, "cmd_throttle": rng.random() < 0.004,
-                 "local_trip": rng.random() < 0.004, "clear": rng.random() < 0.01, "cmd_exclude": rng.random() < 0.02,
+                 "tamper": rng.random() < 0.003, "cmd_halt": rng.random() < 0.004, "cmd_throttle": rng.random() < 0.01,
+                 "local_trip": rng.random() < 0.01, "clear": rng.random() < 0.03, "cmd_exclude": rng.random() < 0.02,
                  "set_mask": rng.choice([0, 0, 0, 0, 1 << 31, 1 << 30, rng.randrange(1 << 32)])}
             sigs = {"tick": dut.tick, "sample": dut.sample, "loop_sense": dut.loop_sense, "hb_valid": dut.hb.hb_valid,
                     "window": dut.hb.window, "tamper": dut.halt.tamper, "cmd_halt": dut.halt.cmd_halt,
@@ -324,8 +349,14 @@ def sim_governor_core(cycles: int = 3000, seed: int = 6, cls=None) -> tuple[bool
                     "cmd_exclude": dut.halt.cmd_exclude, "set_mask": dut.alarms.set_mask}
             for k, s in sigs.items():
                 ctx.set(s, i[k])
-            # the host side does random things too: reads anywhere, rings the doorbell; none of it may matter
+            # the host side does random things too: reads anywhere, rings the doorbell; none of it may matter, except
+            # that a frame the crypto core verifies as CLEAR (0x10) authorizes the firmware's clear (adversarial audit 3)
             ctx.set(dut.csr_addr, rng.randrange(4096)); ctx.set(dut.doorbell, rng.random() < 0.1)
+            frame_cmd = rng.choice([0x10, 0x10, 0x0E])
+            ctx.set(dut.mbox.frame_seq, c + 1); ctx.set(dut.mbox.epoch_exempt, 1)
+            ctx.set(dut.mbox.cmd, frame_cmd); ctx.set(dut.mbox.signed_cmd, frame_cmd)
+            ctx.set(dut.mbox.sig_done, rng.random() < 0.5); ctx.set(dut.mbox.sig_ok, 1)
+            i["clear_dispatch"] = bool(ctx.get(dut.mbox.dispatch)) and ctx.get(dut.mbox.cmd) == 0x10
             # and the fuse side jumps the monotonic counter upward, often keeping its low bits: that must not move
             # the millisecond (FINDINGS-b.md, RTL-HEARTBEAT-KEPT-ALIVE-WITHOUT-HEARTBEAT), so the reference model's prescaler ignores it
             hammer = rng.random() < 0.5

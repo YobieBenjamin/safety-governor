@@ -12,7 +12,7 @@ from conftest import pay
 def test_other_governors_reserve_at_the_owner(rack):
     node1 = rack.nodes[1]
     r = pay(rack, node1, 500, governor=node1.governor)
-    assert r["ok"] and r["ticket"]["payload"]["budget_owner"] == "gov00"
+    assert r["ok"] and r["ticket"]["payload"]["budget_owner"] == {"owners": ["gov00", "gov01", "gov02"], "threshold": 3}
     owner = rack.nodes[0].governor
     committed, reserved = owner.ledger.usage("pay-usd-hourly", 3600, rack.clock.now())
     assert reserved == 500 and committed == 0

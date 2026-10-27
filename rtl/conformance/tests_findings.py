@@ -46,9 +46,11 @@ def test_finding_clear_and_tamper_pulse_same_cycle_ends_safe():
     async def tb(ctx):
         await _halted_by_command(ctx, dut)
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)              # an authorized clear (adversarial audit 3)
         ctx.set(dut.tamper, 1)
         await ctx.tick()
         ctx.set(dut.clear, 0)
+        ctx.set(dut.clear_authorized, 0)
         ctx.set(dut.tamper, 0)
         for _ in range(3):
             await ctx.tick()
@@ -67,9 +69,11 @@ def test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung():
     async def tb(ctx):
         await _halted_by_command(ctx, dut)
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)              # an authorized clear (adversarial audit 3)
         ctx.set(dut.tamper, 1)
         await ctx.tick()
         ctx.set(dut.clear, 0)
+        ctx.set(dut.clear_authorized, 0)
         assert ctx.get(dut.state) == SAFE, f"state {ctx.get(dut.state)} in the cycle after CLEAR + tamper"
     sim(dut, tb)
 
@@ -83,9 +87,11 @@ def test_level_tamper_with_clear_settles_in_safe():
     async def tb(ctx):
         await _halted_by_command(ctx, dut)
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)              # an authorized clear (adversarial audit 3)
         ctx.set(dut.tamper, 1)
         await ctx.tick()
         ctx.set(dut.clear, 0)
+        ctx.set(dut.clear_authorized, 0)
         assert levers(ctx, dut) == (1, 1, 0)
         await ctx.tick()
         assert ctx.get(dut.state) == SAFE and ctx.get(dut.cause) == C_TAMPER
@@ -212,9 +218,10 @@ def test_cmd_halt_in_throttle_from_local_cause_opens_loop():
 
     async def tb(ctx):
         await _to_run(ctx, dut)
-        ctx.set(dut.hb_expired, 1)
+        ctx.set(dut.local_trip, 1)                   # a local trip throttles (a lost heartbeat now halts: adversarial audit 3)
         await ctx.tick()
-        ctx.set(dut.hb_expired, 0)
+        ctx.set(dut.local_trip, 0)
+        assert ctx.get(dut.state) == THROTTLE
         ctx.set(dut.cmd_halt, 1)
         await ctx.tick()
         assert ctx.get(dut.state) == HALT and ctx.get(dut.switch_open) == 1

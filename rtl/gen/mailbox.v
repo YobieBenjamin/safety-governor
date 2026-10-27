@@ -1,22 +1,22 @@
 
 (* top =  1  *)
-module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, needs_run, running, sig_done, sig_ok, clk, rst, verify_req, dispatch, cmd_out, status, doorbell);
+module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, needs_run, running, epoch_advanced, sig_done, sig_ok, clk, rst, verify_req, dispatch, cmd_out, status, doorbell);
   reg \$auto$verilog_backend.cc:2355:dump_module$1  = 0;
-  reg [31:0] \$1 ;
+  reg [63:0] \$1 ;
   wire \$10 ;
   wire \$11 ;
   wire \$12 ;
   reg [2:0] \$13 ;
   reg \$14 ;
-  reg [31:0] \$15 ;
-  reg [31:0] \$16 ;
-  reg [31:0] \$17 ;
-  reg [31:0] \$18 ;
-  reg [31:0] \$19 ;
+  reg [63:0] \$15 ;
+  reg [63:0] \$16 ;
+  reg [63:0] \$17 ;
+  reg [63:0] \$18 ;
+  reg [63:0] \$19 ;
   wire \$2 ;
-  reg [31:0] \$20 ;
-  reg [31:0] \$21 ;
-  reg [31:0] \$22 ;
+  reg [63:0] \$20 ;
+  reg [63:0] \$21 ;
+  reg [63:0] \$22 ;
   reg [7:0] \$23 ;
   wire \$3 ;
   wire \$4 ;
@@ -35,12 +35,14 @@ module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, 
   reg dispatch;
   input doorbell;
   wire doorbell;
+  input epoch_advanced;
+  wire epoch_advanced;
   input epoch_exempt;
   wire epoch_exempt;
   input epoch_match;
   wire epoch_match;
-  input [31:0] frame_seq;
-  wire [31:0] frame_seq;
+  input [63:0] frame_seq;
+  wire [63:0] frame_seq;
   reg fsm_state = 1'h0;
   input [2:0] key_slot;
   wire [2:0] key_slot;
@@ -50,14 +52,14 @@ module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, 
   wire rst;
   input running;
   wire running;
-  reg [31:0] seq0 = 32'd0;
-  reg [31:0] seq1 = 32'd0;
-  reg [31:0] seq2 = 32'd0;
-  reg [31:0] seq3 = 32'd0;
-  reg [31:0] seq4 = 32'd0;
-  reg [31:0] seq5 = 32'd0;
-  reg [31:0] seq6 = 32'd0;
-  reg [31:0] seq7 = 32'd0;
+  reg [63:0] seq0 = 64'h0000000000000000;
+  reg [63:0] seq1 = 64'h0000000000000000;
+  reg [63:0] seq2 = 64'h0000000000000000;
+  reg [63:0] seq3 = 64'h0000000000000000;
+  reg [63:0] seq4 = 64'h0000000000000000;
+  reg [63:0] seq5 = 64'h0000000000000000;
+  reg [63:0] seq6 = 64'h0000000000000000;
+  reg [63:0] seq7 = 64'h0000000000000000;
   wire seq_ok;
   input sig_done;
   wire sig_done;
@@ -225,8 +227,11 @@ module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, 
             end
           end
     endcase
+    if (epoch_advanced) begin
+      \$15  = 64'h0000000000000000;
+    end
     if (rst) begin
-      \$15  = 32'd0;
+      \$15  = 64'h0000000000000000;
     end
   end
   always @* begin
@@ -248,8 +253,11 @@ module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, 
             end
           end
     endcase
+    if (epoch_advanced) begin
+      \$16  = 64'h0000000000000000;
+    end
     if (rst) begin
-      \$16  = 32'd0;
+      \$16  = 64'h0000000000000000;
     end
   end
   always @* begin
@@ -273,8 +281,11 @@ module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, 
             end
           end
     endcase
+    if (epoch_advanced) begin
+      \$17  = 64'h0000000000000000;
+    end
     if (rst) begin
-      \$17  = 32'd0;
+      \$17  = 64'h0000000000000000;
     end
   end
   always @* begin
@@ -300,8 +311,11 @@ module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, 
             end
           end
     endcase
+    if (epoch_advanced) begin
+      \$18  = 64'h0000000000000000;
+    end
     if (rst) begin
-      \$18  = 32'd0;
+      \$18  = 64'h0000000000000000;
     end
   end
   always @* begin
@@ -329,8 +343,11 @@ module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, 
             end
           end
     endcase
+    if (epoch_advanced) begin
+      \$19  = 64'h0000000000000000;
+    end
     if (rst) begin
-      \$19  = 32'd0;
+      \$19  = 64'h0000000000000000;
     end
   end
   always @* begin
@@ -360,8 +377,11 @@ module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, 
             end
           end
     endcase
+    if (epoch_advanced) begin
+      \$20  = 64'h0000000000000000;
+    end
     if (rst) begin
-      \$20  = 32'd0;
+      \$20  = 64'h0000000000000000;
     end
   end
   always @* begin
@@ -393,8 +413,11 @@ module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, 
             end
           end
     endcase
+    if (epoch_advanced) begin
+      \$21  = 64'h0000000000000000;
+    end
     if (rst) begin
-      \$21  = 32'd0;
+      \$21  = 64'h0000000000000000;
     end
   end
   always @* begin
@@ -429,8 +452,11 @@ module mailbox(frame_seq, key_slot, cmd, signed_cmd, epoch_match, epoch_exempt, 
             end
           end
     endcase
+    if (epoch_advanced) begin
+      \$22  = 64'h0000000000000000;
+    end
     if (rst) begin
-      \$22  = 32'd0;
+      \$22  = 64'h0000000000000000;
     end
   end
   always @* begin

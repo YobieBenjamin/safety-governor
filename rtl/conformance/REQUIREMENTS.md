@@ -44,7 +44,7 @@ Findings (F-nn) are the tests that reproduce a disagreement; see `FINDINGS.md`.
 | REQUIREMENT-HEARTBEAT-REMAINING-REGISTER | S §2 | Heartbeat time remaining, milliseconds | top (HB_REMAIN) | RTL | `test_core_hb_remain_csr`<br>`test_finding_heartbeat_expires_on_time` (CONFORMANCE-MILLISECOND-TICK-TOO-LONG) |  |
 | REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER | S §9 | the RTL sequencer and heartbeat timers run on a millisecond tick derived from the microsecond counter | top | RTL | `test_core_timers_ignore_the_raw_microsecond_tick`<br>`test_finding_heartbeat_expires_on_time` (CONFORMANCE-MILLISECOND-TICK-TOO-LONG)<br>`test_core_ms_strobe_is_derived_from_the_counter` |  |
 | REQUIREMENT-HEARTBEAT-WINDOW-CLAMPED | S §9 | the governor clamps any signed window to it | heartbeat (window input) | FW | `test_fw_heartbeat_window_is_clamped_to_policy_expiry` |  |
-| REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | V §3 | The rung (state) climbs on any of loop_lost, hb_expired, tamper, cmd_halt, cmd_throttle, local_trip and on the timers | halt | RTL | `test_halt_loop_lost_from_run`<br>`test_halt_loop_lost_from_throttle`<br>`test_halt_hb_expired_throttles`<br>`test_halt_local_trip_throttles`<br>`test_halt_cmd_throttle_throttles`<br>`test_halt_cmd_halt_from_run`<br>`test_halt_cmd_halt_from_throttle`<br>`test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_halt_throttle_escalates_after_t_throttle_ticks`<br>`test_halt_halt_escalates_after_t_halt_ticks` |  |
+| REQUIREMENT-RUNG-CLIMBS-ON-CAUSES | V §3 | The rung (state) climbs on any of loop_lost, hb_expired, tamper, cmd_halt, cmd_throttle, local_trip and on the timers | halt | RTL | `test_halt_loop_lost_from_run`<br>`test_halt_loop_lost_from_throttle`<br>`test_halt_hb_expired_halts`<br>`test_halt_hb_expired_from_throttle_halts`<br>`test_halt_local_trip_throttles`<br>`test_halt_cmd_throttle_throttles`<br>`test_halt_cmd_halt_from_run`<br>`test_halt_cmd_halt_from_throttle`<br>`test_halt_tamper_from_run`<br>`test_halt_tamper_from_every_rung`<br>`test_halt_throttle_escalates_after_t_throttle_ticks`<br>`test_halt_halt_escalates_after_t_halt_ticks` |  |
 | REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED | V §3 | never descends without clear | halt | RTL | `test_halt_never_descends_without_clear_random`<br>`test_halt_safe_is_absorbing_without_clear`<br>`test_finding_clear_and_tamper_pulse_same_cycle_ends_safe`<br>`test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung`<br>`test_model_finding_halt_in_safe_does_not_descend`<br>`test_calls_model_halt_in_safe_stays_safe_and_opens_loop` |  |
 | REQUIREMENT-LEVERS-FOLLOW-RUNG | V §3 | the levers pwrbrk, perst, pwr_en follow the rung exactly | halt | RTL | `test_halt_levers_follow_every_rung`<br>`test_halt_ports_closed_outside_run`<br>`test_model_finding_halt_in_safe_does_not_descend`<br>`test_diff_levers_per_rung_rtl_equals_model` |  |
 | REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED | V §3 | switch_open starts set, clears only when armed (no cause, hb_ok) | halt | RTL | `test_halt_switch_open_at_reset`<br>`test_halt_no_arming_without_heartbeat`<br>`test_halt_arms_before_loop_current`<br>`test_halt_heartbeat_alone_never_recloses_after_a_loop_cause`<br>`test_diff_boot_rung_rtl_equals_model` |  |
@@ -248,8 +248,8 @@ path and transactional authorization.
 ## The count
 
 Catalogue rows: 87 (69 firmware, 4 hard core, 14 reference gate).
-Conformance tests in `rtl/conformance`: 173, each tied to at least one requirement id.
-Total: 260 (target 150).
+Conformance tests in `rtl/conformance`: 174, each tied to at least one requirement id.
+Total: 261 (target 150).
 
 Be clear about what the two halves are. The catalogue rows exercise the reference software stack, not
 the RTL; they count toward the total because the brief counts them, not because they test the chip.

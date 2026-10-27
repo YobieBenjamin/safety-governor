@@ -136,8 +136,19 @@ def probe_override_slow_and_logged(rack):
 
 
 def probe_governor_overhead_bounded(rack):
+    """Firmware under one percent of GPU time, and the signing engine under half busy on the FULL request-to-effect
+    path (records, release tickets, action tickets) at short responses, and on the loop roll call at 72 members with
+    the fabric authentication the model actually uses (adversarial audit 3: this reported pass while the full path
+    was at 306 percent of one engine)."""
+    from .bench import measured_fabric_auth, roll_call_load, run_full_path
     r = bench_run(rack.tier, gpus=2, requests=100, tokens_per_request=500, actions=10)
-    return "pass" if (r["firmware_overhead_pct"] < 1.0 and r["engine_utilization_pct"] < 50.0 and r["ops"]["sign"] == 100) else "FAIL"
+    short = run_full_path(rack.tier, gpus=2, responses=100, tokens_per_response=100, actions=0)
+    mixed = run_full_path(rack.tier, gpus=2, responses=100, tokens_per_response=500, actions=10)
+    auth = "mac" if measured_fabric_auth()["fabric_sign"] == 0 else "sign"
+    roll = roll_call_load(72, fabric_auth=auth)
+    ok = (r["firmware_overhead_pct"] < 1.0 and r["ops"]["sign"] == 100 and short["engine_utilization_full_path_pct"] < 50.0
+          and mixed["engine_utilization_full_path_pct"] < 50.0 and roll["engine_pct"] < 50.0)
+    return "pass" if ok else "FAIL"
 
 
 def probe_leakage_within_budget(rack):

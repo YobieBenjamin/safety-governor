@@ -206,13 +206,16 @@ class MailboxRef:
             else:
                 self.status = 3
             self.verify = 0
+        if i["epoch_advanced"]:                           # adversarial audit 3: a new epoch restarts every key slot
+            self.seq = [0] * 8
     def regs(self):
         return {"status": self.status, "cmd_out": self.cmd_out, **{f"last_seq[{k}]": v for k, v in enumerate(self.seq)}}
     @staticmethod
     def stim(r, prev):
         i = {"rst": False, "doorbell": r.random() < .4, "frame_seq": r.randrange(16), "key_slot": r.randrange(3),
              "cmd": r.randrange(4), "epoch_match": r.random() < .8, "epoch_exempt": r.random() < .3,
-             "needs_run": r.random() < .5, "running": r.random() < .7, "sig_done": r.random() < .4, "sig_ok": r.random() < .8}
+             "needs_run": r.random() < .5, "running": r.random() < .7, "sig_done": r.random() < .4, "sig_ok": r.random() < .8,
+             "epoch_advanced": r.random() < .05}
         i["signed_cmd"] = i["cmd"] if r.random() < .7 else r.randrange(4)
         if prev.get("_verifying"):                        # RTL-MAILBOX-FRAME-HELD-STILL: the frame holds still while it is being verified
             for f in MailboxRef.FIELDS:

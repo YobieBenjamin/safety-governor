@@ -57,14 +57,14 @@ def test_integrated_tier_hashes_inline():
 
 
 def test_bytes_that_leave_for_the_host_but_are_never_presented_trip_an_alarm(rack1):
-    """Rack tier: the GPU's output crosses the governed pcie port. The governor compares what
-    crossed with what the runtime presented for signing; the excess beyond the policy's slack
-    (1 MB) raises OUTPUT_UNPRESENTED and blocks the output path."""
+    """Rack tier: the GPU's output crosses the governed pcie port. The host 'out' entry admits only what was
+    presented for signing plus the policy's slack (1 MB); the switch refuses the excess, so it never leaves
+    (adversarial audit 3: it used to be admitted and only noticed at the next tick). The refusal raises
+    OUTPUT_UNPRESENTED and blocks the output path."""
     node = rack1.nodes[0]
     g = node.governor
-    for _ in range(1000):
-        assert node.gpu.emit("s", b"x" * 10_000) is not None               # 10 MB out, never presented
-    assert reasons.OUTPUT_UNPRESENTED not in g.alarms                        # the check runs on the governor's tick
+    left = sum(node.gpu.emit("s", b"x" * 10_000) is not None for _ in range(1000))   # 10 MB tried, never presented
+    assert left * 10_000 <= 1 << 20                                          # no more than the slack left the GPU
     rack1.tick()
     assert reasons.OUTPUT_UNPRESENTED in g.alarms
     assert node.gpu.emit("s", b"x") is None and node.gpu.output_blocked

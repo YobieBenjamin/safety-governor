@@ -10,7 +10,7 @@ You cannot trust an AI to police another AI, because the second AI fails the sam
 
 | Repository | What it is | What it proves | Run it |
 |---|---|---|---|
-| [safety-governor](https://github.com/YobieBenjamin/safety-governor) (this one) | The chip: design documents, a functional model of a governed rack, the hypothesis suite, the RTL for the hard-core blocks, the Z3 proofs, the experiment program and the agents that run it | The logic of the governor and its fabric; the proofs; the silicon plan | `./run.sh` (443 model tests, 57 RTL tests, the sweep); `make proof` |
+| [safety-governor](https://github.com/YobieBenjamin/safety-governor) (this one) | The chip: design documents, a functional model of a governed rack, the hypothesis suite, the RTL for the hard-core blocks, the Z3 proofs, the experiment program and the agents that run it | The logic of the governor and its fabric; the proofs; the silicon plan | `./run.sh` (501 model tests, 67 RTL tests, the sweep); `make proof` |
 | [hardware-and-silicon](https://github.com/YobieBenjamin/hardware-and-silicon) | The control-plane reference stack and the blog series *The Chip That Says No* | The protocol: attestation, gate, tickets, budgets, holds, epochs, the audit trail, the OpenShell path | `./run.sh` (56 tests, 75 attacks blocked, 12 baselines allowed) |
 | [Watermark](https://github.com/YobieBenjamin/Watermark) | A test copy of OpenAI's textGrain watermark, a hardened detector, retrieval, a signed registry, 13 attacks | What a watermark can and cannot do; the provenance verdict the gate consumes | `./run.sh` |
 | [safety](https://github.com/YobieBenjamin/safety) | The algorithm mine: hypotheses YB-XXXX, each coded, tested and ledgered; the observer package (`observer/`), the witness lane | The observer as a measured witness, never the lock | `make all` |
@@ -47,11 +47,11 @@ The design documents, numbered, each opening with a plain-words summary and a "b
 | [07-verification-plan.md](docs/07-verification-plan.md) | The nineteen contract tests (hypotheses) and what falsifies each; RTL invariants; silicon validation; FMEA |
 | [11-loop-timing.md](docs/11-loop-timing.md) | The halt loop as a circuit: ngspice across 72 governors, 39 configurations including cut wires, worst case 317 microseconds against a 1 millisecond bound |
 
-The logic runs. [govsim/](govsim/) is the functional model of a rack of governed GPUs: the governor (`governor.py`, the order of checks is `_cmd_request`), the rulebook (`policy.py`), the ledger, the log, the fabric, the GPU with its levers, the switches as enforcement points. [tests/](tests/) holds one file per hypothesis, `test_contract_fresh_authorization_per_operation.py` to `test_contract_oversight_survives_model.py`, plus the regression tests of every audit finding: 443 tests; each test is a thing that would knock a claim down. [rtl/](rtl/) holds the hard-core blocks in Amaranth (measurement registers, monotonic counter, epoch register, ticket store, capability table, halt sequencer, heartbeat, mailbox, lifecycle) with 57 simulation tests and generated Verilog. Forty-eight single-point mutations of the model and the RTL were run to confirm the tests bite (see the README).
+The logic runs. [govsim/](govsim/) is the functional model of a rack of governed GPUs: the governor (`governor.py`, the order of checks is `_cmd_request`), the rulebook (`policy.py`), the ledger, the log, the fabric, the GPU with its levers, the switches as enforcement points. [tests/](tests/) holds one file per hypothesis, `test_contract_fresh_authorization_per_operation.py` to `test_contract_oversight_survives_model.py`, plus the regression tests of every audit finding: 501 tests; each test is a thing that would knock a claim down. [rtl/](rtl/) holds the hard-core blocks in Amaranth (measurement registers, monotonic counter, epoch register, ticket store, capability table, halt sequencer, heartbeat, mailbox, lifecycle) with 67 simulation tests and generated Verilog. Forty-eight single-point mutations of the model and the RTL were run to confirm the tests bite (see the README).
 
 ```bash
 git clone https://github.com/YobieBenjamin/safety-governor && cd safety-governor
-./run.sh          # venv, 443 model tests, 57 RTL tests, Verilog, the sweep into results/report.md
+./run.sh          # venv, 501 model tests, 67 RTL tests, Verilog, the sweep into results/report.md
 ```
 
 ## 3. Follow the math
@@ -87,8 +87,8 @@ Three suites and an attack catalogue, all runnable in minutes without hardware.
 
 | What | Where | Count | Command |
 |---|---|---|---|
-| Governor model: the twenty-one contract tests and the audit regression tests | `safety-governor/tests/` | 443 tests | `./run.sh` or `make test` |
-| RTL blocks | `safety-governor/rtl/tests/` | 57 tests | `make rtl-test` |
+| Governor model: the twenty-one contract tests and the audit regression tests | `safety-governor/tests/` | 501 tests | `./run.sh` or `make test` |
+| RTL blocks | `safety-governor/rtl/tests/` | 67 tests | `make rtl-test` |
 | Halt-loop circuit | `safety-governor/hw/loop/` | 39 ngspice configurations | `make loop` |
 | Reference stack: gate, ledger, endpoints, OASP path, transactional contract | `hardware-and-silicon/tests/` | 56 tests | `./run.sh` |
 | Attack catalogue, every entry against a freshly built node | `hardware-and-silicon/hardware_ref/attacks.py`, report in `results/report.md` | 75 attacks blocked, 12 baselines allowed; 17 on the OpenShell and Sentry path, 5 on the provenance interface | `./run.sh` |
@@ -101,7 +101,7 @@ A baseline is a legitimate operation that must go through; the catalogue carries
 | Grade | What | Where to check |
 |---|---|---|
 | Proven (Z3, by induction, on the abstract machine of `proofs/core_invariants.py`; that the simulation and the RTL follow the abstract machine is checked by tests, not proven, and trace conformance is still open) | The fourteen core invariants (four of them added 22 October 2026, INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD, INVARIANT-FUSED-THRESHOLD-NEVER-FALLS, INVARIANT-ONLY-CLEAR-LEAVES-HALT and INVARIANT-NOTHING-EXECUTES-WHILE-HALTED: the quorum the chip fuses, the clear only a signed CLEAR gives, and nothing executes while halted) and the commit-point properties (1) to (3), on the abstract machine | `make proof`; docs/19 §2 |
-| Tested (every run) | The functional model follows the rules (443 tests); the RTL blocks follow the model (57); the protocol holds against 75 attacks and lets 12 baselines through; OpenShell's shipped middleware contract (5 tests) | `./run.sh` in both repositories |
+| Tested (every run) | The functional model follows the rules (501 tests); the RTL blocks follow the model (67); the protocol holds against 75 attacks and lets 12 baselines through; OpenShell's shipped middleware contract (5 tests) | `./run.sh` in both repositories |
 | Simulated | The halt loop opens and every governor detects it inside 1 ms, worst case 317 µs | docs/11; `make loop` |
 | Assumed, and written down | Every input the gate trusts: who signs it, how fresh, what failure means | docs/06 |
 | Open, with an experiment | Simulation conforms to the proven machine (WAVE-TRACE-CONFORMANCE-REPLAY); two gates read one policy the same way (WAVE-DIFFERENTIAL-GATE-TEST); the physical path enumeration with a source per row and the retrofit columns (WAVE-EXIT-REGISTER); the overhead numbers (N); the observer's miss rate (WAVE-OBSERVER-EVALUATION-SET to 0054); the proofs on the Verilog (WAVE-FORMAL-PROOFS-ON-VERILOG) | docs/20, the pull requests, `audit/wave-N/` |

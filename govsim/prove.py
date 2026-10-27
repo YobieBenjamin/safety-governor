@@ -6,8 +6,11 @@
     python -m govsim.prove --write     # also write results/PROOF.md and results/proof-manifest.json
     python -m govsim.prove --quick     # skip the full pytest sweep (everything else still runs)
 
-This is the artifact that turns "I have a simulation" into "here is a proof you can run yourself and
-cannot break." It runs every layer of evidence and collapses them to a single verdict:
+This collects every layer of evidence the project has and collapses it to a single verdict that anyone can rerun.
+VERDICT 1 means every check that exists passed; it does not mean no attack exists. Adversarial audit 3 found a
+strike on a protected site, a 10 GiB host transfer and a one-key list swap all succeeding while this printed
+VERDICT 1, because no check covered them. Each audit's attacks are added as checks (the red team and the
+pytest suite), so the verdict is only as strong as the attacks it has been shown. The verdict:
 
     VERDICT = 1  iff  no component failed
     VERDICT = 0  otherwise
@@ -142,8 +145,10 @@ def render(m: dict) -> str:
           "itself shown to return 0 when the gate is broken. It is binary and reproducible.", "",
           "## What it does not mean", "",
           "It is not silicon, it does not certify a policy is wise, and it does not close routes outside the "
-          "modelled deployment. Those limits are stated in `results/redteam.md` and `docs/18`. The claim is "
-          "narrow and strong: without current, valid authorization, the protected effect does not proceed."]
+          "modelled deployment. It covers only the attacks it has been shown: each fresh adversarial audit has found "
+          "attacks no check covered (docs/27, docs/28), and those become checks. Those limits are stated in "
+          "`results/redteam.md` and `docs/18`. The claim is narrow: without current, valid authorization, the "
+          "protected effect does not proceed in the model, against every attack checked here."]
     if m["coverage"] != "full":
         L += ["", f"> Coverage is {m['coverage']}: "
               + ("the RTL formal layer was skipped because yowasp-yosys is absent here. Run `python -m govsim.prove` "

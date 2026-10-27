@@ -37,14 +37,14 @@ mistake in place was not really testing anything.
 One command, `python -m rtl.conformance`. It:
 
 - checks that every rule quoted in the table really appears, word for word, in docs/04 or docs/07 (125 rules);
-- runs 173 conformance tests against the chip design, block by block (counter, measurement registers, epoch,
+- runs 174 conformance tests against the chip design, block by block (counter, measurement registers, epoch,
   lifecycle, capability table, ticket store, heartbeat, the halt sequencer, the loop, the meter, the mailbox, the
   alarm register, and the whole core wired together);
 - sends 4,000 random mailbox messages, plus fourteen hand-written ones taken straight from the spec, into both the
   chip design and the software model and compares every answer;
 - does the same for the capability table (1,280 random lookups);
 - maps every row of the existing 87-row attack and baseline catalogue to the rules it exercises;
-- plants 30 one-line mistakes in the design, one per rule, and confirms each is caught;
+- plants 32 one-line mistakes in the design, at least one per rule (30 rules), and confirms each is caught;
 - writes the report to `results/rtl-conformance.md`.
 
 ## What passed
@@ -76,8 +76,8 @@ than the model in a few double-fault cases, and the spec contradicts itself in o
 here; fixing is the next job, with each reproducer becoming the regression test.
 
 The catalogue mapping says something worth saying out loud: all 87 catalogue rows run against the reference
-software stack, not the chip. They count toward the 150 the brief asked for (87 + 173 = 260), but they are not
-evidence about the hardware. The 173 conformance tests are.
+software stack, not the chip. They count toward the 150 the brief asked for (87 + 174 = 261), but they are not
+evidence about the hardware. The 174 conformance tests are.
 
 ## What didn't work
 

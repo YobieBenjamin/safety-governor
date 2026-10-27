@@ -29,7 +29,8 @@
 //   RTL-BOOTS-SAFE the core boots on HALTED_INITIAL with every lever safe and the loop open.
 //   RTL-HALT-REACHES-PINS a halt from any cause reaches the pins on the next cycle: tamper (SAFE, power off, loop open), a halt
 //      command (HALT, loop open), a debounced loop loss while running (HALT, loop open), a heartbeat expiry while
-//      running (THROTTLE, brake on). Clear and the higher-priority causes are the only things that can preempt.
+//      running (HALT, brake and reset on, loop pad closed: adversarial audit 3, it used to be THROTTLE). Clear and the
+//      higher-priority causes are the only things that can preempt.
 //   RTL-HALTED-STAYS-HALTED a halted core never runs again without an authorized clear.
 //   RTL-EXPIRY-NOT-POSTPONED heartbeat expiry cannot be postponed without a valid heartbeat: the millisecond strobe comes every 2^ms_shift
 //      microsecond ticks without fail, whatever any other input does (load_hwm included), and the heartbeat's time
@@ -48,6 +49,13 @@
 //      raised once the chip has been armed. The boot timer counts every millisecond strobe spent waiting, so with
 //      RTL-EXPIRY-NOT-POSTPONED the alarm comes t_boot strobes (3 here, 5000 on the chip) after power-on without a heartbeat. CAUSE bits 3
 //      and 4 and ALARMS read exactly those signals over the CSR window (and so over SMBus).
+// Adversarial audit 3:
+//   RTL-CLEAR-NEEDS-MAILBOX-CLEAR the sequencer's clear authorization is exactly "the mailbox dispatches, this cycle, a verified frame whose command
+//      is CLEAR (0x10)", and a halted core is released only when the firmware's clear and that authorization coincide.
+//      Every rule here that used to say "unless clear" now says "unless clear and that authorization" (clr below).
+//   RTL-EPOCH-ADVANCE-RESETS-MAILBOX the mailbox's epoch_advanced strobe is exactly "the epoch register commits, with quorum, an epoch different
+//      from the one in force", so a re-commit of the same epoch cannot reopen the key slots.
+//   RTL-HALT-RECORD-IN-CORE the non-volatile rung record covers every halted rung (proven across resets in halt_seq_persist.sv).
 // Strengthening invariants for k-induction (the "S" lines): the sequencer's own (state and cause encodings, the
 // switch in each rung), the heartbeat's expired/remaining relation, the debounce counter range, and the ghost
 // that counts ticks since the last strobe equals the prescaler.
@@ -58,6 +66,7 @@ module governor_core_props(input clk, input rst);
   reg [1:0] since = 0;                    // ghost: microsecond ticks since the last millisecond strobe
   always @(posedge clk) if (rst) since <= 0; else if (tick) since <= tick_ms ? 2'd0 : since + 2'd1;
   wire running = halt_state == 1 || halt_state == 2;
+  wire clr = halt_clear && halt_clear_authorized;     // the only clear that counts (adversarial audit 3)
   always @(*) begin
     assume(!rst || init);
     if (init) begin
@@ -76,11 +85,25 @@ module governor_core_props(input clk, input rst);
       assert(loop_count <= 2);
       assert(loop_loop_lost == (loop_count == 2));
       // S: the sequencer
-      assert(halt_state <= 4); assert(halt_cause <= 4);
+      // (cause 5, the rung restored from the non-volatile record, can appear here only through a halt that lands in the
+      // power-on reset cycle; halt_seq.sv says why. Before adversarial audit 3 this line said halt_cause <= 4)
+      assert(halt_state <= 4); assert(halt_cause <= 5);
+      if (halt_cause == 5) assert(halt_state == 3 || halt_state == 4);
       if (halt_state == 2) assert(halt_cause == 2);
       if (halt_state == 1) assert(halt_cause == 0 && !halt_switch_open);
       if (halt_state == 0) assert(halt_cause == 0);
       if ((halt_state == 3 || halt_state == 4) && halt_cause != 2) assert(halt_switch_open);
+      if (halt_cause == 2) assert(!halt_switch_open);
+      // RTL-HALT-RECORD-IN-CORE (and S: halt_seq.sv's record invariants)
+      if (halt_state == 3 || halt_state == 4) assert(halt_rung_nv);
+      if (halt_state == 4) assert(halt_rung_nv_safe);
+      if (halt_rung_nv_safe) assert(halt_rung_nv && (halt_state == 4 || halt_state == 0));
+      if (halt_rung_nv && halt_state != 3 && halt_state != 4)
+        assert(halt_state == 0 && halt_cause == 0 && halt_switch_open && !halt_hb_seen && !halt_excluded);
+      // RTL-CLEAR-NEEDS-MAILBOX-CLEAR
+      assert(halt_clear_authorized == (mbox_dispatch && mbox_cmd == 8'h10));
+      // RTL-EPOCH-ADVANCE-RESETS-MAILBOX
+      assert(mbox_epoch_advanced == (epoch_commit && epoch_quorum_ok && epoch_new_epoch != epoch_epoch));
       // S: the heartbeat and the prescaler
       assert(hb_expired == (hb_remaining == 0));
       assert(since == ms_div);
@@ -96,25 +119,30 @@ module governor_core_props(input clk, input rst);
   end
   always @(posedge clk) if (!init && !$past(init) && !$past(rst)) begin
     // RTL-HALT-REACHES-PINS, tamper
-    if ($past(halt_tamper) && !$past(halt_clear))
+    if ($past(halt_tamper) && !$past(clr))
       assert(halt_state == 4 && !pwrbrk_n && !perst_n && !pwr_en && loop_out_open);
     // RTL-HALT-REACHES-PINS, a halt command, from every rung but SAFE
-    if ($past(halt_cmd_halt) && !$past(halt_clear) && !$past(halt_tamper) && $past(halt_state) != 4)
-      assert(halt_state == 3 && !pwrbrk_n && !perst_n && loop_out_open);
+    // (the one case where it lands higher, in SAFE, is a core whose non-volatile record says SAFE: adversarial audit 3)
+    if ($past(halt_cmd_halt) && !$past(clr) && !$past(halt_tamper) && $past(halt_state) != 4)
+      assert((halt_state == 3 || (halt_state == 4 && $past(halt_state) == 0 && $past(halt_rung_nv_safe))) && !pwrbrk_n && !perst_n && loop_out_open);
     // RTL-HALT-REACHES-PINS, a halt command to a chip already in SAFE: the loop pad opens, SAFE stays, power stays off (Yobie's call 1)
-    if ($past(halt_cmd_halt) && !$past(halt_clear) && !$past(halt_tamper) && $past(halt_state) == 4)
+    if ($past(halt_cmd_halt) && !$past(clr) && !$past(halt_tamper) && $past(halt_state) == 4)
       assert(halt_state == 4 && !pwr_en && loop_out_open && halt_cause == ($past(halt_cause) == 3 ? 3'd3 : 3'd4));
     // RTL-HALT-REACHES-PINS, so in any state: a halt command ends with the loop pad open unless an authorized CLEAR took that cycle
-    if ($past(halt_cmd_halt) && !($past(halt_clear) && $past(halt_state) != 0)) assert(loop_out_open);
+    if ($past(halt_cmd_halt) && !($past(clr) && $past(halt_state) != 0)) assert(loop_out_open);
     // RTL-HALT-REACHES-PINS, a loop loss while running
-    if ($past(loop_loop_lost) && ($past(halt_state) == 1 || $past(halt_state) == 2) && !$past(halt_clear) && !$past(halt_tamper))
+    if ($past(loop_loop_lost) && ($past(halt_state) == 1 || $past(halt_state) == 2) && !$past(clr) && !$past(halt_tamper))
       assert(halt_state == 3 && !pwrbrk_n && !perst_n && loop_out_open);
-    // RTL-HALT-REACHES-PINS, a heartbeat expiry while running
-    if ($past(hb_expired) && $past(halt_state) == 1 && !$past(halt_clear) && !$past(halt_tamper) && !$past(loop_loop_lost)
-        && !$past(halt_cmd_halt))
-      assert(halt_state == 2 && !pwrbrk_n);
+    // RTL-HALT-REACHES-PINS, a heartbeat expiry while running or throttled: HALT, brake and reset on, slot powered, loop pad
+    // closed (a local cause; adversarial audit 3: it was THROTTLE, the brake alone, from RUN only)
+    if ($past(hb_expired) && ($past(halt_state) == 1 || $past(halt_state) == 2) && !$past(clr) && !$past(halt_tamper)
+        && !$past(loop_loop_lost) && !$past(halt_cmd_halt))
+      assert(halt_state == 3 && !pwrbrk_n && !perst_n && pwr_en && !loop_out_open);
+    // RTL-CLEAR-NEEDS-MAILBOX-CLEAR: without a dispatched CLEAR frame a halted core stays halted, whatever the firmware's clear says
+    if (($past(halt_state) == 3 || $past(halt_state) == 4) && !($past(halt_clear) && $past(mbox_dispatch) && $past(mbox_cmd) == 8'h10))
+      assert(halt_state == 3 || halt_state == 4);
     // RTL-HALTED-STAYS-HALTED
-    if (($past(halt_state) == 3 || $past(halt_state) == 4) && !$past(halt_clear)) assert(halt_state == 3 || halt_state == 4);
+    if (($past(halt_state) == 3 || $past(halt_state) == 4) && !$past(clr)) assert(halt_state == 3 || halt_state == 4);
     if ($past(halt_state) != 1 && halt_state == 1) assert($past(halt_state) == 0 && !$past(hb_expired));
     // RTL-EXPIRY-NOT-POSTPONED: the heartbeat
     if (!$past(hb_hb_valid)) assert(hb_remaining <= $past(hb_remaining));
@@ -125,8 +153,8 @@ module governor_core_props(input clk, input rst);
     // RTL-LOOP-STAYS-OPEN
     if ($past(halt_switch_open) && !halt_switch_open)
       assert($past(halt_state) == 0 && $past(halt_cause) == 0 && (!$past(hb_expired) || $past(halt_cmd_exclude)));
-    if ($past(halt_cause) != 0 && halt_cause == 0) assert($past(halt_clear));
-    if (($past(halt_state) == 3 || $past(halt_state) == 4) && $past(halt_cause) != 2 && !$past(halt_clear)) assert(loop_out_open);
+    if ($past(halt_cause) != 0 && halt_cause == 0) assert($past(clr));
+    if (($past(halt_state) == 3 || $past(halt_state) == 4) && $past(halt_cause) != 2 && !$past(clr)) assert(loop_out_open);
     // RTL-EXCLUDED-LEVERS-SAFE: an excluded chip does not run before a valid heartbeat
     if ($past(halt_excluded) && $past(hb_expired)) assert(halt_state != 1 && !pwrbrk_n && !perst_n);
     // RTL-ALARMS-HARDWARE-OWNED: the hardware alarm bits

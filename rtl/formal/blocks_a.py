@@ -28,7 +28,12 @@ GEN = os.path.join(os.path.dirname(HERE), "gen")
 # into which assertion needs the second step). So it runs at depth 5: a 5-step bounded check and
 # 5-induction, which is a complete proof for every reachable state, not a shallow one. Every planted cap_table bug
 # shows within 4 cycles of reset (insert, then look up), so the bounded check still catches them by assertion.
-DEPTH_A = {"cap_table": 5}
+# mailbox: adversarial audit 3 widened its eight sequence registers to 64 bits and added the epoch reset. The bounded
+# check to depth 25 then took about 9 minutes with yices and longer with z3 on this machine (26 October 2026), while
+# k-induction closes at k = 2 in seconds. So it runs at depth 8: an 8-step bounded check and 8-induction, a complete
+# proof for every reachable state. Every planted mailbox bug shows within 4 cycles of reset (doorbell, verify, dispatch,
+# or an epoch strobe), so the bounded check still catches each one by assertion.
+DEPTH_A = {"cap_table": 5, "mailbox": 8}
 
 # yices could not finish ticket_store on this machine (8 slots of 32-bit ids compared against an arbitrary watched
 # id): the bounded check to depth 10 and the 2-induction each ran out a 15-minute cap, where z3 does depth 25 in a
@@ -132,6 +137,13 @@ BLOCKS_A = {
         ("the accepted sequence is recorded in the wrong key slot",
          "self.last_seq[self.key_slot].eq(self.frame_seq), self.status.eq(S_OK)",
          "self.last_seq[0].eq(self.frame_seq), self.status.eq(S_OK)"),
+        # adversarial audit 3: 64-bit sequence space, every key slot restarts at zero when the epoch advances
+        ("the sequence registers shrink back to 32 bits (one frame at 2**32 - 1 ends a key; adversarial audit 3)",
+         "def __init__(self, key_slots: int = 8, seq_bits: int = 64):", "def __init__(self, key_slots: int = 8, seq_bits: int = 32):"),
+        ("an epoch advance does not restart the key slots (adversarial audit 3)",
+         "                m.d.sync += seq.eq(0)", "                m.d.sync += seq.eq(seq)"),
+        ("the key slots restart on a doorbell, not only on an epoch advance (a replay inside the epoch; adversarial audit 3)",
+         "with m.If(self.epoch_advanced):", "with m.If(self.epoch_advanced | self.doorbell):"),
     ]),
 }
 

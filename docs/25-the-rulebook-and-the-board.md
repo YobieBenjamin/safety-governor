@@ -236,7 +236,7 @@ authenticated NVM and nowhere else (`04-specification.md` §10). What is in it, 
 | Field | What it is | What the chip does with it |
 |---|---|---|
 | `override_floor_s` | The shortest time a hold may sit before a person can release it; never under 10 s | `approve.below_latency_floor` on an approval that came too fast for a person to have read anything |
-| `safe_mode` | Per cause, the first rung (THROTTLE, HALT, SAFE) and the timers between rungs | The sequencer's table: a loop opening is HALT, a heartbeat loss is THROTTLE, tamper is SAFE |
+| `safe_mode` | Per cause, the first rung (THROTTLE, HALT, SAFE) and the timers between rungs | The sequencer's table: a loop opening is HALT, a heartbeat loss is HALT (since adversarial audit 3; it was THROTTLE), tamper is SAFE |
 | `fabric` | `heartbeat_expiry_s`, `max_hops`, `epoch_deadline_s`, `loop_bound_s` | The clock the chip keeps against the authority, the fan-out, the rulebook change |
 | `buffer_classes`, `buffer_policy` | Which classes of GPU memory (weights, KV cache, activations, outputs) may leave the GPU, and for whom (nobody, roster peers, the verified host) | The integrated tier's copy-engine and peer-MMU checks; the rack tier records the gap (`ep.unchecked_path`) |
 | `audit` | The share of responses the chip's own random source picks for review (five percent in the model), the verdict classes always held in escrow, which endpoint is the audit store | A sampled or escrowed response needs the audit store's signed receipt before it may leave (`release.escrow_receipt_required`) |

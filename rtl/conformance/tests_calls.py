@@ -21,6 +21,28 @@ async def _pulse(ctx, sig):
     ctx.set(sig, 0)
 
 
+async def _pulse_clear(ctx, seq):
+    """An authorized clear on the sequencer alone: the firmware's clear and the hardware's authorization (a verified
+    CLEAR frame dispatching) in the same cycle (adversarial audit 3)."""
+    ctx.set(seq.clear, 1)
+    ctx.set(seq.clear_authorized, 1)
+    await ctx.tick()
+    ctx.set(seq.clear, 0)
+    ctx.set(seq.clear_authorized, 0)
+
+
+async def _core_clear(ctx, dut, frame_seq):
+    """An authorized clear through the core (adversarial audit 3): the firmware holds its clear while a CLEAR frame
+    (0x10, epoch-exempt) rings the doorbell and the crypto core verifies it; the clear lands in the dispatch cycle."""
+    m = dut.mbox
+    ctx.set(dut.halt.clear, 1)
+    ctx.set(m.frame_seq, frame_seq); ctx.set(m.cmd, 0x10); ctx.set(m.signed_cmd, 0x10); ctx.set(m.epoch_exempt, 1)
+    await _pulse(ctx, dut.doorbell)
+    ctx.set(m.sig_done, 1); ctx.set(m.sig_ok, 1)
+    await ctx.tick()
+    ctx.set(m.sig_done, 0); ctx.set(dut.halt.clear, 0)
+
+
 @conformance("REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG", "REQUIREMENT-HALT-IN-SAFE-STAYS-SAFE")
 def test_calls_halt_in_safe_from_local_cause_opens_loop_keeps_safe():
     """A chip in SAFE on a local cause: a HALT opens the switch, the rung stays SAFE, power stays off, cause command."""
@@ -118,7 +140,8 @@ def test_calls_core_never_raises_no_first_heartbeat_once_armed():
         await _ms(ctx, dut, 5)
         await _pulse(ctx, dut.halt.cmd_halt)
         await _ms(ctx, dut, 5)
-        await _pulse(ctx, dut.halt.clear)
+        await _core_clear(ctx, dut, 1)
+        assert ctx.get(dut.halt.state) == HALTED_INITIAL          # the clear really landed
         await _ms(ctx, dut, 10)
         assert _csr(ctx, dut, 0x084) >> 31 == 0 and ctx.get(dut.halt.no_first_hb) == 0
     sim(dut, tb)
@@ -189,7 +212,7 @@ def test_calls_exclusion_ends_by_heartbeat_halt_or_tamper_only():
 
         async def tb(ctx, dut=dut, end=end, want=want):
             await _pulse(ctx, dut.cmd_exclude)
-            await _pulse(ctx, dut.clear)
+            await _pulse_clear(ctx, dut)
             ctx.set(dut.tick, 1)
             for _ in range(20):
                 await ctx.tick()

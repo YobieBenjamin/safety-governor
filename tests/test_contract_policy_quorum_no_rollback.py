@@ -128,6 +128,7 @@ def test_expired_image_refused(rack1):
     g = rack1.nodes[0].governor
     image = sign_policy(rack1.make_policy_image(rack1.policy_version + 1, expires_in_s=-1), rack1.governance[:3])
     r = g.command("POLICY_PROPOSE", {"image": image})
-    assert r["ok"]                                      # staging verifies signatures and version
-    r = g.command("POLICY_COMMIT", {"epoch": __import__("govsim.policy", fromlist=["policy_epoch"]).policy_epoch(image)})
+    # staging runs every check a commit runs (adversarial audit 3), expiry included, so an expired image is not staged
     assert not r["ok"] and r["why"] == reasons.POLICY_EXPIRED
+    r = g.command("POLICY_COMMIT", {"epoch": __import__("govsim.policy", fromlist=["policy_epoch"]).policy_epoch(image)})
+    assert not r["ok"] and r["why"] == reasons.POLICY_NOT_STAGED

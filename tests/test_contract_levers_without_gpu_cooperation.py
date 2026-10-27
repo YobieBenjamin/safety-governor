@@ -26,12 +26,21 @@ def test_a_gpu_that_ignores_software_still_stops(rack1):
 def test_rungs_escalate_on_the_policy_timers(rack1):
     node = rack1.nodes[0]
     gpu, g = node.gpu, node.governor
-    rack1.tick(seconds=6.0)                               # heartbeat lost -> THROTTLE
+    # A lost heartbeat goes straight to HALT (reset), not to a brake: a braked GPU still computes at half clock
+    # (adversarial audit 3). A cause whose rung is THROTTLE still escalates on the policy timer.
+    rack1.tick(seconds=6.0)                               # heartbeat lost -> HALT
+    assert g.state == "HALT" and gpu.power == "RESET" and gpu.run_tokens(100) == 0
+    rack1.tick(seconds=301.0)                             # T_halt -> SAFE
+    assert g.state == "SAFE" and gpu.power == "OFF"
+
+
+def test_a_throttle_escalates_to_halt_on_the_policy_timer(rack1):
+    node = rack1.nodes[0]
+    gpu, g = node.gpu, node.governor
+    g.enter_safe_mode(reasons.HALT_COMMANDED, rung="THROTTLE")
     assert g.state == "THROTTLE" and gpu.clock_state == "BRAKED" and gpu.power == "ON"
     rack1.tick(seconds=31.0)                              # T_throttle -> HALT
     assert g.state == "HALT" and gpu.power == "RESET"
-    rack1.tick(seconds=301.0)                             # T_halt -> SAFE
-    assert g.state == "SAFE" and gpu.power == "OFF"
 
 
 def test_ports_close_with_the_brake(rack):

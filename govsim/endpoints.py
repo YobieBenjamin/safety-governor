@@ -38,6 +38,7 @@ from .store import Store
 ENFORCE_TICKET_BINDING = True
 
 RACK_POINTS = ("nvswitch", "pcie", "dpu", "storage")
+USED_TICKET_CAPACITY = 1 << 20      # the endpoint's used-ticket store (docs/04: 2**20 entries)
 INTEGRATED_POINTS = ("copy_engine", "peer_mmu")
 BRICKED = ("display", "jtag", "debug")
 
@@ -45,10 +46,13 @@ BRICKED = ("display", "jtag", "debug")
 class Switch:
     """A governed switch: NVSwitch, PCIe switch, DPU flow table or the storage path.
 
-    ``program`` is the only way to open a port or flow in this model, and it verifies the governor's MAC. That
-    assumes the governor is the only master on the switch's management path. On a bare-metal HGX host today, root can
-    reprogram NVSwitch routing and PCIe switch ports in band (docs/research/nvswitch-management.md); closing that is a
-    board and firmware requirement, not something this model shows (docs/research/switch-management-lockdown.md).
+    ``program`` is the governor's write path, and it verifies the governor's MAC. On a bare-metal HGX host today root
+    can also reprogram NVSwitch routing and PCIe switch ports in band (docs/research/nvswitch-management.md). Since
+    adversarial audit 3 the model has that path too: ``host_write`` opens an entry with no MAC, and works whenever
+    the switch's in-band management is not locked down (``locked`` False). Locking it (out-of-band-only management,
+    PCIe switch configuration lockdown) is a board and switch-firmware requirement; the governor reads the lock state
+    and the switch firmware measurement over its own sideband (``lock_report``) and refuses RUN on a switch that is
+    not locked (docs/research/switch-management-lockdown.md).
     """
 
     def __init__(self, kind: str, owner_chip_id: str, cap_key: bytes, log: Callable[[str, dict], None]):
@@ -59,10 +63,25 @@ class Switch:
         self.owner = owner_chip_id
         self._cap_key = cap_key
         self.table: dict[tuple[str, str], dict] = {}     # (peer, direction) -> capability
+        self.bytes_by_direction: dict[tuple[str, str], int] = {}   # (peer, direction) -> bytes admitted
         self.log = log
         self.refusals: list[dict] = []
         self.epoch_tag = ""
         self.bytes_passed: dict[str, int] = {}           # peer -> bytes that crossed this switch
+        self.locked = True                               # in-band (host) management disabled; False on today's bare metal
+        self.firmware_digest = "switch-fw-reference"     # measured by the governor over its sideband
+
+    def lock_report(self) -> dict:
+        """What the governor reads over its sideband: whether in-band management is locked, and the firmware digest."""
+        return {"locked": bool(self.locked), "firmware": self.firmware_digest}
+
+    def host_write(self, peer: str, direction: str, budget: int = 1 << 40) -> bool:
+        """The host writing a port or flow in band, with no governor capability. Possible only on an unlocked switch."""
+        if self.locked:
+            return False
+        self.table[(peer, direction)] = {"point": self.kind, "peer": peer, "direction": direction, "budget": budget,
+                                         "expiry": float("inf"), "epoch_tag": self.epoch_tag, "buffer_class": None}
+        return True
 
     def mac(self, cap: dict) -> str:
         """The MAC over a capability's contents, leaving out the MAC field itself. Two capabilities with the
@@ -118,6 +137,7 @@ class Switch:
             return self._refuse(peer, direction, nbytes, reasons.EP_BUDGET_EXHAUSTED, **extra)
         cap["budget"] -= nbytes
         self.bytes_passed[peer] = self.bytes_passed.get(peer, 0) + nbytes
+        self.bytes_by_direction[(peer, direction)] = self.bytes_by_direction.get((peer, direction), 0) + nbytes
         if cap.get("single_use") and cap["budget"] == 0:
             self.table.pop(self._key(cap), None)     # F31: the grant is spent and cannot be used again
         return True, reasons.OK
@@ -153,7 +173,8 @@ class ActionEndpoint:
     def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], store: Store | None = None,
                  safe_transition: str = "no_action", lists: dict[str, Any] | None = None,
                  sensors: dict[str, Any] | None = None, heartbeat_expiry_s: float = 5.0,
-                 governance_hashes: list[str] | None = None, governance_floor: int | None = None):
+                 governance_hashes: list[str] | None = None, governance_floor: int | None = None,
+                 recovery_hashes: list[str] | None = None, recovery_threshold: int = 0):
         """Create one endpoint. ``governor_keys`` maps each governor's key id to its public key, for every governor
         that may mint a ticket for this device. ``safe_transition`` is what the endpoint does when it refuses
         (the rack's endpoints use ``no_release``, ``decline`` or ``hold``). ``sensors`` are the device's own inputs at
@@ -166,6 +187,9 @@ class ActionEndpoint:
         # F33: a second, separate record of burned tickets, written in the same save as ``consumed``. The single-use
         # check reads both. Clearing one record does not reopen a ticket; clearing both still does (see the tests).
         self.burned = self.store.get("burned", {})        # ticket_id -> t
+        # ticket_id -> the ticket's own expiry. Once a ticket has expired, admit() refuses it anyway, so its used
+        # record can be dropped: the store is bounded by the tickets live at once, not by all tickets ever seen.
+        self.used_expiry = self.store.get("used_expiry", {})
         # Concurrency contract: a single endpoint may be driven by several threads at once (concurrent
         # dispatch). Admission plus durable consumption is an atomic compare-and-set under this lock, so
         # for any one ticket exactly one caller becomes the owner and crosses the effect boundary (F11).
@@ -188,6 +212,7 @@ class ActionEndpoint:
         # only what some rule of the current edition allows, and nothing once the edition revokes that governor.
         self.governance_hashes = governance_hashes
         self.governance_floor = governance_floor
+        self.recovery_hashes, self.recovery_threshold = list(recovery_hashes or []), int(recovery_threshold or 0)
         self.trusted: dict | None = None      # the governance keys and k of the edition in force (they authorize the next)
         self.edition: dict | None = None
         self.revoked: set[str] = set()
@@ -198,23 +223,59 @@ class ActionEndpoint:
         and the function returns False. Tickets for any other epoch are refused later, in ``admit``."""
         if verify_any(signed_epoch, self.keys) is None or signed_epoch["payload"].get("type") != "policy-epoch":
             return False
+        # Never backwards: a statement for an older edition, or a different epoch at the same version, is refused,
+        # so a replayed statement cannot roll this endpoint back (adversarial audit 3).
+        version = signed_epoch["payload"].get("version")
+        if not isinstance(version, int) or isinstance(version, bool):
+            return False
+        held = getattr(self, "epoch_version", None)
+        if held is not None and (version < held or (version == held and signed_epoch["payload"]["epoch"] != self.epoch)):
+            return False
+        self.epoch_version = version
         self.epoch = signed_epoch["payload"]["epoch"]
         self.policy_expires_at = signed_epoch["payload"].get("expires_at")     # F30: None when the edition names no expiry
         return True
+
+    def _prune_used(self, now: float) -> None:
+        """Drop the used records of tickets that have expired (admit refuses an expired ticket on its own)."""
+        for tid in [tid for tid, exp in self.used_expiry.items() if exp < now]:
+            self.consumed.pop(tid, None)
+            self.burned.pop(tid, None)
+            self.used_expiry.pop(tid, None)
+
+    def _authentic(self, ticket: dict) -> bool:
+        """Signed by a governor this endpoint trusts, or, at an egress holding the MAC key it shares with its own
+        governor, a release ticket MACed under that key (adversarial audit 3: per-response signatures overloaded the
+        signing engine)."""
+        if not isinstance(ticket, dict) or not isinstance(ticket.get("payload"), dict):
+            return False
+        if "mac" in ticket:
+            key = getattr(self, "mac_key", None)
+            if key is None or ticket["payload"].get("action") != "response.release" or ticket.get("signer") not in self.keys:
+                return False
+            import hmac as _hmac
+            return _hmac.compare_digest(str(ticket["mac"]), hmac_sha256(key, canonical(ticket["payload"])))
+        return verify_any(ticket, self.keys) is not None
 
     def install_edition(self, image: dict) -> bool:
         """Install a governance-signed edition after checking it here: its signatures against the governance keys in
         force (the fused key hashes for the first one), and no rollback of the version. Returns True when installed."""
         if self.governance_hashes is None:
             return False
-        from .policy import policy_epoch, verify_policy
+        from .policy import policy_epoch, verify_policy, verify_recovery
         ok, _ = verify_policy(image, self.governance_hashes, self.governance_floor, trusted=self.trusted)
+        ok = ok or verify_recovery(image, self.recovery_hashes, self.recovery_threshold)   # the fused recovery quorum
         if not ok or (self.edition is not None and image["version"] < self.edition["version"]):
             return False
         self.edition = image
         self.trusted = {"keys": list(image["governance_keys"]), "threshold": int(image["threshold"])}
         self.revoked = set(image.get("revocations", []))
         self._edition_epoch = policy_epoch(image)
+        # The governance-signed edition is itself the announcement of the epoch: the endpoint moves to it now, and no
+        # governor-signed statement of an older version can move it back (see set_epoch).
+        if getattr(self, "epoch_version", None) is None or int(image["version"]) >= self.epoch_version:
+            self.epoch_version = int(image["version"])
+            self.epoch = self._edition_epoch
         return True
 
     def _check_against_edition(self, ticket: dict, t: dict, action: str, params: dict) -> tuple[bool, str]:
@@ -256,7 +317,7 @@ class ActionEndpoint:
         and it has not been used. Output: (ok, reason). It does not burn the ticket; ``execute`` does that."""
         if ticket is None:
             return False, reasons.TICKET_MISSING
-        if verify_any(ticket, self.keys) is None or ticket["payload"].get("type") != "ticket":
+        if not self._authentic(ticket) or ticket["payload"].get("type") != "ticket":
             return False, reasons.TICKET_BAD_SIGNATURE
         t = ticket["payload"]
         if t["action"] != action:
@@ -302,6 +363,13 @@ class ActionEndpoint:
         with self._lock:
             if t["ticket_id"] in self.consumed or t["ticket_id"] in self.burned:
                 return self._refuse(reasons.TICKET_REPLAY)
+            if len(self.consumed) >= USED_TICKET_CAPACITY:
+                self._prune_used(now)
+                if len(self.consumed) >= USED_TICKET_CAPACITY:
+                    # Adversarial audit 3: the design did not say what happens when the used-ticket store fills. It
+                    # refuses: a ticket that cannot be recorded as used is never executed.
+                    return self._refuse(reasons.ENDPOINT_TICKET_STORE_FULL)
+            self.used_expiry[t["ticket_id"]] = float(t.get("expires_at", now))
             self.consumed[t["ticket_id"]] = now
             self.burned[t["ticket_id"]] = now  # F33: the second record, saved with the first
             self.store.save()                  # burned before anything else happens
@@ -333,6 +401,7 @@ class ActionEndpoint:
         self.store.check_epoch_marks()       # F34: refuses to start when the two epoch-mark copies disagree
         self.consumed = self.store.get("consumed", {})
         self.burned = self.store.get("burned", {})
+        self.used_expiry = self.store.get("used_expiry", {})
         self.state = "ARMED"
 
 
@@ -343,9 +412,15 @@ class EgressEndpoint(ActionEndpoint):
     """The DPU's egress to the user: bytes are held until a release ticket for exactly that response
     is admitted. Without a valid ticket the bytes never leave."""
 
-    def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], store: Store | None = None, safe_transition: str = "hold"):
-        """The egress for one node. It holds responses until a release ticket covers them. Its safe transition is ``hold``."""
-        super().__init__(name, clock, governor_keys, store, safe_transition=safe_transition)
+    def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], store: Store | None = None, safe_transition: str = "hold",
+                 governance_hashes: list[str] | None = None, governance_floor: int | None = None,
+                 recovery_hashes: list[str] | None = None, recovery_threshold: int = 0):
+        """The egress for one node. It holds responses until a release ticket covers them. Its safe transition is ``hold``.
+        It holds the governance anchors too, so it learns each new edition from the governance signatures themselves
+        and not only from its own governor (adversarial audit 3: a straggling governor kept its egress on old rules)."""
+        super().__init__(name, clock, governor_keys, store, safe_transition=safe_transition,
+                         governance_hashes=governance_hashes, governance_floor=governance_floor,
+                         recovery_hashes=recovery_hashes, recovery_threshold=recovery_threshold)
         self.held: dict[tuple[str, str], dict] = {}        # (session, response_id) -> {"bytes", "response_hash", "stream_hashes"}
         self.delivered: dict[str, list[bytes]] = {}        # session -> responses that left
         self.bytes_held = 0
@@ -405,7 +480,8 @@ def strike_checks(protected_list_id: str = "protected-sites") -> list[Callable]:
     def nav_agree(params: dict, sensors: dict) -> tuple[bool, str]:
         """The satellite and inertial positions must agree: each coordinate differs by at most 0.01 degrees.
         A missing reading counts as a conflict."""
-        a, b = sensors.get("nav_gnss"), sensors.get("nav_inertial")
+        from .definitions import canonical_geo
+        a, b = canonical_geo(sensors.get("nav_gnss")), canonical_geo(sensors.get("nav_inertial"))
         if a is None or b is None or abs(a[0] - b[0]) > 0.01 or abs(a[1] - b[1]) > 0.01:
             return False, reasons.ENDPOINT_SENSOR_CONFLICT
         return True, reasons.OK
@@ -419,8 +495,10 @@ def strike_checks(protected_list_id: str = "protected-sites") -> list[Callable]:
         lst = sensors.get("lists", {}).get(protected_list_id)
         if lst is None or lst.get("stale"):
             return False, reasons.ENDPOINT_LIST_STALE
+        # Both positions are required; a missing one, or one that is not understood as a place, is refused
+        # (denylist_hit fails closed on anything the definitions engine cannot read as a place).
         for pos in (params.get("target"), sensors.get("nav_gnss")):
-            if pos is not None and denylist_hit(pos, lst["entries"]):
+            if pos is None or denylist_hit(pos, lst["entries"], kind="geo"):
                 return False, reasons.ENDPOINT_TARGET_PROTECTED
         return True, reasons.OK
 

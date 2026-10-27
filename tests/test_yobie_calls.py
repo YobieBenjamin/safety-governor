@@ -96,7 +96,13 @@ def test_exclude_lets_the_rest_run_and_keeps_the_excluded_chip_off():
         rack.install_lists(n)
         rack.attest(n)
         rack.load_model(n)
-    assert pay(rack, rack.nodes[0], 10)["ok"]                  # status alarms do not park a running neighbour's gate
+    # status alarms do not park a running neighbour's gate: an unbudgeted action is allowed
+    msg = {"recipient": "recipient-a", "body": "status"}
+    assert rack.request(rack.nodes[0], "message.send", msg)["ok"]
+    # a budgeted one is refused while the stuck chip is one of the three budget owners that must all reserve
+    # (adversarial audit 3), failing closed until the chip arms or an edition names other owners
+    r = pay(rack, rack.nodes[0], 10)
+    assert not r["ok"] and r["why"] == reasons.GATE_BUDGET_OWNER_UNREACHABLE
     rack.fabric.heal()                                         # its heartbeat finally arrives: it arms normally
     rack.heartbeat()
     assert not stuck.excluded and stuck.state == RUN

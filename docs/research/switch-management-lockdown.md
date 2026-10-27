@@ -18,8 +18,18 @@ in `govsim/endpoints.py`.
 3. The governor refuses to enter RUN unless it has verified both: the lockdown is set, and the measured firmware of each
    switch is on the reference list (see catalog row 16).
 
-## Plan
+## What the code does now (adversarial audit 3, catalog row 5)
 
-- Model: add a bare-metal tier where the host can write the switch, and show that the governor refuses RUN unless the
-  lockdown is attested. Not done yet; open.
+- Every governed switch in the model now has the host's in-band write path: `Switch.host_write` opens an entry with no
+  governor capability whenever the switch is not locked (`locked` False, today's bare metal).
+- The governor reads each switch's lock state and firmware digest over its own sideband (`lock_report`). It refuses
+  RUN while any governed switch is unlocked, raises SWITCH_UNLOCKED (which blocks minting), and a switch that becomes
+  unlocked while running stops the GPU (HALT).
+- Tests: `tests/test_adversarial_audit_3.py` (`test_a_governor_will_not_run_behind_an_unlocked_switch`,
+  `test_a_switch_unlocked_while_running_stops_the_gpu`, `test_a_locked_switch_refuses_host_writes`).
+
+## Still open
+
+- The firmware digest is reported but not yet compared with a reference list in the edition (catalog row 16 of
+  audit 2). Next fix.
 - Depends on NVIDIA (NVSwitch out-of-band-only mode) and on the switch vendor (Broadcom PEX lockdown). Stage: Board.

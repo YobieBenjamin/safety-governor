@@ -47,6 +47,12 @@ def test_alarm_survives_restart(rack1):
 
 
 def test_alarm_propagates_over_the_fabric(rack):
-    a, b = rack.nodes[0].governor, rack.nodes[1].governor
+    """A peer's alarm becomes an alarm on the other chips when two distinct members report it (adversarial audit 3:
+    one lying member used to freeze the rack with one broadcast). One report is logged, not raised. A chip that is
+    itself in trouble still stops its own GPU at once, and a cause that opens the loop stops the whole domain."""
+    a, b, c = rack.nodes[0].governor, rack.nodes[1].governor, rack.nodes[2].governor
     a.raise_alarm("tamper.suspected", "governor")
-    assert "tamper.suspected" in b.alarms and b.alarms["tamper.suspected"]["source"] == "fabric"
+    assert "tamper.suspected" in a.alarms and "tamper.suspected" not in c.alarms
+    assert c.log.has("alarm.reported", code="tamper.suspected")
+    b.raise_alarm("tamper.suspected", "governor")
+    assert "tamper.suspected" in c.alarms and c.alarms["tamper.suspected"]["source"] == "fabric"

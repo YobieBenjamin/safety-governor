@@ -22,6 +22,18 @@ live "waiting for the first heartbeat, boot window passed" flag and bit 4 the li
 (0x088) is how many milliseconds the chip waited before its first heartbeat (saturating at 65535; frozen once
 armed), so an operator reading one chip over SMBus sees "this chip, waiting for its first heartbeat since reset".
 ``t_boot_ms`` (default 5000) is the boot window; the proof builds use a few milliseconds.
+
+Adversarial audit 3. ``halt.clear_authorized`` is driven here, and only here, by ``mbox.dispatch & (mbox.cmd ==
+MBOX_CLEAR)``: the mailbox is dispatching, this cycle, a frame whose sequence and epoch passed, whose signature verified
+and whose signed command byte is CLEAR. The firmware's ``halt_clear`` port is its approval (cause logged, neighbour
+acknowledged); the sequencer clears only when both agree in the same cycle, so firmware can hold its approval as a
+level and the clear lands on the dispatch. ``mbox.cmd`` is used, not ``mbox.cmd_out``: ``cmd_out`` is a register
+written on the dispatch edge, so in the dispatch cycle it still holds the previous command (a CLEAR dispatched
+earlier would authorize a later HEARTBEAT's dispatch cycle). In the dispatch cycle ``cmd`` equals ``signed_cmd``
+(the mailbox dispatches only then) and is held still by the mailbox's frame-held-still obligation.
+``mbox.epoch_advanced`` is the epoch register's commit of a different epoch (a commit with quorum whose value
+differs from the one in force), so the mailbox restarts every key slot only when the epoch really moves.
+MBOX_SEQ (0x108) reads the low 32 bits of key slot 0's 64-bit sequence register and MBOX_SEQ_HI (0x10C) the high 32.
 """
 from amaranth import Cat, Const, Elaboratable, Module, Mux, Signal
 
@@ -40,6 +52,9 @@ from .ticket_store import TicketStore
 
 POINTS = ("nvswitch", "pcie", "dpu", "storage")
 MS_SHIFT = 10            # 2^10 microsecond ticks per millisecond strobe
+# adversarial audit 3: the CLEAR command code (docs/04 section 3; govsim/governor.py MAILBOX_CODES 0x10). The sequencer's
+# clear takes effect only in the cycle the mailbox dispatches a verified frame carrying this code
+MBOX_CLEAR = 0x10
 ALARM_NO_FIRST_HEARTBEAT = 31   # ALARMS bits owned by the hardware (docs/04 section 2)
 ALARM_EXCLUDED = 30
 HW_ALARMS = (1 << ALARM_NO_FIRST_HEARTBEAT) | (1 << ALARM_EXCLUDED)
@@ -120,6 +135,10 @@ class GovernorCore(Elaboratable):
             self.halt.hb_expired.eq(self.hb.expired),
             self.halt.hb_ok.eq(~self.hb.expired),
             self.halt.loop_sense.eq(self.loop_sense),
+            # adversarial audit 3: the hardware's half of a clear, a verified CLEAR frame dispatching this cycle
+            self.halt.clear_authorized.eq(self.mbox.dispatch & (self.mbox.cmd == MBOX_CLEAR)),
+            # adversarial audit 3: a committed epoch that differs from the one in force restarts the mailbox's key slots
+            self.mbox.epoch_advanced.eq(self.epoch.commit & self.epoch.quorum_ok & (self.epoch.new_epoch != self.epoch.epoch)),
             self.mbox.running.eq(self.halt.state == 1),
             self.mbox.doorbell.eq(self.doorbell),
             self.pwrbrk_n.eq(~self.halt.pwrbrk),
@@ -177,7 +196,10 @@ class GovernorCore(Elaboratable):
             with m.Case(0x104):
                 m.d.comb += self.csr_rdata.eq(self.mbox.status)
             with m.Case(0x108):
-                m.d.comb += self.csr_rdata.eq(self.mbox.last_seq[0])  # MBOX_SEQ: the first key slot's last accepted seq
+                m.d.comb += self.csr_rdata.eq(self.mbox.last_seq[0][:32])  # MBOX_SEQ: the first key slot's last accepted seq, low word
+            with m.Case(0x10C):
+                # MBOX_SEQ_HI: its high word (adversarial audit 3: the sequence registers are 64 bits)
+                m.d.comb += self.csr_rdata.eq(self.mbox.last_seq[0][32:])
             with m.Default():
                 m.d.comb += self.csr_rdata.eq(0)
         for i in range(8):                                               # EPOCH[0..7] at 0x010.., MEAS0 at 0x030.., MEAS1 at 0x050..

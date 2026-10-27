@@ -39,8 +39,12 @@ def test_clearing_the_governor_record_and_one_endpoint_record_does_not_reopen_a_
     assert len(ep.executed) == before
 
 
-def test_clearing_every_record_reopens_the_ticket_documented_open():
-    # Documented open part of F33. This is an in-process write to all three records (two endpoint, one governor).
+def test_clearing_every_record_no_longer_reopens_the_ticket():
+    # Formerly the documented open part of F33: an in-process write to all three single-use records (two endpoint,
+    # one governor) reopened the ticket. Since adversarial audit 3 the governor also keeps the record of tickets it
+    # minted and retires an entry when it commits, so a cleared single-use record does not make the ticket
+    # committable again: the governor no longer holds it as minted. Writing that fourth record too is still possible
+    # for code inside the trust root; that residual is stated in docs/28.
     r, node, ticket = _strike_ticket()
     ep = r.endpoints["strike-guidance"]
     g = node.governor
@@ -49,5 +53,5 @@ def test_clearing_every_record_reopens_the_ticket_documented_open():
     ep.burned.clear()
     g.committed_tickets.clear()
     before = len(ep.executed)
-    ep.execute(ticket, "strike", P)
-    assert len(ep.executed) == before + 1, "expected the trust-root gap to reproduce; if this fails, the gap has changed"
+    ok, why = ep.execute(ticket, "strike", P)
+    assert not ok and len(ep.executed) == before

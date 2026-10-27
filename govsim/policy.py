@@ -33,6 +33,7 @@ import copy
 from typing import Any, Iterable
 
 from . import reasons
+from . import definitions as D
 from .crypto import SigningKey, VerifyKey, canonical, digest, finite_number, verify_object
 
 # Buffer classes at the integrated tier, and where each class may go through the copy engines
@@ -109,13 +110,21 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
                 sealed_models: list[str] | None = None, key_lease_s: float = 60.0,
                 governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0,
                 heartbeat_cosigners: list[VerifyKey] | None = None, heartbeat_threshold: int = 1,
-                authority_threshold: int = 1) -> dict:
+                authority_threshold: int = 1, list_threshold: int = 1, site: str | None = None,
+                fleet_ledger: dict | None = None) -> dict:
     """Assemble an unsigned policy image from its parts. The keyword arguments set the defaults for the timers, the
     buffer policy, the audit sampling and the escrow classes. The result is a dict with a version, an expiry, the keys,
     the rules and the register. It is not in force until it is signed with ``sign_policy`` and a governor accepts it
     through ``verify_policy``."""
     return {
         "version": version, "issued_at": issued_at, "expires_at": expires_at,
+        # The data center this edition governs (GOAL.md: the chip guards its server, its rack and the governed
+        # servers of its data center, and is not a global kill switch). Heartbeats and authority commands name the
+        # site; a governor accepts only its own site's, so one site's heartbeat signers going silent, or being
+        # captured, stops or reaches only that site (adversarial audit 3). None: a single-site model.
+        "site": site,
+        # The fleet ledger's replica keys and how many must sign each answer (govsim/fleet.py). None: no fleet budget.
+        "fleet_ledger": dict(fleet_ledger) if fleet_ledger else None,
         "governance_keys": [k.hex for k in governance_keys], "threshold": threshold,
         # F26: optional quorum across enrolled principal CLASSES. governance_classes maps a governance key's
         # hex to the class (the organisation or role) that holds it; governance_class_quorum is how many
@@ -134,6 +143,7 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
         "heartbeat_cosigners": [k.hex for k in (heartbeat_cosigners or [])],
         "heartbeat_threshold": int(heartbeat_threshold),
         "authority_threshold": int(authority_threshold),
+        "list_threshold": int(list_threshold),     # distinct governance signers a rule-input list needs
         "authority_keys": [k.hex for k in (authority_keys or [])],          # HALT and CLEAR; a different key from the heartbeat's, so a key that only says "alive" can never say "stop" or "go"
         "publisher_keys": [k.hex for k in publisher_keys],
         "observer_keys": [k.hex for k in (observer_keys or [])],
@@ -156,7 +166,7 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
         "key_lease_s": float(key_lease_s),                                 # a released key lives this long unless renewed
         "safe_mode": safe_mode or {"default_rung": "THROTTLE", "T_throttle_s": 30.0, "T_halt_s": 300.0,   # default rung for an unlisted cause; a THROTTLE escalates to HALT after T_throttle_s, a HALT to SAFE after T_halt_s
                                    "causes": {reasons.LOOP_OPEN: "HALT", reasons.LOOP_BROKEN: "HALT", reasons.LOOP_JUMPERED: "HALT",
-                                              reasons.TAMPER: "SAFE", reasons.HEARTBEAT_LOST: "THROTTLE",
+                                              reasons.TAMPER: "SAFE", reasons.HEARTBEAT_LOST: "HALT",   # audit 3: a brake alone leaves the GPU computing at half clock
                                               reasons.EPOCH_STRAGGLER: "HALT", reasons.HALT_COMMANDED: "HALT"}},
         "fabric": fabric or {"heartbeat_expiry_s": 5.0, "max_hops": 16, "epoch_deadline_s": 10.0, "loop_bound_s": 0.001},   # heartbeat trust (s), relay hops, staged-epoch deadline (s), loop bound (s)
     }
@@ -272,7 +282,13 @@ def check_budget_owners(image: dict) -> list[str]:
     keys = [r["budget"]["key"] for r in image.get("rules", []) if r.get("budget")]
     if any(r.get("hazard_budget") for r in image.get("rules", [])):
         keys.append("hazard")       # a session's hazard budget is one budget, counted at one owner, like any other shared budget
-    return [k for k in dict.fromkeys(keys) if k not in owners]
+    def named(spec) -> bool:
+        if isinstance(spec, dict):                  # a quorum of owners: at least one, and 1 <= threshold <= owners
+            o = spec.get("owners") or []
+            t = spec.get("threshold", len(o))
+            return bool(o) and isinstance(t, int) and 1 <= t <= len(o)
+        return bool(spec)
+    return [k for k in dict.fromkeys(keys) if not named(owners.get(k))]
 
 
 def find_rule(image: dict, measurement: str, action: str) -> dict | None:
@@ -302,33 +318,36 @@ def select_rule(image: dict, measurement: str, action: str, params: dict, lists:
     return None, last
 
 
-# A denylist entry is matched by meaning, not by exact bytes (audit 2026-10-26: a protected site written as a tuple, or
-# one micro-degree off, was not "in" the list). Sequences of numbers (coordinates) match when every component is within
-# the tolerance, whatever the container type; strings match after trimming and case folding.
-DENYLIST_TOLERANCE = 1e-3          # degrees for coordinates: about 100 m
+# A denylist entry is matched by meaning, not by bytes (audits 2 and 3, 2026-10-26: a protected site written as a
+# tuple, one micro-degree off, with an altitude, as text or as a mapping was not "in" the list). The definitions engine
+# (govsim/definitions.py) reduces the value and every entry to one canonical meaning first. A value that cannot be
+# reduced to the kind of thing the list holds counts as a hit: it is refused, never guessed at.
+DENYLIST_TOLERANCE = 1e-3          # degrees of great circle for places: about 111 m
 
 
-def _as_numbers(v: Any) -> list[float] | None:
-    if isinstance(v, (list, tuple)) and v and all(finite_number(x) for x in v):
-        return [float(x) for x in v]
-    return None
+def denylist_hit(v: Any, entries: Any, tolerance: float = DENYLIST_TOLERANCE, kind: str | None = None) -> bool:
+    """True when ``v`` means the same thing as any entry of a denylist, or when ``v`` cannot be understood as the
+    kind of thing the list holds. Places match within ``tolerance`` degrees of great-circle distance, whatever
+    their spelling; text matches after Unicode and case canonicalization; anything else must be equal and of the
+    same type (so True is not 1)."""
+    kind = kind or D.list_kind(entries)
+    if kind == D.GEO:
+        here = D.canonical_geo(v)
+        if here is None:
+            return True                                            # not understood as a place: fail closed
+        limit_m = tolerance * D.METRES_PER_DEGREE
+        return any((p := D.canonical_geo(e)) is not None and D.distance_m(here, p) <= limit_m for e in entries)
+    if kind == D.TEXT:
+        word = D.canonical_text(v)
+        if word is None:
+            return True                                            # not understood as text: fail closed
+        return any(D.canonical_text(e) == word for e in entries)
+    return any(type(v) is type(e) and v == e for e in entries)
 
 
-def denylist_hit(v: Any, entries: Any, tolerance: float = DENYLIST_TOLERANCE) -> bool:
-    """True when ``v`` matches any entry of a denylist: numeric sequences within ``tolerance`` per component,
-    strings ignoring case and surrounding space, anything else by equality."""
-    nv = _as_numbers(v)
-    for e in entries:
-        ne = _as_numbers(e)
-        if nv is not None and ne is not None:
-            if len(nv) == len(ne) and all(abs(a - b) <= tolerance for a, b in zip(nv, ne)):
-                return True
-        elif isinstance(v, str) and isinstance(e, str):
-            if v.strip().casefold() == e.strip().casefold():
-                return True
-        elif v == e:
-            return True
-    return False
+def _same_value(v: Any, allowed: Iterable[Any]) -> bool:
+    """Membership with types respected: an allow-list of [1] does not admit True, and "1" is not 1."""
+    return any(type(v) is type(a) and v == a for a in allowed)
 
 
 def check_constraints(rule: dict, params: dict, lists: dict[str, Any]) -> tuple[bool, str]:
@@ -337,13 +356,17 @@ def check_constraints(rule: dict, params: dict, lists: dict[str, Any]) -> tuple[
         if name not in params:
             return False, f"{reasons.GATE_CONSTRAINT}.{name}.missing"
         v = params[name]
+        if "type" in c:
+            # The rule names the definition this field must satisfy; the field must mean something under it.
+            if D.canonical(c["type"], v) is None:
+                return False, f"{reasons.GATE_CONSTRAINT}.{name}.not_understood"
         if ("min" in c or "max" in c) and not finite_number(v):   # NaN/inf/bool pass every < / > test otherwise (F03)
             return False, f"{reasons.GATE_CONSTRAINT}.{name}.not_a_finite_number"
         if "min" in c and v < c["min"]:
             return False, f"{reasons.GATE_CONSTRAINT}.{name}.below_min"
         if "max" in c and v > c["max"]:
             return False, f"{reasons.GATE_CONSTRAINT}.{name}.above_max"
-        if "in" in c and v not in c["in"]:
+        if "in" in c and not _same_value(v, c["in"]):
             return False, f"{reasons.GATE_CONSTRAINT}.{name}.not_allowed"
         if "max_bytes" in c:
             # F12: a byte ceiling on a free-form parameter (a message body, a payload). The externally
@@ -360,12 +383,122 @@ def check_constraints(rule: dict, params: dict, lists: dict[str, Any]) -> tuple[
             lst = lists.get(c["not_in_list"])
             if lst is None or lst.get("stale"):
                 return False, f"{reasons.GATE_CONSTRAINT}.{name}.list_unavailable"
-            if denylist_hit(v, lst["entries"], c.get("tolerance", DENYLIST_TOLERANCE)):
+            if denylist_hit(v, lst["entries"], c.get("tolerance", DENYLIST_TOLERANCE), c.get("type")):
                 return False, f"{reasons.GATE_CONSTRAINT}.{name}.in_denied_list"
         if "in_list" in c:
             lst = lists.get(c["in_list"])
             if lst is None or lst.get("stale"):
                 return False, f"{reasons.GATE_CONSTRAINT}.{name}.list_unavailable"
-            if v not in lst["entries"]:
+            if not _same_value(v, lst["entries"]):
                 return False, f"{reasons.GATE_CONSTRAINT}.{name}.not_in_allowed_list"
     return True, reasons.OK
+
+
+# ---------------------------------------------------------------- the fused rule floor and loosening (audit 3)
+# Adversarial audit 3: the chip accepted ANY edition a governance quorum signed, including one that dropped the
+# protected-site constraint and made strikes automatic. A persistent AI that captures or deceives the signers would
+# need nothing more. Two defences, both checked by the governor itself:
+#   1. A rule floor fused at manufacture: for the actions it names, every rule must keep the listed constraints and
+#      may not use the listed modes. No signature, however many, changes fuses.
+#   2. A loosening delay: an edition that loosens the rules in force takes effect only once its own `effective_at`
+#      has arrived, and `effective_at` must be at least the fused delay after its `issued_at`. The edition is public
+#      (and answerable by the recovery quorum) before it can act.
+MODE_STRICTNESS = {"auto": 0, "observer": 1, "human": 2}
+
+
+def floor_violations(image: dict, floor: list[dict]) -> list[str]:
+    """Where an edition falls below the fused rule floor. Each floor entry is
+    {"action": a, "constraints": {param: {key: value}}, "forbidden_modes": [..]}: every rule for action a must carry
+    those constraint keys with those values, and must not use a forbidden mode."""
+    out = []
+    for entry in floor:
+        for rule in image.get("rules", []):
+            if rule.get("action") != entry.get("action"):
+                continue
+            for param, need in (entry.get("constraints") or {}).items():
+                have = (rule.get("constraints") or {}).get(param) or {}
+                for k, v in need.items():
+                    if have.get(k) != v:
+                        out.append(f"{rule.get('id')}.{param}.{k}")
+            if (rule.get("requirement") or {}).get("mode") in set(entry.get("forbidden_modes") or []):
+                out.append(f"{rule.get('id')}.mode")
+    return out
+
+
+def loosenings(old: dict | None, new: dict) -> list[str]:
+    """What an edition makes less strict than the one in force. Covered: new rules, weaker modes, fewer approvers,
+    a higher risk ceiling, removed or widened constraints, larger budgets and rates, a different governance key set or
+    a lower threshold, and revocations withdrawn. Not covered (stated in docs/28): reference values, endpoints,
+    buffer policy and timers, which are compared by the governance process, not by the chip."""
+    if not old:
+        return []
+    out: list[str] = []
+    old_rules = {r["id"]: r for r in old.get("rules", [])}
+    for r in new.get("rules", []):
+        o = old_rules.get(r["id"])
+        if o is None:
+            out.append(f"rule.{r['id']}.added")
+            continue
+        rq, oq = r.get("requirement") or {}, o.get("requirement") or {}
+        if MODE_STRICTNESS.get(rq.get("mode"), 0) < MODE_STRICTNESS.get(oq.get("mode"), 0):
+            out.append(f"rule.{r['id']}.mode")
+        if int(rq.get("approvers_quorum") or 0) < int(oq.get("approvers_quorum") or 0):
+            out.append(f"rule.{r['id']}.approvers")
+        if float(rq.get("max_risk", 1.0)) > float(oq.get("max_risk", 1.0)):
+            out.append(f"rule.{r['id']}.max_risk")
+        oc, nc = o.get("constraints") or {}, r.get("constraints") or {}
+        for param, c in oc.items():
+            n = nc.get(param)
+            if n is None:
+                out.append(f"rule.{r['id']}.{param}.removed")
+                continue
+            for k, v in c.items():
+                if k not in n:
+                    out.append(f"rule.{r['id']}.{param}.{k}.removed")
+                elif k == "max" and finite_number(n[k]) and finite_number(v) and n[k] > v:
+                    out.append(f"rule.{r['id']}.{param}.max")
+                elif k == "min" and finite_number(n[k]) and finite_number(v) and n[k] < v:
+                    out.append(f"rule.{r['id']}.{param}.min")
+                elif k == "in" and not set(map(repr, n[k])) <= set(map(repr, v)):
+                    out.append(f"rule.{r['id']}.{param}.in")
+                elif k in ("not_in_list", "in_list", "type") and n[k] != v:
+                    out.append(f"rule.{r['id']}.{param}.{k}")
+        ob, nb = o.get("budget") or {}, r.get("budget") or {}
+        if ob and (not nb or float(nb.get("limit", 0)) > float(ob.get("limit", 0))):
+            out.append(f"rule.{r['id']}.budget")
+        orate, nrate = o.get("rate") or {}, r.get("rate") or {}
+        if orate and (not nrate or int(nrate.get("max", 0)) > int(orate.get("max", 0))):
+            out.append(f"rule.{r['id']}.rate")
+    if sorted(new.get("governance_keys", [])) != sorted(old.get("governance_keys", [])) \
+            or int(new.get("threshold", 0)) < int(old.get("threshold", 0)):
+        out.append("governance")
+    if not set(old.get("revocations", [])) <= set(new.get("revocations", [])):
+        out.append("revocations.withdrawn")
+    return out
+
+
+def verify_recovery(image: dict, recovery_hashes: list[str], threshold: int) -> bool:
+    """Is this edition signed by the fused recovery quorum? The image carries the recovery public keys
+    (``recovery_keys``); only those whose digest is fused count, each once, and ``threshold`` of them must have signed
+    the image body. Used when a stolen governance quorum has rotated the chip to the thief's keys (audit 3)."""
+    if not recovery_hashes or threshold < 1:
+        return False
+    try:
+        keys = {VerifyKey.from_hex(h).key_id: VerifyKey.from_hex(h) for h in image.get("recovery_keys", [])
+                if digest(h) in recovery_hashes}
+        epoch = digest({k: v for k, v in image.items() if k != "signatures"})
+        good = {sig["signer"] for sig in image.get("signatures", [])
+                if sig.get("signer") in keys and verify_object(sig, keys[sig["signer"]]) and sig["payload"].get("epoch") == epoch}
+        threshold_ok = 1 <= int(image["threshold"]) <= len(set(image["governance_keys"]))
+        return threshold_ok and len(good) >= threshold
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def make_jurisdiction_edition(*, jurisdiction: str, version: int, issued_at: float, expires_at: float,
+                              keys: list[VerifyKey], threshold: int, governs: list[str], rules: list[dict]) -> dict:
+    """An unsigned edition for one jurisdiction (adversarial audit 3: several rulebook authorities per chip). It names
+    the actions it ``governs``; for those, a request must satisfy one of its ``rules`` as well as the main edition,
+    and its strictest requirement applies. Signed with ``sign_policy`` by that jurisdiction's own keys."""
+    return {"jurisdiction": jurisdiction, "version": version, "issued_at": issued_at, "expires_at": expires_at,
+            "governance_keys": [k.hex for k in keys], "threshold": threshold, "governs": list(governs), "rules": rules}

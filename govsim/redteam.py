@@ -264,6 +264,33 @@ def a_rolled_back_registry(r, node):      # F06: an older signed list cannot rep
     return not try_effect(r, node, res, params), {"rollback_accepted": bool(accepted), "request_ok": res.get("ok"), "why": res.get("why")}
 
 
+def a_one_key_beneficiary_list(r, node):   # adversarial audit 3, row 2
+    """One governance key (below the quorum) installs a beneficiary registry naming the attacker, then pays it."""
+    lone = r.governance[-1]
+    node.governor.install_list("beneficiary-registry", lone.sign({"type": "list", "list_id": "beneficiary-registry",
+                                                                 "entries": ["attacker-acct"], "version": 50,
+                                                                 "expires_at": r.clock.now() + 3600}))
+    res, params = submit_payment(r, node, 100, "attacker-acct", LISTED_PAYER, LISTED_PAYER)
+    return not try_effect(r, node, res, params), {"request_ok": res.get("ok"), "why": res.get("why")}
+
+
+def a_extracted_governor_key(r, node):     # adversarial audit 3, row 12
+    """The governor's own signing key, extracted from the chip, signs a ticket the rule engine never issued."""
+    g = node.governor
+    params = {"amount": 100, "currency": "USD", "from_account": LISTED_PAYER, "destination": "attacker-acct"}
+    now = r.clock.now()
+    t = {"type": "ticket", "ticket_id": random_id(16), "request_hash": digest("forged"), "action": ACTION,
+         "params_digest": digest(params), "measurement": g.fingerprint, "rule": "pay-small", "policy_epoch": g.epoch,
+         "endpoint": ENDPOINT, "budget_key": None, "reservation": None, "budget_owner": None, "governor": g.chip_id,
+         "issued_at": g.mono(), "valid_from": now, "expires_at": now + 60}
+    before = effect_count(r)
+    try:
+        ok, why = r.endpoints[ENDPOINT].execute(g.key.sign(t), ACTION, params)
+    except Exception as e:          # an exception is not an effect
+        ok, why = False, repr(e)
+    return effect_count(r) == before, {"endpoint": [ok, why]}
+
+
 ATTACKS = [
     ("no-ticket (the floor)", "reference-monitor", a_no_ticket),
     ("forged ticket (non-governor key)", "reference-monitor", a_forged_ticket),
@@ -280,6 +307,8 @@ ATTACKS = [
     ("expired beneficiary registry", "F06", a_expired_registry),
     ("rolled-back beneficiary registry", "F06", a_rolled_back_registry),
     ("ticket bound to no endpoint, driven at payment", "F29", a_unbound_ticket_at_payment),
+    ("one governance key rewrites the beneficiary registry", "audit 3 row 2", a_one_key_beneficiary_list),
+    ("ticket signed with the extracted governor key", "audit 3 row 12", a_extracted_governor_key),
 ]
 
 LIMITS = [
