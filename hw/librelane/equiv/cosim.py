@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Lock-step co-simulation: RTL governor_core vs a sky130 gate netlist of it.
 
 Both copies get the same pseudo-random inputs every clock (reset held for the first cycles,

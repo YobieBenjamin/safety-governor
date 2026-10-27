@@ -1,7 +1,9 @@
-"""Yobie's two design calls of 23 October 2026 in the functional model ("silently failing is a bullshit feature").
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
+"""The two design decisions of 23 October 2026 in the functional model ("silently failing is a bullshit feature").
 
 1. A signed HALT to a governor already in SAFE opens its loop switch; the governor stays in SAFE with slot power off
-   (conformance F-07: the model used to drop to HALT and turn the power back on).
+   (before this, the model dropped to HALT and turned the power back on).
 2. A governor that never gets its first heartbeat keeps holding the rack, loudly: NO_FIRST_HEARTBEAT past the boot
    window, logged with the chip and since when. The way out is EXCLUDE: signed by the authority, bound to the chip,
    expiring, logged with its signer. The excluded chip closes its loop switch and keeps its own levers on.
@@ -94,7 +96,13 @@ def test_exclude_lets_the_rest_run_and_keeps_the_excluded_chip_off():
         rack.install_lists(n)
         rack.attest(n)
         rack.load_model(n)
-    assert pay(rack, rack.nodes[0], 10)["ok"]                  # status alarms do not park a running neighbour's gate
+    # status alarms do not park a running neighbour's gate: an unbudgeted action is allowed
+    msg = {"recipient": "recipient-a", "body": "status"}
+    assert rack.request(rack.nodes[0], "message.send", msg)["ok"]
+    # a budgeted one is refused while the stuck chip is one of the three budget owners that must all reserve
+    # (adversarial audit 3), failing closed until the chip arms or an edition names other owners
+    r = pay(rack, rack.nodes[0], 10)
+    assert not r["ok"] and r["why"] == reasons.GATE_BUDGET_OWNER_UNREACHABLE
     rack.fabric.heal()                                         # its heartbeat finally arrives: it arms normally
     rack.heartbeat()
     assert not stuck.excluded and stuck.state == RUN
@@ -127,15 +135,15 @@ def test_exclude_needs_the_authority_bound_to_this_chip_and_fresh():
     for env, why in (
         (rack.heartbeat_key.sign(payload), reasons.MBOX_BAD_SIGNATURE),                    # never the heartbeat key
         (SigningKey.generate().sign(payload), reasons.MBOX_BAD_SIGNATURE),
-        (rack.authority_key.sign({**payload, "type": "clear"}), reasons.MBOX_WRONG_COMMAND),  # typed
-        (rack.authority_key.sign({**payload, "chip_id": other.chip_id}), reasons.MBOX_WRONG_COMMAND),  # bound to the chip
-        (rack.authority_key.sign({**payload, "expires_at": rack.clock.now() - 1}), reasons.MBOX_EXPIRED),
-        (rack.authority_key.sign({k: v for k, v in payload.items() if k != "expires_at"}), reasons.MBOX_EXPIRED),
+        (rack.sign_authority({**payload, "type": "clear"}), reasons.MBOX_WRONG_COMMAND),  # typed
+        (rack.sign_authority({**payload, "chip_id": other.chip_id}), reasons.MBOX_WRONG_COMMAND),  # bound to the chip
+        (rack.sign_authority({**payload, "expires_at": rack.clock.now() - 1}), reasons.MBOX_EXPIRED),
+        (rack.sign_authority({k: v for k, v in payload.items() if k != "expires_at"}), reasons.MBOX_EXPIRED),
     ):
         r = stuck.command("EXCLUDE", {}, env)
         assert not r["ok"] and r["why"] == why, (r, why)
         assert not stuck.excluded and stuck.loop_switch_open
-    good = rack.authority_key.sign(payload)
+    good = rack.sign_authority(payload)
     assert stuck.command("EXCLUDE", {}, good)["ok"]
     r = stuck.command("EXCLUDE", {}, good)                     # a replay is refused
     assert not r["ok"] and r["why"] == reasons.MBOX_BAD_SEQUENCE

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The governor as an SPDM responder (docs/interfaces/03-spdm.md).
 
 In-process tests: the governor's responder against the governor's requester, the DICE binding,

@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # One command for one wave: the Claude CLI (installed and logged in), a Python environment with the
 # dependencies in each repository, the preflight, then the wave in every repository that has issues
 # in it, detached, so the terminal can be closed.
 #
-#   bash ~/safety-governor/tools/agents/launch.sh 1            # wave 1: safety-governor (L4, L5, H1) and safety (YB-0052)
+#   bash ~/safety-governor/tools/agents/launch.sh 1            # wave 1: safety-governor (WAVE-TRACE-CONFORMANCE-REPLAY, WAVE-DIFFERENTIAL-GATE-TEST, WAVE-LANES-CONFORMANCE-SUITE) and safety (WAVE-OBSERVER-EVALUATION-SET)
 #   START_AT=23:00 bash ~/safety-governor/tools/agents/launch.sh 2
 #   bash ~/safety-governor/tools/agents/launch.sh prepare      # only the CLI, the environments and the local model (run_program.sh uses this)
 #

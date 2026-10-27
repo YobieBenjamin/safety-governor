@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # Run one wave of the experiment program as unattended coding agents: one agent per issue, each in
 # its own git worktree and branch, on the mid-tier model, with a turn cap and a spend cap, no
 # permission prompts, a watchdog, and a pause-and-resume when the subscription window runs out.
@@ -9,7 +11,7 @@
 #   tools/agents/run_wave.sh 1 --detach        # same, in the background; log in .agents/wave-1/launcher.log
 #   tools/agents/run_wave.sh 1 --check         # preflight only: gh, claude, python, baseline tests
 #   tools/agents/run_wave.sh 1 --dry-run       # write the briefs and print the commands; start nothing
-#   tools/agents/run_wave.sh 1 --only L4       # one issue
+#   tools/agents/run_wave.sh 1 --only L4       # one issue (WAVE-TRACE-CONFORMANCE-REPLAY (old: L4))
 #   START_AT=23:00 tools/agents/run_wave.sh 1 --detach    # start at 23:00 (tonight, or tomorrow if past)
 #
 # Knobs, as environment variables (defaults chosen for a Claude subscription, see docs/21):

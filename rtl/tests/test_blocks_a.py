@@ -1,4 +1,6 @@
-"""Regressions for the two RTL bugs L7 found on 23 October 2026 (rtl/formal/FINDINGS-a.md F1, F2). Each test fails
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
+"""Regressions for the two RTL bugs WAVE-FORMAL-PROOFS-ON-VERILOG found on 23 October 2026 (rtl/formal/FINDINGS-a.md RTL-DEBUG-WINDOW-AFTER-RESET, RTL-COUNTER-WRAPPED-TO-ZERO). Each test fails
 by assertion on the code before the fix. Amaranth's built-in simulator, no external tools."""
 import os
 import sys
@@ -30,7 +32,7 @@ def run(top, testbench):
     sim.run()
 
 
-def test_f1_no_debug_window_after_reset_on_a_production_chip():
+def test_no_debug_window_after_reset_on_a_production_chip():
     dut = Lifecycle()
     top = _WithReset(dut)
 
@@ -56,7 +58,7 @@ def test_f1_no_debug_window_after_reset_on_a_production_chip():
     run(top, tb)
 
 
-def test_f2_counter_saturates_instead_of_wrapping():
+def test_counter_saturates_instead_of_wrapping():
     dut = MonotonicCounter()
 
     async def tb(ctx):

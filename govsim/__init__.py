@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """govsim: a functional model of the Safety Governor, its enforcement points, the halt loop
 and the message fabric, across a simulated cluster of GPUs.
 

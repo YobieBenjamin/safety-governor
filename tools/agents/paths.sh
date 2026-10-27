@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # Where the clones live. Sourced by every script under tools/; setup_and_publish.sh carries the
 # same three lines itself, because it runs before any clone exists.
 #
@@ -13,7 +15,7 @@ fi
 INBOX="$WORK/inbox"   # bundles made in the program's container land here (setup_and_publish.sh also looks beside itself)
 
 # Signal a process and everything under it, children first. Every watchdog here used to signal the
-# shell around an agent; the shell died on TERM and its claude lived on as an orphan (L6 on 21 October
+# shell around an agent; the shell died on TERM and its claude lived on as an orphan (WAVE-MUTATION-TESTING-GATE on 21 October
 # kept writing its log for an hour after its launcher had reported it done).
 sig_tree() { local pid="$1" sig="${2:-TERM}" c; for c in $(pgrep -P "$pid" 2>/dev/null || true); do sig_tree "$c" "$sig"; done; kill -"$sig" "$pid" 2>/dev/null || true; }
 # An agent is a claude process a launcher started with --add-dir <clone>/.agents/wave-N; a person's own claude session never carries that.

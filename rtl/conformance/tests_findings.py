@@ -1,8 +1,10 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Finding reproducers for the hard-core blocks, and cross-checks of the RTL against the functional model.
 
 A test marked ``finding=`` asserts what the spec requires; on today's RTL it fails by assertion, and the
 assertion message says what the RTL did instead. FINDINGS.md has the write-up for each id. The two leads the
-brief named are F-05 (CLEAR and tamper in the same cycle) and F-06 (the lifecycle value before the fuse load).
+brief named are CONFORMANCE-CLEAR-BEATS-TAMPER (CLEAR and tamper in the same cycle) and CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD (the lifecycle value before the fuse load).
 """
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ from .tests_blocks import _cap_insert, _cap_lookup, _to_run, mbox_deliver
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-# ================================================================ F-05: CLEAR and tamper in the same cycle (lead a)
+# ================================================================ CONFORMANCE-CLEAR-BEATS-TAMPER: CLEAR and tamper in the same cycle (lead a)
 async def _halted_by_command(ctx, dut):
     await _to_run(ctx, dut)
     ctx.set(dut.cmd_halt, 1)
@@ -33,10 +35,10 @@ async def _halted_by_command(ctx, dut):
     assert ctx.get(dut.state) == HALT
 
 
-# F-05 closed on fix/halt: tamper now outranks CLEAR. This test passes and guards the fix.
-@conformance("R-042", "R-035")
+# CONFORMANCE-CLEAR-BEATS-TAMPER closed on fix/halt: tamper now outranks CLEAR. This test passes and guards the fix.
+@conformance("REQUIREMENT-TAMPER-ZEROIZES-TO-SAFE", "REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED")
 def test_finding_clear_and_tamper_pulse_same_cycle_ends_safe():
-    """F-05: the spec says tamper means SAFE. A one-cycle tamper strobe (a glitch detector) in the same cycle as
+    """CONFORMANCE-CLEAR-BEATS-TAMPER: the spec says tamper means SAFE. A one-cycle tamper strobe (a glitch detector) in the same cycle as
     an authorized CLEAR: the RTL takes the CLEAR branch first, lands in HALTED_INITIAL with cause none, and the
     tamper is gone. Required: SAFE with cause tamper."""
     dut = B.HaltSeq()
@@ -44,9 +46,11 @@ def test_finding_clear_and_tamper_pulse_same_cycle_ends_safe():
     async def tb(ctx):
         await _halted_by_command(ctx, dut)
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)              # an authorized clear (adversarial audit 3)
         ctx.set(dut.tamper, 1)
         await ctx.tick()
         ctx.set(dut.clear, 0)
+        ctx.set(dut.clear_authorized, 0)
         ctx.set(dut.tamper, 0)
         for _ in range(3):
             await ctx.tick()
@@ -55,24 +59,26 @@ def test_finding_clear_and_tamper_pulse_same_cycle_ends_safe():
     sim(dut, tb)
 
 
-# F-05 closed on fix/halt: tamper now outranks CLEAR. This test passes and guards the fix.
-@conformance("R-042", "R-035")
+# CONFORMANCE-CLEAR-BEATS-TAMPER closed on fix/halt: tamper now outranks CLEAR. This test passes and guards the fix.
+@conformance("REQUIREMENT-TAMPER-ZEROIZES-TO-SAFE", "REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED")
 def test_finding_clear_and_tamper_same_cycle_never_leaves_safe_rung():
-    """F-05, the one-cycle view: even with tamper held high (a mesh cut), the cycle after CLEAR plus tamper must
+    """CONFORMANCE-CLEAR-BEATS-TAMPER, the one-cycle view: even with tamper held high (a mesh cut), the cycle after CLEAR plus tamper must
     show SAFE; the RTL shows HALTED_INITIAL for one cycle, then SAFE."""
     dut = B.HaltSeq()
 
     async def tb(ctx):
         await _halted_by_command(ctx, dut)
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)              # an authorized clear (adversarial audit 3)
         ctx.set(dut.tamper, 1)
         await ctx.tick()
         ctx.set(dut.clear, 0)
+        ctx.set(dut.clear_authorized, 0)
         assert ctx.get(dut.state) == SAFE, f"state {ctx.get(dut.state)} in the cycle after CLEAR + tamper"
     sim(dut, tb)
 
 
-@conformance("R-042")
+@conformance("REQUIREMENT-TAMPER-ZEROIZES-TO-SAFE")
 def test_level_tamper_with_clear_settles_in_safe():
     """Not a finding on its own: with tamper held as a level, the sequencer is back in SAFE one cycle later, and
     during that cycle the levers are the boot rung's (brake, reset, power off), so the GPU is never released."""
@@ -81,16 +87,18 @@ def test_level_tamper_with_clear_settles_in_safe():
     async def tb(ctx):
         await _halted_by_command(ctx, dut)
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)              # an authorized clear (adversarial audit 3)
         ctx.set(dut.tamper, 1)
         await ctx.tick()
         ctx.set(dut.clear, 0)
+        ctx.set(dut.clear_authorized, 0)
         assert levers(ctx, dut) == (1, 1, 0)
         await ctx.tick()
         assert ctx.get(dut.state) == SAFE and ctx.get(dut.cause) == C_TAMPER
     sim(dut, tb)
 
 
-@conformance("R-074", "R-042")
+@conformance("REQUIREMENT-FIRMWARE-TAMPER-ZEROIZE", "REQUIREMENT-TAMPER-ZEROIZES-TO-SAFE")
 def test_model_tamper_is_safe_and_unclearable():
     """The model: a tamper event zeroizes, goes to SAFE, and every command after it (CLEAR included) is refused."""
     rack = build_rack(1, "rack")
@@ -102,11 +110,11 @@ def test_model_tamper_is_safe_and_unclearable():
     assert r == {"ok": False, "why": reasons.TAMPER_ZEROIZED}
 
 
-# ================================================================ F-06: lifecycle before the fuse load (lead b)
-# F-06 closed by the L7 group A merge: this test passes and guards the fix.
-@conformance("R-010", "R-011")
+# ================================================================ CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD: lifecycle before the fuse load (lead b)
+# CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD closed by the WAVE-FORMAL-PROOFS-ON-VERILOG group A merge: this test passes and guards the fix.
+@conformance("REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG", "REQUIREMENT-PRODUCTION-HAS-NO-DEBUG")
 def test_finding_lifecycle_debug_before_fuse_load():
-    """F-06: a part fused PRODUCTION, between reset and the fuse load: the register holds its reset value 0 (TEST)
+    """CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD: a part fused PRODUCTION, between reset and the fuse load: the register holds its reset value 0 (TEST)
     and debug_grant follows debug_req. Required: debug is impossible on production silicon, at every cycle."""
     dut = B.Lifecycle()
 
@@ -117,11 +125,11 @@ def test_finding_lifecycle_debug_before_fuse_load():
     sim(dut, tb)
 
 
-# F-06 is only half closed: debug is no longer granted before the fuse load, but the LIFECYCLE register still
+# CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD is only half closed: debug is no longer granted before the fuse load, but the LIFECYCLE register still
 # reads TEST in that window, so this reproducer still fails, on the register half.
-@conformance("R-012", "R-011", finding="F-06")
+@conformance("REQUIREMENT-LIFECYCLE-REGISTER-ENCODING", "REQUIREMENT-PRODUCTION-HAS-NO-DEBUG", finding="CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD")
 def test_finding_core_reports_test_lifecycle_before_fuse_load():
-    """F-06 through the core: LIFECYCLE reads 0 (test) and the debug_grant port is high on a production part
+    """CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD through the core: LIFECYCLE reads 0 (test) and the debug_grant port is high on a production part
     until the firmware strobes life.load. Required: never test, never granted."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
 
@@ -136,9 +144,9 @@ def test_finding_core_reports_test_lifecycle_before_fuse_load():
     sim(dut, tb)
 
 
-@conformance("R-011")
+@conformance("REQUIREMENT-PRODUCTION-HAS-NO-DEBUG")
 def test_lifecycle_after_load_debug_is_dead():
-    """The other half of F-06: once loaded, a production part never grants debug again, whatever arrives."""
+    """The other half of CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD: once loaded, a production part never grants debug again, whatever arrives."""
     dut = B.Lifecycle()
     rng = random.Random(9)
 
@@ -157,7 +165,7 @@ def test_lifecycle_after_load_debug_is_dead():
     sim(dut, tb)
 
 
-# ================================================================ F-07: a signed HALT to a governor already in SAFE
+# ================================================================ a signed HALT to a governor already in SAFE
 async def _safe_by_local_cause(ctx, dut):
     await _to_run(ctx, dut)
     ctx.set(dut.hb_expired, 1)
@@ -170,10 +178,10 @@ async def _safe_by_local_cause(ctx, dut):
     assert ctx.get(dut.state) == SAFE and ctx.get(dut.cause) == C_LOCAL and ctx.get(dut.switch_open) == 0
 
 
-# F-07 closed by Yobie's call 1 (23 October 2026): a HALT opens the loop on every rung. This test passes and guards it.
-@conformance("R-038", "R-144")
+# Closed on 23 October 2026: a HALT opens the loop on every rung. This test passes and guards it.
+@conformance("REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE", "REQUIREMENT-HALT-OPENS-LOOP-EVERY-RUNG")
 def test_finding_cmd_halt_in_safe_opens_the_loop():
-    """F-07 (RTL): a governor that climbed to SAFE on a local cause keeps its loop switch closed (right: local
+    """RTL: a governor that climbed to SAFE on a local cause keeps its loop switch closed (right: local
     causes do not stop the rack). A signed HALT then arrives. The spec: switch_open sets on cmd_halt, and a
     signed HALT is a loop-opening cause that stops the whole domain. The RTL ignores cmd_halt in SAFE."""
     dut = B.HaltSeq(t_throttle=2, t_halt=2)
@@ -187,10 +195,10 @@ def test_finding_cmd_halt_in_safe_opens_the_loop():
     sim(dut, tb)
 
 
-# F-07 closed (model half): enter_safe_mode never applies a lower rung. This test passes and guards it.
-@conformance("R-035", "R-036", "R-145")
+# Closed (model half): enter_safe_mode never applies a lower rung. This test passes and guards it.
+@conformance("REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED", "REQUIREMENT-LEVERS-FOLLOW-RUNG", "REQUIREMENT-HALT-IN-SAFE-STAYS-SAFE")
 def test_model_finding_halt_in_safe_does_not_descend():
-    """F-07 (model): the same event in govsim moves the governor DOWN from SAFE to HALT and turns slot power back
+    """Model: the same event in govsim moves the governor DOWN from SAFE to HALT and turns slot power back
     on. The spec: the rung never descends without CLEAR; SAFE has PWR_EN low."""
     rack = build_rack(1, "rack")
     rack.bring_up()
@@ -203,26 +211,27 @@ def test_model_finding_halt_in_safe_does_not_descend():
     assert g.state == "SAFE" and g.levers["pwr_en"] is False, f"model went to {g.state}, levers {g.levers}"
 
 
-@conformance("R-038")
+@conformance("REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE")
 def test_cmd_halt_in_throttle_from_local_cause_opens_loop():
     """The neighbouring case conforms: a signed HALT to a governor throttled on a local cause halts it and opens the loop."""
     dut = B.HaltSeq()
 
     async def tb(ctx):
         await _to_run(ctx, dut)
-        ctx.set(dut.hb_expired, 1)
+        ctx.set(dut.local_trip, 1)                   # a local trip throttles (a lost heartbeat now halts: adversarial audit 3)
         await ctx.tick()
-        ctx.set(dut.hb_expired, 0)
+        ctx.set(dut.local_trip, 0)
+        assert ctx.get(dut.state) == THROTTLE
         ctx.set(dut.cmd_halt, 1)
         await ctx.tick()
         assert ctx.get(dut.state) == HALT and ctx.get(dut.switch_open) == 1
     sim(dut, tb)
 
 
-# ================================================================ F-15: loop_lost outside RUN and THROTTLE
-@conformance("R-038", finding="F-15")
+# ================================================================ CONFORMANCE-SWITCH-OPEN-RUN-ONLY: loop_lost outside RUN and THROTTLE
+@conformance("REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE", finding="CONFORMANCE-SWITCH-OPEN-RUN-ONLY")
 def test_finding_loop_lost_in_halt_sets_switch_open():
-    """F-15 (spec text): 07 section 3 says switch_open sets on loop_lost. A governor in HALT on a local cause
+    """CONFORMANCE-SWITCH-OPEN-RUN-ONLY (spec text): 07 section 3 says switch_open sets on loop_lost. A governor in HALT on a local cause
     (switch closed) sees the loop drop: the RTL, like the model, only acts on loop_lost in RUN or THROTTLE."""
     dut = B.HaltSeq(t_throttle=2, t_halt=50)
 
@@ -242,10 +251,10 @@ def test_finding_loop_lost_in_halt_sets_switch_open():
     sim(dut, tb)
 
 
-# ================================================================ F-08: the "millisecond" is 1,024 microseconds
-@conformance("R-032", "R-029", "R-031", finding="F-08")
+# ================================================================ CONFORMANCE-MILLISECOND-TICK-TOO-LONG: the "millisecond" is 1,024 microseconds
+@conformance("REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER", "REQUIREMENT-HEARTBEAT-EXPIRES-ON-TIME", "REQUIREMENT-HEARTBEAT-REMAINING-REGISTER", finding="CONFORMANCE-MILLISECOND-TICK-TOO-LONG")
 def test_finding_heartbeat_expires_on_time():
-    """F-08: a 2 ms heartbeat window must have expired after 2,000 microsecond ticks (plus one cycle for the
+    """CONFORMANCE-MILLISECOND-TICK-TOO-LONG: a 2 ms heartbeat window must have expired after 2,000 microsecond ticks (plus one cycle for the
     register). The core's millisecond strobe is every 2^10 = 1,024 ticks, so it expires after 2,048: every timer
     the spec states in milliseconds runs 2.4 percent long (a 5 s heartbeat expiry becomes 5.12 s)."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -262,7 +271,7 @@ def test_finding_heartbeat_expires_on_time():
     sim(dut, tb)
 
 
-@conformance("R-032")
+@conformance("REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER")
 def test_core_ms_strobe_is_derived_from_the_counter():
     """What does conform: the slow strobe is derived from the microsecond counter (it is a function of MONO's low
     bits and the tick), so nothing outside the core can make the timers run faster or slower."""
@@ -279,10 +288,10 @@ def test_core_ms_strobe_is_derived_from_the_counter():
     sim(dut, tb)
 
 
-# ================================================================ F-09, F-10: capability table
-@conformance("R-016", finding="F-09")
+# ================================================================ CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES, CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES: capability table
+@conformance("REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO", finding="CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES")
 def test_finding_cap_refuses_at_zero_budget():
-    """F-09: the spec says a lookup refuses at zero. With the budget spent to exactly zero, a zero-byte lookup is
+    """CONFORMANCE-ZERO-BYTE-LOOKUP-PASSES: the spec says a lookup refuses at zero. With the budget spent to exactly zero, a zero-byte lookup is
     still allowed by the RTL (budget < bytes is false for 0 < 0). The model's switch does the same."""
     dut = B.CapTable(entries=2)
 
@@ -300,9 +309,9 @@ def test_finding_cap_refuses_at_zero_budget():
     sim(dut, tb)
 
 
-@conformance("R-014", "R-015", finding="F-10")
+@conformance("REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH", "REQUIREMENT-LOOKUP-DECREMENTS-BUDGET", finding="CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES")
 def test_finding_cap_reprogramming_a_key_replaces_it():
-    """F-10: the table is keyed on (point, peer, dir), and the model's switch replaces an entry when the same key
+    """CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES: the table is keyed on (point, peer, dir), and the model's switch replaces an entry when the same key
     is programmed again. The RTL stores a second entry and the priority encoder keeps answering from the first:
     tightening a 1,000-byte capability to 10 bytes leaves 1,000 bytes usable."""
     dut = B.CapTable(entries=4)
@@ -332,19 +341,19 @@ def _model_cap(sw, peer, direction, budget, expiry):
     return cap
 
 
-@conformance("R-014", "R-015")
+@conformance("REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH", "REQUIREMENT-LOOKUP-DECREMENTS-BUDGET")
 def test_model_switch_replaces_on_reprogram():
-    """The model's side of F-10: programming the same (peer, direction) again replaces the entry."""
+    """The model's side of CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES: programming the same (peer, direction) again replaces the entry."""
     sw = _model_switch()
     assert sw.program(_model_cap(sw, "p7", "both", 1000, 200))
     assert sw.program(_model_cap(sw, "p7", "both", 10, 200))
     assert sw.pass_traffic("p7", "in", 500, 100)[0] is False
 
 
-@conformance("R-014", "R-015", "R-016", "R-017", "R-018", "R-020", "R-021")
+@conformance("REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH", "REQUIREMENT-LOOKUP-DECREMENTS-BUDGET", "REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO", "REQUIREMENT-CAPABILITY-REFUSES-ON-EXPIRY", "REQUIREMENT-CAPABILITY-REFUSES-STALE-TAG", "REQUIREMENT-BUDGET-NEVER-UNDERFLOWS", "REQUIREMENT-CAPABILITY-DIRECTION-FIELD")
 def test_diff_cap_table_random_against_model_switch():
     """1,500 random inserts and lookups on one point into the RTL table and the model's Switch, with keys that never
-    overlap (F-10 covers overlap): allow agrees on every lookup and the remaining budgets agree after each one."""
+    overlap (CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES covers overlap): allow agrees on every lookup and the remaining budgets agree after each one."""
     rng = random.Random(10)
     dut = B.CapTable(entries=8)
     sw = _model_switch()
@@ -391,11 +400,11 @@ def test_diff_cap_table_random_against_model_switch():
     return stats
 
 
-# ================================================================ F-11, F-12: counters that wrap
-# F-11 closed by the L7 group B merge (acce09f): the meter saturates. This test now passes and guards the fix.
-@conformance("R-052")
+# ================================================================ CONFORMANCE-METER-COUNTERS-WRAP, CONFORMANCE-MONOTONIC-COUNTER-WRAPS: counters that wrap
+# CONFORMANCE-METER-COUNTERS-WRAP closed by the WAVE-FORMAL-PROOFS-ON-VERILOG group B merge (acce09f): the meter saturates. This test now passes and guards the fix.
+@conformance("REQUIREMENT-METER-ONLY-INCREMENTS")
 def test_finding_meter_counter_wraps_at_48_bits():
-    """F-11: meter counters only increment. At the prototype's 48 bits (the spec's register is 64), bytes out
+    """CONFORMANCE-METER-COUNTERS-WRAP: meter counters only increment. At the prototype's 48 bits (the spec's register is 64), bytes out
     wraps to a small number after 2^48 bytes, about 281 TB, which a long-lived slot can reach."""
     dut = B.Meter(slots=1)
 
@@ -410,10 +419,10 @@ def test_finding_meter_counter_wraps_at_48_bits():
     sim(dut, tb)
 
 
-# F-12 closed by the L7 group A merge: this test passes and guards the fix.
-@conformance("R-002", "R-003")
+# CONFORMANCE-MONOTONIC-COUNTER-WRAPS closed by the WAVE-FORMAL-PROOFS-ON-VERILOG group A merge: this test passes and guards the fix.
+@conformance("REQUIREMENT-COUNTER-REFUSES-DECREMENT", "REQUIREMENT-COUNTER-FUSE-HIGH-WATER-MARK")
 def test_finding_mono_wraps_from_an_all_ones_high_water_mark():
-    """F-12: the counter never decreases. A high-water mark that reads all ones (an erased or failed fuse array)
+    """CONFORMANCE-MONOTONIC-COUNTER-WRAPS: the counter never decreases. A high-water mark that reads all ones (an erased or failed fuse array)
     loads 2^64 - 1, and the next tick wraps the governor's clock to 0. Low severity: unreachable by counting."""
     dut = B.MonotonicCounter()
 
@@ -428,10 +437,10 @@ def test_finding_mono_wraps_from_an_all_ones_high_water_mark():
     sim(dut, tb)
 
 
-# ================================================================ F-13: mailbox inputs are not latched
-@conformance("R-062", "R-054", finding="F-13")
+# ================================================================ CONFORMANCE-FRAME-NOT-LATCHED: mailbox inputs are not latched
+@conformance("REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE", "REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED", finding="CONFORMANCE-FRAME-NOT-LATCHED")
 def test_finding_mailbox_sequence_never_moves_backwards():
-    """F-13: the Mailbox checks frame_seq at the doorbell and stores frame_seq at sig_done, reading the port live
+    """CONFORMANCE-FRAME-NOT-LATCHED: the Mailbox checks frame_seq at the doorbell and stores frame_seq at sig_done, reading the port live
     both times. If the value on the port changes in between, the RTL dispatches a frame whose sequence is not
     above the last accepted one and moves last_seq backwards. Required: last_seq never decreases."""
     dut = B.Mailbox()
@@ -451,17 +460,17 @@ def test_finding_mailbox_sequence_never_moves_backwards():
     sim(dut, tb)
 
 
-# ================================================================ F-14: the spec's own status table
-@conformance("R-061", "R-063", finding="F-14")
+# ================================================================ CONFORMANCE-STATUS-TABLE-MISSING-ROW: the spec's own status table
+@conformance("REQUIREMENT-MAILBOX-STATUS-CODES", "REQUIREMENT-WRONG-COMMAND-STATUS", finding="CONFORMANCE-STATUS-TABLE-MISSING-ROW")
 def test_finding_spec_status_table_lists_status_7():
-    """F-14 (spec): section 3 and the RTL use MBOX_STATUS 7 (wrong command); the register map's row lists 0 to 6."""
+    """CONFORMANCE-STATUS-TABLE-MISSING-ROW (spec): section 3 and the RTL use MBOX_STATUS 7 (wrong command); the register map's row lists 0 to 6."""
     text = open(os.path.join(ROOT, "docs", "04-specification.md"), encoding="utf-8").read()
     row = next(l for l in text.splitlines() if "`MBOX_STATUS`" in l)
     assert re.search(r"\b7\b", row), f"register map row: {row.strip()}"
 
 
 # ================================================================ cross-model checks that conform
-@conformance("R-036")
+@conformance("REQUIREMENT-LEVERS-FOLLOW-RUNG")
 def test_diff_levers_per_rung_rtl_equals_model():
     """For every rung, the RTL's levers equal the model's _apply_rung levers."""
     rack = build_rack(1, "rack")
@@ -492,7 +501,7 @@ def test_diff_levers_per_rung_rtl_equals_model():
     assert rtl == model, (rtl, model)
 
 
-@conformance("R-037", "R-073")
+@conformance("REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED", "REQUIREMENT-BOOT-REFUSED-STAYS-HALTED")
 def test_diff_boot_rung_rtl_equals_model():
     """Fresh out of boot, RTL and model agree: HALTED_INITIAL, levers safe, loop switch open."""
     from govsim.cluster import build_rack as br
@@ -507,7 +516,7 @@ def test_diff_boot_rung_rtl_equals_model():
     sim(dut, tb)
 
 
-@conformance("R-024")
+@conformance("REQUIREMENT-PORT-OPEN-ONLY-WITH-ENTRY")
 def test_cap_expired_entry_closes_the_port_for_good():
     """After an expiry is seen, the entry is gone: moving the clock back (it cannot, but the table must not care) finds nothing."""
     dut = B.CapTable(entries=2)
@@ -527,9 +536,9 @@ def test_cap_expired_entry_closes_the_port_for_good():
     sim(dut, tb)
 
 
-@conformance("R-014", "R-093", finding="F-10")
+@conformance("REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH", "REQUIREMENT-SWITCH-RECONFIGURED-AFTER-EVENTS", finding="CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES")
 def test_finding_cap_rederived_after_epoch_switch_is_usable():
-    """F-10, the fail-closed face: in RUN the epoch switches, the firmware re-derives the port under the new tag
+    """CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES, the fail-closed face: in RUN the epoch switches, the firmware re-derives the port under the new tag
     (spec: it re-derives the switch configuration after any epoch event). The stale entry still sits in a lower
     slot, the priority encoder hits it first, and the new, valid capability is refused R_STALE_EPOCH."""
     dut = B.CapTable(entries=4)

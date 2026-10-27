@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The compliance matrix: docs/interfaces/compliance_matrix.csv -> docs/interfaces/COMPLIANCE-MATRIX.md.
 
     python -m govsim.hardware_ref.matrix            # check the CSV and write the Markdown

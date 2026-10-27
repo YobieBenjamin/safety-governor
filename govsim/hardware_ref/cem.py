@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """PCIe CEM sideband timing, checked against the RTL halt sequencer.
 
 The numbers. The PCI Express CEM specification is members-only; we have not read it. Every
@@ -209,8 +211,10 @@ def simulate(with_shaper: bool, shaper=None, ramp_us: int = 5_000, pg_delay_us: 
         ctx.set(seq.loop_lost, 0)
         await ctx.tick()
         ctx.set(seq.clear, 1)
+        ctx.set(seq.clear_authorized, 1)     # an authorized CLEAR: the firmware's clear and a verified CLEAR frame (adversarial audit 3)
         await ctx.tick()
         ctx.set(seq.clear, 0)
+        ctx.set(seq.clear_authorized, 0)
         await ctx.tick().repeat(run_us)
         ctx.set(dut.brownout, 1)
         await ctx.tick().repeat(2_000)

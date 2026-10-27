@@ -41,8 +41,8 @@ The name is James Watt's. His governor was two brass balls on a spinning shaft. 
 engine ran too fast the balls flew out and throttled the steam valve. No operator could talk
 it out of its job. It understood nothing about the factory. It never slept.
 
-> **Technical version:** `00-objectives.md` (goals G1 to G8, requirements R1 to R32,
-> non-goals N1 to N7, the three tiers, the acceptance rule).
+> **Technical version:** `00-objectives.md` (goals (all eight), requirements (all thirty-two),
+> non-goals (all seven), the three tiers, the acceptance rule).
 > **Where every requirement is tested:** the last column of each table in `00`.
 
 ---
@@ -142,8 +142,8 @@ when the fire marshal has checked the alarm, not before.
 > hierarchy), `08-silicon-plan.md` §1 (OpenTitan).
 > **Model:** `govsim/root.py` (`SiliconRoot.boot`: the two measurements, CDI_0, CDI_1, the
 > keys), `govsim/fuses.py` (the secret is derive-only; the counter never decreases).
-> **Tests:** `tests/test_h15_tamper.py` (modified firmware changes the signing key, a modified
-> loader changes the identity; rollback refused at boot), `tests/test_h12_fabric_auth.py` (a
+> **Tests:** `tests/test_contract_no_debug_in_production.py` (modified firmware changes the signing key, a modified
+> loader changes the identity; rollback refused at boot), `tests/test_contract_only_roster_speaks_once.py` (a
 > genuine chip with unapproved firmware cannot join a roster).
 > **Hardware:** `rtl/governor_rtl/measure_reg.py` (extend-only), `monotonic.py` (never
 > decreases), `lifecycle.py`.
@@ -184,9 +184,9 @@ when the fire marshal has checked the alarm, not before.
 > **Model:** `govsim/cluster.py` (`bring_up`, `attest`, `load_model`, `form_roster`,
 > `request`, `new_policy`, `change_epoch`, `halt`), `govsim/gpu.py` (the GPU's attestation
 > report and its exits).
-> **Tests:** `tests/test_h01_attestation.py` (permissions are bound to firmware, model and
-> policy; the key is released only to a verified enclave), `tests/test_h12_fabric_auth.py`
-> (roster), `tests/test_h09_overhead.py` (nothing per token).
+> **Tests:** `tests/test_contract_attestation_binds_permissions.py` (permissions are bound to firmware, model and
+> policy; the key is released only to a verified enclave), `tests/test_contract_only_roster_speaks_once.py`
+> (roster), `tests/test_contract_governor_overhead_bounded.py` (nothing per token).
 
 ---
 
@@ -231,8 +231,8 @@ after the report is filed.
 > (the timers: heartbeat 1 s / expiry 5 s, throttle to halt 30 s, halt to safe 300 s).
 > **Model:** `govsim/governor.py` (`enter_safe_mode`, `_apply_rung`, `_try_run`, `_cmd_clear`),
 > `govsim/gpu.py` (what each lever does to a GPU that ignores all software).
-> **Tests:** `tests/test_h16_levers.py` (the levers work without the GPU's cooperation),
-> `tests/test_h11_halt_loop.py` (nobody clears alone), `tests/test_h05_alarms.py` (alarms
+> **Tests:** `tests/test_contract_levers_without_gpu_cooperation.py` (the levers work without the GPU's cooperation),
+> `tests/test_contract_halt_reaches_every_gpu.py` (nobody clears alone), `tests/test_contract_alarms_are_monotone.py` (alarms
 > only go one way).
 > **Hardware:** `rtl/governor_rtl/halt.py` (the sequencer), `heartbeat.py`, `alarms.py`.
 
@@ -291,8 +291,8 @@ Four things the fabric does with those messages:
 > **Model:** `govsim/fabric.py` (`HaltLoop`, `MessageFabric` with partitions),
 > `govsim/governor.py` (`_heartbeat`, `sense_loop`, `on_fabric`, `publish_checkpoint`),
 > `govsim/cluster.py` (`change_epoch`, `exchange_checkpoints`).
-> **Tests:** `tests/test_h11_halt_loop.py`, `tests/test_h12_fabric_auth.py`,
-> `tests/test_h13_shared_budget.py`, `tests/test_h14_partition.py` (including the reachable
+> **Tests:** `tests/test_contract_halt_reaches_every_gpu.py`, `tests/test_contract_only_roster_speaks_once.py`,
+> `tests/test_contract_shared_budget_no_overspend.py`, `tests/test_contract_partitions_end_safe.py` (including the reachable
 > straggler expelled by the epoch-bound heartbeat).
 > **Hardware:** `rtl/governor_rtl/halt_loop.py` (`LoopIO`), `heartbeat.py`, `epoch_reg.py`.
 
@@ -340,8 +340,8 @@ office opens for business either way.
 > **Technical version:** `03-interfaces.md` §2 to §10, `hw/pcb/rack-integration.md`.
 > **Model:** `govsim/endpoints.py` (switches as enforcement points; the endpoint
 > comparator), `govsim/gpu.py` (`transfer` through the switches; `EXITS`).
-> **Tests:** `tests/test_h02_enforcement_points.py` (no bytes to a stranger; unchecked paths
-> bricked; and the honest gap between two roster members), `tests/test_h06_comparator.py`.
+> **Tests:** `tests/test_contract_every_crossing_governed.py` (no bytes to a stranger; unchecked paths
+> bricked; and the honest gap between two roster members), `tests/test_contract_comparator_survives_compromise.py`.
 > **Hardware:** `rtl/governor_rtl/cap_table.py` (which port is open to whom, until when).
 
 ---
@@ -389,9 +389,9 @@ alarm if the policy says so. Nothing else happens.
 > **Model:** `govsim/governor.py` (`_cmd_request`, `_cmd_approve`, `commit_from_endpoint`),
 > `govsim/policy.py` (rules, k-of-n signatures, `select_rule`), `govsim/ledger.py`
 > (reserve, commit, release, replay, rate windows), `govsim/endpoints.py` (`ActionEndpoint`).
-> **Tests:** `tests/test_h00_contract.py` (forged, altered, expired, replayed, power-cut),
-> `tests/test_h04_lane.py` (the broker cannot pick its lane), `tests/test_h08_override.py`
-> (slow, quorum, logged), `tests/test_h13_shared_budget.py`, `tests/test_h10_leakage.py`
+> **Tests:** `tests/test_contract_fresh_authorization_per_operation.py` (forged, altered, expired, replayed, power-cut),
+> `tests/test_contract_broker_cannot_pick_rule.py` (the broker cannot pick its lane), `tests/test_contract_override_slow_and_logged.py`
+> (slow, quorum, logged), `tests/test_contract_shared_budget_no_overspend.py`, `tests/test_contract_leakage_within_budget.py`
 > (the output budget).
 > **Hardware:** `rtl/governor_rtl/mailbox.py` (order of checks), `ticket_store.py` (a burned
 > id is never admitted again), `meter.py`.
@@ -472,13 +472,13 @@ the wall of the security office.
 
 > **Technical version:** `06-assumptions-register.md`.
 > **Model:** `govsim/policy.py` (`check_register`: no row, no load).
-> **Tests:** `tests/test_h07_register.py`.
+> **Tests:** `tests/test_contract_assumptions_register_complete.py`.
 
 ---
 
 ## 12. How we know it works: seventeen ways to knock it down
 
-Every claim the blog makes about the chip is written as a hypothesis, H0 to H16, with the
+Every claim the blog makes about the chip is written as a hypothesis, the seventeen contract tests, with the
 exact observation that would falsify it. Each one has a test file. The tests run the
 functional model of a whole rack through bring-up, jobs, attacks and failures, at three
 levels of the design: the **rack tier** (the plan of record, where the governor owns the
@@ -510,7 +510,7 @@ compiler is trusted or the binary verified. A verified controller does not verif
 beside it.
 
 > **Technical version:** `07-verification-plan.md`; the live matrix in `results/report.md`.
-> **Code:** `govsim/harness.py` (the sweep), `tests/test_h00_*.py` to `test_h18_*.py` (200
+> **Code:** `govsim/harness.py` (the sweep), the contract test files `tests/test_contract_*.py` (200
 > tests), `rtl/tests/test_blocks.py` (20 block simulations), `.github/workflows/ci.yml`. In the
 > October 2026 audit, forty-eight single-point mutations of the model and the RTL were run
 > against the suite; the twenty that survived each got a test that now catches them
@@ -597,10 +597,10 @@ releasing a response waits at most one window plus one signature, 67 millisecond
 All of this is a model. The real figures come from the Phase 2 measurement on a real node and
 replace it.
 
-> **Technical version:** `04-specification.md` §9 (timing budgets), `00-objectives.md` R31
-> and R32.
+> **Technical version:** `04-specification.md` §9 (timing budgets), `00-objectives.md` REQUIREMENT-PER-TOKEN-WORK-ZERO
+> and REQUIREMENT-DEPLOYMENT-OVERHEAD-UNDER-ONE-PERCENT.
 > **Code:** `govsim/bench.py` (`python -m govsim.cli bench`).
-> **Tests:** `tests/test_h09_overhead.py`.
+> **Tests:** `tests/test_contract_governor_overhead_bounded.py`.
 
 ---
 
@@ -632,5 +632,5 @@ replace it.
 - The governor **does not understand words**. It never will, and the design is honest that
   the semantic residual belongs to narrow rulebooks, witnesses and humans.
 
-> **Technical version:** `00-objectives.md` N1 to N7, `05-threat-model.md` (the last two
+> **Technical version:** `00-objectives.md` (all seven), `05-threat-model.md` (the last two
 > tables), `06-assumptions-register.md`, `results/report.md` (the three gaps), `AUDIT-2026-10.md`.

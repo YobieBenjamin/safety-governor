@@ -6,7 +6,7 @@
 > **Plain-English version:** `10-plain-english-walkthrough.md` §2 to §5.
 > **Backed by:** model `govsim/governor.py`, `govsim/cluster.py` (`build_rack`); hardware
 > `rtl/governor_rtl/top.py` (`GovernorCore`) and the blocks named in the table below; wiring
-> `hw/pcb/rack-integration.md`; tests `tests/test_h01`, `h11`, `h14`, `h16`.
+> `hw/pcb/rack-integration.md`; tests `tests/test_contract_attestation_binds_permissions`, `test_contract_halt_reaches_every_gpu`, `test_contract_partitions_end_safe`, `test_contract_levers_without_gpu_cooperation`.
 
 ## Where the governor lives
 
@@ -173,9 +173,11 @@ completes its controlled withdrawal, then reset.
 
 Which causes open the loop is also deliberate. Loop-opening causes (the loop itself opening,
 a detected tamper, a signed HALT) stop the whole domain. Local causes (a lost heartbeat, a
-stale epoch, an exhausted output budget) throttle this governor's own slot and climb the
-rungs on the policy's timers without opening the loop, so one governor's lost heartbeat does
-not stop the rack. The open cause and the rung are durable: a power cycle brings the governor
+stale epoch, an exhausted output budget) stop this governor's own slot without opening the loop,
+so one governor's lost heartbeat does not stop the rack. A lost heartbeat or a stale epoch goes
+straight to HALT (brake and reset): a brake alone leaves the GPU computing at about half clock
+(adversarial audit 3). An exhausted output budget brakes (THROTTLE) and climbs the rungs on the
+policy's timers. The open cause and the rung are durable: a power cycle brings the governor
 back on the same rung.
 
 No rung can be climbed back up by the governor alone. CLEAR is a signed command from the

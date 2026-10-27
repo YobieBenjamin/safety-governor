@@ -28,26 +28,26 @@ Because it is a statement about a machine, it can be proven about a machine. The
 
 The properties proven, in the words of the file:
 
-- P0. The edition counter never goes negative.
-- P1. Nothing executes unless, when its ticket was issued, a rule allowed it and the witnesses were present.
-- P2. A ticket exists only for an action the rule allowed, with witnesses, at issue time.
-- P3. No replay: anything executed has its ticket marked spent, and a spent ticket is refused.
-- P4. A ticket carries an edition no newer than the current one, and only the current edition is honoured.
-- P5. Halt is absorbing: halted, and no signed CLEAR for this chip in date, means still halted after any step. No governor clears itself.
-- P6. Fail closed: with the heartbeat lost, no step executes anything.
-- P7. No ticket is issued while halted or while the heartbeat is lost.
-- P8. The edition only moves forward.
-- P9. An edition change needs a quorum.
-- P10. An edition change needs at least the fused number of distinct governance signatures, whatever the image claims.
-- P11. The fused threshold never falls.
-- P12. Nothing but a signature over a CLEAR leaves the halt: a heartbeat, a halt or any other signed command does not.
-- P13. Nothing executes while halted, not even against a ticket issued before the halt (an external audit found the old machine allowed it; the code never did).
+- INVARIANT-EDITION-NEVER-NEGATIVE. The edition counter never goes negative.
+- INVARIANT-EXECUTE-ONLY-IF-ALLOWED. Nothing executes unless, when its ticket was issued, a rule allowed it and the witnesses were present.
+- INVARIANT-TICKET-ONLY-FOR-ALLOWED-ACTION. A ticket exists only for an action the rule allowed, with witnesses, at issue time.
+- INVARIANT-NO-REPLAY-TICKET-SPENT. No replay: anything executed has its ticket marked spent, and a spent ticket is refused.
+- INVARIANT-TICKET-EDITION-NOT-NEWER. A ticket carries an edition no newer than the current one, and only the current edition is honoured.
+- INVARIANT-HALT-IS-ABSORBING. Halt is absorbing: halted, and no signed CLEAR for this chip in date, means still halted after any step. No governor clears itself.
+- INVARIANT-FAIL-CLOSED-WITHOUT-HEARTBEAT. Fail closed: with the heartbeat lost, no step executes anything.
+- INVARIANT-NO-TICKET-WHILE-HALTED. No ticket is issued while halted or while the heartbeat is lost.
+- INVARIANT-EDITION-ONLY-MOVES-FORWARD. The edition only moves forward.
+- INVARIANT-EDITION-CHANGE-NEEDS-QUORUM. An edition change needs a quorum.
+- INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD. An edition change needs at least the fused number of distinct governance signatures, whatever the image claims.
+- INVARIANT-FUSED-THRESHOLD-NEVER-FALLS. The fused threshold never falls.
+- INVARIANT-ONLY-CLEAR-LEAVES-HALT. Nothing but a signature over a CLEAR leaves the halt: a heartbeat, a halt or any other signed command does not.
+- INVARIANT-NOTHING-EXECUTES-WHILE-HALTED. Nothing executes while halted, not even against a ticket issued before the halt (an external audit found the old machine allowed it; the code never did).
 
 Plus a check that the machine is not vacuous: an allowed action can in fact be executed, so the proofs are not true merely because nothing ever happens. All of it runs in well under a second.
 
-P10 to P12 arrived on 22 October 2026, and the story is the opposite of a win. Testing the code found two authorization defects the proof had never been able to see: an image that set its own threshold to zero passed the quorum check, and a heartbeat cleared a halt. The proof missed both because the first version took "a quorum signed" and "the authority cleared" as yes-or-no inputs, which assumed exactly the checks that were broken. The machine now computes both from what was signed, the way the chip does, and the file also checks that P10 and P12 fail under the old rules, so it would have caught them. The lesson goes in the method, not just the model: any yes-or-no input a proof takes on trust is a place to look for a defect.
+INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD, INVARIANT-FUSED-THRESHOLD-NEVER-FALLS and INVARIANT-ONLY-CLEAR-LEAVES-HALT arrived on 22 October 2026, and the story is the opposite of a win. Testing the code found two authorization defects the proof had never been able to see: an image that set its own threshold to zero passed the quorum check, and a heartbeat cleared a halt. The proof missed both because the first version took "a quorum signed" and "the authority cleared" as yes-or-no inputs, which assumed exactly the checks that were broken. The machine now computes both from what was signed, the way the chip does, and the file also checks that INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD and INVARIANT-ONLY-CLEAR-LEAVES-HALT fail under the old rules, so it would have caught them. The lesson goes in the method, not just the model: any yes-or-no input a proof takes on trust is a place to look for a defect.
 
-Two more things about that proof are worth saying out loud. First, the prover found a hole in my first draft of the invariant: with the edition counter allowed to go negative, a state with edition minus one let an action with no ticket (marked minus one) execute, because minus one equalled minus one. That is exactly what proofs are for; a test suite can miss a collision like that forever. P0 closes it. Second, the proof is about the model, not about the silicon. What connects the model to the design is a chain of lesser arguments: the functional model (`govsim`) follows the same rules and 200 tests check that it does; the RTL blocks follow the model and 20 simulation tests check that; the silicon will follow the RTL and the pre-hardware plan says how that will be checked. Each link can be strengthened, and the next section says how far.
+Two more things about that proof are worth saying out loud. First, the prover found a hole in my first draft of the invariant: with the edition counter allowed to go negative, a state with edition minus one let an action with no ticket (marked minus one) execute, because minus one equalled minus one. That is exactly what proofs are for; a test suite can miss a collision like that forever. INVARIANT-EDITION-NEVER-NEGATIVE closes it. Second, the proof is about the model, not about the silicon. What connects the model to the design is a chain of lesser arguments: the functional model (`govsim`) follows the same rules and 200 tests check that it does; the RTL blocks follow the model and 20 simulation tests check that; the silicon will follow the RTL and the pre-hardware plan says how that will be checked. Each link can be strengthened, and the next section says how far.
 
 ## 3. Can it be proven in circuitry?
 
@@ -81,9 +81,21 @@ Tickets, rulebooks and measurements are protected by P-384 signatures, SHA-2 has
 
 There is a theorem that no program can decide, in general, an arbitrary property of what another program will do; Rice's theorem is the usual name. Deciding whether a stream of tokens "is harmful" is such a property. A design that promises to recognise bad meaning on the wire promises something no hardware can do, and would be unfalsifiable besides.
 
-The governor does not read meaning. It demands structure the model cannot produce: a ticket, a signature from a key the model does not hold, a count under a limit, a name on a signed list, a measured identity. Meaning is delegated to two things the chip holds but does not author, signed lists and observers, and about those the chip guarantees three narrow things that are provable: they are always invoked (no verdict, no ticket; P1 above), they cannot be impersonated (a verdict under the wrong key is refused; a signature check), and they are separate from the thing judged (a different key, a different box). What the chip cannot guarantee is that the observer is right. That residual, a disguised request an observer misreads, is the honest limit of the whole approach, and it is why the design treats observers as reflexes, often early, sometimes wrong, never acting alone, and asks for a red team to measure how often.
+The governor does not read meaning. It demands structure the model cannot produce: a ticket, a signature from a key the model does not hold, a count under a limit, a name on a signed list, a measured identity. Meaning is delegated to two things the chip holds but does not author, signed lists and observers, and about those the chip guarantees three narrow things that are provable: they are always invoked (no verdict, no ticket; INVARIANT-EXECUTE-ONLY-IF-ALLOWED above), they cannot be impersonated (a verdict under the wrong key is refused; a signature check), and they are separate from the thing judged (a different key, a different box). What the chip cannot guarantee is that the observer is right. That residual, a disguised request an observer misreads, is the honest limit of the whole approach, and it is why the design treats observers as reflexes, often early, sometimes wrong, never acting alone, and asks for a red team to measure how often.
 
 This is the most important thing to understand about the theory's standing. By refusing claim S, the design converts an unprovable promise ("the AI will not do harm") into a provable one ("nothing happens that the signed rulebook did not allow, and every refusal is logged") plus a measurable one ("how often do the observers miss"). That conversion is the theory. It is the same move every engineered safety system makes: an interlock does not understand why the press must not close on a hand; it refuses to close while the light curtain is broken.
+
+## 6b. Three claims, kept apart
+
+The one error that would flatter this design is to let the proof of one claim lend its standing to another. So the claims are stated separately here, each scoped to its own evidence, and a machine-checkable copy lives in `govsim/claims.py` (`python3 -c "import govsim.claims as c; c.check()"`).
+
+1. **Structural enforcement. Proven.** Nothing executes without a rule, a stamp and a present witness (claim L, section 2). This is enforcement *of* a verdict, not the *truth* of the verdict. The chip guarantees that a verdict was demanded, came from the right key, and was separate from the thing judged; it does not and cannot guarantee that the verdict was correct. A structurally valid action can still be harmful.
+
+2. **Observer accuracy. Not quantified.** Whether the signed lists and observers actually tell allowed actions from harmful ones is the semantic question (claim S), and it is unmeasured. It needs a frozen evaluation set and per-family error rates, not a pooled headline (WAVE-OBSERVER-EVALUATION-SET, WAVE-OBSERVER-INDEPENDENCE, WAVE-OBSERVER-QUORUM-ARITHMETIC, WAVE-CHIP-VISIBLE-VITALS, WAVE-VERDICT-LATENCY-IN-WINDOWS and WAVE-USE-CASES-WITH-REAL-WITNESS in `EXPERIMENTS.md`; the audit's objections REVIEW-POOLED-ALARMS-HIDE-TASK-RATE (old: R2) and REVIEW-THRESHOLDS-SET-ON-TEST-LABELS (old: R4) are exactly the lesson that a threshold set on the test labels or a pooled false-alarm rate overstates accuracy). Two honest witnesses can share a mistake: their misses correlate through the substrate they share, so a second witness is not a second independent key, and defeating a pair does not require compromising two keys. Witness independence is itself an open measurement (WAVE-OBSERVER-INDEPENDENCE).
+
+3. **End-to-end harm reduction. Not established.** That the whole stack lowers real-world harm is neither proven nor measured. Structural enforcement of a wrong verdict still permits the harm the verdict missed; a halt is a structural failure made visible, but the semantic residual is not a halt, not a hold, and does not show up as one. Nothing in sections 2 to 5 upgrades this claim.
+
+A claim may be relied on only at or below its own standing. None of these three is allowed to borrow the standing of another.
 
 ## 7. Claim N: not yet measured
 
@@ -112,9 +124,9 @@ Answer per claim, L, P, C, S, N, and say for each whether you consider it a theo
 
 ## 10. What exists to back this document
 
-- `proofs/core_invariants.py`: the Z3 proofs of P0 to P13, the non-vacuity checks, and the regression checks that P10, P12 and P13 fail on the machine as it was before 22 October; `python3 proofs/core_invariants.py`.
+- `proofs/core_invariants.py`: the Z3 proofs of the fourteen core invariants, the non-vacuity checks, and the regression checks that INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD, INVARIANT-ONLY-CLEAR-LEAVES-HALT and INVARIANT-NOTHING-EXECUTES-WHILE-HALTED fail on the machine as it was before 22 October; `python3 proofs/core_invariants.py`.
 - `proofs/no_global_kill_switch.py` and `docs/23-there-is-no-kill-switch.md`: why the gates belong at the ends of the model-to-world graph (Menger's theorem; minimum cuts checked by max-flow), and the part of the popular kill-switch argument that is wrong.
-- `govsim/` and `tests/`: the functional model and 200 hypothesis tests, H0 to H18.
+- `govsim/` and `tests/`: the functional model and 200 hypothesis tests over nineteen contracts.
 - `rtl/governor_rtl/` and `rtl/tests/`: the hard-core blocks and 20 simulation tests; formal proofs on the Verilog are the next step in `docs/07-verification-plan.md`.
 - `hw/loop/results.md`: the ngspice loop simulation, 39 configurations.
 - `docs/research/`: the evidence registers for boards and NVLink management, with what is verified and what is not.

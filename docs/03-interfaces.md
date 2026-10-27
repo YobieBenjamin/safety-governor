@@ -12,7 +12,7 @@ column is the honest part. Nothing here changes the GPU's silicon or CUDA.
 > **Against the real public specifications (DC-SCM, PCIe CEM, SPDM, nvtrust):** `interfaces/COMPLIANCE-MATRIX.md`.
 > **Backed by:** model `govsim/endpoints.py` (switches as enforcement points, the endpoint
 > comparator), `govsim/gpu.py` (`EXITS`, `transfer`, the levers, the attestation report);
-> tests `tests/test_h02_enforcement_points.py`, `test_h06_comparator.py`, `test_h16_levers.py`;
+> tests `tests/test_contract_every_crossing_governed.py`, `test_contract_comparator_survives_compromise.py`, `test_contract_levers_without_gpu_cooperation.py`;
 > hardware `rtl/governor_rtl/cap_table.py`, `halt.py`; pins `hw/pinout/governor_module.csv`;
 > wiring `hw/pcb/rack-integration.md`.
 
@@ -61,7 +61,7 @@ current epoch and a live heartbeat, or it is closed. That blocks exfiltration to
 that is not on the roster, blocks all traffic when the heartbeat stops, and makes "which GPUs
 may talk" a policy decision the host cannot change. What it does not do is inspect individual
 transfers between two legitimate roster members; that residual is named in the objectives
-(N5) and is what the integrated tier would add.
+(GOAL-NOT-INSPECTING-ROSTER-TRANSFERS) and is what the integrated tier would add.
 
 In plain words: the governor does not stand in the corridor checking every parcel. It holds
 the keys to the doors between the buildings, and the doors only open for people on the roll.
@@ -78,7 +78,10 @@ The host operating system, the hypervisor, the BMC and the scheduler are untrust
 deliver messages to the mailbox and they can stop delivering them. They cannot forge a
 signature, roll back the epoch, clear an alarm, reopen a port, or stop the governor from
 halting the GPU. If the host stops relaying heartbeats, the governor halts at expiry; the host
-cannot keep the GPU alive by silence.
+cannot keep the GPU alive by silence. If the host drops a HALT meant for its own governor, the
+authority hands the same signed HALT to any other governor, which relays it over the fabric
+(adversarial audit 3; before that a dropped HALT was never applied while neighbours kept relaying
+heartbeats). A host can still delay a HALT by the time the authority takes to notice and resend it.
 
 ## 5. Memory
 

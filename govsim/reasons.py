@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Reason codes. Strings in the model; 16-bit codes in silicon (the table at the end)."""
 
 # attestation and identity
@@ -10,7 +12,14 @@ ATTEST_PATH_OPEN = "attest.unchecked_path_open"
 
 # policy
 POLICY_QUORUM = "policy.quorum_not_met"
+POLICY_CLASS_QUORUM = "policy.class_quorum_not_met"   # F26: signatures did not span enough distinct principal classes
 POLICY_ROLLBACK = "policy.rollback"
+JURISDICTION_UNKNOWN = "jurisdiction.unknown"           # no fused root for that jurisdiction, or the edition names another
+JURISDICTION_DENIED = "jurisdiction.denied"             # a jurisdiction governing the action has no rule allowing it
+JURISDICTION_EXPIRED = "jurisdiction.expired"           # a jurisdiction's edition expired: what it governs is denied
+POLICY_BELOW_FLOOR = "policy.below_fused_rule_floor"     # the edition removes or weakens a rule the fuses protect
+POLICY_VERSION_JUMP = "policy.version_jump"             # the version advances more than MAX_EDITION_STEP, or past the fuses
+POLICY_LOOSENING_DELAY = "policy.loosening_before_delay"  # a loosening edition before its public delay has run
 POLICY_REGISTER_INCOMPLETE = "policy.register_incomplete"
 POLICY_EXPIRED = "policy.expired"
 POLICY_STALE_EPOCH = "policy.stale_epoch"
@@ -24,6 +33,7 @@ MBOX_NOT_RUNNING = "mailbox.governor_not_running"
 MBOX_UNKNOWN_COMMAND = "mailbox.unknown_command"
 MBOX_WRONG_COMMAND = "mailbox.wrong_command"        # a valid signature over a different command, or for another chip
 MBOX_EXPIRED = "mailbox.expired"                    # an authority command past its expiry, or with none
+ATTEST_NOT_THIS_GPU = "attest.not_the_gpu_on_these_levers"   # the report is a genuine GPU, but not the one wired to this governor
 ATTEST_REVOKED = "attest.revoked"                    # the device is on the rulebook's revocation list
 EP_SANDBOXED = "ep.sandboxed"                       # a sandboxed workload gets no peer path and no network flow
 
@@ -49,6 +59,7 @@ RELEASE_ILLEGIBLE = "release.below_legibility_floor"
 RELEASE_ESCROW_REQUIRED = "release.escrow_receipt_required"
 RELEASE_STREAM_MISSING = "release.required_stream_missing"
 RELEASE_HASH_MISMATCH = "release.response_hash_mismatch"
+RELEASE_COMMITMENT_CONFLICT = "release.response_commitment_conflict"
 SESSION_HAZARD_BUDGET = "release.session_hazard_budget_exceeded"
 
 # deployment and training governance
@@ -70,12 +81,19 @@ TICKET_ACTION_MISMATCH = "ticket.action_mismatch"
 TICKET_EXPIRED = "ticket.expired"
 TICKET_NOT_YET_VALID = "ticket.not_yet_valid"
 TICKET_REPLAY = "ticket.replay"
+TICKET_NOT_MINTED = "ticket.not_minted"                # signed with the governor key, but not in its record of tickets it minted
 TICKET_STALE_EPOCH = "ticket.stale_epoch"
 TICKET_WRONG_ENDPOINT = "ticket.wrong_endpoint"
+TICKET_UNBOUND = "ticket.unbound"          # the ticket names no endpoint; no endpoint accepts or commits it (F29)
 TICKET_MISSING = "ticket.missing"
+TICKET_REVOKED_GOVERNOR = "ticket.revoked_governor"   # signed by a governor the edition in force revokes
+TICKET_NO_RULE = "ticket.no_rule"                     # names no rule of the edition in force
+TICKET_RULE_MISMATCH = "ticket.rule_mismatch"         # the named rule does not allow this action, endpoint, workload or fields
+TICKET_NO_EDITION = "ticket.no_edition"               # the endpoint holds no verified edition, so it cannot check the rule
 COMMIT_UNREACHABLE = "commit.unreachable"
 COMMIT_REJECTED = "commit.rejected"
 ENDPOINT_HEARTBEAT_EXPIRED = "endpoint.heartbeat_expired"
+ENDPOINT_TICKET_STORE_FULL = "endpoint.ticket_store_full"   # no room to record the ticket as used: refused
 ENDPOINT_SENSOR_CONFLICT = "endpoint.sensor_conflict"
 ENDPOINT_LIST_STALE = "endpoint.list_stale"
 ENDPOINT_TARGET_PROTECTED = "endpoint.target_protected"
@@ -89,6 +107,7 @@ EP_BUDGET_EXHAUSTED = "ep.budget_exhausted"
 EP_EXPIRED = "ep.capability_expired"
 EP_STALE_EPOCH = "ep.stale_epoch"
 EP_BRICKED = "ep.path_bricked"
+EP_OUTPUT_NOT_SEALED = "ep.output_not_sealed"      # a host-side exit on a board that cannot seal output to the egress
 EP_NOT_ON_ROSTER = "ep.peer_not_on_roster"
 EP_UNCHECKED = "ep.unchecked_path"   # the recorded gap at tiers without a checker
 EP_BUFFER_CLASS = "ep.buffer_class_not_permitted"   # integrated tier: the class may not leave for that peer
@@ -102,6 +121,7 @@ FABRIC_TOO_MANY_HOPS = "fabric.too_many_hops"
 FABRIC_PARTITIONED = "fabric.partitioned"
 HEARTBEAT_BAD_SIGNATURE = "heartbeat.bad_signature"
 HEARTBEAT_REPLAY = "heartbeat.replay"
+HEARTBEAT_WRONG_SITE = "heartbeat.wrong_site"        # signed for another data center
 HEARTBEAT_EXPIRED = "heartbeat.expired"
 ROSTER_QUOTE_INVALID = "roster.quote_invalid"
 ROSTER_NOT_MEMBER = "roster.not_member"
@@ -124,8 +144,10 @@ HALT_COMMANDED = "halt.commanded"
 HEARTBEAT_LOST = "halt.heartbeat_lost"
 EPOCH_STRAGGLER = "halt.epoch_straggler"
 TAMPER = "halt.tamper"
+LEVER_UNWIRED = "alarm.lever_unwired"
+SWITCH_UNLOCKED = "alarm.switch_unlocked"  # a governed switch accepts in-band (host) management writes      # a lever self-test failed: the governor cannot stop its GPU
 
-# boot: the first heartbeat (Yobie's call 2, 23 October 2026). A chip that never gets its first heartbeat keeps
+# boot: the first heartbeat. A chip that never gets its first heartbeat keeps
 # holding the rack, loudly: the hardware raises NO_FIRST_HEARTBEAT past the boot window (ALARMS bit 31, CAUSE bit 3 in
 # silicon). An authorized EXCLUDE closes its loop switch while its own levers stay on (ALARMS bit 30, CAUSE bit 4).
 NO_FIRST_HEARTBEAT = "boot.no_first_heartbeat"
@@ -139,9 +161,17 @@ KEY_NO_GPU_KEY = "key.no_attested_gpu_key"             # the verified GPU report
 KEY_UNWRAP_FAILED = "key.unwrap_failed"                # the data key was not sealed to this governor, or was altered
 KEY_NO_LEASE = "key.no_lease"                          # KEY_RENEW for a model with no live lease on this chip
 KEY_REVOKED = "key.revoked"                            # logged when a new edition drops a model with a live lease
+KEY_WEIGHTS_UNBOUND = "key.weights_not_committed"      # the manifest named a model but committed to no weight bytes (F01)
 
-# the customer-confirmation payment rule (docs/18 question 22, issue I1): a wire needs the payer's own signature
+# the customer-confirmation payment rule (docs/18 question 22, issue EXPERIMENT-CUSTOMER-CONFIRMATION): a wire needs the payer's own signature
 GATE_PAYER_UNCONFIRMED = "gate.payer_unconfirmed"
+
+# the beneficiary admission rule (external audit F04): a payee must be on a current, signed beneficiary registry
+GATE_BENEFICIARY_UNLISTED = "gate.beneficiary_unlisted"       # an unknown payee: a hold for enrollment, never the auto path
+GATE_BENEFICIARY_NO_REGISTRY = "gate.beneficiary_no_registry"  # the signed beneficiary registry is missing or stale: fail closed
+
+# authority that is validated at use time, not only at install (external audit F06)
+POLICY_EXPIRED_RUNTIME = "halt.policy_expired"                # a running edition passed its own expiry: the declared fail-closed transition
 
 OK = "ok"
 
@@ -149,6 +179,8 @@ OK = "ok"
 # name before ADDED) keep their sorted numbering, and names added later take the next numbers in the order added.
 ADDED = [NO_FIRST_HEARTBEAT, EXCLUDED, EXCLUDE_NOT_WAITING,       # 23 October 2026
          KEY_MODEL_NOT_LOADED, KEY_MODEL_NOT_ALLOWED, KEY_NO_GPU_KEY, KEY_UNWRAP_FAILED, KEY_NO_LEASE, KEY_REVOKED,   # 23 October, origin gate
-         GATE_PAYER_UNCONFIRMED]   # 23 October, I1
+         GATE_PAYER_UNCONFIRMED,   # 23 October, EXPERIMENT-CUSTOMER-CONFIRMATION
+         KEY_WEIGHTS_UNBOUND,      # 23 October, origin-gate weight-commitment binding (F01)
+         GATE_BENEFICIARY_UNLISTED, GATE_BENEFICIARY_NO_REGISTRY, POLICY_EXPIRED_RUNTIME]   # 23 October, external audit F04/F06
 _FIRST = sorted(v for k, v in list(globals().items()) if k.isupper() and isinstance(v, str) and v not in ADDED)
 CODES = {name: i for i, name in enumerate(_FIRST + ADDED, start=1)}

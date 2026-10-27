@@ -4,8 +4,10 @@ module heartbeat(window, tick, clk, rst, remaining, expired, hb_valid);
   reg \$auto$verilog_backend.cc:2355:dump_module$1  = 0;
   wire \$1 ;
   wire \$2 ;
-  wire [32:0] \$3 ;
-  reg [31:0] \$4 ;
+  wire \$3 ;
+  wire [32:0] \$4 ;
+  reg [31:0] \$5 ;
+  wire [31:0] clamped;
   input clk;
   wire clk;
   output expired;
@@ -20,22 +22,24 @@ module heartbeat(window, tick, clk, rst, remaining, expired, hb_valid);
   wire tick;
   input [31:0] window;
   wire [31:0] window;
+  assign \$3  = tick & \$2 ;
+  assign \$4  = remaining - 1'h1;
   always @(posedge clk)
-    remaining <= \$4 ;
-  assign \$1  = | remaining;
-  assign \$2  = tick & \$1 ;
-  assign \$3  = remaining - 1'h1;
+    remaining <= \$5 ;
+  assign \$1  = window > 13'h1388;
+  assign clamped = \$1  ? 32'd5000 : window;
   assign expired = ! remaining;
+  assign \$2  = | remaining;
   always @* begin
     if (\$auto$verilog_backend.cc:2355:dump_module$1 ) begin end
-    \$4  = remaining;
+    \$5  = remaining;
     if (hb_valid) begin
-      \$4  = window;
-    end else if (\$2 ) begin
-      \$4  = \$3 [31:0];
+      \$5  = clamped;
+    end else if (\$3 ) begin
+      \$5  = \$4 [31:0];
     end
     if (rst) begin
-      \$4  = 32'd0;
+      \$5  = 32'd0;
     end
   end
 endmodule

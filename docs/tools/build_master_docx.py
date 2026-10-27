@@ -228,7 +228,7 @@ def validate(path: str) -> None:
     n_img = sum(1 for rel in d.part.rels.values() if "image" in rel.reltype)
     if n_img < len(FIGURES):
         raise SystemExit(f"expected at least {len(FIGURES)} embedded figures, found {n_img}")
-    if "—" in text:
+    if "\u2014" in text:
         raise SystemExit("an em dash made it into the document")
     n_tables = len(d.tables)
     size_kb = os.path.getsize(path) // 1024

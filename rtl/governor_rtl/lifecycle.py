@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Lifecycle controller. Invariant: the state is monotone (TEST < PROVISIONED < PRODUCTION <
 DECOMMISSIONED) and in PRODUCTION or later ``debug_grant`` is never asserted.
 
@@ -6,7 +8,7 @@ register moving up) and never moves down.
 
 Debug is also refused until ``load`` has mirrored the fuses since the last reset. Before 23 October 2026 the
 register came out of reset as TEST and granted debug to anyone who asked in the cycles before the boot code
-strobed ``load``, on a chip whose fuses said PRODUCTION (L7 found it: rtl/formal/FINDINGS-a.md, F1).
+strobed ``load``, on a chip whose fuses said PRODUCTION (WAVE-FORMAL-PROOFS-ON-VERILOG found it: rtl/formal/FINDINGS-a.md, RTL-DEBUG-WINDOW-AFTER-RESET).
 """
 from amaranth import Elaboratable, Module, Signal
 

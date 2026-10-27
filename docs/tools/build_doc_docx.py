@@ -112,7 +112,7 @@ def validate(src_rel: str, out: str) -> None:
     n_src_tables = sum(1 for i, ln in enumerate(text.split("\n")) if ln.startswith("|") and i + 1 < len(text.split("\n")) and re.match(r"^\|?\s*:?-{3,}", text.split("\n")[i + 1]))
     if len(d.tables) < n_src_tables:
         raise SystemExit(f"expected {n_src_tables} tables, found {len(d.tables)}")
-    if "—" in body:
+    if "\u2014" in body:
         raise SystemExit("an em dash made it into the document")
     print(f"wrote {out}: {len(heads)} headings, {len(d.tables)} tables, {n_img} figures, {len(body.split()):,} words, {os.path.getsize(out) // 1024} KB")
 

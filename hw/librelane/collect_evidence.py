@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Copy the signoff reports (not the multi-GB run directory) from a LibreLane/OpenLane 2 run into
 hw/librelane/evidence/, and record the GDS size and SHA-256.
 

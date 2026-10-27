@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Measurement register. Invariant: the register changes only through ``extend``; there is no
 write port. ``extend`` asks the SHA-256 engine for H(value || data) and latches the result.
 

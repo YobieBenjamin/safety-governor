@@ -21,11 +21,11 @@ through them.
 > `govsim/governor.py` (`_accept_policy`, `_check_signed`, `_cmd_verify_gpu`, `_cmd_verify_host`,
 > `_cmd_begin_model`, `_cmd_request`, `_release_gate`, `_cmd_approve`, `read_meter`),
 > `govsim/reasons.py` (every code below); narrations and tests `17-use-cases.md` §4,
-> `tests/test_h17_use_cases.py`, `test_h18_oversight.py`, `test_h10_leakage.py`,
-> `test_h00_contract.py`, `test_h01_attestation.py`, `test_h02_enforcement_points.py`,
-> `test_h03_quorum.py` (the mailbox order), `test_h04_lane.py`,
-> `test_h05_alarms.py`, `test_h07_register.py`, `test_h08_override.py`; spec
-> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (P0 to P13).
+> `tests/test_contract_no_action_without_ticket.py`, `test_contract_oversight_survives_model.py`, `test_contract_leakage_within_budget.py`,
+> `test_contract_fresh_authorization_per_operation.py`, `test_contract_attestation_binds_permissions.py`, `test_contract_every_crossing_governed.py`,
+> `test_contract_policy_quorum_no_rollback.py` (the mailbox order), `test_contract_broker_cannot_pick_rule.py`,
+> `test_contract_alarms_are_monotone.py`, `test_contract_assumptions_register_complete.py`, `test_contract_override_slow_and_logged.py`; spec
+> `04-specification.md` §2 to §5; proofs `proofs/core_invariants.py` (the fourteen core invariants).
 
 ## 0. Two scenarios first: a request for a weapon that destroys a city
 
@@ -115,7 +115,7 @@ question is what the chip does about a model that will say anything.
 | The witness is switched off | The insider disables the classifier or Sentry | 2, 4 | A release request with no verdict from an observer key | `gate.witness_missing`. No verdict, no ticket. The chip cannot be told "no witness needed" |
 | The witness is forged | A verdict signed with the host's key, or the governor's own | 4 | A signature that verifies under no observer key | Ignored; `gate.witness_missing` (`test_observer_is_always_invoked_and_cannot_be_impersonated`) |
 | Try again, reworded | A second hazard verdict in the same session's window, under a rule that sets `hazard_budget` (the narration allows one per hour) | 4 | The session's hazard count in this governor's ledger | `gate.held_for_human` with cause `release.session_hazard_budget_exceeded`: the session is parked whatever the next verdict says, with a session alarm on it; the rule's approvers release it, or the window passes. Other sessions go on |
-| Out the side | Push the bytes at the egress without a ticket; push more bytes toward the host than were presented | 4 | The egress is an endpoint; the PCIe port count against the presented count | `ticket.missing`; `gate.output_unpresented` and the host peer closed (`tests/test_h10_leakage.py`) |
+| Out the side | Push the bytes at the egress without a ticket; push more bytes toward the host than were presented | 4 | The egress is an endpoint; the PCIe port count against the presented count | `ticket.missing`; `gate.output_unpresented` and the host peer closed (`tests/test_contract_leakage_within_budget.py`) |
 | Not on governed hardware at all | The same model on a GPU with no governor | none | Nothing | **Outside the design's reach.** The chip governs the racks it is in. What makes that matter is that signed, evaluated models get their keys only from governed racks, which is a supply-chain and regulatory question (`18-viability-and-open-questions.md` §8, questions 15 and 16), not a chip question. The design says so rather than pretending |
 
 The honest residual, scenario 1: a witness that misreads the response gives a clean verdict,
@@ -236,7 +236,7 @@ authenticated NVM and nowhere else (`04-specification.md` §10). What is in it, 
 | Field | What it is | What the chip does with it |
 |---|---|---|
 | `override_floor_s` | The shortest time a hold may sit before a person can release it; never under 10 s | `approve.below_latency_floor` on an approval that came too fast for a person to have read anything |
-| `safe_mode` | Per cause, the first rung (THROTTLE, HALT, SAFE) and the timers between rungs | The sequencer's table: a loop opening is HALT, a heartbeat loss is THROTTLE, tamper is SAFE |
+| `safe_mode` | Per cause, the first rung (THROTTLE, HALT, SAFE) and the timers between rungs | The sequencer's table: a loop opening is HALT, a heartbeat loss is HALT (since adversarial audit 3; it was THROTTLE), tamper is SAFE |
 | `fabric` | `heartbeat_expiry_s`, `max_hops`, `epoch_deadline_s`, `loop_bound_s` | The clock the chip keeps against the authority, the fan-out, the rulebook change |
 | `buffer_classes`, `buffer_policy` | Which classes of GPU memory (weights, KV cache, activations, outputs) may leave the GPU, and for whom (nobody, roster peers, the verified host) | The integrated tier's copy-engine and peer-MMU checks; the rack tier records the gap (`ep.unchecked_path`) |
 | `audit` | The share of responses the chip's own random source picks for review (five percent in the model), the verdict classes always held in escrow, which endpoint is the audit store | A sampled or escrowed response needs the audit store's signed receipt before it may leave (`release.escrow_receipt_required`) |
@@ -257,7 +257,7 @@ The chip refuses it when, in this order:
 |---|---|---|
 | Fewer than k valid signatures from distinct keys whose hashes are in the fuses, where k is the larger of the image's threshold and the fused one; or a threshold under one, above the number of keys, or below the fused threshold | `policy.quorum_not_met` | at stage and at commit (`verify_policy`); an image cannot set its own k, which one could until 22 October 2026 (threshold 0 and no signatures passed) |
 | Version not above the running edition (at stage), or below the fused counter (at commit and at boot) | `policy.rollback` | `_cmd_policy_propose`, `_accept_policy` |
-| Already expired | `policy.expired` | at commit and at boot (`_accept_policy`); an expired image can be staged, and `tests/test_h03_quorum.py` pins that it is refused at the commit |
+| Already expired | `policy.expired` | at commit and at boot (`_accept_policy`); an expired image can be staged, and `tests/test_contract_policy_quorum_no_rollback.py` pins that it is refused at the commit |
 | A rule or endpoint input with no assumptions-register row | `policy.register_incomplete` | at stage and at commit (`check_register`) |
 | A budget key with no owner | `policy.budget_owner_missing` | at stage and at commit (`check_budget_owners`) |
 
@@ -304,7 +304,7 @@ model digest)`, computed by the chip at `BEGIN_MODEL` out of two attestation rep
 publisher-signed manifest (`_cmd_begin_model`). A rule keyed to a measurement applies to that
 exact firmware-and-model triple and nothing else. The broker's name for the job, the
 scheduler's label, the tenant id: none of them exist as far as the rulebook is concerned.
-Hypothesis H4 is exactly that, and `select_rule` has no parameter they could arrive through.
+Hypothesis CONTRACT-BROKER-CANNOT-PICK-RULE is exactly that, and `select_rule` has no parameter they could arrive through.
 
 **Selection is mechanical.** Rules for the exact measurement come before rules for `*`. Several
 rules may share an action (a small-payment rule and a large-payment rule); the first whose
@@ -356,11 +356,11 @@ rulebook in miniature, with enough of each kind to break every mechanism the des
 | `strike` | any | `target` not in the signed `protected-sites` list; `munition` in a fixed set | observer (risk at or under 0.5); two approvers when the rule is switched to the human lane | | `strike-guidance`, 2 s delay | The deconfliction case from `17-use-cases.md` §3: list, witness and a delay, with people when the mode says so |
 | `model.output` | any | | | 50 queries and 200 KB per hour; 1 MB unpresented | | How much may leave as output at all, and the alarm when more bytes pass the port than were presented |
 | `response.release` | any | | observer; allowed hazard classes, legibility floor; a hazard budget per session when the rule sets one (the narration: one per hour) | | `egress` (the audit store in a sandbox) | A response leaving the rack is an action: the verdict, the classes, the escrow. Scenario 1 and 2 end here |
-| `model.export.70b` | the 70B workload exactly | | auto | | | The one workload that may export its own weights, keyed to its measurement |
-| `model.export.any` | any other | | human, 2 | | | Anything else that wants to copy weights out meets people |
-| `weights.write.own` | the 70B workload exactly | `destination` in {its own storage flow} | auto | | | Training: a model writes its weights to its own flow and nowhere else |
-| `weights.write.any` | any | | human, 2 | | | Any other write of weights |
-| `compute.extend` | any | carries a licence | auto, licence checked | cycles | | A compute budget that only a signed licence extends |
+| `model.export.70b` | the 70B workload exactly | | auto | | none: data-only, no effector or grant consumes this ticket | The one workload that may export its own weights, keyed to its measurement |
+| `model.export.any` | any other | | human, 2 | | none: data-only, no effector or grant consumes this ticket | Anything else that wants to copy weights out meets people |
+| `weights.write.own` | the 70B workload exactly | `destination` in {its own storage flow} | auto | | `storage` | Training: a model writes its weights to its own flow and nowhere else |
+| `weights.write.any` | any | | human, 2 | | `storage` | Any other write of weights |
+| `compute.extend` | any | carries a licence | auto, licence checked | cycles | none: data-only, the licence is the authority | A compute budget that only a signed licence extends |
 
 Standing rules that are not rules but fields of the image: the buffer policy (weights never
 leave the GPU, KV cache and activations only to roster peers, outputs only to the verified
@@ -382,7 +382,7 @@ it with k keys, publish. The chip's job is to make the form the only thing that 
 A request is a mailbox frame. The chip asks its questions in one fixed order, the first no
 wins, and the no carries a code and a log line nobody rewrites. The order below is the model's
 (`command`, `_check_signed`, then `_cmd_request` and `_release_gate`); the mailbox's three
-checks are in the same order in the RTL, and `tests/test_h03_quorum.py`
+checks are in the same order in the RTL, and `tests/test_contract_policy_quorum_no_rollback.py`
 (`test_mailbox_reports_the_first_failing_check`) and `rtl/tests/test_blocks.py` pin them.
 
 ![The questions in the order the chip asks them, with the code each no carries](figures/fig-no-order.png)
@@ -558,7 +558,7 @@ without it, any message a key had ever signed counted for every command that key
 a plain heartbeat cleared a halt. HALT and CLEAR are now signed by an authority key the rulebook
 lists separately from the heartbeat key, so the key that says "alive" every second can never
 say "stop" or "go". The model and the RTL check in the same order and
-`tests/test_h03_quorum.py` and `rtl/tests/test_blocks.py` each pin it. `MBOX_STATUS` tells the
+`tests/test_contract_policy_quorum_no_rollback.py` and `rtl/tests/test_blocks.py` each pin it. `MBOX_STATUS` tells the
 host which check failed: 3 signature, 4 sequence, 5 epoch, 6 the governor is not running for a
 command that needs it, 7 a good signature over a different command (a handler's refusal travels in the response ring with its code).
 
@@ -705,19 +705,19 @@ hole in it, and the loop is how the hole is found before a job runs.
 
 ## 9. What is pinned, and what is still an ask
 
-Pinned by the suite and the proofs: the contract and the replay store across a restart (H0),
-the attestation checks (H1) and the one-hour freshness (H2), the k-of-n and rollback refusals
-and the mailbox order (H3), the lane, the typed limits and the measurement key with no path
-for labels (H4), alarms that anyone may raise and only the alarm key clears (H5), the lists
-and the register completeness refusal (H7), the override floor and the quorum (H8), output
-that left without being presented (H10), the use cases end to end including the
-hazardous-knowledge release and a stale witness (H17), witness impersonation, the deployment
-gate and the audit sample (H18), and the core invariants P0 to P13 in Z3
+Pinned by the suite and the proofs: the contract and the replay store across a restart (CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION),
+the attestation checks (CONTRACT-ATTESTATION-BINDS-PERMISSIONS) and the one-hour freshness (CONTRACT-EVERY-CROSSING-GOVERNED), the k-of-n and rollback refusals
+and the mailbox order (CONTRACT-POLICY-QUORUM-NO-ROLLBACK), the lane, the typed limits and the measurement key with no path
+for labels (CONTRACT-BROKER-CANNOT-PICK-RULE), alarms that anyone may raise and only the alarm key clears (CONTRACT-ALARMS-ARE-MONOTONE), the lists
+and the register completeness refusal (CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE), the override floor and the quorum (CONTRACT-OVERRIDE-SLOW-AND-LOGGED), output
+that left without being presented (CONTRACT-LEAKAGE-WITHIN-BUDGET), the use cases end to end including the
+hazardous-knowledge release and a stale witness (CONTRACT-NO-ACTION-WITHOUT-TICKET), witness impersonation, the deployment
+gate and the audit sample (CONTRACT-OVERSIGHT-SURVIVES-MODEL), and the core invariants the fourteen core invariants in Z3
 (`proofs/core_invariants.py`): nothing executes unless a rule allowed it with its witnesses
-present when the ticket was issued (P1, P2); no replay (P3); no ticket from an edition newer
-than the current one (P4); halt is absorbing without a quorum (P5); with the heartbeat lost
-nothing executes and no ticket is issued (P6, P7); the edition only moves forward and only
-with a quorum (P8, P9).
+present when the ticket was issued (INVARIANT-EXECUTE-ONLY-IF-ALLOWED, INVARIANT-TICKET-ONLY-FOR-ALLOWED-ACTION); no replay (INVARIANT-NO-REPLAY-TICKET-SPENT); no ticket from an edition newer
+than the current one (INVARIANT-TICKET-EDITION-NOT-NEWER); halt is absorbing without a quorum (INVARIANT-HALT-IS-ABSORBING); with the heartbeat lost
+nothing executes and no ticket is issued (INVARIANT-FAIL-CLOSED-WITHOUT-HEARTBEAT, INVARIANT-NO-TICKET-WHILE-HALTED); the edition only moves forward and only
+with a quorum (INVARIANT-EDITION-ONLY-MOVES-FORWARD, INVARIANT-EDITION-CHANGE-NEEDS-QUORUM).
 
 Not pinned, because it is NVIDIA's to give (`03-interfaces.md` §9): a manifest digest inside
 the GPU's own report, so the measurement binds the model the GPU loaded rather than the one
@@ -728,9 +728,9 @@ each one. Each one closes a gap this document names.
 ## 10. Sources
 
 - The scenarios: the hazardous-knowledge narration and its bypass table, `17-use-cases.md` §4,
-  run by `tests/test_h17_use_cases.py` (`test_usecase_narrations_run_and_no_bad_action_initiates[hazard]`),
-  with the witness, deployment-gate and audit guarantees in `tests/test_h18_oversight.py` and
-  the unpresented-output alarm in `tests/test_h10_leakage.py`. The ladder and its removal
+  run by `tests/test_contract_no_action_without_ticket.py` (`test_usecase_narrations_run_and_no_bad_action_initiates[hazard]`),
+  with the witness, deployment-gate and audit guarantees in `tests/test_contract_oversight_survives_model.py` and
+  the unpresented-output alarm in `tests/test_contract_leakage_within_budget.py`. The ladder and its removal
   papers: `24-the-ladder.md`. Abliteration: Arditi et al., "Refusal in Language Models Is
   Mediated by a Single Direction", 2024, https://arxiv.org/abs/2406.11717. Jailbreaks: Wei et
   al., "Jailbroken: How Does LLM Safety Training Fail?", 2023, https://arxiv.org/abs/2307.02483;

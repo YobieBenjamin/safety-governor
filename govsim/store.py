@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Durable state.
 
 The governor's NVM is modelled as a dictionary that survives ``Governor.restart()`` while
@@ -24,6 +26,15 @@ def _snapshot(data: dict[str, Any]) -> bytes:
 
 class PowerLoss(Exception):
     """Fault injection: the power failed before this save completed."""
+
+
+class MarksDisagree(Exception):
+    """F34: the two copies of the epoch mark in one NVM image disagree, so the image is not whole. The chip
+    refuses to start. This catches a partial or torn write. It does not catch a rollback of the whole image,
+    because a rolled-back image is internally consistent. That needs an external anchor."""
+
+
+MARK_KEYS = ("epoch_mark_a", "epoch_mark_b")
 
 
 class Store:
@@ -64,6 +75,14 @@ class Store:
     def power_loss(self) -> None:
         """Drop everything not yet saved."""
         self.data = pickle.loads(self._nvm)
+
+    def check_epoch_marks(self) -> None:
+        """F34: at restart, refuse when the two copies of the monotonic epoch mark disagree. When they agree, the
+        mark moves up by one. The bump is durable at the next save."""
+        a, b = self.data.get(MARK_KEYS[0], 0), self.data.get(MARK_KEYS[1], 0)
+        if a != b:
+            raise MarksDisagree(f"epoch marks disagree ({a} vs {b}): the image is not whole, refusing to start")
+        self.data[MARK_KEYS[0]] = self.data[MARK_KEYS[1]] = a + 1
 
     def get(self, key: str, default: Any = None) -> Any:
         if key not in self.data:

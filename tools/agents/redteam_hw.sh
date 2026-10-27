@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # The hardware red team, gated on the Cyber Verification Program. It does nothing until the program has approved
 # an API workspace and that workspace's key is configured, because without it Anthropic's safeguards stop adversarial
 # work even on our own design (it happened on 22 October, docs/26 workstream 3).

@@ -12,7 +12,7 @@ assume the spec is incomplete and look for what it misses.
 
 Areas, in priority order:
 1. The mailbox and the signed-command path: ordering, replay across reset, the window between doorbell and verdict
-   (open findings F8, F9 in `rtl/formal/FINDINGS-a.md`), command-type confusion.
+   (open findings RTL-RESET-ZEROES-MAILBOX-SEQUENCES, RTL-MAILBOX-FRAME-NOT-HELD in `rtl/formal/FINDINGS-a.md`), command-type confusion.
 2. The halt sequencer and loop: races between strobes in one cycle, reset sequencing, boot-window behaviour, EXCLUDE.
 3. The origin gate (`govsim/sealing.py`, KEY_RELEASE, KEY_RENEW): lease handling, revocation, key-box binding.
 4. The SMBus target and the CSR window: anything a host on the management bus can do beyond reading and the doorbell.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The safety fabric: the halt loop and the message fabric (``docs/02-safety-fabric.md``).
 
 The loop is physics: current flows iff the wire is intact and every member's switch is

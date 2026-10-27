@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """PCIe CEM sideband timing against the RTL (docs/interfaces/02-pcie-cem-sideband.md).
 
 The CEM numbers come from public secondary sources (the CEM itself is members-only); see

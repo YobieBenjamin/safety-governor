@@ -51,7 +51,7 @@
   caught  governor_core mutant: the host's CSR address selects the meter slot that gets charged [simulation: missed it]
   FACT  governor_core: lost heartbeat climbs to SAFE with the loop closed: from boot, a heartbeat that runs out reaches SAFE, power off, loop pad closed (trace of 28 cycles found)
   FACT  governor_core: local cause never opens the loop; HALT to a SAFE chip does not open it: proven: cause LOCAL implies the loop pad is closed; a HALT command to a chip already in SAFE leaves the pad as it was; bounded to 12 cycles and k-induction: every reachable state (yices)
-L7: every property proven on the Verilog, every mutant caught
+WAVE-FORMAL-PROOFS-ON-VERILOG: every property proven on the Verilog, every mutant caught
 
 real	19m16.032s
 user	9m13.277s

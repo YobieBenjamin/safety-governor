@@ -39,11 +39,11 @@ What was wrong and is fixed:
 
 - An expired rulebook is refused at **commit** and at boot, not at stage, and not on every
   request afterwards. `_cmd_policy_propose` checks quorum, rollback, register and budget
-  owners; `policy.expired` lives in `_accept_policy` only, which `test_h03_quorum` pins.
+  owners; `policy.expired` lives in `_accept_policy` only, which `tests/test_contract_policy_quorum_no_rollback.py` pins.
   The per-request expiry claim is gone; the figure `fig-no-order` was renumbered to match.
 - The hazard budget is a **local rate window on each governor's own ledger**
   (`hazard|session`), not a shared budget with one owner over the fabric. Only the payment
-  budget is owned over the fabric (H13). The scenario text, the figure note and §7 now say so.
+  budget is owned over the fabric (CONTRACT-SHARED-BUDGET-NO-OVERSPEND). The scenario text, the figure note and §7 now say so.
 - `approvers_quorum` only means anything when the rule's mode is **human**. The strike rule
   in the model runs as observer mode with a risk ceiling; a passing witness mints a ticket,
   no hold. The strike row and §3 changed.
@@ -51,11 +51,11 @@ What was wrong and is fixed:
   `select_rule`, after attestation, the token, replay and alarms. Row 1 was deleted and
   `.missing` moved into the rule row.
 - The release gate checks the **hazard budget before the class**, and that order is
-  load-bearing (`test_h17` gets `session_hazard_budget_exceeded` on the third hazard only
+  load-bearing (`tests/test_contract_no_action_without_ticket.py` gets `session_hazard_budget_exceeded` on the third hazard only
   because of it). Three places and the figure reordered.
 - The mailbox order (sequence, edition, signature) is pinned by
-  `tests/test_h03_quorum.py::test_mailbox_reports_the_first_failing_check` and
-  `rtl/tests/test_blocks.py`, not by `test_h00_contract.py`.
+  `tests/test_contract_policy_quorum_no_rollback.py::test_mailbox_reports_the_first_failing_check` and
+  `rtl/tests/test_blocks.py`, not by `test_contract_fresh_authorization_per_operation.py`.
 - `revocations` is in the schema and **never read** by the model. Said plainly now; in the
   gap list.
 - `02-safety-fabric.md` references: the straggler is §2, shared budgets are §2; there is no §6.
@@ -73,7 +73,7 @@ Imprecise, fixed: OpenShell has no 202, a hold is a deny that says `hold_pending
 reworded second hazard is parked as a hold with a session-scoped sticky alarm, released by
 the rule's approvers; rollback is refused strictly below the fused counter or not above the
 running edition; RTL status 6 is "governor not running"; six attestation checks, five pinned
-by H1; freshness is H2, witness staleness H17, impersonation H18; the buffer policy is the
+by CONTRACT-ATTESTATION-BINDS-PERMISSIONS; freshness is CONTRACT-EVERY-CROSSING-GOVERNED, witness staleness CONTRACT-NO-ACTION-WITHOUT-TICKET, impersonation CONTRACT-OVERSIGHT-SURVIVES-MODEL; the buffer policy is the
 integrated tier's; `hazard_budget` defaults to none and the narration sets max 1; the meter's
 alarm is about cycles; the PCIe port is programmed for host and roster peers; the heartbeat
 is checked in `tick` and shows up as `governor_not_running`; a reused token from a legitimate
@@ -85,10 +85,10 @@ is checked in `tick` and shows up as `governor_not_running`; a reused token from
 
 ## 3. The brief (the deck)
 
-Fixed in `build_deck.js` and the deck rebuilt: L5's numbers are 20 of 87 compared, 17 agree,
+Fixed in `build_deck.js` and the deck rebuilt: WAVE-DIFFERENTIAL-GATE-TEST's numbers are 20 of 87 compared, 17 agree,
 five disagreements pinned; the envelope signer fields are identical across repositories
 (`sha256[:8]` as 16 hex characters both sides), the real gap is hex versus base64 and the
-missing embedded key, and it is a recorded gap, not a failing test; the L4 replayer
+missing embedded key, and it is a recorded gap, not a failing test; the WAVE-TRACE-CONFORMANCE-REPLAY replayer
 re-encodes the guards and does not drive the Z3 machine, 199 of 200 traces plus one expected
 refusal, and its heartbeat check cannot fail because the sink emits `heartbeat_lost` right
 before it; the column is "What was found", not "What the gate found"; the tests run racks of
@@ -98,16 +98,16 @@ NSM, HMC and Fabric Manager items, the copy-engine and peer-MMU checkers are a s
 for a future generation; eleven of the twenty-one mailbox commands are signed, the rest
 authenticate their payload or are open by design; the ten gate questions now match
 `_cmd_request` (form check inside the rule step; a dead heartbeat or an expired rulebook
-stops the chip before any handler runs); P3 and P4 worded as proven; 17 ms at 100 MHz is
+stops the chip before any handler runs); INVARIANT-NO-REPLAY-TICKET-SPENT and INVARIANT-TICKET-EDITION-NOT-NEWER worded as proven; 17 ms at 100 MHz is
 34 ms at the sky130 prototype's 50 MHz, where the batched engine would be 68 percent busy;
-the codes-to-tests rows corrected (session hazard budget is H17, compute budget H18,
-unpresented output H10); k per pair, not per machine; the board tier in docs/01's words;
-"P2 register pending"; twenty-three experiments; N2 models and N3 measures; NSM port disable
+the codes-to-tests rows corrected (session hazard budget is CONTRACT-NO-ACTION-WITHOUT-TICKET, compute budget CONTRACT-OVERSIGHT-SURVIVES-MODEL,
+unpresented output CONTRACT-LEAKAGE-WITHIN-BUDGET); k per pair, not per machine; the board tier in docs/01's words;
+"WAVE-EXIT-REGISTER register pending"; twenty-three experiments; WAVE-FALSE-HALT-RATE-MODEL models and EXPERIMENT-FPGA-BESIDE-REAL-GPU measures; NSM port disable
 applies from the next reset today, apply-now is ask 1; the sub-millisecond answer is the
 model's and unmeasured; `gate.not_attested` beside `model.not_evaluated`; one chip per
 baseboard, one instance per slot. `docs/brief/SOURCES.md`: five figure files, the bench call
-needs `actions=0` to give 0.044 percent, the contract tests are named in `tests/test_oasp.py`,
-L5 carries no waiting marker.
+needs `actions=0` to give 0.044 percent, the contract tests are named in `hardware-and-silicon/tests/test_oasp.py`,
+WAVE-DIFFERENTIAL-GATE-TEST carries no waiting marker.
 
 ## 4. The blog, Parts 5, 6 and 7
 
@@ -119,7 +119,7 @@ fire loop, a cut halts. Loss of current is declared after two missed samples and
 output follows within about three sense periods, 311 µs on the digital path (the same
 loose phrase was in `02-safety-fabric.md` §1 and is fixed there). The tests run racks of up
 to four GPUs; 72 is the ngspice loop. A jumpered governor is caught the moment its own
-switch opens, and is invisible and harmless until then (by design, `test_h11`). Rebuilding
+switch opens, and is invisible and harmless until then (by design, `tests/test_contract_halt_reaches_every_gpu.py`). Rebuilding
 rosters during a partition is in the design's partition table, not in a test. Per-port
 switch control is a firmware ask (docs/03 §9), so "opens only" became "is designed to open
 only" with the ask named. ANSI/ISA-50.00.01 and IEC 60381-1. 100BASE-T1 on the harness.
@@ -128,14 +128,14 @@ The rack figure now says it draws 72 governors as nine trays of eight.
 **Part 6.** The percolation chart counts copy-to-device **pairs** still connected, not roads;
 its axis and callouts changed. "Edge cut" meant a cut at the network's edge, not a graph
 theorist's edge cut; reworded everywhere, the country figure included. The deep-network
-row (K1a) is thin in the model: 57 of the 60 core nodes sit one hop from some machine, so
+row (INVARIANT-NO-DEEP-NETWORK-SEPARATOR) is thin in the model: 57 of the 60 core nodes sit one hop from some machine, so
 the check runs on three nodes; the post, docs/23 and the script's own output now say so,
 and a larger core is in the gap list. Claim 2 is **k dots per pair**, not per machine; the
 model's 43 dots for 22 machines is under two per machine, and the script asserts only
 "at least k and larger than either end". Claim 3 needs the network to carry
 min(|S|, |T|) disjoint paths between the two whole sides, which pairwise k-connectivity does
 not give (a 2-connected core with a two-node waist is the counterexample); the one code
-change of this review adds **K4c** to `proofs/no_global_kill_switch.py`, which lets the cut
+change of this review adds **INVARIANT-NO-CUT-BEATS-SMALLER-END** to `proofs/no_global_kill_switch.py`, which lets the cut
 fall anywhere except on the bystanders and checks that the smallest separator in the whole
 graph is still 11, the device end's count. It holds. The reference-monitor sentence now
 claims only what `core_invariants.py` proves: the always-invoked half, on the abstract
@@ -149,8 +149,8 @@ the three percent of the subscription window are my reading of the tool's meter 
 post now says that. All four experiments came back "revise". The packet holds the latest
 review of each branch, not every review. The reviewer's actual words on the replayer
 ("re-encodes the guards as copies and does not drive the machine") replace a phrase that
-was not in the packet. The uncommitted-work episode belonged to L5's first revision, not to
-H1. The first-pass path blocks are in the pull requests' history, not in the packet, and the
+was not in the packet. The uncommitted-work episode belonged to WAVE-DIFFERENTIAL-GATE-TEST's first revision, not to
+WAVE-LANES-CONFORMANCE-SUITE. The first-pass path blocks are in the pull requests' history, not in the packet, and the
 post says which pass it describes. The local reader timed out on two of three. The gate
 beats OpenShell's half-second timeout by roughly a thousand times in the Python model,
 unmeasured on hardware. The watermark numbers now match Part 1 (a half rewrite beats the
@@ -160,23 +160,23 @@ alliance's move to the Linux Foundation is cited.
 
 ## 5. docs/24 and docs/23
 
-docs/24: the quorum of observers is docs/18 question 2 (and YB-0053, YB-0054), not 12; the
-hold and approval tests are `test_h08_override.py` and `test_h04_lane.py`, H18 is the
+docs/24: the quorum of observers is docs/18 question 2 (and WAVE-OBSERVER-INDEPENDENCE, WAVE-OBSERVER-QUORUM-ARITHMETIC), not 12; the
+hold and approval tests are `test_contract_override_slow_and_logged.py` and `test_contract_broker_cannot_pick_rule.py`, CONTRACT-OVERSIGHT-SURVIVES-MODEL is the
 witnesses; the human lane is docs/04 §4 (the rule's requirement mode) and §3 (the hold and
-APPROVE), not §5; of the four ways the framework could be wrong, two have experiments (N2;
-YB-0052 to 0054) and two (device-maker coverage, persuasion) are docs/18 questions with no
+APPROVE), not §5; of the four ways the framework could be wrong, two have experiments (WAVE-FALSE-HALT-RATE-MODEL;
+WAVE-OBSERVER-EVALUATION-SET to 0054) and two (device-maker coverage, persuasion) are docs/18 questions with no
 experiment, which the text now says instead of claiming four; Wallace et al. rank system
 over user over model and tool output, the developer tier came later in OpenAI's model spec;
 OpenShell 0.1.0 was released on 28 September 2026 and first shown at GTC in March, and
 Sentry is a reference system design, not open source and not a product; the Open Secure AI
 Alliance has no published charter, the trusted-foundation wording is its description of its
-stack; three figures are borrowed from the blog, not two; YB-0052's review found the
+stack; three figures are borrowed from the blog, not two; WAVE-OBSERVER-EVALUATION-SET's review found the
 baseline overlap, it did not measure correlated failures; docs/23 argues and checks on a
 model, it does not prove the Internet; "a billion a day" and "by the thousand" are gone, they
 had no source; BlueField-4 is a DPU; Sentry's verdict can also be a rung-2 witness (docs/25
 §0.1), so the two documents agree on where it sits.
 
-docs/23: Claim 2 and Claim 3 reworded as above, with K4c in the table; K1a's row carries the
+docs/23: Claim 2 and Claim 3 reworded as above, with INVARIANT-NO-CUT-BEATS-SMALLER-END in the table; INVARIANT-NO-DEEP-NETWORK-SEPARATOR's row carries the
 thin-check note; the core is "expander-like" (the script checks simple and connected, not
 expansion); docs/19 proves claim L with the reference-monitor argument and the Z3 proofs,
 not with cuts, and the header says so; Menger is nearly a century old; the reference-monitor
@@ -186,7 +186,7 @@ does not exist.
 
 ## 6. What the readers could not check
 
-- The `safety` repository (YB-0052's set, scorer, baselines and pull request 7) and the
+- The `safety` repository (WAVE-OBSERVER-EVALUATION-SET's set, scorer, baselines and pull request 7) and the
   `Watermark` repository are not on the machine the readers ran on; their numbers are
   inherited from the posts that first stated them.
 - GitHub itself (the pull-request comments, NVIDIA/OpenShell at `837fdfd`, the
@@ -207,18 +207,18 @@ over again.
 
 | # | Gap | Where it shows | What closes it |
 |---|---|---|---|
-| G1 | `revocations` is stored and never read: a revoked observer key or chip id is still honoured | `policy.py:85`; docs/25 §2 | A check in `_keys` and `_witnessed`; a test that revokes a key mid-session and expects `gate.witness_revoked` |
-| G2 | `CAP_REQUEST` ignores `sandbox`: a sandboxed roster peer can still be granted a flow | `governor.py` `_cmd_cap_request`; docs/25 §2 | The sandbox check in `_cmd_cap_request`; a test beside `test_h17::test_sandbox_organism` |
-| G3 | The hazard budget is per governor, so a session spread across two chips gets two budgets | `governor.py` `_release_gate`; docs/25 §0.1 | Either own it over the fabric like the payment budget (H13's `_reserve`) or state per-governor as the design |
-| G4 | Tokens are read from the GPU's counter, not from the streams presented for signing | `read_meter`; docs/25 §7.1 | Derive the meter's tokens from `_cmd_sign_output`, or keep the counter and say so in docs/04 |
-| G5 | A workload token's fingerprint survives an edition change, so an old token is accepted under the new edition | `governor.py` `_cmd_begin_model`, `_cmd_request`; docs/25 §2.1 | Refresh the fingerprint on commit, or require `BEGIN_MODEL` again; `test_h01::test_fingerprint_names_policy_epoch` extended |
-| G6 | The L4 replayer re-encodes the guards and does not drive the Z3 machine; its heartbeat check cannot fail | `audit/wave-1/review/L4`; experiment L4 | The revision L4 is in: install z3 in the agent's environment and drive `core_invariants.py` for real |
-| G7 | K1a is near-vacuous on a 60-node core (three deep nodes) | `proofs/no_global_kill_switch.py`; docs/23 §4; Part 6 | Rebuild with a core large enough that "deep" means something (a few hundred nodes), rerun, and restate the numbers everywhere they appear |
-| G8 | Claim 3 needs set-to-set connectivity; K4c checks it on the instance, the prose assumption is strengthened | docs/23 §3a; Part 6 | Done in the documents; the stronger assumption belongs in the proof script's docstring too (it is) |
-| G9 | The gate's latency inside OpenShell's window is unmeasured | docs/NVIDIA.md; Part 5; deck slide 19 | YB-0056 is that experiment; a timing test in `tests/test_oasp.py` would pin the model's half millisecond |
-| G10 | The sky130 prototype at 50 MHz puts a P-384 signature at 34 ms and the batched engine at 68 percent, above the spec's 50 percent bound | docs/04 §9 and §11 | Either a wider batch window at the prototype clock or the product clock stated as the bound's basis |
-| G11 | Roster formation during a partition is in the design's table and in no test | docs/02 §3; Part 7 | A case in `test_h14_partition.py` that forms a roster in the surviving half before `heal()` |
-| G12 | The wall time and cost of a wave are not in the packet in a form anyone can check (`0 min` per row) | `audit/wave-1/REPORT.md` | `run_wave.sh` records wall time per attempt and the CLI's own cost line into the report |
+| GAP-REVOCATIONS-UNENFORCED | `revocations` is stored and never read: a revoked observer key or chip id is still honoured | `policy.py:85`; docs/25 §2 | A check in `_keys` and `_witnessed`; a test that revokes a key mid-session and expects `gate.witness_revoked` |
+| GAP-SANDBOX-FLAG-IGNORED | `CAP_REQUEST` ignores `sandbox`: a sandboxed roster peer can still be granted a flow | `governor.py` `_cmd_cap_request`; docs/25 §2 | The sandbox check in `_cmd_cap_request`; a test beside `test_contract_no_action_without_ticket::test_sandbox_organism` |
+| GAP-HAZARD-BUDGET-PER-GOVERNOR | The hazard budget is per governor, so a session spread across two chips gets two budgets | `governor.py` `_release_gate`; docs/25 §0.1 | Either own it over the fabric like the payment budget (CONTRACT-SHARED-BUDGET-NO-OVERSPEND's `_reserve`) or state per-governor as the design |
+| GAP-TOKENS-FROM-STREAMS | Tokens are read from the GPU's counter, not from the streams presented for signing | `read_meter`; docs/25 §7.1 | Derive the meter's tokens from `_cmd_sign_output`, or keep the counter and say so in docs/04 |
+| GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE | A workload token's fingerprint survives an edition change, so an old token is accepted under the new edition | `governor.py` `_cmd_begin_model`, `_cmd_request`; docs/25 §2.1 | Refresh the fingerprint on commit, or require `BEGIN_MODEL` again; `test_contract_attestation_binds_permissions::test_fingerprint_names_policy_epoch` extended |
+| GAP-REPLAYER-CHECK-CANNOT-FAIL | The WAVE-TRACE-CONFORMANCE-REPLAY replayer re-encodes the guards and does not drive the Z3 machine; its heartbeat check cannot fail | `audit/wave-1/review/L4` (the dated review folder of WAVE-TRACE-CONFORMANCE-REPLAY); experiment WAVE-TRACE-CONFORMANCE-REPLAY | The revision L4 is in: install z3 in the agent's environment and drive `core_invariants.py` for real |
+| GAP-KILL-SWITCH-CORE-TOO-SMALL | INVARIANT-NO-DEEP-NETWORK-SEPARATOR is near-vacuous on a 60-node core (three deep nodes) | `proofs/no_global_kill_switch.py`; docs/23 §4; Part 6 | Rebuild with a core large enough that "deep" means something (a few hundred nodes), rerun, and restate the numbers everywhere they appear |
+| GAP-SET-CONNECTIVITY-ASSUMPTION | Claim 3 needs set-to-set connectivity; INVARIANT-NO-CUT-BEATS-SMALLER-END checks it on the instance, the prose assumption is strengthened | docs/23 §3a; Part 6 | Done in the documents; the stronger assumption belongs in the proof script's docstring too (it is) |
+| GAP-GATE-LATENCY-UNMEASURED | The gate's latency inside OpenShell's window is unmeasured | docs/NVIDIA.md; Part 5; deck slide 19 | WAVE-VERDICT-LATENCY-IN-WINDOWS is that experiment; a timing test in `hardware-and-silicon/tests/test_oasp.py` would pin the model's half millisecond |
+| GAP-PROTOTYPE-SIGNATURE-ENGINE-OVERLOADED | The sky130 prototype at 50 MHz puts a P-384 signature at 34 ms and the batched engine at 68 percent, above the spec's 50 percent bound | docs/04 §9 and §11 | Either a wider batch window at the prototype clock or the product clock stated as the bound's basis |
+| GAP-PARTITION-ROSTER-FORMATION-UNTESTED | Roster formation during a partition is in the design's table and in no test | docs/02 §3; Part 7 | A case in `test_contract_partitions_end_safe.py` that forms a roster in the surviving half before `heal()` |
+| GAP-WAVE-COST-UNCHECKABLE | The wall time and cost of a wave are not in the packet in a form anyone can check (`0 min` per row) | `audit/wave-1/REPORT.md` | `run_wave.sh` records wall time per attempt and the CLI's own cost line into the report |
 
 ## 8. Found the same evening, by testing the code: two authorization defects
 
@@ -228,23 +228,23 @@ documents and the proofs both took it on trust.
 
 | # | Defect | How it was shown | Fix | Test | Proof |
 |---|---|---|---|---|---|
-| A1 | `verify_policy` read k from the image it was checking: an image with `threshold: 0` and no signatures passed, and `POLICY_PROPOSE` staged it (the commit runs the same check) | A one-GPU rack, an unsigned image with threshold 0: `{'ok': True}` | k is fused at provisioning (`Fuses.governance_threshold`); an image's threshold must be at least one, at most the number of distinct keys and at least the fused one; each key counts once; an edition that asks for more raises the fused floor, never lowers it | `tests/test_h19_authorization.py`, six tests | P10, P11 |
-| A2 | `_check_signed` checked who signed a frame but not what it was signed for: a legitimate heartbeat, presented as `CLEAR`, cleared a halt; any authority signature authorized every authority command | Halt a governor, send a heartbeat as `CLEAR`: `{'ok': True}`, cause gone | Every signed payload names its command (`type`); a HALT or CLEAR also names the chip and carries an expiry no more than 60 s ahead; HALT and CLEAR are signed by authority keys the rulebook lists apart from the heartbeat key; the heartbeat handler checks its own type too; the RTL mailbox compares the command byte inside the verified payload with the frame's (status 7) | Eight tests, and a sweep that records every signed frame a normal run delivers and replays each into every other signed command | P5 restated, P12 |
+| REVIEW-POLICY-THRESHOLD-FROM-IMAGE | `verify_policy` read k from the image it was checking: an image with `threshold: 0` and no signatures passed, and `POLICY_PROPOSE` staged it (the commit runs the same check) | A one-GPU rack, an unsigned image with threshold 0: `{'ok': True}` | k is fused at provisioning (`Fuses.governance_threshold`); an image's threshold must be at least one, at most the number of distinct keys and at least the fused one; each key counts once; an edition that asks for more raises the fused floor, never lowers it | `tests/test_contract_signature_authorizes_exactly.py`, six tests | INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD, INVARIANT-FUSED-THRESHOLD-NEVER-FALLS |
+| REVIEW-SIGNED-PURPOSE-UNCHECKED | `_check_signed` checked who signed a frame but not what it was signed for: a legitimate heartbeat, presented as `CLEAR`, cleared a halt; any authority signature authorized every authority command | Halt a governor, send a heartbeat as `CLEAR`: `{'ok': True}`, cause gone | Every signed payload names its command (`type`); a HALT or CLEAR also names the chip and carries an expiry no more than 60 s ahead; HALT and CLEAR are signed by authority keys the rulebook lists apart from the heartbeat key; the heartbeat handler checks its own type too; the RTL mailbox compares the command byte inside the verified payload with the frame's (status 7) | Eight tests, and a sweep that records every signed frame a normal run delivers and replays each into every other signed command | INVARIANT-HALT-IS-ABSORBING restated, INVARIANT-ONLY-CLEAR-LEAVES-HALT |
 
 **Neither was a hardware fault.** Both reproduce in a single-threaded run of the Python model on a
 simulated clock; real silicon built from that logic would have had both. Each fix was checked by
-putting the old code back: the new tests fail on the old rules (A2's heartbeat case is now stopped
+putting the old code back: the new tests fail on the old rules (REVIEW-SIGNED-PURPOSE-UNCHECKED's heartbeat case is now stopped
 twice, by the type check and by the separate key, and each alone is enough), and the proof file
-checks that P10 and P12 fail under the old rules, so it would have caught both.
+checks that INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD and INVARIANT-ONLY-CLEAR-LEAVES-HALT fail under the old rules, so it would have caught both.
 
 **Why the proofs missed them.** The abstract machine took "a quorum signed the new edition" and
 "the authority cleared the halt" as yes-or-no inputs. That assumed exactly the two checks that
 were broken. The machine now computes both from what was signed. The lesson for the method: every
 yes-or-no input a proof takes on trust is a place to test the code directly.
 
-Added to the gaps the program owes: **G13**, the same sweep for the fabric's message types
+Added to the gaps the program owes: **GAP-FABRIC-SIGNATURE-REPLAY-SWEEP**, the same sweep for the fabric's message types
 (roster, alarm, checkpoint, beacon) and for the signed objects inside bodies (verdicts, lists,
-tickets, tokens, receipts), each replayed into every place that accepts a signature; **G14**, a
+tickets, tokens, receipts), each replayed into every place that accepts a signature; **GAP-SEEDED-CONCURRENCY-HARNESS**, a
 seeded concurrency harness that interleaves commands, timers and crashes across governors, which
 is the honest way to tell a race from a logic error before anyone blames the hardware.
 
@@ -258,32 +258,32 @@ was checked by putting the old code back and watching its test fail.
 
 | # | His finding | Reproduced on his snapshot? | Fix | Regression |
 |---|---|---|---|---|
-| 1 | An unsigned policy with threshold 0 passes propose and commit | Yes: propose ok, commit ok, installed threshold 0 | Section 8, A1 (fused threshold) | H19; P10, P11 |
-| 2 | A signed heartbeat clears a halt across the rack | Yes: two of four governors cleared in my run, four in his (his checkpoint exchange satisfied all four neighbours) | Section 8, A2 (signed type, chip, expiry; separate authority key) | H19 and the replay sweep; P12 |
-| 3 | The reference gate's signing key is computable from public quotes | Yes: the key derived from the two alias public keys equals the gate's | `SiliconRoot.derive_key` from the secret CDI | hardware-and-silicon `tests/test_audit_2026_10_22.py` |
+| 1 | An unsigned policy with threshold 0 passes propose and commit | Yes: propose ok, commit ok, installed threshold 0 | Section 8, REVIEW-POLICY-THRESHOLD-FROM-IMAGE (fused threshold) | CONTRACT-SIGNATURE-AUTHORIZES-EXACTLY; INVARIANT-EDITION-CHANGE-NEEDS-FUSED-THRESHOLD, INVARIANT-FUSED-THRESHOLD-NEVER-FALLS |
+| 2 | A signed heartbeat clears a halt across the rack | Yes: two of four governors cleared in my run, four in his (his checkpoint exchange satisfied all four neighbours) | Section 8, REVIEW-SIGNED-PURPOSE-UNCHECKED (signed type, chip, expiry; separate authority key) | CONTRACT-SIGNATURE-AUTHORIZES-EXACTLY and the replay sweep; INVARIANT-ONLY-CLEAR-LEAVES-HALT |
+| 3 | The reference gate's signing key is computable from public quotes | Yes: the key derived from the two alias public keys equals the gate's | `SiliconRoot.derive_key` from the secret CDI | `hardware-and-silicon/tests/test_audit_2026_10_22.py` |
 | 4 | An old human approval releases a hold the current policy refuses | Yes: $5,000 hold approved and executed after the cap fell to $2,000 | Holds carry their policy; a new policy drops them; approval of a hold from another policy is refused | same file |
 | 5 | A replayed older epoch moves the endpoint back and an old ticket executes | Yes: `ticket.policy_stale`, then executed after the old epoch was replayed | Versioned epochs with a durable high-water mark at the endpoint; the gate refuses to commit a ticket from a replaced policy | same file |
 | 5b | (found while fixing 5) the gate reloads an older governance-signed policy | Yes | Every governance document carries a version; older ones refused; restart reloads the newest | same file |
 | 5c | (found while fixing 5) an older revocation list un-revokes a device | Yes | Same versioning at the attestation verifier | same file |
-| 6 | The abstract machine lets a ticket issued before a halt execute during it | Yes: the old `execute` step did not require RUN; the code's commit always did | `execute` requires RUN; P13 proved; the file checks that P13 fails on the old machine; H19 pins the code | `make proof`, H19 |
+| 6 | The abstract machine lets a ticket issued before a halt execute during it | Yes: the old `execute` step did not require RUN; the code's commit always did | `execute` requires RUN; INVARIANT-NOTHING-EXECUTES-WHILE-HALTED proved; the file checks that INVARIANT-NOTHING-EXECUTES-WHILE-HALTED fails on the old machine; CONTRACT-SIGNATURE-AUTHORIZES-EXACTLY pins the code | `make proof`, CONTRACT-SIGNATURE-AUTHORIZES-EXACTLY |
 
-He also called out four gaps this record had already listed (G1, G2, G3, G5) as failures of
+He also called out four gaps this record had already listed (GAP-REVOCATIONS-UNENFORCED, GAP-SANDBOX-FLAG-IGNORED, GAP-HAZARD-BUDGET-PER-GOVERNOR, GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE) as failures of
 controls someone could reasonably expect the fields to provide. Agreed, and closed: revoked keys
-count for nothing in any role and a revoked GPU fails attestation (G1); a sandboxed governor refuses
-peer capabilities on request (G2); a session's hazard budget is counted at one named owner across
-the rack, failing closed when the owner is unreachable (G3); a workload token dies with its
-edition (G5). `tests/test_h20_closed_gaps.py`, eight tests, each mutation caught. G4 (tokens read
+count for nothing in any role and a revoked GPU fails attestation (GAP-REVOCATIONS-UNENFORCED); a sandboxed governor refuses
+peer capabilities on request (GAP-SANDBOX-FLAG-IGNORED); a session's hazard budget is counted at one named owner across
+the rack, failing closed when the owner is unreachable (GAP-HAZARD-BUDGET-PER-GOVERNOR); a workload token dies with its
+edition (GAP-WORKLOAD-TOKEN-SURVIVES-RULE-CHANGE). `tests/test_contract_named_controls_enforced.py`, eight tests, each mutation caught. GAP-TOKENS-FROM-STREAMS (tokens read
 from the GPU's counter) stays open: it is a modelling simplification, not a hole an attacker uses.
 
-**The research objections, recomputed from the committed YB-0051 scores** (script in the review
+**The research objections, recomputed from the committed EXPERIMENT-LOW-FALSE-ALARM-PRECISION scores** (script in the review
 packet; the numbers are his and they hold exactly):
 
 | Quantity | His number | Recomputed |
 |---|---|---|
-| C2 at 1%, threshold from the test set's correct answers | 339 caught, 59 false alarms, 0.996% | 339, 59, 0.996% |
+| EXPERIMENT-COMBINED-LOGISTIC-CANDIDATE (old: C2) at 1%, threshold from the test set's correct answers | 339 caught, 59 false alarms, 0.996% | 339, 59, 0.996% |
 | False alarms on modular exponentiation | 46 of 352, 13.07% | 46 of 352, 13.07% |
 | Self-consistency plus the text monitor at the same 59 false alarms | 336 caught | 336 |
-| C2 with the threshold frozen on the reference | 307 caught, 44 false alarms, 0.743% | 307, 44, 0.743%; modpow still 41 of 352, 11.65% |
+| EXPERIMENT-COMBINED-LOGISTIC-CANDIDATE (old: C2) with the threshold frozen on the reference | 307 caught, 44 false alarms, 0.743% | 307, 44, 0.743%; modpow still 41 of 352, 11.65% |
 
 **What that means for the chip, which is the point of the program.** These detectors are AI
 checking AI (self-consistency asks the model again; the probe and the text monitor read its
@@ -293,10 +293,10 @@ cannot be what decides an irreversible action. The lock is outside the model: th
 by people the model cannot reach, the ticket, and the device that checks it. Three things follow
 for the rulebook. A witness's threshold is set per action class, not pooled. A rule that requires a
 witness for an irreversible action also requires a human hold or a second, independent witness,
-which the observer lane already supports. And the YB-0051 result does not yet justify building
+which the observer lane already supports. And the EXPERIMENT-LOW-FALSE-ALARM-PRECISION result does not yet justify building
 activation telemetry into silicon: an output-only combination that needs no internal access came
 within three catches of it. His three methodological points (a threshold chosen on test labels; a
-task held out of the weights but not of model selection in YB-0047; H3's "the tie-break, not more
+task held out of the weights but not of model selection in EXPERIMENT-TEXT-BASELINE-TRANSFER; EXPERIMENT-REVIEW-SAMPLE-COUNT-EFFECT (old: H3)'s "the tie-break, not more
 samples" read off an interval that spans zero) are correct as stated and belong in that
 repository's corrections ledger; they are drafted, with two more the recomputation adds, in
 `audit/external-2026-10-22/AGR-CORRECTIONS-DRAFT.md`, to be copied across (this pipeline does not push that
@@ -305,7 +305,7 @@ repository yet). His memo is kept verbatim in `audit/external-2026-10-22/MEMO.md
 
 His work order, adopted: the five reproduced failures first (done above), then the disclosed gaps
 (three of four closed), then one complete action path end to end with a real observer and a
-policy change, a delayed approval, a replay, a restart, a partition and a revocation (open: G15),
+policy change, a delayed approval, a replay, a restart, a partition and a revocation (open: GAP-END-TO-END-ACTION-PATH),
 then the preregistered telemetry comparison against self-consistency plus text with separate
 training, calibration and untouched test data (open, in AGR), then one named physical
 configuration with a measured deadline (stage 3 of `22`).

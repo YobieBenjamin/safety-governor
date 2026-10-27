@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Capability table and checker. One instance per enforcement point.
 
 Invariant: a lookup allows only an entry with a matching (point, peer, dir), budget >= bytes,

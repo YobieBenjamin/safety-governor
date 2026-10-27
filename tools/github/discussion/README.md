@@ -21,7 +21,7 @@ It is a discussion space, not the product.
 
 Nothing posted here becomes part of the product by being posted. When a discussion changes the design, the change
 is written in the product repository in Yobie's own words, with a link to the discussion that prompted it, the way
-the open questions G1, G2, A1 and I1 credit the comments that raised them.
+the open questions EXPERIMENT-LOG-READ-ACCESS-POLICY, EXPERIMENT-AFFECTED-PARTY-CONTEST-LANE, EXPERIMENT-ROAD-REACHABILITY and EXPERIMENT-CUSTOMER-CONFIRMATION credit the comments that raised them.
 
 Start here: [START-HERE.md in safety-governor](https://github.com/YobieBenjamin/safety-governor/blob/main/START-HERE.md)
 and the open questions in [docs/18](https://github.com/YobieBenjamin/safety-governor/blob/main/docs/18-viability-and-open-questions.md).

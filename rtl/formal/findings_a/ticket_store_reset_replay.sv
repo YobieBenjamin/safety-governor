@@ -1,4 +1,4 @@
-// L7-SPLICE block: ticket_store. FINDINGS-a.md F5. Expected to FAIL by assertion: python -m rtl.formal reports it
+// L7-SPLICE block: ticket_store. FINDINGS-a.md RTL-RESET-EMPTIES-TICKET-STORE. Expected to FAIL by assertion: python -m rtl.formal reports it (WAVE-FORMAL-PROOFS-ON-VERILOG (old: L7))
 // "reproduced". Rule: a burned ticket id is never burned (admitted) again, now with reset allowed in any cycle.
 // The block's store is volatile and a reset empties it, so after a reset the same id burns a second time.
   (* anyconst *) reg [31:0] f_w;

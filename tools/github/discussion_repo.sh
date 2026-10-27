@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # The discussion forum, kept apart from the product: a separate public repository with GitHub Discussions on, its own
 # license (CC BY 4.0, contributors keep their copyright), and a pinned first post explaining what goes where.
 # Idempotent: run it again and it updates the files, creates nothing twice.
@@ -54,7 +56,7 @@ print("""This space is for questions, critiques and proposals from outside the p
 
 Nothing posted here becomes part of the product by being posted. When a discussion changes the design, the change is written in the product repository in Yobie's own words, linking back here.
 
-Good places to start: the open questions in docs/18 (https://github.com/YobieBenjamin/safety-governor/blob/main/docs/18-viability-and-open-questions.md), including who reads the log (G1), how an affected party contests (G2), an agent that adds roads (A1) and the wire the customer never meant (I1).""")
+Good places to start: the open questions in docs/18 (https://github.com/YobieBenjamin/safety-governor/blob/main/docs/18-viability-and-open-questions.md), including who reads the log (EXPERIMENT-LOG-READ-ACCESS-POLICY), how an affected party contests (EXPERIMENT-AFFECTED-PARTY-CONTEST-LANE), an agent that adds roads (EXPERIMENT-ROAD-REACHABILITY) and the wire the customer never meant (EXPERIMENT-CUSTOMER-CONFIRMATION).""")
 PY
 )
   gh api graphql -f query='mutation($r:ID!,$c:ID!,$t:String!,$b:String!){createDiscussion(input:{repositoryId:$r,categoryId:$c,title:$t,body:$b}){discussion{url}}}' \

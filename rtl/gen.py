@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Emit Verilog for every block and for governor_core into rtl/gen/.
 
     python -m rtl.gen            # writes rtl/gen/*.v

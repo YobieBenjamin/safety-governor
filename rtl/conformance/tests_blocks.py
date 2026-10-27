@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Conformance tests, block by block: each one checks a sentence of the spec against the Amaranth RTL.
 
 These are the inspector's checks with the code book open: one rule, one room, one observation. Every test
@@ -12,7 +14,7 @@ from amaranth import Signal
 from amaranth.hdl import ResetInserter
 
 from rtl.governor_rtl.cap_table import R_BUDGET, R_EXPIRED, R_NO_CAP, R_OK, R_STALE_EPOCH
-from rtl.governor_rtl.halt import (C_COMMAND, C_LOCAL, C_LOOP, C_NONE, C_TAMPER, HALT, HALTED_INITIAL, RUN, SAFE,
+from rtl.governor_rtl.halt import (C_COMMAND, C_LOCAL, C_LOOP, C_NONE, C_PERSIST, C_TAMPER, HALT, HALTED_INITIAL, RUN, SAFE,
                                    THROTTLE)
 from rtl.governor_rtl.lifecycle import DECOMMISSIONED, PRODUCTION, PROVISIONED, TEST
 from rtl.governor_rtl.mailbox import S_BAD_EPOCH, S_BAD_SEQ, S_BAD_SIG, S_BUSY, S_IDLE, S_OK, S_REFUSED, S_WRONG_CMD
@@ -23,13 +25,13 @@ RUNG = {RUN: 0, THROTTLE: 1, HALT: 2, SAFE: 3}       # severity order; HALTED_IN
 
 
 # ================================================================ monotonic counter
-@conformance("R-001")
+@conformance("REQUIREMENT-MONOTONIC-MICROSECOND-COUNTER")
 def test_mono_counter_is_64_bits():
     """The counter is 64 bits wide."""
     assert len(B.MonotonicCounter().value) == 64
 
 
-@conformance("R-001")
+@conformance("REQUIREMENT-MONOTONIC-MICROSECOND-COUNTER")
 def test_mono_advances_once_per_tick():
     """Each inc strobe advances the counter by exactly one; no strobe, no change."""
     dut = B.MonotonicCounter(width=16)
@@ -46,7 +48,7 @@ def test_mono_advances_once_per_tick():
     sim(dut, tb)
 
 
-@conformance("R-002")
+@conformance("REQUIREMENT-COUNTER-REFUSES-DECREMENT")
 def test_mono_decrement_request_refused_and_value_kept():
     """A decrement request is flagged as refused and the value does not move."""
     dut = B.MonotonicCounter(width=16)
@@ -65,7 +67,7 @@ def test_mono_decrement_request_refused_and_value_kept():
     sim(dut, tb)
 
 
-@conformance("R-002")
+@conformance("REQUIREMENT-COUNTER-REFUSES-DECREMENT")
 def test_mono_never_decreases_under_random_inputs():
     """2,000 cycles of random inc, dec_req, load_hwm and hwm: the value never goes down."""
     dut = B.MonotonicCounter(width=16)
@@ -85,7 +87,7 @@ def test_mono_never_decreases_under_random_inputs():
     sim(dut, tb)
 
 
-@conformance("R-003")
+@conformance("REQUIREMENT-COUNTER-FUSE-HIGH-WATER-MARK")
 def test_mono_high_water_mark_raises_the_counter():
     """At boot the fuse-backed high-water mark is loaded: the counter starts no lower than it."""
     dut = B.MonotonicCounter(width=16)
@@ -98,7 +100,7 @@ def test_mono_high_water_mark_raises_the_counter():
     sim(dut, tb)
 
 
-@conformance("R-003")
+@conformance("REQUIREMENT-COUNTER-FUSE-HIGH-WATER-MARK")
 def test_mono_lower_high_water_mark_cannot_pull_back():
     """A stale (lower) high-water mark never moves the counter backwards."""
     dut = B.MonotonicCounter(width=16)
@@ -114,7 +116,7 @@ def test_mono_lower_high_water_mark_cannot_pull_back():
 
 
 # ================================================================ measurement registers
-@conformance("R-004")
+@conformance("REQUIREMENT-MEASUREMENT-EXTEND-ONLY")
 def test_meas_engine_output_without_request_ignored():
     """A hash result that this block did not ask for never lands in the register."""
     dut = B.MeasureReg(width=32)
@@ -128,7 +130,7 @@ def test_meas_engine_output_without_request_ignored():
     sim(dut, tb)
 
 
-@conformance("R-004")
+@conformance("REQUIREMENT-MEASUREMENT-EXTEND-ONLY")
 def test_meas_extend_latches_engine_result():
     """extend asks the engine for H(value || data) and latches exactly what the engine returns."""
     dut = B.MeasureReg(width=32)
@@ -147,7 +149,7 @@ def test_meas_extend_latches_engine_result():
     sim(dut, tb)
 
 
-@conformance("R-004")
+@conformance("REQUIREMENT-MEASUREMENT-EXTEND-ONLY")
 def test_meas_has_no_write_port():
     """The block exposes no write-data or write-enable port: only extend, data and the engine interface."""
     dut = B.MeasureReg(width=32)
@@ -155,7 +157,7 @@ def test_meas_has_no_write_port():
     assert ports == {"extend", "data", "hash_req", "hash_in", "hash_done", "hash_out", "value", "busy"}, ports
 
 
-@conformance("R-005", "R-006")
+@conformance("REQUIREMENT-LOADER-MEASUREMENT-REGISTER", "REQUIREMENT-FIRMWARE-MEASUREMENT-REGISTER")
 def test_core_meas_csr_windows_read_both_registers():
     """MEAS0 at 0x030.. and MEAS1 at 0x050.. read the two measurement registers, eight words each."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -179,7 +181,7 @@ def test_core_meas_csr_windows_read_both_registers():
 
 
 # ================================================================ epoch register
-@conformance("R-007")
+@conformance("REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM")
 def test_epoch_commit_without_quorum_ignored():
     """A commit strobe without quorum_ok leaves the epoch unchanged."""
     dut = B.EpochReg(width=32)
@@ -192,7 +194,7 @@ def test_epoch_commit_without_quorum_ignored():
     sim(dut, tb)
 
 
-@conformance("R-007")
+@conformance("REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM")
 def test_epoch_quorum_without_commit_ignored():
     """quorum_ok alone, without the policy FSM's commit, changes nothing."""
     dut = B.EpochReg(width=32)
@@ -205,7 +207,7 @@ def test_epoch_quorum_without_commit_ignored():
     sim(dut, tb)
 
 
-@conformance("R-007")
+@conformance("REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM")
 def test_epoch_host_write_has_no_effect():
     """The host write port is refused and flagged, and the value never moves."""
     dut = B.EpochReg(width=32)
@@ -218,7 +220,7 @@ def test_epoch_host_write_has_no_effect():
     sim(dut, tb)
 
 
-@conformance("R-007")
+@conformance("REQUIREMENT-EPOCH-CHANGES-ONLY-WITH-QUORUM")
 def test_epoch_commit_with_quorum_switches():
     """commit with quorum_ok switches the epoch to the new value."""
     dut = B.EpochReg(width=32)
@@ -232,7 +234,7 @@ def test_epoch_commit_with_quorum_switches():
     sim(dut, tb)
 
 
-@conformance("R-009")
+@conformance("REQUIREMENT-EPOCH-TAG-LOW-BITS")
 def test_epoch_tag_is_low_16_bits():
     """The capability epoch tag is the low 16 bits of the epoch."""
     dut = B.EpochReg(width=64)
@@ -246,7 +248,7 @@ def test_epoch_tag_is_low_16_bits():
     sim(dut, tb)
 
 
-@conformance("R-008")
+@conformance("REQUIREMENT-EPOCH-IS-POLICY-DIGEST")
 def test_core_epoch_csr_reads_256_bits():
     """EPOCH[0..7] at 0x010.. reads the 256-bit epoch, low word first."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -265,7 +267,7 @@ def test_core_epoch_csr_reads_256_bits():
 
 
 # ================================================================ lifecycle
-@conformance("R-010")
+@conformance("REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG")
 def test_lifecycle_never_moves_down_by_advance():
     """advance to a lower or equal state is refused and flagged."""
     dut = B.Lifecycle()
@@ -282,7 +284,7 @@ def test_lifecycle_never_moves_down_by_advance():
     sim(dut, tb)
 
 
-@conformance("R-010")
+@conformance("REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG")
 def test_lifecycle_lower_fuse_load_cannot_move_down():
     """A fuse load that reads a lower state does not move the register down."""
     dut = B.Lifecycle()
@@ -297,7 +299,7 @@ def test_lifecycle_lower_fuse_load_cannot_move_down():
     sim(dut, tb)
 
 
-@conformance("R-010")
+@conformance("REQUIREMENT-LIFECYCLE-MONOTONE-NO-DEBUG")
 def test_lifecycle_monotone_under_random_inputs():
     """2,000 random cycles of load, advance and their values: the state never decreases."""
     dut = B.Lifecycle()
@@ -317,7 +319,7 @@ def test_lifecycle_monotone_under_random_inputs():
     sim(dut, tb)
 
 
-@conformance("R-011", "R-013")
+@conformance("REQUIREMENT-PRODUCTION-HAS-NO-DEBUG", "REQUIREMENT-JTAG-REFUSED-AND-LOGGED")
 def test_lifecycle_debug_refused_in_production_and_later():
     """Once the register holds PRODUCTION or DECOMMISSIONED, debug_grant is 0 and debug_refused is 1."""
     for target in (PRODUCTION, DECOMMISSIONED):
@@ -333,7 +335,7 @@ def test_lifecycle_debug_refused_in_production_and_later():
         sim(dut, tb)
 
 
-@conformance("R-011")
+@conformance("REQUIREMENT-PRODUCTION-HAS-NO-DEBUG")
 def test_lifecycle_debug_granted_before_production():
     """In TEST and PROVISIONED a debug request is granted (the bring-up plan needs JTAG in TEST)."""
     for target in (TEST, PROVISIONED):
@@ -348,7 +350,7 @@ def test_lifecycle_debug_granted_before_production():
         sim(dut, tb)
 
 
-@conformance("R-012")
+@conformance("REQUIREMENT-LIFECYCLE-REGISTER-ENCODING")
 def test_core_lifecycle_csr_encoding():
     """LIFECYCLE at 0x004 reads 0 test, 1 provisioned, 2 production, 3 decommissioned after the fuse load."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -394,7 +396,7 @@ def _cap_tb(body):
     sim(dut, tb)
 
 
-@conformance("R-014")
+@conformance("REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH")
 def test_cap_match_requires_point():
     """An entry for one enforcement point never matches a lookup at another."""
     async def body(ctx, dut):
@@ -406,7 +408,7 @@ def test_cap_match_requires_point():
     _cap_tb(body)
 
 
-@conformance("R-014")
+@conformance("REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH")
 def test_cap_match_requires_peer():
     """An entry for one peer never matches a lookup for another."""
     async def body(ctx, dut):
@@ -417,7 +419,7 @@ def test_cap_match_requires_peer():
     _cap_tb(body)
 
 
-@conformance("R-014", "R-021")
+@conformance("REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH", "REQUIREMENT-CAPABILITY-DIRECTION-FIELD")
 def test_cap_match_requires_direction():
     """An 'out' entry does not admit 'in' traffic; an 'in' entry does not admit 'out'."""
     async def body(ctx, dut):
@@ -433,7 +435,7 @@ def test_cap_match_requires_direction():
     _cap_tb(body)
 
 
-@conformance("R-021")
+@conformance("REQUIREMENT-CAPABILITY-DIRECTION-FIELD")
 def test_cap_both_admits_in_and_out():
     """A 'both' entry admits traffic in either direction."""
     async def body(ctx, dut):
@@ -445,7 +447,7 @@ def test_cap_both_admits_in_and_out():
     _cap_tb(body)
 
 
-@conformance("R-015")
+@conformance("REQUIREMENT-LOOKUP-DECREMENTS-BUDGET")
 def test_cap_lookup_decrements_by_bytes():
     """An allowed lookup takes exactly lk_bytes off the entry's budget."""
     async def body(ctx, dut):
@@ -461,7 +463,7 @@ def test_cap_lookup_decrements_by_bytes():
     _cap_tb(body)
 
 
-@conformance("R-016", "R-020")
+@conformance("REQUIREMENT-CAPABILITY-REFUSES-AT-ZERO", "REQUIREMENT-BUDGET-NEVER-UNDERFLOWS")
 def test_cap_refuses_more_than_remaining_budget():
     """A lookup larger than what is left is refused with R_BUDGET and takes nothing."""
     async def body(ctx, dut):
@@ -474,7 +476,7 @@ def test_cap_refuses_more_than_remaining_budget():
     _cap_tb(body)
 
 
-@conformance("R-020")
+@conformance("REQUIREMENT-BUDGET-NEVER-UNDERFLOWS")
 def test_cap_budget_never_underflows_random():
     """1,000 random lookups against one entry: the budget only falls, never wraps, and allows sum to the start."""
     rng = random.Random(3)
@@ -496,7 +498,7 @@ def test_cap_budget_never_underflows_random():
     _cap_tb(body)
 
 
-@conformance("R-017")
+@conformance("REQUIREMENT-CAPABILITY-REFUSES-ON-EXPIRY")
 def test_cap_refuses_at_expiry_and_drops_entry():
     """At now == expiry the lookup is refused R_EXPIRED and the entry is dropped."""
     async def body(ctx, dut):
@@ -513,7 +515,7 @@ def test_cap_refuses_at_expiry_and_drops_entry():
     _cap_tb(body)
 
 
-@conformance("R-018", "R-093")
+@conformance("REQUIREMENT-CAPABILITY-REFUSES-STALE-TAG", "REQUIREMENT-SWITCH-RECONFIGURED-AFTER-EVENTS")
 def test_cap_refuses_on_epoch_tag_mismatch():
     """An entry minted under another epoch tag is refused R_STALE_EPOCH."""
     async def body(ctx, dut):
@@ -525,7 +527,7 @@ def test_cap_refuses_on_epoch_tag_mismatch():
     _cap_tb(body)
 
 
-@conformance("R-019")
+@conformance("REQUIREMENT-MAC-CHECKED-AT-INSERTION")
 def test_cap_insert_needs_mac():
     """An insert without mac_ok is not stored."""
     async def body(ctx, dut):
@@ -537,7 +539,7 @@ def test_cap_insert_needs_mac():
     _cap_tb(body)
 
 
-@conformance("R-019")
+@conformance("REQUIREMENT-MAC-CHECKED-AT-INSERTION")
 def test_cap_lookup_does_not_consult_mac():
     """Once stored, lookups succeed whatever mac_ok says: the MAC is checked at insertion only."""
     async def body(ctx, dut):
@@ -549,7 +551,7 @@ def test_cap_lookup_does_not_consult_mac():
     _cap_tb(body)
 
 
-@conformance("R-014")
+@conformance("REQUIREMENT-CAPABILITY-TABLE-KEYED-MATCH")
 def test_cap_full_table_refuses_insert():
     """With every slot valid, a further insert is flagged ins_full and not stored."""
     async def body(ctx, dut):
@@ -564,7 +566,7 @@ def test_cap_full_table_refuses_insert():
     _cap_tb(body)
 
 
-@conformance("R-025")
+@conformance("REQUIREMENT-LOOKUP-IN-ONE-CYCLE")
 def test_cap_lookup_answers_in_the_same_cycle():
     """allow and reason are combinational: the answer is there in the cycle the lookup is presented."""
     async def body(ctx, dut):
@@ -576,7 +578,7 @@ def test_cap_lookup_answers_in_the_same_cycle():
     _cap_tb(body)
 
 
-@conformance("R-022", "R-026")
+@conformance("REQUIREMENT-TABLE-SIZES-ARE-PARAMETERS", "REQUIREMENT-ENFORCEMENT-POINT-NUMBERING")
 def test_core_has_one_table_per_point_sized_by_parameter():
     """GovernorCore has four capability tables (NVSwitch, PCIe, DPU, storage), each of cap_entries entries."""
     for n in (1, 3):
@@ -586,7 +588,7 @@ def test_core_has_one_table_per_point_sized_by_parameter():
         assert dut.tickets.n == 2
 
 
-@conformance("R-023")
+@conformance("REQUIREMENT-PROTOTYPE-DEFAULT-SIZES")
 def test_core_default_sizes_are_the_spec_prototype():
     """Defaults: 8 entries per point, 16-bit peer, 24-bit budget, 32-bit ticket id, 8-bit command, 4 meter slots of 48 bits."""
     dut = B.GovernorCore()
@@ -597,7 +599,7 @@ def test_core_default_sizes_are_the_spec_prototype():
     assert dut.meter.slots == 4 and len(dut.meter.add_tokens) == 48
 
 
-@conformance("R-024")
+@conformance("REQUIREMENT-PORT-OPEN-ONLY-WITH-ENTRY")
 def test_core_tables_empty_whenever_not_running():
     """Out of RUN every table is cleared and an insert does not stick: no port can be open."""
     dut = B.GovernorCore(cap_entries=2, ticket_entries=1)
@@ -631,7 +633,7 @@ def test_core_tables_empty_whenever_not_running():
 
 
 # ================================================================ used-ticket store
-@conformance("R-027", "R-028")
+@conformance("REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED", "REQUIREMENT-BURN-BEFORE-ADMIT")
 def test_ticket_seen_after_burn():
     """After a burn, a query for the same id reports seen, every time."""
     dut = B.TicketStore(entries=4)
@@ -650,7 +652,7 @@ def test_ticket_seen_after_burn():
     sim(dut, tb)
 
 
-@conformance("R-027")
+@conformance("REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED")
 def test_ticket_second_burn_of_same_id_refused():
     """Burning an id that is already in the store does not succeed again."""
     dut = B.TicketStore(entries=4)
@@ -663,7 +665,7 @@ def test_ticket_second_burn_of_same_id_refused():
     sim(dut, tb)
 
 
-@conformance("R-027")
+@conformance("REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED")
 def test_ticket_full_store_refuses_burn_and_flags():
     """When the store is full a new id cannot be burned and full is asserted, so the endpoint must refuse."""
     dut = B.TicketStore(entries=2)
@@ -683,7 +685,7 @@ def test_ticket_full_store_refuses_burn_and_flags():
     sim(dut, tb)
 
 
-@conformance("R-027")
+@conformance("REQUIREMENT-BURNED-TICKET-NEVER-ADMITTED")
 def test_ticket_never_admitted_twice_random():
     """500 random burns over a small id space: an id whose burn succeeded never has a second successful burn."""
     dut = B.TicketStore(entries=16)
@@ -704,7 +706,7 @@ def test_ticket_never_admitted_twice_random():
 
 
 # ================================================================ heartbeat
-@conformance("R-029")
+@conformance("REQUIREMENT-HEARTBEAT-EXPIRES-ON-TIME")
 def test_hb_expired_at_reset():
     """Before any valid heartbeat the timer is expired (nothing to arm on)."""
     dut = B.Heartbeat(width=8)
@@ -714,7 +716,7 @@ def test_hb_expired_at_reset():
     sim(dut, tb)
 
 
-@conformance("R-029")
+@conformance("REQUIREMENT-HEARTBEAT-EXPIRES-ON-TIME")
 def test_hb_expires_on_the_window_th_tick():
     """With a window of N ticks, expired is 0 after N-1 ticks and 1 after the Nth."""
     dut = B.Heartbeat(width=8)
@@ -733,7 +735,7 @@ def test_hb_expires_on_the_window_th_tick():
     sim(dut, tb)
 
 
-@conformance("R-030")
+@conformance("REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID")
 def test_hb_reload_only_on_valid():
     """Changing the window input or ticking never reloads; only hb_valid does, and to the window given."""
     dut = B.Heartbeat(width=8)
@@ -753,7 +755,7 @@ def test_hb_reload_only_on_valid():
     sim(dut, tb)
 
 
-@conformance("R-030")
+@conformance("REQUIREMENT-HEARTBEAT-RELOADS-ONLY-ON-VALID")
 def test_hb_valid_wins_over_tick():
     """A valid heartbeat in a tick cycle reloads to the full window (it is not decremented in the same cycle)."""
     dut = B.Heartbeat(width=8)
@@ -767,7 +769,7 @@ def test_hb_valid_wins_over_tick():
     sim(dut, tb)
 
 
-@conformance("R-031")
+@conformance("REQUIREMENT-HEARTBEAT-REMAINING-REGISTER")
 def test_core_hb_remain_csr():
     """HB_REMAIN at 0x078 reads the heartbeat's remaining count."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -781,7 +783,7 @@ def test_core_hb_remain_csr():
     sim(dut, tb)
 
 
-@conformance("R-032")
+@conformance("REQUIREMENT-MILLISECOND-TICK-FROM-COUNTER")
 def test_core_timers_ignore_the_raw_microsecond_tick():
     """The heartbeat counts on the derived slow strobe, not on every microsecond tick."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -831,55 +833,62 @@ def _cause_test(cause_sig, start, expect_state, expect_cause, opens):
     _halt(body)
 
 
-@conformance("R-034", "R-038")
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES", "REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE")
 def test_halt_loop_lost_from_run():
     """loop_lost in RUN: HALT, cause loop, switch open."""
     _cause_test("loop_lost", RUN, HALT, C_LOOP, 1)
 
 
-@conformance("R-034", "R-038")
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES", "REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE")
 def test_halt_loop_lost_from_throttle():
     """loop_lost in THROTTLE: HALT, cause loop, switch open."""
     _cause_test("loop_lost", THROTTLE, HALT, C_LOOP, 1)
 
 
-@conformance("R-034")
-def test_halt_hb_expired_throttles():
-    """hb_expired in RUN: THROTTLE, cause local, loop stays closed."""
-    _cause_test("hb_expired", RUN, THROTTLE, C_LOCAL, 0)
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES")
+def test_halt_hb_expired_halts():
+    """hb_expired in RUN: HALT (brake and reset), cause local, loop stays closed. Adversarial audit 3: it used to be
+    THROTTLE, the brake alone, but a braked GPU still computes at half clock (govsim policy: HEARTBEAT_LOST is HALT)."""
+    _cause_test("hb_expired", RUN, HALT, C_LOCAL, 0)
 
 
-@conformance("R-034")
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES")
+def test_halt_hb_expired_from_throttle_halts():
+    """hb_expired in THROTTLE: HALT at once (not after T_throttle), cause local, loop stays closed (adversarial audit 3)."""
+    _cause_test("hb_expired", THROTTLE, HALT, C_LOCAL, 0)
+
+
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES")
 def test_halt_local_trip_throttles():
     """local_trip in RUN: THROTTLE, cause local, loop stays closed."""
     _cause_test("local_trip", RUN, THROTTLE, C_LOCAL, 0)
 
 
-@conformance("R-034")
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES")
 def test_halt_cmd_throttle_throttles():
     """cmd_throttle in RUN: THROTTLE, cause local, loop stays closed."""
     _cause_test("cmd_throttle", RUN, THROTTLE, C_LOCAL, 0)
 
 
-@conformance("R-034", "R-038")
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES", "REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE")
 def test_halt_cmd_halt_from_run():
     """cmd_halt in RUN: HALT, cause command, switch open."""
     _cause_test("cmd_halt", RUN, HALT, C_COMMAND, 1)
 
 
-@conformance("R-034", "R-038")
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES", "REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE")
 def test_halt_cmd_halt_from_throttle():
     """cmd_halt in THROTTLE: HALT, cause command, switch open."""
     _cause_test("cmd_halt", THROTTLE, HALT, C_COMMAND, 1)
 
 
-@conformance("R-034", "R-038", "R-042")
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES", "REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE", "REQUIREMENT-TAMPER-ZEROIZES-TO-SAFE")
 def test_halt_tamper_from_run():
     """tamper in RUN: SAFE, cause tamper, switch open."""
     _cause_test("tamper", RUN, SAFE, C_TAMPER, 1)
 
 
-@conformance("R-034", "R-038", "R-042")
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES", "REQUIREMENT-SWITCH-OPENS-ON-LOOP-CAUSE", "REQUIREMENT-TAMPER-ZEROIZES-TO-SAFE")
 def test_halt_tamper_from_every_rung():
     """tamper from HALTED_INITIAL, THROTTLE, HALT and SAFE all land in SAFE with cause tamper and the switch open."""
     for prep in ("boot", "throttle", "halt", "safe"):
@@ -902,7 +911,7 @@ def test_halt_tamper_from_every_rung():
         _halt(body, t_throttle=3, t_halt=4)
 
 
-@conformance("R-034", "R-041")
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES", "REQUIREMENT-THROTTLE-AND-HALT-TIMERS")
 def test_halt_throttle_escalates_after_t_throttle_ticks():
     """THROTTLE moves to HALT on exactly the t_throttle-th millisecond tick, not before."""
     async def body(ctx, dut):
@@ -919,7 +928,7 @@ def test_halt_throttle_escalates_after_t_throttle_ticks():
     _halt(body, t_throttle=7, t_halt=9)
 
 
-@conformance("R-034", "R-041")
+@conformance("REQUIREMENT-RUNG-CLIMBS-ON-CAUSES", "REQUIREMENT-THROTTLE-AND-HALT-TIMERS")
 def test_halt_halt_escalates_after_t_halt_ticks():
     """HALT moves to SAFE on exactly the t_halt-th millisecond tick, not before."""
     async def body(ctx, dut):
@@ -936,7 +945,7 @@ def test_halt_halt_escalates_after_t_halt_ticks():
     _halt(body, t_throttle=7, t_halt=9)
 
 
-@conformance("R-041")
+@conformance("REQUIREMENT-THROTTLE-AND-HALT-TIMERS")
 def test_core_default_timers_are_30s_and_300s():
     """The core's defaults are T_throttle 30,000 ms and T_halt 300,000 ms."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -944,7 +953,7 @@ def test_core_default_timers_are_30s_and_300s():
     assert 300_000 < (1 << len(dut.halt.timer))      # the timer can count that far
 
 
-@conformance("R-035")
+@conformance("REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED")
 def test_halt_never_descends_without_clear_random():
     """5,000 random cycles of every cause, tick, hb_ok and loop_sense, clear held low: the rung only climbs.
     The one move off HALTED_INITIAL that is not a climb is arming into RUN, allowed only with no cause."""
@@ -968,7 +977,7 @@ def test_halt_never_descends_without_clear_random():
     _halt(body, t_throttle=4, t_halt=6)
 
 
-@conformance("R-035")
+@conformance("REQUIREMENT-RUNG-NEVER-DESCENDS-UNCLEARED")
 def test_halt_safe_is_absorbing_without_clear():
     """In SAFE every input but clear (and tamper, which stays in SAFE) leaves the state in SAFE."""
     async def body(ctx, dut):
@@ -983,7 +992,7 @@ def test_halt_safe_is_absorbing_without_clear():
     _halt(body, t_throttle=2, t_halt=2)
 
 
-@conformance("R-036")
+@conformance("REQUIREMENT-LEVERS-FOLLOW-RUNG")
 def test_halt_levers_follow_every_rung():
     """Levers per rung: HALTED_INITIAL brake+reset+power off; RUN released; THROTTLE brake; HALT brake+reset; SAFE all."""
     expect = {HALTED_INITIAL: (1, 1, 0), RUN: (0, 0, 1), THROTTLE: (1, 0, 1), HALT: (1, 1, 1), SAFE: (1, 1, 0)}
@@ -1007,7 +1016,7 @@ def test_halt_levers_follow_every_rung():
     _halt(body, t_throttle=2, t_halt=2)
 
 
-@conformance("R-036")
+@conformance("REQUIREMENT-LEVERS-FOLLOW-RUNG")
 def test_halt_ports_closed_outside_run():
     """ports_closed is 0 only in RUN."""
     async def body(ctx, dut):
@@ -1020,7 +1029,7 @@ def test_halt_ports_closed_outside_run():
     _halt(body)
 
 
-@conformance("R-037")
+@conformance("REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED")
 def test_halt_switch_open_at_reset():
     """The loop switch starts open."""
     async def body(ctx, dut):
@@ -1028,7 +1037,7 @@ def test_halt_switch_open_at_reset():
     _halt(body)
 
 
-@conformance("R-037", "R-073")
+@conformance("REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED", "REQUIREMENT-BOOT-REFUSED-STAYS-HALTED")
 def test_halt_no_arming_without_heartbeat():
     """Without hb_ok the switch never closes and the sequencer never leaves HALTED_INITIAL, loop current or not."""
     async def body(ctx, dut):
@@ -1040,7 +1049,7 @@ def test_halt_no_arming_without_heartbeat():
     _halt(body)
 
 
-@conformance("R-037")
+@conformance("REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED")
 def test_halt_arms_before_loop_current():
     """With hb_ok and no loop current the switch closes (armed) but the state waits in HALTED_INITIAL."""
     async def body(ctx, dut):
@@ -1053,7 +1062,7 @@ def test_halt_arms_before_loop_current():
     _halt(body)
 
 
-@conformance("R-037", "R-039")
+@conformance("REQUIREMENT-SWITCH-CLOSES-ONLY-WHEN-ARMED", "REQUIREMENT-CLEAR-KEEPS-SWITCH-OPEN")
 def test_halt_heartbeat_alone_never_recloses_after_a_loop_cause():
     """Once a loop-opening cause opened the switch, a live heartbeat alone never closes it."""
     async def body(ctx, dut):
@@ -1067,7 +1076,7 @@ def test_halt_heartbeat_alone_never_recloses_after_a_loop_cause():
     _halt(body)
 
 
-@conformance("R-039", "R-047")
+@conformance("REQUIREMENT-CLEAR-KEEPS-SWITCH-OPEN", "REQUIREMENT-CLEAR-CLOSES-IF-NO-CAUSE")
 def test_halt_clear_does_not_close_the_switch_until_armed():
     """After clear the state is HALTED_INITIAL with no cause and the switch still open; it closes only when armed."""
     async def body(ctx, dut):
@@ -1077,8 +1086,10 @@ def test_halt_clear_does_not_close_the_switch_until_armed():
         ctx.set(dut.loop_lost, 0)
         ctx.set(dut.hb_ok, 0)
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)                  # an authorized clear: a verified CLEAR frame dispatching
         await ctx.tick()
         ctx.set(dut.clear, 0)
+        ctx.set(dut.clear_authorized, 0)
         assert (ctx.get(dut.state), ctx.get(dut.cause), ctx.get(dut.switch_open)) == (HALTED_INITIAL, C_NONE, 1)
         await ctx.tick()
         assert ctx.get(dut.switch_open) == 1
@@ -1088,24 +1099,27 @@ def test_halt_clear_does_not_close_the_switch_until_armed():
     _halt(body)
 
 
-@conformance("R-047")
+@conformance("REQUIREMENT-CLEAR-CLOSES-IF-NO-CAUSE")
 def test_halt_clear_in_boot_rung_is_a_no_op():
     """A clear while already in HALTED_INITIAL changes nothing."""
     async def body(ctx, dut):
         ctx.set(dut.clear, 1)
+        ctx.set(dut.clear_authorized, 1)
         await ctx.tick()
         assert (ctx.get(dut.state), ctx.get(dut.cause), ctx.get(dut.switch_open)) == (HALTED_INITIAL, C_NONE, 1)
     _halt(body)
 
 
-@conformance("R-040")
+@conformance("REQUIREMENT-CAUSE-BITS-NAME-SUMMARY")
 def test_halt_cause_codes_match_the_spec():
-    """The cause encoding is 0 none, 1 loop, 2 local, 3 tamper, 4 command."""
+    """The cause encoding is 0 none, 1 loop, 2 local, 3 tamper, 4 command, and (adversarial audit 3) 5 for a rung
+    restored from the non-volatile record after a reset."""
     assert (C_NONE, C_LOOP, C_LOCAL, C_TAMPER, C_COMMAND) == (0, 1, 2, 3, 4)
+    assert C_PERSIST == 5
     assert len(B.HaltSeq().cause) == 3
 
 
-@conformance("R-040")
+@conformance("REQUIREMENT-CAUSE-BITS-NAME-SUMMARY")
 def test_halt_escalation_keeps_the_cause():
     """A timer escalation keeps the cause that started the climb."""
     async def body(ctx, dut):
@@ -1120,13 +1134,13 @@ def test_halt_escalation_keeps_the_cause():
     _halt(body, t_throttle=2, t_halt=2)
 
 
-@conformance("R-043")
+@conformance("REQUIREMENT-STATE-REGISTER-CODES")
 def test_halt_state_codes_match_the_spec():
     """The rung encoding is 0 HALTED_INITIAL, 1 RUN, 2 THROTTLE, 3 HALT, 4 SAFE."""
     assert (HALTED_INITIAL, RUN, THROTTLE, HALT, SAFE) == (0, 1, 2, 3, 4)
 
 
-@conformance("R-043", "R-067")
+@conformance("REQUIREMENT-STATE-REGISTER-CODES", "REQUIREMENT-CAUSE-REGISTER-LAYOUT")
 def test_core_state_and_cause_csrs():
     """STATE at 0x008 and CAUSE at 0x00C follow the sequencer, with the firmware's code in CAUSE[15:8]."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1142,7 +1156,7 @@ def test_core_state_and_cause_csrs():
     sim(dut, tb)
 
 
-@conformance("R-044")
+@conformance("REQUIREMENT-LEVERS-REGISTER-BITS")
 def test_core_levers_csr_bits():
     """LEVERS at 0x080: bit 0 brake, bit 1 PERST#, bit 2 PWR_EN low, for each rung the core can reach quickly."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1168,7 +1182,7 @@ def test_core_levers_csr_bits():
     sim(dut, tb)
 
 
-@conformance("R-045")
+@conformance("REQUIREMENT-CORE-BOOTS-HALTED-SAFE")
 def test_core_boot_state_levers_and_switch():
     """Out of reset: HALTED_INITIAL, brake and reset asserted at the pads (active low), PWR_EN low, switch open."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1179,7 +1193,7 @@ def test_core_boot_state_levers_and_switch():
     sim(dut, tb)
 
 
-@conformance("R-046")
+@conformance("REQUIREMENT-WATCHDOG-RESETS-TO-HALTED")
 def test_core_reset_from_run_returns_to_boot_rung():
     """A reset (the watchdog's) in RUN puts the core back in HALTED_INITIAL with the loop switch open."""
     rst = Signal()
@@ -1203,7 +1217,7 @@ def test_core_reset_from_run_returns_to_boot_rung():
 
 
 # ================================================================ loop
-@conformance("R-048")
+@conformance("REQUIREMENT-LOOP-PAD-FOLLOWS-SWITCH")
 def test_loop_pad_follows_switch_request():
     """loop_out_open is the sequencer's switch_open, both ways, in the same cycle."""
     dut = B.LoopIO()
@@ -1215,7 +1229,7 @@ def test_loop_pad_follows_switch_request():
     sim(dut, tb)
 
 
-@conformance("R-049", "R-143")
+@conformance("REQUIREMENT-LOOP-LOSS-DEBOUNCE", "REQUIREMENT-BOARD-LOSS-DEBOUNCE")
 def test_loop_one_noisy_sample_is_not_a_loss():
     """A single low sample between good ones never declares a loss."""
     dut = B.LoopIO()
@@ -1229,7 +1243,7 @@ def test_loop_one_noisy_sample_is_not_a_loss():
     sim(dut, tb)
 
 
-@conformance("R-049", "R-143")
+@conformance("REQUIREMENT-LOOP-LOSS-DEBOUNCE", "REQUIREMENT-BOARD-LOSS-DEBOUNCE")
 def test_loop_two_low_samples_declare_loss():
     """Two consecutive low samples declare the loss; it stays declared while current is absent."""
     dut = B.LoopIO()
@@ -1247,7 +1261,7 @@ def test_loop_two_low_samples_declare_loss():
     sim(dut, tb)
 
 
-@conformance("R-049")
+@conformance("REQUIREMENT-LOOP-LOSS-DEBOUNCE")
 def test_loop_counts_only_on_sample_strobes():
     """Cycles without a sample strobe do not count toward the debounce."""
     dut = B.LoopIO()
@@ -1263,7 +1277,7 @@ def test_loop_counts_only_on_sample_strobes():
     sim(dut, tb)
 
 
-@conformance("R-050")
+@conformance("REQUIREMENT-LOOP-REGISTER-BITS")
 def test_core_loop_csr_bits():
     """LOOP at 0x07C: bit 0 current sensed, bit 1 own switch open."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1283,7 +1297,7 @@ def test_core_loop_csr_bits():
 
 
 # ================================================================ meter
-@conformance("R-051")
+@conformance("REQUIREMENT-METER-HOST-WRITE-REFUSED")
 def test_meter_host_write_refused_and_flagged():
     """A host write is flagged and leaves every counter as it was."""
     dut = B.Meter(slots=2, width=16)
@@ -1300,7 +1314,7 @@ def test_meter_host_write_refused_and_flagged():
     sim(dut, tb)
 
 
-@conformance("R-052")
+@conformance("REQUIREMENT-METER-ONLY-INCREMENTS")
 def test_meter_counters_only_increase_random():
     """500 random strobes with small adds across slots: no counter ever goes down (while it does not wrap)."""
     dut = B.Meter(slots=4, width=32)
@@ -1323,7 +1337,7 @@ def test_meter_counters_only_increase_random():
     sim(dut, tb)
 
 
-@conformance("R-052")
+@conformance("REQUIREMENT-METER-ONLY-INCREMENTS")
 def test_meter_slots_are_independent():
     """A strobe on one slot changes only that slot."""
     dut = B.Meter(slots=2, width=16)
@@ -1341,7 +1355,7 @@ def test_meter_slots_are_independent():
     sim(dut, tb)
 
 
-@conformance("R-053")
+@conformance("REQUIREMENT-METER-SLOT-LAYOUT")
 def test_core_meter_csr_layout():
     """METER_SLOT[n] at 0x200 + 32n: tokens, cycles, bytes in, bytes out, each a low and a high word."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1395,7 +1409,7 @@ def _mbox(body):
     sim(dut, tb)
 
 
-@conformance("R-054", "R-059")
+@conformance("REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED", "REQUIREMENT-DISPATCH-AFTER-ALL-CHECKS")
 def test_mbox_good_frame_dispatches_once():
     """A good frame dispatches with the command on cmd_out; the same frame again is a replay."""
     async def body(ctx, dut):
@@ -1406,7 +1420,7 @@ def test_mbox_good_frame_dispatches_once():
     _mbox(body)
 
 
-@conformance("R-054")
+@conformance("REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED")
 def test_mbox_sequence_must_strictly_increase():
     """A lower sequence number than the last accepted is refused; a higher one (gaps allowed) is accepted."""
     async def body(ctx, dut):
@@ -1416,7 +1430,7 @@ def test_mbox_sequence_must_strictly_increase():
     _mbox(body)
 
 
-@conformance("R-054", "R-060")
+@conformance("REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED", "REQUIREMENT-SEQUENCE-REGISTER-PER-KEY")
 def test_mbox_sequence_is_per_key_slot():
     """Each signer key slot keeps its own last accepted sequence."""
     async def body(ctx, dut):
@@ -1427,7 +1441,7 @@ def test_mbox_sequence_is_per_key_slot():
     _mbox(body)
 
 
-@conformance("R-055")
+@conformance("REQUIREMENT-FRAME-EPOCH-MUST-MATCH")
 def test_mbox_stale_epoch_refused_unless_exempt():
     """A stale epoch is refused with status 5; the same frame marked epoch-exempt goes through."""
     async def body(ctx, dut):
@@ -1436,7 +1450,7 @@ def test_mbox_stale_epoch_refused_unless_exempt():
     _mbox(body)
 
 
-@conformance("R-056")
+@conformance("REQUIREMENT-FRAME-SIGNATURE-CHECKED")
 def test_mbox_bad_signature_refused():
     """A frame whose signature does not verify is refused with status 3 and not dispatched."""
     async def body(ctx, dut):
@@ -1445,7 +1459,7 @@ def test_mbox_bad_signature_refused():
     _mbox(body)
 
 
-@conformance("R-056", "R-059")
+@conformance("REQUIREMENT-FRAME-SIGNATURE-CHECKED", "REQUIREMENT-DISPATCH-AFTER-ALL-CHECKS")
 def test_mbox_no_dispatch_before_signature():
     """While the crypto core has not answered, nothing is dispatched and the status is busy."""
     async def body(ctx, dut):
@@ -1461,7 +1475,7 @@ def test_mbox_no_dispatch_before_signature():
     _mbox(body)
 
 
-@conformance("R-057", "R-063")
+@conformance("REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND", "REQUIREMENT-WRONG-COMMAND-STATUS")
 def test_mbox_signed_for_another_command_is_status_7():
     """A good signature over a different command is status 7, not dispatched, and the sequence is not consumed."""
     async def body(ctx, dut):
@@ -1471,7 +1485,7 @@ def test_mbox_signed_for_another_command_is_status_7():
     _mbox(body)
 
 
-@conformance("R-061")
+@conformance("REQUIREMENT-MAILBOX-STATUS-CODES")
 def test_mbox_refused_when_not_running():
     """A command class that needs RUN is refused with status 6 while not running, and is not sent for verification."""
     async def body(ctx, dut):
@@ -1481,14 +1495,14 @@ def test_mbox_refused_when_not_running():
     _mbox(body)
 
 
-@conformance("R-061")
+@conformance("REQUIREMENT-MAILBOX-STATUS-CODES")
 def test_mbox_status_codes_match_the_register_map():
     """MBOX_STATUS codes: 0 idle, 1 busy, 2 ok, 3 bad signature, 4 bad sequence, 5 bad epoch, 6 refused (7 wrong command, from section 3)."""
     assert (S_IDLE, S_BUSY, S_OK, S_BAD_SIG, S_BAD_SEQ, S_BAD_EPOCH, S_REFUSED, S_WRONG_CMD) == (0, 1, 2, 3, 4, 5, 6, 7)
     assert B.Mailbox().status.shape().width <= 8
 
 
-@conformance("R-062", "R-054")
+@conformance("REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE", "REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED")
 def test_mbox_failed_frames_do_not_consume_sequence():
     """Bad signature, bad epoch, refused and wrong-command frames leave the sequence where it was."""
     async def body(ctx, dut):
@@ -1499,7 +1513,7 @@ def test_mbox_failed_frames_do_not_consume_sequence():
     _mbox(body)
 
 
-@conformance("R-062")
+@conformance("REQUIREMENT-NO-DISPATCH-WITHOUT-FRESH-SEQUENCE")
 def test_mbox_no_dispatch_without_all_checks_random():
     """3,000 random frames with inputs held stable: dispatch happens exactly when seq > last, epoch ok or exempt,
     running or not needed, signature good and command matching; and then the sequence moves to frame_seq."""
@@ -1523,7 +1537,7 @@ def test_mbox_no_dispatch_without_all_checks_random():
     _mbox(body)
 
 
-@conformance("R-060", "R-061")
+@conformance("REQUIREMENT-SEQUENCE-REGISTER-PER-KEY", "REQUIREMENT-MAILBOX-STATUS-CODES")
 def test_core_mbox_status_and_seq_csrs():
     """Through the core: MBOX_STATUS at 0x104 reports refused while not RUN for a run-needing class; MBOX_SEQ at 0x108 tracks slot 0."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1549,11 +1563,13 @@ def test_core_mbox_status_and_seq_csrs():
         assert ctx.get(dut.csr_rdata) == S_OK
         ctx.set(dut.csr_addr, 0x108)
         assert ctx.get(dut.csr_rdata) == 3
+        ctx.set(dut.csr_addr, 0x10C)                        # MBOX_SEQ_HI: the high word of the 64-bit register (adversarial audit 3)
+        assert ctx.get(dut.csr_rdata) == 0
     sim(dut, tb)
 
 
 # ================================================================ top: the CSR window
-@conformance("R-064", "R-065")
+@conformance("REQUIREMENT-ONLY-DOORBELL-WRITABLE", "REQUIREMENT-NO-CSR-WRITE-PORT")
 def test_core_has_no_csr_write_port():
     """GovernorCore exposes no CSR write data or write enable; the doorbell is the only host-driven CSR input."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1563,7 +1579,7 @@ def test_core_has_no_csr_write_port():
     assert host_side == {"csr_addr", "csr_rdata"}, host_side
 
 
-@conformance("R-064", "R-065")
+@conformance("REQUIREMENT-ONLY-DOORBELL-WRITABLE", "REQUIREMENT-NO-CSR-WRITE-PORT")
 def test_core_csr_reads_have_no_side_effects():
     """Sweeping every CSR address for many cycles changes no state the CSR window shows."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1580,7 +1596,7 @@ def test_core_csr_reads_have_no_side_effects():
     sim(dut, tb)
 
 
-@conformance("R-066")
+@conformance("REQUIREMENT-SILICON-ID-REGISTER")
 def test_core_id_register():
     """ID at 0x000 reads a fixed, non-zero silicon id and revision."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1592,7 +1608,7 @@ def test_core_id_register():
     sim(dut, tb)
 
 
-@conformance("R-068")
+@conformance("REQUIREMENT-LOG-WINDOW-FIRMWARE-MAPPED")
 def test_core_log_window_is_not_decoded():
     """LOG_HEAD and LOG_SIZE are firmware-mapped: the RTL core returns 0 there."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1604,7 +1620,7 @@ def test_core_log_window_is_not_decoded():
     sim(dut, tb)
 
 
-@conformance("R-001")
+@conformance("REQUIREMENT-MONOTONIC-MICROSECOND-COUNTER")
 def test_core_mono_csr_low_and_high_words():
     """MONO_LO and MONO_HI at 0x070 and 0x074 read the 64-bit counter."""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
@@ -1626,7 +1642,7 @@ def test_core_mono_csr_low_and_high_words():
 
 
 # ================================================================ alarms
-@conformance("R-069", "R-072", "R-088")
+@conformance("REQUIREMENT-ALARM-BITS-SET-THROUGH-MASK", "REQUIREMENT-ALARMS-MONOTONE", "REQUIREMENT-ANY-PARTY-RAISES-STICKY-ALARM")
 def test_alarm_any_source_sets():
     """Any bit presented on set_mask becomes and stays set."""
     dut = B.Alarms(width=8)
@@ -1642,7 +1658,7 @@ def test_alarm_any_source_sets():
     sim(dut, tb)
 
 
-@conformance("R-070", "R-089")
+@conformance("REQUIREMENT-ALARM-CLEAR-NEEDS-AUTHORIZATION", "REQUIREMENT-ALARM-APPROVER-KEY-CLEARS")
 def test_alarm_clear_needs_authorization():
     """clear_mask without clear_authorized is refused and flagged; with it, only the named bits clear."""
     dut = B.Alarms(width=8)
@@ -1661,7 +1677,7 @@ def test_alarm_clear_needs_authorization():
     sim(dut, tb)
 
 
-@conformance("R-070", "R-072")
+@conformance("REQUIREMENT-ALARM-CLEAR-NEEDS-AUTHORIZATION", "REQUIREMENT-ALARMS-MONOTONE")
 def test_alarm_set_beats_clear_in_the_same_cycle():
     """A bit set and cleared (authorized) in the same cycle stays set: a fresh alarm is never lost."""
     dut = B.Alarms(width=8)
@@ -1675,7 +1691,7 @@ def test_alarm_set_beats_clear_in_the_same_cycle():
     sim(dut, tb)
 
 
-@conformance("R-072")
+@conformance("REQUIREMENT-ALARMS-MONOTONE")
 def test_alarm_monotone_without_authorization_random():
     """1,000 random cycles with clear_authorized low: the alarm word only gains bits."""
     dut = B.Alarms(width=16)
@@ -1693,10 +1709,10 @@ def test_alarm_monotone_without_authorization_random():
     sim(dut, tb)
 
 
-@conformance("R-071")
+@conformance("REQUIREMENT-STICKY-ALARM-REGISTER")
 def test_core_alarms_csr():
     """ALARMS at 0x084 reads the sticky alarm word. (Bits 31 and 30 became hardware-owned on 23 October 2026, so the
-    firmware-raised word here uses bit 29; R-148 checks that firmware cannot raise 31 and 30.)"""
+    firmware-raised word here uses bit 29; REQUIREMENT-HARDWARE-ALARMS-SEQUENCER-ONLY checks that firmware cannot raise 31 and 30.)"""
     dut = B.GovernorCore(cap_entries=1, ticket_entries=1)
 
     async def tb(ctx):
@@ -1708,7 +1724,7 @@ def test_core_alarms_csr():
     sim(dut, tb)
 
 
-@conformance("R-091", "R-052")
+@conformance("REQUIREMENT-METER-SLOT-FREEZE", "REQUIREMENT-METER-ONLY-INCREMENTS")
 def test_meter_frozen_slot_stays_put_without_strobes():
     """END_MODEL freezes a slot by the firmware no longer strobing it: with no strobe, no counter moves, whatever the add inputs say."""
     dut = B.Meter(slots=2, width=16)
@@ -1727,7 +1743,7 @@ def test_meter_frozen_slot_stays_put_without_strobes():
     sim(dut, tb)
 
 
-@conformance("R-093", "R-009", "R-087")
+@conformance("REQUIREMENT-SWITCH-RECONFIGURED-AFTER-EVENTS", "REQUIREMENT-EPOCH-TAG-LOW-BITS", "REQUIREMENT-RACK-WIDE-EPOCH-SWITCH")
 def test_core_epoch_switch_kills_every_old_capability():
     """After a quorum-backed epoch switch, every capability minted under the old epoch tag is refused at once, on every point."""
     dut = B.GovernorCore(cap_entries=2, ticket_entries=1)
@@ -1757,7 +1773,7 @@ def test_core_epoch_switch_kills_every_old_capability():
     sim(dut, tb)
 
 
-@conformance("R-082", "R-055")
+@conformance("REQUIREMENT-SELF-AUTHENTICATING-COMMANDS", "REQUIREMENT-FRAME-EPOCH-MUST-MATCH")
 def test_mbox_self_authenticating_command_rides_on_the_firmware_verdict():
     """A command that authenticates itself in the body (a k-of-n policy image) has no frame signature; the RTL has
     no bypass for it, so it is dispatched only when the firmware reports the body's own verification on sig_ok."""

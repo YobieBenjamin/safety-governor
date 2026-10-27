@@ -23,7 +23,7 @@ break the circuit on purpose and watch the check fail. If the check didn't fail,
 Every block also ran 20,000 random cycles against a separate model written from the spec (two people doing the same
 sum on separate sheets), and five were re-proven by a second solver.
 
-What's still open, in one picture: three of the open findings (F3, F5, F8) are the circuit forgetting on restart
+What's still open, in one picture: three of the open findings (RTL-COUNTER-ROLLBACK-ACROSS-RESET, RTL-RESET-EMPTIES-TICKET-STORE, RTL-RESET-ZEROES-MAILBOX-SEQUENCES) are the circuit forgetting on restart
 what the spec says firmware and non-volatile memory must remember. A bouncer who forgets every face when the lights
 flicker. The spec puts the memory in firmware, the firmware isn't written yet, and the tests that will hold it to
 account are already here.

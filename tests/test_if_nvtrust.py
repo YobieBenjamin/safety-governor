@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """NVIDIA GPU attestation evidence (nvtrust) into VERIFY_GPU (docs/interfaces/04-nvtrust.md).
 
 All NVIDIA data here is NVIDIA's own public sample from github.com/NVIDIA/nvtrust (BSD-3-Clause,
@@ -91,6 +93,9 @@ def nvidia_rack(sample, golden=None, **ref_kw):
     res = rack.change_epoch(image)
     g = rack.nodes[0].governor
     assert g.policy and any(r.get("format") == N.FORMAT for r in g.policy["reference_values"]), res
+    # the governor accepts only the GPU wired to its levers (read over its sideband): wire NVIDIA's sample GPU to it
+    ev = N.verify_evidence(sample[0], sample[1], sample[2])
+    g.gpu.chip_id = ev.chip_id
     return rack, g
 
 
@@ -152,3 +157,13 @@ def test_model_format_reports_still_work(rack1):
     """The NVIDIA path is additive: the model's own report format is untouched."""
     r = rack1.attest(rack1.nodes[0])
     assert r["gpu"]["ok"]
+
+
+def test_verify_gpu_refuses_a_genuine_gpu_that_is_not_the_one_on_its_levers(sample):
+    """Adversarial audit 2026-10-26: the host relays a genuine GPU's evidence that is not from the GPU wired to this
+    governor (a cuckoo relay). The governor refuses it."""
+    rack, g = nvidia_rack(sample, driver_version="550.90.07", vbios_version="96.00.9f.00.01")
+    g.gpu.chip_id = "gpu-wired-to-these-levers"
+    g.nonces.add(N.parse_report(sample[0]).nonce.hex())
+    r = g.command("VERIFY_GPU", N.verify_gpu_body(sample[0], sample[1]))
+    assert not r["ok"] and r["why"] == reasons.ATTEST_NOT_THIS_GPU

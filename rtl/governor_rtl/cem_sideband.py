@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """PCIe CEM sideband shaper: sits between the halt sequencer's levers and one slot's pads, and
 adds the CEM reset timing the sequencer does not enforce on its own.
 

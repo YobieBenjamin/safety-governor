@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Read FPGA build directories and say what happened. Called by hw/fpga/build.sh.
 
     python3 hw/fpga/report.py --met DIR                    # exit 0 if DIR's bitstream exists and timing met
@@ -20,7 +22,7 @@ ASIC_MHZ = 50.0
 
 NOTES = """## Findings from this build
 
-**F1. The core halts itself one cycle after it first reaches RUN when the loop sense strobe runs from power-on.**
+**RTL-CORE-HALTS-AFTER-REACHING-RUN. The core halts itself one cycle after it first reaches RUN when the loop sense strobe runs from power-on.**
 `LoopIO` counts sense samples with no current. Before the governor arms, its own loop switch is open, so on a
 one-governor loop (and on any loop where this governor's switch is the open one) there is no current and the
 debounce counter saturates: `loop_lost` is high while the core sits in HALTED_INITIAL. The heartbeat arms the core,
@@ -35,7 +37,7 @@ Proposed fix, not applied (halt.py is not this branch's): in `HaltSeq`, enter RU
 so an armed core waits for one clean sense sample (at most 100 us). Until then the bench (`host_test.py levers` and
 `soak`) cannot hold RUN and will say so.
 
-**F2. 50 MHz is not met on the ECP5: the design reaches about 38 MHz, limited by the capability table's one-cycle
+**RTL-FPGA-MISSES-TARGET-CLOCK. 50 MHz is not met on the ECP5: the design reaches about 38 MHz, limited by the capability table's one-cycle
 lookup.** The critical path (below) runs from a lookup input of `cap_dpu` through the eight-entry CAM compare, the
 priority select and the 24-bit budget compare and decrement, into the budget register, in one cycle (docs/04
 section 9: "1 cycle at the checker clock"). In the router2 run at seed 1: 26.4 ns, 4.7 ns logic and 21.7 ns routing.
@@ -139,6 +141,16 @@ def write(path: str, seed: str, dirs: list[str]) -> int:
         L.append(f"- Bench bitstream: `build/{os.path.basename(c['dir'])}/{os.path.basename(c['bit'])}` at {c['mhz']} MHz. "
                  "The governor's timers run on a 1 us tick divided from whatever the clock is, so the heartbeat, "
                  "throttle, halt and loop-sense timings are the same at any of these clocks.")
+        mpath = os.path.join(c["dir"], "manifest.json")
+        if os.path.exists(mpath):
+            try:
+                m = json.load(open(mpath, encoding="utf-8"))
+                bit = m.get("bitstream") or {}
+                L.append(f"- Build manifest (`build/{os.path.basename(c['dir'])}/manifest.json`): fail-closed, source_rev "
+                         f"`{m.get('source_rev', '')[:16]}`, stages {','.join(m.get('stages', []))}, bitstream sha256 "
+                         f"`{(bit.get('sha256') or '')[:16]}`. The verdict is read from this manifest, not from the bitstream's presence.")
+            except (ValueError, OSError):
+                pass
     else:
         L.append("- No timing-clean bitstream.")
     L += ["", "## Utilisation", "", "After synthesis (yosys `synth_ecp5`) and after place and route (nextpnr), "

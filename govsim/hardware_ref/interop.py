@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """SPDM interoperability against DMTF's own tools (libspdm via spdm-emu, and the
 SPDM-Responder-Validator), with negative controls so a pass means something.
 
@@ -9,15 +11,15 @@ The build needs git, cmake and a C compiler, about 150 MB of disk and a few minu
 cores; it uses mbedtls, not OpenSSL, to keep the clone small.
 
 Runs, each with an expected outcome:
-  A1  libspdm requester (spdm_requester_emu) -> governor responder, SPDM 1.1     expect success
-  A2  same, SPDM 1.2, raw measurements, signature on every GET_MEASUREMENTS        expect success
-  A3  same as A1, governor corrupts one CHALLENGE_AUTH signature bit              expect failure
-  A4  same as A1, governor corrupts one MEASUREMENTS signature bit                expect failure
-  A5  same as A1, requester trusts libspdm's sample root, not the governor's       expect "no authority"
+  EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION  libspdm requester (spdm_requester_emu) -> governor responder, SPDM 1.1     expect success
+  EXPERIMENT-SPDM-INTEROP-RAW-MEASUREMENTS  same, SPDM 1.2, raw measurements, signature on every GET_MEASUREMENTS        expect success
+  EXPERIMENT-SPDM-FLIPPED-CHALLENGE-SIGNATURE  same as EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION, governor corrupts one CHALLENGE_AUTH signature bit              expect failure
+  EXPERIMENT-SPDM-FLIPPED-MEASUREMENT-SIGNATURE  same as EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION, governor corrupts one MEASUREMENTS signature bit                expect failure
+  EXPERIMENT-SPDM-REQUESTER-TRUSTS-SAMPLE-ROOT  same as EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION, requester trusts libspdm's sample root, not the governor's       expect "no authority"
   B   DMTF SPDM-Responder-Validator -> governor responder                         expect 0 failed assertions
-  C1  governor requester -> libspdm responder (spdm_responder_emu), SPDM 1.1     expect success
-  C2  same, SPDM 1.2                                                              expect success
-  C3  governor requester trusting the wrong root -> libspdm responder             expect failure
+  EXPERIMENT-SPDM-GOVERNOR-REQUESTS-EARLIER-VERSION  governor requester -> libspdm responder (spdm_responder_emu), SPDM 1.1     expect success
+  EXPERIMENT-SPDM-GOVERNOR-REQUESTS-LATER-VERSION  same, SPDM 1.2                                                              expect success
+  EXPERIMENT-SPDM-GOVERNOR-TRUSTS-WRONG-ROOT  governor requester trusting the wrong root -> libspdm responder             expect failure
 
 Results go to docs/interfaces/results/spdm-interop.md (and the validator's full log next to it).
 """
@@ -180,25 +182,25 @@ def run_responder_emu(bins: Path, ver: str, trust_libspdm_root: bool = True) -> 
 def run_all(bins: Path) -> tuple[bool, dict]:
     ident = make_identity()
     r: dict = {}
-    r["A1"] = run_requester_emu(bins, ident, ["--ver", "1.1", "--cap", "CERT,CHAL", "--exe_conn", "DIGEST,CERT,CHAL,MEAS", "--basic_mut_auth", "NO"])
-    r["A2"] = run_requester_emu(bins, ident, ["--ver", "1.2", "--cap", "CERT,CHAL", "--exe_conn", "DIGEST,CERT,CHAL,MEAS", "--basic_mut_auth", "NO", "--meas_att", "RAW,SIG"])
-    r["A3"] = run_requester_emu(bins, ident, ["--ver", "1.1", "--cap", "CERT,CHAL", "--exe_conn", "DIGEST,CERT,CHAL,MEAS", "--basic_mut_auth", "NO"], mutant="chal_sig")
-    r["A4"] = run_requester_emu(bins, ident, ["--ver", "1.1", "--cap", "CERT,CHAL", "--exe_conn", "DIGEST,CERT,CHAL,MEAS", "--basic_mut_auth", "NO"], mutant="meas_sig")
-    r["A5"] = run_requester_emu(bins, ident, ["--ver", "1.1", "--cap", "CERT,CHAL", "--exe_conn", "DIGEST,CERT,CHAL,MEAS", "--basic_mut_auth", "NO"], trust_governor=False)
+    r["EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION"] = run_requester_emu(bins, ident, ["--ver", "1.1", "--cap", "CERT,CHAL", "--exe_conn", "DIGEST,CERT,CHAL,MEAS", "--basic_mut_auth", "NO"])
+    r["EXPERIMENT-SPDM-INTEROP-RAW-MEASUREMENTS"] = run_requester_emu(bins, ident, ["--ver", "1.2", "--cap", "CERT,CHAL", "--exe_conn", "DIGEST,CERT,CHAL,MEAS", "--basic_mut_auth", "NO", "--meas_att", "RAW,SIG"])
+    r["EXPERIMENT-SPDM-FLIPPED-CHALLENGE-SIGNATURE"] = run_requester_emu(bins, ident, ["--ver", "1.1", "--cap", "CERT,CHAL", "--exe_conn", "DIGEST,CERT,CHAL,MEAS", "--basic_mut_auth", "NO"], mutant="chal_sig")
+    r["EXPERIMENT-SPDM-FLIPPED-MEASUREMENT-SIGNATURE"] = run_requester_emu(bins, ident, ["--ver", "1.1", "--cap", "CERT,CHAL", "--exe_conn", "DIGEST,CERT,CHAL,MEAS", "--basic_mut_auth", "NO"], mutant="meas_sig")
+    r["EXPERIMENT-SPDM-REQUESTER-TRUSTS-SAMPLE-ROOT"] = run_requester_emu(bins, ident, ["--ver", "1.1", "--cap", "CERT,CHAL", "--exe_conn", "DIGEST,CERT,CHAL,MEAS", "--basic_mut_auth", "NO"], trust_governor=False)
     r["B"] = run_validator(bins, ident)
-    r["C1"] = run_responder_emu(bins, "1.1")
-    r["C2"] = run_responder_emu(bins, "1.2")
-    r["C3"] = run_responder_emu(bins, "1.1", trust_libspdm_root=False)
+    r["EXPERIMENT-SPDM-GOVERNOR-REQUESTS-EARLIER-VERSION"] = run_responder_emu(bins, "1.1")
+    r["EXPERIMENT-SPDM-GOVERNOR-REQUESTS-LATER-VERSION"] = run_responder_emu(bins, "1.2")
+    r["EXPERIMENT-SPDM-GOVERNOR-TRUSTS-WRONG-ROOT"] = run_responder_emu(bins, "1.1", trust_libspdm_root=False)
     verdict = {
-        "A1": r["A1"]["exit"] == 0 and not r["A1"]["errors"] and not r["A1"]["no_authority"],
-        "A2": r["A2"]["exit"] == 0 and not r["A2"]["errors"] and not r["A2"]["no_authority"],
-        "A3": r["A3"]["exit"] != 0 and any("authentication" in e for e in r["A3"]["errors"]),
-        "A4": r["A4"]["exit"] != 0 and any("measurement" in e for e in r["A4"]["errors"]),
-        "A5": r["A5"]["no_authority"],
+        "EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION": r["EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION"]["exit"] == 0 and not r["EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION"]["errors"] and not r["EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION"]["no_authority"],
+        "EXPERIMENT-SPDM-INTEROP-RAW-MEASUREMENTS": r["EXPERIMENT-SPDM-INTEROP-RAW-MEASUREMENTS"]["exit"] == 0 and not r["EXPERIMENT-SPDM-INTEROP-RAW-MEASUREMENTS"]["errors"] and not r["EXPERIMENT-SPDM-INTEROP-RAW-MEASUREMENTS"]["no_authority"],
+        "EXPERIMENT-SPDM-FLIPPED-CHALLENGE-SIGNATURE": r["EXPERIMENT-SPDM-FLIPPED-CHALLENGE-SIGNATURE"]["exit"] != 0 and any("authentication" in e for e in r["EXPERIMENT-SPDM-FLIPPED-CHALLENGE-SIGNATURE"]["errors"]),
+        "EXPERIMENT-SPDM-FLIPPED-MEASUREMENT-SIGNATURE": r["EXPERIMENT-SPDM-FLIPPED-MEASUREMENT-SIGNATURE"]["exit"] != 0 and any("measurement" in e for e in r["EXPERIMENT-SPDM-FLIPPED-MEASUREMENT-SIGNATURE"]["errors"]),
+        "EXPERIMENT-SPDM-REQUESTER-TRUSTS-SAMPLE-ROOT": r["EXPERIMENT-SPDM-REQUESTER-TRUSTS-SAMPLE-ROOT"]["no_authority"],
         "B": r["B"]["fail"] == 0 and (r["B"]["pass"] or 0) > 0,
-        "C1": r["C1"].get("ok") is True,
-        "C2": r["C2"].get("ok") is True,
-        "C3": r["C3"].get("ok") is False and "pinned root" in r["C3"].get("error", ""),
+        "EXPERIMENT-SPDM-GOVERNOR-REQUESTS-EARLIER-VERSION": r["EXPERIMENT-SPDM-GOVERNOR-REQUESTS-EARLIER-VERSION"].get("ok") is True,
+        "EXPERIMENT-SPDM-GOVERNOR-REQUESTS-LATER-VERSION": r["EXPERIMENT-SPDM-GOVERNOR-REQUESTS-LATER-VERSION"].get("ok") is True,
+        "EXPERIMENT-SPDM-GOVERNOR-TRUSTS-WRONG-ROOT": r["EXPERIMENT-SPDM-GOVERNOR-TRUSTS-WRONG-ROOT"].get("ok") is False and "pinned root" in r["EXPERIMENT-SPDM-GOVERNOR-TRUSTS-WRONG-ROOT"].get("error", ""),
     }
     return all(verdict.values()), {"runs": r, "verdict": verdict}
 
@@ -213,17 +215,17 @@ def write_report(res: dict) -> Path:
              f"spdm-emu {PINS['spdm-emu'][1]} built with mbedtls; libspdm and SPDM-Responder-Validator at the submodule commits it pins.", "",
              "| Run | What | Expected | Result |", "|---|---|---|---|"]
     desc = {
-        "A1": ("libspdm requester -> governor responder, SPDM 1.1", "success"),
-        "A2": ("libspdm requester -> governor responder, SPDM 1.2, raw measurements, signed every time", "success"),
-        "A3": ("A1 with one CHALLENGE_AUTH signature bit flipped by the governor", "libspdm rejects"),
-        "A4": ("A1 with one MEASUREMENTS signature bit flipped by the governor", "libspdm rejects"),
-        "A5": ("A1 with libspdm trusting its own sample root instead of the governor's", "libspdm says no authority"),
+        "EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION": ("libspdm requester -> governor responder, SPDM 1.1", "success"),
+        "EXPERIMENT-SPDM-INTEROP-RAW-MEASUREMENTS": ("libspdm requester -> governor responder, SPDM 1.2, raw measurements, signed every time", "success"),
+        "EXPERIMENT-SPDM-FLIPPED-CHALLENGE-SIGNATURE": ("EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION with one CHALLENGE_AUTH signature bit flipped by the governor", "libspdm rejects"),
+        "EXPERIMENT-SPDM-FLIPPED-MEASUREMENT-SIGNATURE": ("EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION with one MEASUREMENTS signature bit flipped by the governor", "libspdm rejects"),
+        "EXPERIMENT-SPDM-REQUESTER-TRUSTS-SAMPLE-ROOT": ("EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION with libspdm trusting its own sample root instead of the governor's", "libspdm says no authority"),
         "B": ("DMTF SPDM-Responder-Validator -> governor responder", "0 failed assertions"),
-        "C1": ("governor requester -> libspdm responder, SPDM 1.1", "success"),
-        "C2": ("governor requester -> libspdm responder, SPDM 1.2", "success"),
-        "C3": ("governor requester trusting the wrong root -> libspdm responder", "governor requester rejects"),
+        "EXPERIMENT-SPDM-GOVERNOR-REQUESTS-EARLIER-VERSION": ("governor requester -> libspdm responder, SPDM 1.1", "success"),
+        "EXPERIMENT-SPDM-GOVERNOR-REQUESTS-LATER-VERSION": ("governor requester -> libspdm responder, SPDM 1.2", "success"),
+        "EXPERIMENT-SPDM-GOVERNOR-TRUSTS-WRONG-ROOT": ("governor requester trusting the wrong root -> libspdm responder", "governor requester rejects"),
     }
-    for k in ("A1", "A2", "A3", "A4", "A5", "B", "C1", "C2", "C3"):
+    for k in ("EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION", "EXPERIMENT-SPDM-INTEROP-RAW-MEASUREMENTS", "EXPERIMENT-SPDM-FLIPPED-CHALLENGE-SIGNATURE", "EXPERIMENT-SPDM-FLIPPED-MEASUREMENT-SIGNATURE", "EXPERIMENT-SPDM-REQUESTER-TRUSTS-SAMPLE-ROOT", "B", "EXPERIMENT-SPDM-GOVERNOR-REQUESTS-EARLIER-VERSION", "EXPERIMENT-SPDM-GOVERNOR-REQUESTS-LATER-VERSION", "EXPERIMENT-SPDM-GOVERNOR-TRUSTS-WRONG-ROOT"):
         d, e = desc[k]
         detail = r[k]
         if k == "B":

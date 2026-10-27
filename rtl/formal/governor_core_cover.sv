@@ -1,4 +1,4 @@
-// L7, governor_core: a reachability witness for FINDINGS-b.md. From power-on, with loop current present and one
+// WAVE-FORMAL-PROOFS-ON-VERILOG, governor_core: a reachability witness for FINDINGS-b.md. From power-on, with loop current present and one
 // valid heartbeat that is then never renewed, the small build (blocks_b.SMALL) reaches SAFE with the slot powered
 // off and its loop pad still closed. The solver must find the trace; python -m rtl.formal prints its length.
 module governor_core_cover_props(input clk, input rst);

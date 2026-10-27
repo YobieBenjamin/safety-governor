@@ -1,7 +1,9 @@
 # Safety Governor (SG)
 
-**A chip that says no. One per NVIDIA GPU, added through the rack's own boards, changing
-nothing in the GPU or in CUDA.**
+**A chip that says no. One governor for every NVIDIA GPU slot, added through the rack's own boards, changing
+nothing in the GPU or in CUDA.** A governor chip may serve one GPU or several (an HGX baseboard's eight); the cost and
+signing-load figures in `govsim/bench.py` assume eight slots per chip, and the roll-call figure assumes one
+governor per GPU at 72 members, the worst case.
 
 This is the chip-design project behind the blog series
 [*The Chip That Says No*](https://github.com/YobieBenjamin/hardware-and-silicon/tree/main/blog)
@@ -47,8 +49,8 @@ If you came to check the work rather than read about it, [`START-HERE.md`](START
 |---|---|---|
 | [`docs/`](docs/) | The design: objectives, architecture, the safety fabric, interfaces to the GPU and the rack, the specification, the threat model, the assumptions register, the verification plan, the plan to put it on silicon through lithography, the analogies, and the plain-English walkthrough; figures in `docs/figures/` are drawn by `docs/figures/make_figures.py` from the same facts the text states | read |
 | [`govsim/`](govsim/) | A functional model of the governor, the rack's switches as enforcement points, the halt loop and the message fabric, across a simulated rack of GPUs | `./run.sh` |
-| [`tests/`](tests/) | One test file per hypothesis, H0 to H20 (224 tests). A hypothesis is a claim the blog makes; a test is what would knock it down. Forty-eight single-point mutations of the model and the RTL were run against the suite in the October 2026 audit; the ones that survived got tests | `./run.sh` |
-| [`rtl/`](rtl/) | The hard-core digital blocks in [Amaranth HDL](https://amaranth-lang.org/), simulated (20 block tests), with generated Verilog in `rtl/gen/` | `make rtl` |
+| [`tests/`](tests/) | One test file per hypothesis, the twenty-one contract tests and the regression tests of every audit finding (501 tests as of 26 October 2026, after adversarial audit 3). A hypothesis is a claim the blog makes; a test is what would knock it down. Forty-eight single-point mutations of the model and the RTL were run against the suite in the October 2026 audit; the ones that survived got tests | `./run.sh` |
+| [`rtl/`](rtl/) | The hard-core digital blocks in [Amaranth HDL](https://amaranth-lang.org/), simulated (67 block tests), with generated Verilog in `rtl/gen/` | `make rtl` |
 | [`hw/`](hw/) | The LibreLane flow for a SkyWater sky130 shuttle run, the pinout, and the rack integration reference (module, baseboard signals, switch management) | `make gds` on a machine with Docker |
 | [`results/`](results/) | The last sweep: which hypotheses hold at which tier of the design | `./run.sh` writes it |
 | [`proofs/`](proofs/) | The machine-checked part: the core invariants and the commit point proven by induction in Z3, and the kill-switch cuts checked by max-flow; `z3-solver` comes with `pip install -e ".[dev]"`, which `./run.sh` does | `make proof` |
@@ -71,8 +73,10 @@ its own copy of the signed rulebook, and its own log. It verifies the GPU's
 confidential-computing attestation locally against pinned reference values, releases the
 model's decryption key only to a verified enclave, mints the one-time tickets that endpoints
 demand before they act, keeps the budgets, counts the tokens, and signs what the verified
-runtime presents. It has three physical levers over its GPU that need nothing from the GPU
-vendor: the power-brake input, the reset pin, and the slot's power enable. It has authority
+runtime presents. It has three physical levers over its GPU, which need nothing from the GPU vendor where the board
+wires them to the governor: the power-brake input, the reset pin, and the slot's power enable. On today's
+public NVIDIA boards that wiring is coarser (HGX resets are grouped, the brake is board-level, GB200 trays put
+the levers behind the BMC; docs/research/board-lever-register.md), so per-GPU levers are a board requirement. It has authority
 over the three places on the board where the GPU's traffic already passes a switch: the
 NVSwitch ports (NVLink to other GPUs), the PCIe switch ports and ACS (the host, peers,
 storage), and the DPU's filter tables (RDMA across nodes). All governors in a rack share two
@@ -85,27 +89,27 @@ Nothing in CUDA changes.
 
 | Feature | In plain words | Technical | Model | Test | RTL / hardware |
 |---|---|---|---|---|---|
-| One governor per GPU slot, on the board | A lifeguard per pool, not one for the whole water park | `docs/01` "Where the governor lives" | `govsim/cluster.py` | `tests/test_h16_levers.py` | `hw/pcb/rack-integration.md` §1 |
+| One governor per GPU slot, on the board | A lifeguard per pool, not one for the whole water park | `docs/01` "Where the governor lives" | `govsim/cluster.py` | `tests/test_contract_levers_without_gpu_cooperation.py` | `hw/pcb/rack-integration.md` §1 |
 | Added through the rack's boards | The security office rents the room next door; it does not ask the landlord to rebuild the building | `docs/03` §1, `docs/08` §4 | `govsim/gpu.py` (nothing in the GPU changes) | the whole suite at the rack tier | `hw/pinout/governor_module.csv` |
-| Fused identity and DICE key | A house key cut from the shape of the house. Change the house and the key stops fitting | `docs/04` §7 | `govsim/root.py`, `govsim/fuses.py` | `tests/test_h15_tamper.py`, `test_h12_fabric_auth.py` | `rtl/governor_rtl/measure_reg.py`, `monotonic.py` |
-| Local attestation verifier | The bouncer carries the photo book; he does not phone head office for every face | `docs/01` "Job lifecycle" step 1, `docs/03` §2 | `govsim/governor.py` (`_cmd_verify_gpu`, `_cmd_verify_host`) | `tests/test_h01_attestation.py` | integrated crypto IP (`docs/08` §1) |
-| Policy image and epoch | A rulebook with an edition number. Tickets printed under an old edition are void; a governor that misses the new edition is sent home, not left on the old one | `docs/04` §4, `docs/02` §2 | `govsim/policy.py`, `govsim/governor.py` (`_accept_policy`, the read-only `epoch`) | `tests/test_h03_quorum.py`, `test_h14_partition.py` | `rtl/governor_rtl/epoch_reg.py` |
-| Ticket minting and budgets | One seat, one show, torn at the door; one cashier per cash drawer | `docs/04` §5, `docs/03` §7 | `govsim/governor.py` (`_cmd_request`), `govsim/ledger.py` | `tests/test_h00_contract.py`, `test_h04_lane.py`, `test_h13_shared_budget.py` | `rtl/governor_rtl/ticket_store.py` |
-| Heartbeat | The dead man's switch on a train. Let go and the brakes come on | `docs/02` §2 "Heartbeat fan-out", `docs/04` §9 | `govsim/governor.py` (`_heartbeat`) | `tests/test_h14_partition.py` | `rtl/governor_rtl/heartbeat.py` |
-| Halt loop | The fire-alarm loop. Pull any station and every bell rings. Cut the wire and every bell rings too | `docs/02` §1 | `govsim/fabric.py` (`HaltLoop`) | `tests/test_h11_halt_loop.py` | `rtl/governor_rtl/halt_loop.py`; `hw/pcb/rack-integration.md` §4 |
-| Message fabric | The building's intercom, separate from the Wi-Fi the tenants use | `docs/02` §2 | `govsim/fabric.py` (`MessageFabric`) | `tests/test_h12_fabric_auth.py` | fabric MAC as integrated IP (`docs/08` §1) |
-| Roster | Roll call with ID badges before the bus leaves | `docs/02` §2 "Roster formation" | `govsim/cluster.py` (`form_roster`) | `tests/test_h12_fabric_auth.py` | `rtl/governor_rtl/cap_table.py` (ports open only to roster peers) |
-| Power brake, reset, slot power | The circuit breaker in your house. The appliance does not get a vote | `docs/03` §2, `docs/01` "Safe-mode state machine" | `govsim/governor.py` (`_apply_rung`), `govsim/gpu.py` | `tests/test_h16_levers.py` | `rtl/governor_rtl/halt.py` |
-| Switch-port authority | The doors between buildings only unlock for people on the roll; the switch is the door, the governor holds the key | `docs/03` §3 | `govsim/endpoints.py` (`Switch`) | `tests/test_h02_enforcement_points.py` | `rtl/governor_rtl/cap_table.py` |
-| Output signing | The courier signs for the package. It proves who handled it, not what is inside; at the rack tier the governor also checks that what left for the host through its switch port is what was presented | `docs/04` §6 and §9 | `govsim/governor.py` (`_cmd_sign_output`, `_check_unpresented_output`) | `tests/test_h10_leakage.py`, `test_h09_overhead.py` | crypto IP; `govsim/bench.py` prices it at OpenTitan's published OTBN figure |
-| Metering | The taxi meter | `docs/04` §2 (`METER_SLOT`) | `govsim/gpu.py` (`run_tokens`) | `tests/test_h09_overhead.py` | `rtl/governor_rtl/meter.py` |
-| Response release and the egress hold | The mail room keeps the parcel until the permit arrives; an inspector who was never asked means no permit | `docs/04` §3, `docs/07` H17 and H18 | `govsim/governor.py` (`_release_gate`), `govsim/endpoints.py` (`EgressEndpoint`, `AuditStore`) | `tests/test_h17_use_cases.py`, `test_h18_oversight.py` | firmware and policy; no new RTL |
-| Loop beacon | Roll call on the fire-alarm loop: a station that says its switch is open while the bell wire still carries current has been bypassed | `docs/02` §1 and §3 | `govsim/governor.py` (`_on_loop_beacon`, `_close_loop_window`), `govsim/fabric.py` (`jumper`) | `tests/test_h11_halt_loop.py` | firmware over the fabric |
-| Buffer classes (integrated tier) | Weights never leave the building; working papers may go to colleagues on the roll; finished letters only to the front desk | `docs/00` N5, `docs/07` H2b | `govsim/policy.py` (`buffer_allowed`), `govsim/endpoints.py` (`DescriptorChecker`) | `tests/test_h02_enforcement_points.py` | in-GPU checkers, an ask to NVIDIA |
-| Signed log | The flight recorder, and each governor keeps a copy of its neighbors' last page | `docs/02` §2 "Cross-linked logs" | `govsim/log.py` | `tests/test_h00_contract.py` (every decision logged), `test_h12_fabric_auth.py` | NVM (`docs/04` §10) |
-| Alarms | A pulled fire alarm stays pulled until the marshal resets it | `docs/04` §2 (`ALARMS`) | `govsim/governor.py` (alarms) | `tests/test_h05_alarms.py` | `rtl/governor_rtl/alarms.py` |
-| Fused-off debug | The service hatch is welded shut after the factory | `docs/00` R4, `docs/08` §3 | `govsim/fuses.py` (lifecycle) | `tests/test_h15_tamper.py` | `rtl/governor_rtl/lifecycle.py` |
-| The assumptions register | The list taped to the wall of the security office | `docs/06` | `govsim/policy.py` (`check_register`) | `tests/test_h07_register.py` | n/a (policy data) |
+| Fused identity and DICE key | A house key cut from the shape of the house. Change the house and the key stops fitting | `docs/04` §7 | `govsim/root.py`, `govsim/fuses.py` | `tests/test_contract_no_debug_in_production.py`, `test_contract_only_roster_speaks_once.py` | `rtl/governor_rtl/measure_reg.py`, `monotonic.py` |
+| Local attestation verifier | The bouncer carries the photo book; he does not phone head office for every face | `docs/01` "Job lifecycle" step 1, `docs/03` §2 | `govsim/governor.py` (`_cmd_verify_gpu`, `_cmd_verify_host`) | `tests/test_contract_attestation_binds_permissions.py` | integrated crypto IP (`docs/08` §1) |
+| Policy image and epoch | A rulebook with an edition number. Tickets printed under an old edition are void; a governor that misses the new edition is sent home, not left on the old one | `docs/04` §4, `docs/02` §2 | `govsim/policy.py`, `govsim/governor.py` (`_accept_policy`, the read-only `epoch`) | `tests/test_contract_policy_quorum_no_rollback.py`, `test_contract_partitions_end_safe.py` | `rtl/governor_rtl/epoch_reg.py` |
+| Ticket minting and budgets | One seat, one show, torn at the door; one cashier per cash drawer | `docs/04` §5, `docs/03` §7 | `govsim/governor.py` (`_cmd_request`), `govsim/ledger.py` | `tests/test_contract_fresh_authorization_per_operation.py`, `test_contract_broker_cannot_pick_rule.py`, `test_contract_shared_budget_no_overspend.py` | `rtl/governor_rtl/ticket_store.py` |
+| Heartbeat | The dead man's switch on a train. Let go and the brakes come on | `docs/02` §2 "Heartbeat fan-out", `docs/04` §9 | `govsim/governor.py` (`_heartbeat`) | `tests/test_contract_partitions_end_safe.py` | `rtl/governor_rtl/heartbeat.py` |
+| Halt loop | The fire-alarm loop. Pull any station and every bell rings. Cut the wire and every bell rings too | `docs/02` §1 | `govsim/fabric.py` (`HaltLoop`) | `tests/test_contract_halt_reaches_every_gpu.py` | `rtl/governor_rtl/halt_loop.py`; `hw/pcb/rack-integration.md` §4 |
+| Message fabric | The building's intercom, separate from the Wi-Fi the tenants use | `docs/02` §2 | `govsim/fabric.py` (`MessageFabric`) | `tests/test_contract_only_roster_speaks_once.py` | fabric MAC as integrated IP (`docs/08` §1) |
+| Roster | Roll call with ID badges before the bus leaves | `docs/02` §2 "Roster formation" | `govsim/cluster.py` (`form_roster`) | `tests/test_contract_only_roster_speaks_once.py` | `rtl/governor_rtl/cap_table.py` (ports open only to roster peers) |
+| Power brake, reset, slot power | The circuit breaker in your house. The appliance does not get a vote | `docs/03` §2, `docs/01` "Safe-mode state machine" | `govsim/governor.py` (`_apply_rung`), `govsim/gpu.py` | `tests/test_contract_levers_without_gpu_cooperation.py` | `rtl/governor_rtl/halt.py` |
+| Switch-port authority | The doors between buildings only unlock for people on the roll; the switch is the door, the governor holds the key | `docs/03` §3 | `govsim/endpoints.py` (`Switch`) | `tests/test_contract_every_crossing_governed.py` | `rtl/governor_rtl/cap_table.py` |
+| Output signing | The courier signs for the package. It proves who handled it, not what is inside; at the rack tier the governor also checks that what left for the host through its switch port is what was presented | `docs/04` §6 and §9 | `govsim/governor.py` (`_cmd_sign_output`, `_check_unpresented_output`) | `tests/test_contract_leakage_within_budget.py`, `test_contract_governor_overhead_bounded.py` | crypto IP; `govsim/bench.py` prices it at OpenTitan's published OTBN figure |
+| Metering | The taxi meter | `docs/04` §2 (`METER_SLOT`) | `govsim/gpu.py` (`run_tokens`) | `tests/test_contract_governor_overhead_bounded.py` | `rtl/governor_rtl/meter.py` |
+| Response release and the egress hold | The mail room keeps the parcel until the permit arrives; an inspector who was never asked means no permit | `docs/04` §3, `docs/07` CONTRACT-NO-ACTION-WITHOUT-TICKET and CONTRACT-OVERSIGHT-SURVIVES-MODEL | `govsim/governor.py` (`_release_gate`), `govsim/endpoints.py` (`EgressEndpoint`, `AuditStore`) | `tests/test_contract_no_action_without_ticket.py`, `test_contract_oversight_survives_model.py` | firmware and policy; no new RTL |
+| Loop beacon | Roll call on the fire-alarm loop: a station that says its switch is open while the bell wire still carries current has been bypassed | `docs/02` §1 and §3 | `govsim/governor.py` (`_on_loop_beacon`, `_close_loop_window`), `govsim/fabric.py` (`jumper`) | `tests/test_contract_halt_reaches_every_gpu.py` | firmware over the fabric |
+| Buffer classes (integrated tier) | Weights never leave the building; working papers may go to colleagues on the roll; finished letters only to the front desk | `docs/00` GOAL-NOT-INSPECTING-ROSTER-TRANSFERS, `docs/07` CONTRACT-DESCRIPTOR-LEVEL-ROSTER-GAP | `govsim/policy.py` (`buffer_allowed`), `govsim/endpoints.py` (`DescriptorChecker`) | `tests/test_contract_every_crossing_governed.py` | in-GPU checkers, an ask to NVIDIA |
+| Signed log | The flight recorder, and each governor keeps a copy of its neighbors' last page | `docs/02` §2 "Cross-linked logs" | `govsim/log.py` | `tests/test_contract_fresh_authorization_per_operation.py` (every decision logged), `test_contract_only_roster_speaks_once.py` | NVM (`docs/04` §10) |
+| Alarms | A pulled fire alarm stays pulled until the marshal resets it | `docs/04` §2 (`ALARMS`) | `govsim/governor.py` (alarms) | `tests/test_contract_alarms_are_monotone.py` | `rtl/governor_rtl/alarms.py` |
+| Fused-off debug | The service hatch is welded shut after the factory | `docs/00` REQUIREMENT-DEBUG-FUSED-OFF, `docs/08` §3 | `govsim/fuses.py` (lifecycle) | `tests/test_contract_no_debug_in_production.py` | `rtl/governor_rtl/lifecycle.py` |
+| The assumptions register | The list taped to the wall of the security office | `docs/06` | `govsim/policy.py` (`check_register`) | `tests/test_contract_assumptions_register_complete.py` | n/a (policy data) |
 
 The reason behind each feature and what it does not do are in
 [`docs/09-analogies.md`](docs/09-analogies.md); the same features told as one story are in

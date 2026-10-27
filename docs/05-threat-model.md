@@ -28,33 +28,34 @@ it is the list the assumptions register and the human layers exist for.
 
 | Threat | Mechanism | Hypothesis / test |
 |---|---|---|
-| Action without authorization | Endpoint comparator demands a ticket bound to the exact fields, single use, current epoch, committed at the governor | H0 |
-| Forged, altered, expired, replayed ticket | Signature under the governor's DICE key; params digest; expiry; durable used-ticket set | H0 |
-| Broker chooses its own lane ("this is reversible") | The rulebook selects the rule from fingerprint, action and limited fields only | H4 |
-| Modified GPU firmware, swapped model, changed policy, with permissions carried over | Fingerprint covers all three; permissions keyed on the fingerprint | H1 |
-| Policy loosened by one operator | k-of-n signatures checked by the governor itself | H3 |
-| Policy rollback to an older, looser image | Anti-rollback counter in fuses tracks the policy version | H3 |
-| Alarm cleared by the model, the host or a lone operator | Alarms are sticky; clearing needs a rule or an approver key | H5 |
-| Everything above the comparator compromised | Comparator re-checks against its own sensors and lists | H6 |
-| A rule relying on an input nobody vouched for | Policy load fails if a constraint names an input with no register row | H7 |
-| Fast, silent override | Quorum, latency floor, mandatory log entry | H8 |
-| Weight exfiltration to a non-roster peer, or over any path while the heartbeat is dead | Roster-bound NVSwitch ports, PCIe switch ports and ACS, DPU flows; unchecked paths bricked | H2 |
-| Slow leakage over the permitted output channel beyond budget | Query and byte budgets per workload; entropy and rate limits | H10 |
-| GPU keeps running when told to stop | Power brake, reset, slot power cut (where the board provides per-slot power control), needing nothing from the GPU | H16 |
-| A halt that reaches some GPUs and not others | The halt loop; fail-safe open | H11 |
-| A rogue device on the fabric; replayed fabric messages | Roster from mutual attestation; signed, sequenced, epoch-bound messages | H12 |
-| Two governors overspending a shared budget | One ledger owner per key; reserve at the owner | H13 |
-| A partitioned segment kept alive by silence or a replayed heartbeat | Heartbeat expiry; authority signature; sequence numbers | H14 |
-| An epoch change applied unevenly | Two-phase commit with a deadline; stragglers halted | H14 |
-| Debug port used in production | Lifecycle fuse; access refused and logged | H15 |
-| Host silences the governor | Silence is a missed heartbeat; the governor halts | H14 |
+| Action without authorization | Endpoint comparator demands a ticket bound to the exact fields, single use, current epoch, committed at the governor | CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION |
+| Forged, altered, expired, replayed ticket | Signature under the governor's DICE key; params digest; expiry; durable used-ticket set | CONTRACT-FRESH-AUTHORIZATION-PER-OPERATION |
+| Broker chooses its own lane ("this is reversible") | The rulebook selects the rule from fingerprint, action and limited fields only | CONTRACT-BROKER-CANNOT-PICK-RULE |
+| Modified GPU firmware, swapped model, changed policy, with permissions carried over | Fingerprint covers all three; permissions keyed on the fingerprint | CONTRACT-ATTESTATION-BINDS-PERMISSIONS |
+| Policy loosened by one operator | k-of-n signatures checked by the governor itself, on the rulebook and, since adversarial audit 3, on every signed list a rule depends on (beneficiaries, protected sites, recipients) | CONTRACT-POLICY-QUORUM-NO-ROLLBACK, tests/test_adversarial_audit_3.py |
+| Policy loosened or captured by a full quorum (stolen or coerced) | A fused rule floor no edition can remove; a fused delay before a loosening edition acts (set in production fuses); a version step bound; a fused recovery quorum that can always take a chip back | tests/test_adversarial_audit_3.py |
+| Policy rollback to an older, looser image | Anti-rollback counter in fuses tracks the policy version | CONTRACT-POLICY-QUORUM-NO-ROLLBACK |
+| Alarm cleared by the model, the host or a lone operator | Alarms are sticky; clearing needs a rule or an approver key | CONTRACT-ALARMS-ARE-MONOTONE |
+| Everything above the comparator compromised | Comparator re-checks against its own sensors and lists | CONTRACT-COMPARATOR-SURVIVES-COMPROMISE |
+| A rule relying on an input nobody vouched for | Policy load fails if a constraint names an input with no register row | CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE |
+| Fast, silent override | Quorum, latency floor, mandatory log entry | CONTRACT-OVERRIDE-SLOW-AND-LOGGED |
+| Weight exfiltration to a non-roster peer, or over any path while the heartbeat is dead | Roster-bound NVSwitch ports, PCIe switch ports and ACS, DPU flows; unchecked paths bricked | CONTRACT-EVERY-CROSSING-GOVERNED |
+| Slow leakage over the permitted output channel beyond budget | Query and byte budgets per workload; entropy and rate limits | CONTRACT-LEAKAGE-WITHIN-BUDGET |
+| GPU keeps running when told to stop | Power brake, reset, slot power cut (where the board provides per-slot power control), needing nothing from the GPU | CONTRACT-LEVERS-WITHOUT-GPU-COOPERATION |
+| A halt that reaches some GPUs and not others | The halt loop; fail-safe open | CONTRACT-HALT-REACHES-EVERY-GPU |
+| A rogue device on the fabric; replayed fabric messages | Roster from mutual attestation; signed, sequenced, epoch-bound messages | CONTRACT-ONLY-ROSTER-SPEAKS-ONCE |
+| Two governors overspending a shared budget | One ledger owner per key; reserve at the owner | CONTRACT-SHARED-BUDGET-NO-OVERSPEND |
+| A partitioned segment kept alive by silence or a replayed heartbeat | Heartbeat expiry; authority signature; sequence numbers | CONTRACT-PARTITIONS-END-SAFE |
+| An epoch change applied unevenly | Two-phase commit with a deadline; stragglers halted | CONTRACT-PARTITIONS-END-SAFE |
+| Debug port used in production | Lifecycle fuse; access refused and logged | CONTRACT-NO-DEBUG-IN-PRODUCTION |
+| Host silences the governor | Silence is a missed heartbeat; the governor halts | CONTRACT-PARTITIONS-END-SAFE |
 
 ## What the governor only raises the cost of
 
 | Threat | Mitigation | Residual |
 |---|---|---|
 | Key extraction by decapping, probing, fault injection | Fused secret readable only by the KDF; active mesh shield; glitch detectors; zeroization; keys never in SRAM longer than needed | A well-funded lab with time can still win. Tamper response makes it expensive and evident, not impossible |
-| Loop defeat by jumpering the wire around a governor | Loop current is sensed at every governor, and the authority's heartbeat carries a beacon naming the loop's expected members; every governor replies with a signed report of its switch state and the current it senses; a member that reports its switch open while the loop carries current has been jumpered: alarm LOOP_JUMPERED names it and the rack halts (`tests/test_h11_halt_loop.py`) | A jumpered governor whose switch is closed is indistinguishable from a healthy one and gains the attacker nothing until it tries to open; an attacker who can jumper the wire has board-level access, which the enclosure tamper switch should have reported |
+| Loop defeat by jumpering the wire around a governor | Loop current is sensed at every governor, and the authority's heartbeat carries a beacon naming the loop's expected members; every governor replies with a signed report of its switch state and the current it senses; a member that reports its switch open while the loop carries current has been jumpered: alarm LOOP_JUMPERED names it and the rack halts (`tests/test_contract_halt_reaches_every_gpu.py`) | A jumpered governor whose switch is closed is indistinguishable from a healthy one and gains the attacker nothing until it tries to open; an attacker who can jumper the wire has board-level access, which the enclosure tamper switch should have reported |
 | Replacing a governor with a lookalike | DICE identity; reference values signed by the governance root; the roster refuses an unknown chip | A fab-level clone with the same UDS defeats this; supply-chain controls, not silicon, are the answer |
 | Side channels on the crypto engines | Constant-time implementations; power and EM countermeasures in the product node | Not proven in the prototype |
 | Denial of service by flooding the mailbox | Rate limits per signer; refusals logged | A flooded governor refuses; it never allows. Availability is the cost, by design |
@@ -69,6 +70,7 @@ it is the list the assumptions register and the human layers exist for.
 | A policy that is wrong | Policy review, formal checking, and the humans who sign it |
 | Fab-level compromise, a leaked vendor key | Supply-chain controls, public logs of firmware hashes, key diversity |
 | The operator who holds the quorum and uses it badly | Governance design, not hardware |
+| One organization holding a quorum of keys and signing a change that loosens a protected rule | Counting keys is not independence; the optional across-class quorum (`govsim/policy.py`, F26) rejects a change that does not span distinct principal classes, but the enrolment, custody and recourse obligations that make it mean anything are governance, named in `docs/18` section 8c |
 | Availability: a heartbeat too aggressive, a safe move badly chosen | The safe-mode policy and the measurement program |
 
 In plain words: the governor makes sure nobody gets past the gate without a ticket, and that

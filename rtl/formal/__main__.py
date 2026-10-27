@@ -1,4 +1,6 @@
-"""L7: prove the chip's properties on the generated Verilog, then prove the proofs can fail.
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
+"""WAVE-FORMAL-PROOFS-ON-VERILOG: prove the chip's properties on the generated Verilog, then prove the proofs can fail.
 
     python -m rtl.formal          # every block that has a property file; exit 1 on anything that does not hold
     python -m rtl.formal meter    # only the blocks named (any number)
@@ -43,17 +45,17 @@ BLOCKS = {
          "m.d.sync += [self.state.eq(SAFE), self.timer.eq(0)]", "m.d.sync += [self.state.eq(HALT), self.timer.eq(0)]"),
         ("the power brake releases in THROTTLE",
          "self.pwrbrk.eq(self.state != RUN),", "self.pwrbrk.eq((self.state != RUN) & (self.state != THROTTLE)),"),
-        ("CLEAR outranks tamper again (F-05)",
-         "with m.If(self.tamper):", "with m.If(self.tamper & ~(self.clear & (self.state != HALTED_INITIAL))):"),
-        ("RUN entered on a stale loop_lost (F1)",
+        ("CLEAR outranks tamper again (CONFORMANCE-CLEAR-BEATS-TAMPER)",
+         "with m.If(self.tamper):", "with m.If(self.tamper & ~(self.clear & self.clear_authorized & (self.state != HALTED_INITIAL))):"),
+        ("RUN entered on a stale loop_lost (RTL-CORE-HALTS-AFTER-REACHING-RUN)",
          "with m.If(self.loop_sense & ~self.loop_lost):", "with m.If(self.loop_sense):"),
         ("a halt command is ignored once throttled",
          "with m.Elif(self.cmd_halt):", "with m.Elif(self.cmd_halt & (self.state != THROTTLE)):"),
         # Yobie's calls, 23 October 2026: HALT in SAFE opens the loop; EXCLUDE; NO_FIRST_HEARTBEAT
-        ("a HALT to a chip in SAFE leaves the loop closed (the old behaviour, F-07)",
+        ("a HALT to a chip in SAFE leaves the loop closed (the old behaviour, CONFORMANCE-HALT-IN-SAFE-MISHANDLED)",
          "            m.d.sync += self.switch_open.eq(1)\n        with m.Elif(self.cmd_halt):",
          "            pass\n        with m.Elif(self.cmd_halt):"),
-        ("a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old F-07)",
+        ("a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old CONFORMANCE-HALT-IN-SAFE-MISHANDLED)",
          "with m.Elif(self.cmd_halt & (self.state == SAFE)):", "with m.Elif(self.cmd_halt & (self.state == SAFE) & 0):"),
         ("EXCLUDE closes the loop of a chip halted by loop loss, a command or tamper",
          "with m.Elif(self.cmd_exclude & (self.state == HALTED_INITIAL) & (self.cause == C_NONE)):",
@@ -73,6 +75,36 @@ BLOCKS = {
         ("arming records the first heartbeat only if it also enters RUN (the alarm can fire on an armed chip)",
          "self.switch_open.eq(0), self.hb_seen.eq(1), self.excluded.eq(0)",
          "self.switch_open.eq(0), self.hb_seen.eq(self.hb_seen | (self.loop_sense & ~self.loop_lost)), self.excluded.eq(0)"),
+        # adversarial audit 3: CLEAR bound to a verified mailbox CLEAR
+        ("the hardware's CLEAR authorization is ignored: a bare firmware strobe releases the levers (adversarial audit 3)",
+         "clear_ok = self.clear & self.clear_authorized", "clear_ok = self.clear"),
+        # adversarial audit 3: a lost heartbeat is HALT, not THROTTLE
+        ("a lost heartbeat only throttles: the brake alone, the GPU computes at half clock (adversarial audit 3)",
+         "m.d.sync += [self.state.eq(HALT), self.cause.eq(C_LOCAL), self.timer.eq(0)]",
+         "m.d.sync += [self.state.eq(THROTTLE), self.cause.eq(C_LOCAL), self.timer.eq(0)]"),
+        ("a lost heartbeat is ignored once throttled (adversarial audit 3)",
+         "with m.Elif(self.hb_expired & in_run):", "with m.Elif(self.hb_expired & (self.state == RUN)):"),
+        ("a lost heartbeat opens the loop to the neighbours (it is a local cause; adversarial audit 3)",
+         "m.d.sync += [self.state.eq(HALT), self.cause.eq(C_LOCAL), self.timer.eq(0)]",
+         "m.d.sync += [self.state.eq(HALT), self.cause.eq(C_LOCAL), self.timer.eq(0), self.switch_open.eq(1)]"),
+        # adversarial audit 3: the non-volatile rung record
+        ("a power cycle forgets the halt: the rung record is an ordinary register that resets (adversarial audit 3)",
+         "self.rung_nv = Signal(reset_less=True)", "self.rung_nv = Signal()"),
+        ("the SAFE record resets: a SAFE chip comes back from a power cycle in HALT with slot power on (adversarial audit 3)",
+         "self.rung_nv_safe = Signal(reset_less=True)", "self.rung_nv_safe = Signal()"),
+        ("the record is never consulted: after a reset the chip arms on the next heartbeat (adversarial audit 3)",
+         "with m.Elif(self.rung_nv & (self.state == HALTED_INITIAL)):", "with m.Elif(0):"),
+        ("an unauthorized clear erases the record (adversarial audit 3)",
+         "with m.If((self.state == HALT) | (self.state == SAFE)):\n            m.d.sync += self.rung_nv.eq(1)",
+         "with m.If((self.state == HALT) | (self.state == SAFE)):\n            m.d.sync += self.rung_nv.eq(~self.clear)"),
+        ("the record is written a cycle after a commanded halt lands (a reset in between forgets it; adversarial audit 3)",
+         "self.switch_open.eq(1), self.timer.eq(0)]\n            m.d.sync += self.rung_nv.eq(1)\n        with m.Elif(self.hb_expired & in_run):",
+         "self.switch_open.eq(1), self.timer.eq(0)]\n        with m.Elif(self.hb_expired & in_run):"),
+        ("the SAFE record is dropped while in SAFE (adversarial audit 3)",
+         "with m.If(self.state == SAFE):\n            m.d.sync += self.rung_nv_safe.eq(1)",
+         "with m.If(self.state == SAFE):\n            m.d.sync += self.rung_nv_safe.eq(0)"),
+        ("the restored chip comes back with its loop switch closed by an EXCLUDE (the record does not outrank it; adversarial audit 3)",
+         "with m.Elif(self.rung_nv & (self.state == HALTED_INITIAL)):", "with m.Elif(self.rung_nv & (self.state == HALTED_INITIAL) & ~self.cmd_exclude):"),
     ]),
 }
 OPTIONS: dict = {}
@@ -93,7 +125,7 @@ except ImportError:
 BLOCKS.update(BLOCKS_FPGA)
 
 # the second set of blocks (mailbox, cap_table, ticket_store, epoch_reg, monotonic_counter, lifecycle) lives in its own
-# file so two people can extend L7 at once; CHECKS_A are its extra, independent checks (a second solver, a random
+# file so two people can extend WAVE-FORMAL-PROOFS-ON-VERILOG at once; CHECKS_A are its extra, independent checks (a second solver, a random
 # simulation against a reference model). Missing file, missing blocks: the halt sequencer still runs.
 try:
     from .blocks_a import BLOCKS_A, CHECKS_A, DEPTH_A
@@ -134,7 +166,7 @@ def solvers() -> list:
     return _SOLVERS
 
 
-SPLICE = "// L7-SPLICE"
+SPLICE = "// L7-SPLICE"  # WAVE-FORMAL-PROOFS-ON-VERILOG (old: L7)
 
 
 def smt(work: str, top: str, yosys_extra: str = "") -> str | None:
@@ -143,7 +175,7 @@ def smt(work: str, top: str, yosys_extra: str = "") -> str | None:
     A props file that starts with SPLICE is pasted into the block's own module, just before endmodule, so its
     assertions can name the block's internal registers (yosys has no hierarchical references); the block's logic is
     untouched. Any yosys warning is refused: a misspelt signal name becomes a free wire, a variable driven from two
-    blocks becomes a conflict, and an assertion over either proves nothing (found by the L7 group A work)."""
+    blocks becomes a conflict, and an assertion over either proves nothing (found by the WAVE-FORMAL-PROOFS-ON-VERILOG group A work)."""
     text = open(os.path.join(work, "props.sv"), encoding="utf-8").read()
     if text.startswith(SPLICE):
         dut = open(os.path.join(work, "dut.v"), encoding="utf-8").read()
@@ -291,7 +323,7 @@ def main(argv: list) -> int:
         for ok, line in check(prove, names):
             print(f"  {line}")
             bad += not ok
-    print("L7: every property proven on the Verilog, every mutant caught" if not bad else f"L7: {bad} problem(s)")
+    print("WAVE-FORMAL-PROOFS-ON-VERILOG: every property proven on the Verilog, every mutant caught" if not bad else f"WAVE-FORMAL-PROOFS-ON-VERILOG: {bad} problem(s)")
     return 1 if bad else 0
 
 

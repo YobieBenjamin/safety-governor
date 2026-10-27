@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """python -m rtl.conformance: run the spec conformance suite and say honestly what conforms and what does not.
 
 Steps, each self-checking:
@@ -25,7 +27,8 @@ from collections import defaultdict
 warnings.filterwarnings("ignore", message=".*created but never used.*")
 
 from . import load_tests                                       # noqa: E402
-from . import findings as findings_text, plain_english          # noqa: E402
+from . import findings as findings_text, plain_english
+from .names import NAMES  # registered names for the generated tables          # noqa: E402
 from .catalogue import CATALOGUE                               # noqa: E402
 from .framework import REGISTRY, run_one                      # noqa: E402
 from .mutants import MUTANTS                                   # noqa: E402
@@ -36,7 +39,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 REQ_MD = os.path.join(HERE, "REQUIREMENTS.md")
 FINDINGS_MD = os.path.join(HERE, "FINDINGS.md")
 PLAIN_MD = os.path.join(HERE, "PLAIN-ENGLISH.md")
-DIFF_CLASSES = {"agree": 3690, "F-01": 253, "F-02": 3, "F-03": 54}   # the random run's numbers FINDINGS quotes
+DIFF_CLASSES = {"agree": 3690, "CONFORMANCE-RUN-STATE-CHECK-ORDER": 253, "CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO": 3, "CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST": 54}   # the random run's numbers FINDINGS quotes
 RESULT_MD = os.path.join(ROOT, "results", "rtl-conformance.md")
 TARGET = 150
 
@@ -84,22 +87,25 @@ def requirements_md() -> str:
     ]
     for rid, doc, sec, quote, block, owner in REQUIREMENTS:
         ts = tb.get(rid, [])
-        cell = "<br>".join(f"`{t.name}`" + (f" ({t.finding})" if t.finding else "") for t in ts) or "none"
+        cell = "<br>".join(f"`{t.name}`" + (f" ({', '.join(NAMES.get(x, x) for x in t.finding.split(','))})" if t.finding else "") for t in ts) or "none"
         rows = cb.get(rid, [])
-        lines.append(f"| {rid} | {doc} §{sec} | {quote.replace('|', '/')} | {block} | {owner} | {cell} | {len(rows) or ''} |")
+        lines.append(f"| {NAMES.get(rid, rid)} | {doc} §{sec} | {quote.replace('|', '/')} | {block} | {owner} | {cell} | {len(rows) or ''} |")
     lines += [
         "",
         "## The catalogue, row by row",
         "",
-        "The 75-attack, 12-baseline catalogue in `hardware-and-silicon` (`hardware_ref`, `results/report.json`).",
+        "The 75-attack, 12-baseline catalogue in `hardware-and-silicon` (`hardware_ref`, `hardware-and-silicon/results/report.json`).",
         "Every row runs against the reference software stack, so in the catalogue every row is decided by the",
         "reference gate. The owner column says which layer of the governor would decide the same thing.",
+        "A row name starts with the reference-stack layer it tests: L0 (Silicon Root), L2 (Provenance), L3 (Observers),",
+        "L4 (Control Plane) or L5 (Governance Root); EP, AU, NV and TX rows test endpoints, the audit trail, the NVIDIA",
+        "path and transactional authorization.",
         "",
         "| Row | Governor-side owner | Requirements |",
         "|---|---|---|",
     ]
     for name, (owner, reqs) in CATALOGUE.items():
-        lines.append(f"| `{name}` | {owner} | {', '.join(reqs)} |")
+        lines.append(f"| `{name}` | {owner} | {', '.join(NAMES.get(r, r) for r in reqs)} |")
     by_owner = defaultdict(int)
     for owner, _ in CATALOGUE.values():
         by_owner[owner] += 1
@@ -172,7 +178,7 @@ def main(argv: list[str]) -> int:
     # 3. findings file
     # a closed finding keeps its section (the record of what was wrong) but has "(closed)" in its heading;
     # its reproducer has become an ordinary conformance test that guards the fix
-    written = {f for f, rest in re.findall(r"^## (F-\d\d)(.*)$", findings_text.TEXT, re.M) if "(closed)" not in rest}
+    written = {f for f, rest in re.findall(r"^## (CONFORMANCE-[A-Z0-9-]+):?(.*)$", findings_text.TEXT, re.M) if "(closed)" not in rest}
     named = {t.finding for t in REGISTRY if t.finding}
     for f in sorted(named - written):
         problems.append(f"{f} has reproducer tests but no section in FINDINGS.md")
@@ -267,7 +273,7 @@ def coverage(outcomes) -> dict:
         fails = sorted({o.test.finding for o in os_ if o.test.finding and o.status == "assert"})
         conform = sum(1 for o in os_ if o.status == "pass" and not o.test.finding)
         if fails:
-            verdict = "DISAGREES " + ",".join(fails)
+            verdict = "DISAGREES " + ", ".join(NAMES.get(x, x) for x in fails)
         elif conform:
             verdict = "conforms"
         elif cb.get(rid):
@@ -316,7 +322,7 @@ def write_report(outcomes, mut, table, cat_note, total, problems, quick) -> None
         L.append(f"- Mutation sample: {sum(m['status'] == 'assert' for m in mut)}/{len(mut)} one-line mutants caught by "
                  f"assertion, over {len({m['req'] for m in mut})} requirements")
     if diff and diff.extra:
-        L.append(f"- Mailbox differential: {diff.extra['frames']} random frames, classes {diff.extra['classes']}")
+        L.append(f"- Mailbox differential: {diff.extra['frames']} random frames, classes { {NAMES.get(k, k): v for k, v in diff.extra['classes'].items()} }")
     if cap and cap.extra:
         L.append(f"- Capability table differential: {cap.extra}")
     if problems:
@@ -324,25 +330,25 @@ def write_report(outcomes, mut, table, cat_note, total, problems, quick) -> None
     L += ["", "## Disagreements (findings)", "", "| Finding | Reproducer | What the RTL or model did |", "|---|---|---|"]
     for f in sorted(findings):
         for o in findings[f]:
-            L.append(f"| {f} | `{o.test.name}` | {o.status}: {o.detail.replace('|', '/')} |")
+            L.append(f"| {NAMES.get(f, f)} | `{o.test.name}` | {o.status}: {o.detail.replace('|', '/')} |")
     if diff and diff.extra:
         L += ["", "First example of each mailbox disagreement class in the random run:", ""]
         for k, v in sorted(diff.extra["examples"].items()):
-            L.append(f"- {k}: {v}")
+            L.append(f"- {NAMES.get(k, k)}: {v}")
     L += ["", "## Coverage by requirement", "", "| Id | Owner | Block | Conforming tests | Catalogue rows | Verdict |",
           "|---|---|---|---|---|---|"]
     for rid, owner, block, conform, ncat, verdict, _ in table["rows"]:
-        L.append(f"| {rid} | {owner} | {block} | {conform} | {ncat} | {verdict} |")
+        L.append(f"| {NAMES.get(rid, rid)} | {owner} | {block} | {conform} | {ncat} | {verdict} |")
     if mut:
         L += ["", "## Mutation sample", "", "| # | Requirement | File | Mutant | Test | Outcome |", "|---|---|---|---|---|---|"]
         for m in mut:
             esc = lambda t: t.replace("|", "\\|")      # noqa: E731
-            L.append(f"| {m['i'] + 1} | {m['req']} | {m['src']} | `{esc(m['old'])}` to `{esc(m['new'])}` | `{m['test']}` | "
+            L.append(f"| {m['i'] + 1} | {NAMES.get(m['req'], m['req'])} | {m['src']} | `{esc(m['old'])}` to `{esc(m['new'])}` | `{m['test']}` | "
                      f"{'caught by assertion' if m['status'] == 'assert' else m['status']} |")
     L += ["", "## Every test", "", "| Test | Requirements | Outcome | Seconds |", "|---|---|---|---|"]
     for o in outcomes:
-        tag = ("reproduces " + o.test.finding) if (o.test.finding and o.status == "assert") else o.status
-        L.append(f"| `{o.test.name}` | {', '.join(o.test.reqs)} | {tag} | {o.seconds:.1f} |")
+        tag = ("reproduces " + ", ".join(NAMES.get(x, x) for x in o.test.finding.split(","))) if (o.test.finding and o.status == "assert") else o.status
+        L.append(f"| `{o.test.name}` | {', '.join(NAMES.get(r, r) for r in o.test.reqs)} | {tag} | {o.seconds:.1f} |")
     os.makedirs(os.path.dirname(RESULT_MD), exist_ok=True)
     open(RESULT_MD, "w", encoding="utf-8").write("\n".join(L) + "\n")
 

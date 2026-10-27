@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # Sourced by launch.sh and run_wave.sh. Sets LOCAL_OK (1 or 0) and LOCAL_MODEL for the Ollama server at
 # LOCAL_URL: probes the API; if nothing answers, starts the Ollama app or the ollama binary from the
 # places the installers use; then picks (or makes, through the API) a qwen3 model with a 64k context.

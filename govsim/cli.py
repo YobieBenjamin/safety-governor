@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """govsim command line: sweep, demo, bench."""
 from __future__ import annotations
 
@@ -224,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd")
     sub.add_parser("sweep", help="run every hypothesis against every tier and write results/report.md")
     sub.add_parser("demo", help="a narrated walk through one rack")
-    sub.add_parser("bench", help="the H9 overhead model")
+    sub.add_parser("bench", help="the CONTRACT-GOVERNOR-OVERHEAD-BOUNDED overhead model")
     uc = sub.add_parser("usecase", help="a narrated use case: the hops, what the governor saw and did, the bypasses and their refusals")
     uc.add_argument("name", choices=sorted(USECASES))
     args = ap.parse_args(argv)

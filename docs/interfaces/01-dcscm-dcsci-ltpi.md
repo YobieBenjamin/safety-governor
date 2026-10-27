@@ -13,7 +13,7 @@
 | Project Argus DC-SCM 2.0 module spec, section 9.4 Tables 2 and 3 (`ARGUS`) | Pin numbers, functions, voltages and directions. Argus states its pinout "fully complies with the OCP DC-SCI Rev2.0 Ver1.0 Pin Definition" | WebFetch text extraction |
 | OCP LTPI for DC-SCM 2.2 (`LTPI12`) | GPIO frame (2.2.1.1), link loss (2.5.2), latency (Table 15, Table 16) | WebFetch text extraction |
 
-So the pin numbers in the mapping are a public secondary transcription of the OCP spreadsheet, made by a vendor that built to it. Row `DCSCM-09` of the compliance matrix stays **open** until someone reads the spreadsheet itself. DC-SCM 2.2 changed some names and added alternates relative to 2.0; where the 2.1 change log says a pin gained an alternate (the LTPI2 and SGMII alternates on the OCP bay pins), the mapping says so in its notes.
+So the pin numbers in the mapping are a public secondary transcription of the OCP spreadsheet, made by a vendor that built to it. Row `REQUIREMENT-PINS-CONFIRMED-AGAINST-SPREADSHEET` of the compliance matrix stays **open** until someone reads the spreadsheet itself. DC-SCM 2.2 changed some names and added alternates relative to 2.0; where the 2.1 change log says a pin gained an alternate (the LTPI2 and SGMII alternates on the OCP bay pins), the mapping says so in its notes.
 
 ## 2. The mapping, in one table
 
@@ -26,9 +26,9 @@ Full detail, one row per physical pin, is in `hw/pinout/dcscm_mapping.csv`. The 
 | GPU post-box SMBus, slots 0 to 7 | I2C_3V3_2 to I2C_3V3_9, one bus per slot | DCSCM22 3.5.7; ARGUS | designed; HPM routing to the GPU is OEM, the HGX side is NDA |
 | NVSwitch management bus | I2C_I3C_1V8_12 (A58/A59) through a 3.3 to 1.8 V translator | DCSCM22 3.5.7 | designed; HGX side NDA |
 | PCIe switch management bus | I2C_I3C_1V8_13 (A61/A62) through a translator | DCSCM22 3.5.7 | designed |
-| PWRBRK#, slots 0 to 7 | LTPI2 low-latency GPIO, SCM to HPM, bits 0 to 7 | LTPI12 2.2.1.1, Table 15 | designed, needs REQ-LTPI-FS-1 |
-| PERST#, slots 0 to 7 | LTPI2 low-latency GPIO, bits 8 to 15 | LTPI12 2.2.1.1; DCSCM22 3.5.1.3 | designed, needs REQ-LTPI-FS-1 |
-| PWR_EN, slots 0 to 7 | LTPI2 normal-latency GPIO, bits 0 to 7 | LTPI12 2.2.1.1, Table 16 | designed, needs REQ-LTPI-FS-1 |
+| PWRBRK#, slots 0 to 7 | LTPI2 low-latency GPIO, SCM to HPM, bits 0 to 7 | LTPI12 2.2.1.1, Table 15 | designed, needs REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS |
+| PERST#, slots 0 to 7 | LTPI2 low-latency GPIO, bits 8 to 15 | LTPI12 2.2.1.1; DCSCM22 3.5.1.3 | designed, needs REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS |
+| PWR_EN, slots 0 to 7 | LTPI2 normal-latency GPIO, bits 0 to 7 | LTPI12 2.2.1.1, Table 16 | designed, needs REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS |
 | NVSwitch reset, PCIe switch reset | LTPI2 normal-latency GPIO, bits 8 and 9 | LTPI12 2.2.1.1 | designed |
 | TAMPER_IN | HPM_SCM_INTRUSION_N (B27), wired-AND with the module's own switch | DCSCM22 3.5.13 | designed |
 | Halt loop, message fabric | Their own connector next to the management connector | `hw/pcb/rack-integration.md` 4 | intentional |
@@ -57,11 +57,11 @@ For a BMC that is a sensible rule: a glitch should not flap the board's signals.
 
 `tests/test_if_dcscm.py::test_finding_ltpi_as_written_holds_released_levers_on_link_loss` shows it on the model of the spec text, and `test_failsafe_endpoint_asserts_levers_on_link_loss_and_before_training` shows the fix.
 
-**REQ-LTPI-FS-1.** The HPM-side LTPI2 endpoint drives every governor lever to its asserted value (PWRBRK# low, PERST# low, PWR_EN low, switch resets asserted) while the link has not reached Operational since power-on, and from the moment Link Lost is declared until the link is Operational again and a fresh frame has arrived. The HPM default for those outputs is the asserted value; they must not depend on pull resistors on the card side.
+**REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS.** The HPM-side LTPI2 endpoint drives every governor lever to its asserted value (PWRBRK# low, PERST# low, PWR_EN low, switch resets asserted) while the link has not reached Operational since power-on, and from the moment Link Lost is declared until the link is Operational again and a fresh frame has arrived. The HPM default for those outputs is the asserted value; they must not depend on pull resistors on the card side.
 
-No public document requires this. It is stricter than LTPI. It needs OEM logic in the HPM CPLD, which is why the matrix row `LTPI-04` is **open**, not designed.
+No public document requires this. It is stricter than LTPI. It needs OEM logic in the HPM CPLD, which is why the matrix row `REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS` is **open**, not designed.
 
-**REQ-CEM-FAIL-1** comes out of the same hop and is explained in `02-pcie-cem-sideband.md`: the HPM endpoint also ORs the slot's own power-fail into PERST#, because a power-good that crosses LTPI arrives up to 19.2 us late and the CEM wants PERST# within 500 ns.
+**REQUIREMENT-LOCAL-POWER-FAIL-DRIVES-PERST** comes out of the same hop and is explained in `02-pcie-cem-sideband.md`: the HPM endpoint also ORs the slot's own power-fail into PERST#, because a power-good that crosses LTPI arrives up to 19.2 us late and the CEM wants PERST# within 500 ns.
 
 ## 5. Latency
 

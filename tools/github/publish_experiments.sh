@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # Publish the chip program's experiments to GitHub: labels and one issue per experiment, in the
 # repository each experiment belongs to, from tools/github/experiments.json. Idempotent: labels
 # are created or updated, and an issue whose title already exists is updated, not duplicated.
@@ -11,7 +13,7 @@
 # Needs: gh (logged in as YobieBenjamin), python3, git. Run from any directory.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; . "$HERE/../agents/paths.sh"   # WORK: where the clones live
-SPEC="$HERE/experiments.json"
+SPEC="${EXPERIMENTS_SPEC:-$HERE/experiments.json}"   # override to publish a different spec, e.g. audit-fixes.json
 OWNER="${GITHUB_OWNER:-YobieBenjamin}"
 DRY=0; BUNDLES=""
 while [ $# -gt 0 ]; do
@@ -89,14 +91,14 @@ for i in json.load(open(sys.argv[1]))['issues']:
     title=$(printf '%s' "$line" | python3 -c "import json,sys; print(json.load(sys.stdin)['title'])")
     labels=$(printf '%s' "$line" | python3 -c "import json,sys; print(','.join(json.load(sys.stdin)['labels']))")
     body=$(mktemp); printf '%s' "$line" | python3 -c "import json,sys; sys.stdout.write(json.load(sys.stdin)['body'])" > "$body"
-    # the issue is matched by its exact title, else by its id prefix ("L5 · ") when a brief's title was
+    # the issue is matched by its exact title, else by its id prefix ("WAVE-DIFFERENTIAL-GATE-TEST · ") when a brief's title was
     # corrected; the lowest-numbered one is kept and retitled, later duplicates are closed
     ident=$(printf '%s' "$line" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
     match=$(python3 -c "
 import json, sys
 issues = json.load(open(sys.argv[1])); title, ident = sys.argv[2], sys.argv[3]
 exact = [i for i in issues if i['title'] == title]
-# a closed issue still counts as the issue (closing #7 by hand must not make the next run open a new L7);
+# a closed issue still counts as the issue (closing #7 by hand must not make the next run open a new WAVE-FORMAL-PROOFS-ON-VERILOG);
 # only open ones are ever closed as duplicates
 pref = sorted([i for i in issues if i['title'].startswith(ident + ' \u00b7 ')], key=lambda i: i['number'])
 cands = sorted({i['number']: i for i in exact + pref}.values(), key=lambda i: i['number'])

@@ -33,14 +33,14 @@ mistake in place was not really testing anything.
 One command, `python -m rtl.conformance`. It:
 
 - checks that every rule quoted in the table really appears, word for word, in docs/04 or docs/07 (125 rules);
-- runs 173 conformance tests against the chip design, block by block (counter, measurement registers, epoch,
+- runs 174 conformance tests against the chip design, block by block (counter, measurement registers, epoch,
   lifecycle, capability table, ticket store, heartbeat, the halt sequencer, the loop, the meter, the mailbox, the
   alarm register, and the whole core wired together);
 - sends 4,000 random mailbox messages, plus fourteen hand-written ones taken straight from the spec, into both the
   chip design and the software model and compares every answer;
 - does the same for the capability table (1,280 random lookups);
 - maps every row of the existing 87-row attack and baseline catalogue to the rules it exercises;
-- plants 30 one-line mistakes in the design, one per rule, and confirms each is caught;
+- plants 32 one-line mistakes in the design, at least one per rule (30 rules), and confirms each is caught;
 - writes the report to `results/rtl-conformance.md`.
 
 ## What passed
@@ -56,11 +56,11 @@ Every one of the 30 planted mistakes was caught by a failing check.
 
 Fifteen findings, all written up with a test that reproduces each one. The two that matter most:
 
-- **Tamper can be lost (F-05).** If an authorized CLEAR and a tamper signal land in the same clock cycle, the chip
+- **Tamper can be lost (CONFORMANCE-CLEAR-BEATS-TAMPER).** If an authorized CLEAR and a tamper signal land in the same clock cycle, the chip
   handles the CLEAR first and forgets the tamper. If the tamper was a one-cycle pulse (a glitch detector), the chip
   goes back to running. The spec says tamper means SAFE, full stop. The fix is to swap two lines and make tamper
   sticky.
-- **Debug is open for a moment on a production part (F-06).** The lifecycle register starts at "test" after reset
+- **Debug is open for a moment on a production part (CONFORMANCE-DEBUG-BEFORE-FUSE-LOAD).** The lifecycle register starts at "test" after reset
   and only reads the fuses when the firmware tells it to. Until then, a production chip will grant a debug request.
   The spec says production silicon has no debug path, ever. Real designs start in the most locked-down state.
 
@@ -72,8 +72,8 @@ than the model in a few double-fault cases, and the spec contradicts itself in o
 here; fixing is the next job, with each reproducer becoming the regression test.
 
 The catalogue mapping says something worth saying out loud: all 87 catalogue rows run against the reference
-software stack, not the chip. They count toward the 150 the brief asked for (87 + 173 = 260), but they are not
-evidence about the hardware. The 173 conformance tests are.
+software stack, not the chip. They count toward the 150 the brief asked for (87 + 174 = 261), but they are not
+evidence about the hardware. The 174 conformance tests are.
 
 ## What didn't work
 
@@ -86,7 +86,7 @@ evidence about the hardware. The 173 conformance tests are.
   "is the governor running" check sits, and the heartbeat path in the model. The finding says exactly that.
 - **My first capability-table comparison drifted.** Once the two tables disagreed about a duplicate entry, every
   later answer diverged too, and the test reported nonsense. I split it: the random run now keeps entries from
-  overlapping and agrees exactly, and the duplicate case has its own reproducer (F-10).
+  overlapping and agrees exactly, and the duplicate case has its own reproducer (CONFORMANCE-DUPLICATE-CAPABILITY-ENTRIES).
 - **One of my own tests was wrong.** The LOOP register test expected the switch to close one clock cycle too
   early. The chip was right; I fixed the test.
 - **This page and FINDINGS.md are generated.** The tool I write files with refused to write report-style

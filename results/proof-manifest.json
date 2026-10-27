@@ -1,0 +1,113 @@
+{
+  "verdict": 1,
+  "coverage": "software-only",
+  "generated": "2026-10-23T23:43:28Z",
+  "commit": "0d63e43380a887c1876c38942f0a87ba1ec548d4",
+  "environment": {
+    "python": "3.13.16",
+    "yowasp_yosys": false,
+    "pytest": true
+  },
+  "counts": {
+    "pass": 11,
+    "fail": 0,
+    "skipped": 1
+  },
+  "components": [
+    {
+      "key": "redteam-selftest",
+      "description": "the red-team oracle returns 0 on a broken gate (non-vacuous)",
+      "command": "python -m govsim.redteam --selftest",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": "SELFTEST: 1  (the oracle detects a broken gate)"
+    },
+    {
+      "key": "redteam",
+      "description": "capstone: one protected action, every attack the audit named",
+      "command": "python -m govsim.redteam",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": "VERDICT: 1"
+    },
+    {
+      "key": "proofs-core",
+      "description": "abstract-machine invariants (INVARIANT-EDITION-NEVER-NEGATIVE..INVARIANT-NO-REPLAY-COUNTED, non-vacuity)",
+      "command": "python proofs/core_invariants.py",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": "All proofs hold."
+    },
+    {
+      "key": "proofs-commit",
+      "description": "the commit-point proof",
+      "command": "python proofs/commit_point.py",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": "All proofs hold."
+    },
+    {
+      "key": "proofs-killswitch",
+      "description": "no global kill switch / corrected min-cut",
+      "command": "python proofs/no_global_kill_switch.py",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": "All checks hold."
+    },
+    {
+      "key": "conformance",
+      "description": "RTL differential-conformance suite",
+      "command": "python -m rtl.conformance",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": "wrote results/rtl-conformance.md in 19 s"
+    },
+    {
+      "key": "rtl-formal",
+      "description": "RTL formal properties with planted mutants",
+      "command": "-m rtl.formal",
+      "status": "skipped",
+      "note": "yowasp-yosys not installed in this environment; run on a host that has it for the full verdict"
+    },
+    {
+      "key": "exp-origin-gate",
+      "description": "EXPERIMENT-ORIGIN-GATE: the origin gate (no key, no model)",
+      "command": "python -m govsim.origin_gate",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": "EXPERIMENT-ORIGIN-GATE: every check holds"
+    },
+    {
+      "key": "exp-containment",
+      "description": "EXPERIMENT-EGRESS-CONTAINMENT: containment measurement",
+      "command": "python -m govsim.containment",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": "EXPERIMENT-EGRESS-CONTAINMENT: every check holds"
+    },
+    {
+      "key": "exp-road",
+      "description": "EXPERIMENT-ROAD-REACHABILITY: rulebook reachability audit",
+      "command": "python -m govsim.road_reachability",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": "EXPERIMENT-ROAD-REACHABILITY: the audit works, finds its one road, and the fix and the planted gap both behave"
+    },
+    {
+      "key": "exp-customer",
+      "description": "EXPERIMENT-CUSTOMER-CONFIRMATION: the payer's own-key confirmation",
+      "command": "python -m govsim.customer_confirm",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": "EXPERIMENT-CUSTOMER-CONFIRMATION: every check holds"
+    },
+    {
+      "key": "unit-tests",
+      "description": "the discriminating test suite (fail-before, pass-after)",
+      "command": "python -m pytest -q",
+      "status": "pass",
+      "returncode": 0,
+      "last_line": ".............................................................            [100%]"
+    }
+  ]
+}

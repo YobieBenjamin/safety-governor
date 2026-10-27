@@ -1,4 +1,4 @@
-.PHONY: figures docx run test rtl rtl-test sweep demo bench gds loop clean interfaces
+.PHONY: figures docx run test rtl rtl-test sweep demo bench gds loop clean interfaces prove redteam
 run:      ; ./run.sh
 test:     ; python3 -m pytest -q tests
 rtl-test: ; python3 -m pytest -q rtl/tests
@@ -12,5 +12,7 @@ gds:      ; python3 -m pip install -q --upgrade librelane && librelane --dockeri
 loop:     ; python3 hw/loop/run_loop.py
 interfaces: ; python3 -m govsim.hardware_ref
 proof:    ; python3 proofs/core_invariants.py && python3 proofs/commit_point.py && python3 proofs/no_global_kill_switch.py
+prove:    ; python3 -m govsim.prove
+redteam:  ; python3 -m govsim.redteam
 clean:    ; rm -rf .venv .pytest_cache govsim/__pycache__ tests/__pycache__ rtl/__pycache__ rtl/governor_rtl/__pycache__ rtl/tests/__pycache__ hw/librelane/governor_core/runs
 archive:  ; python3 tools/archive/build_archive.py --out build/archive --repo . --repo ../hardware-and-silicon && python3 tools/archive/build_project_docs.py --out build/project --governor . --stack ../hardware-and-silicon

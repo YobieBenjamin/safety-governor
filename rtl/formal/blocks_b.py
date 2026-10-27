@@ -1,4 +1,6 @@
-"""L7, work stream b: heartbeat, meter, alarms, measure_reg, loop_io, governor_core.
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
+"""WAVE-FORMAL-PROOFS-ON-VERILOG, work stream b: heartbeat, meter, alarms, measure_reg, loop_io, governor_core.
 
 Merged into rtl/formal/__main__.py's BLOCKS by a guarded import; same shape:
     block -> (Amaranth source file, class name, [(mutant description, old text, new text)])
@@ -29,9 +31,15 @@ BLOCKS_B = {
         ("the countdown stops at one and never expires",
          "with m.Elif(self.tick & (self.remaining != 0)):", "with m.Elif(self.tick & (self.remaining > 1)):"),
         ("a heartbeat buys twice the window it signed",
-         "m.d.sync += self.remaining.eq(self.window)", "m.d.sync += self.remaining.eq(self.window << 1)"),
+         "m.d.sync += self.remaining.eq(clamped)", "m.d.sync += self.remaining.eq(clamped << 1)"),
         ("expiry is hidden on every tick cycle",
          "m.d.comb += self.expired.eq(self.remaining == 0)", "m.d.comb += self.expired.eq((self.remaining == 0) & ~self.tick)"),
+        # adversarial audit 3: the window is clamped to the policy maximum (5000 ms)
+        ("the window is not clamped: one heartbeat with a 32-bit window keeps the core alive for 49 days (adversarial audit 3)",
+         "Mux(self.window > self.max_window, self.max_window, self.window)", "self.window"),
+        ("the clamp lets one tick more than the policy maximum through (adversarial audit 3)",
+         "Mux(self.window > self.max_window, self.max_window, self.window)",
+         "Mux(self.window > self.max_window, self.max_window + 1, self.window)"),
     ]),
     "meter": ("meter.py", "Meter", [
         ("the old wrapping add (the bug fixed on 23 October 2026)",
@@ -116,6 +124,19 @@ BLOCKS_B = {
          "Cat(self.halt.cause, self.halt.no_first_hb, self.halt.excluded,", "Cat(self.halt.cause, Const(0, 1), self.halt.excluded,"),
         ("an excluded chip's PERST# pad releases",
          "self.perst_n.eq(~self.halt.perst),", "self.perst_n.eq(~self.halt.perst | self.halt.excluded),"),
+        # adversarial audit 3: CLEAR bound to the mailbox, epoch advance restarts the key slots
+        ("any dispatched mailbox command authorizes a clear (a heartbeat frame releases the levers; adversarial audit 3)",
+         "self.halt.clear_authorized.eq(self.mbox.dispatch & (self.mbox.cmd == MBOX_CLEAR)),",
+         "self.halt.clear_authorized.eq(self.mbox.dispatch),"),
+        ("the clear authorization reads the stale cmd_out register (the previous frame's command; adversarial audit 3)",
+         "self.halt.clear_authorized.eq(self.mbox.dispatch & (self.mbox.cmd == MBOX_CLEAR)),",
+         "self.halt.clear_authorized.eq(self.mbox.dispatch & (self.mbox.cmd_out == MBOX_CLEAR)),"),
+        ("an epoch commit without a quorum restarts the mailbox key slots (adversarial audit 3)",
+         "self.mbox.epoch_advanced.eq(self.epoch.commit & self.epoch.quorum_ok & (self.epoch.new_epoch != self.epoch.epoch)),",
+         "self.mbox.epoch_advanced.eq(self.epoch.commit & (self.epoch.new_epoch != self.epoch.epoch)),"),
+        ("a re-commit of the same epoch restarts the key slots (old frames of this epoch replay; adversarial audit 3)",
+         "self.mbox.epoch_advanced.eq(self.epoch.commit & self.epoch.quorum_ok & (self.epoch.new_epoch != self.epoch.epoch)),",
+         "self.mbox.epoch_advanced.eq(self.epoch.commit & self.epoch.quorum_ok),"),
         ("the host's CSR address selects the meter slot that gets charged",
          "m.d.comb += self.meter.rd_slot.eq(meter_off[5:7])",
          "m.d.comb += [self.meter.rd_slot.eq(meter_off[5:7]), self.meter.slot.eq(meter_off[5:7])]"),
@@ -145,7 +166,9 @@ def _probes(core) -> list:
         getattr(core.loop, attr).name = "loop_" + attr
     return [core.halt.state, core.halt.cause, core.halt.switch_open, core.halt.timer, core.hb.remaining,
             core.hb.expired, core.loop.loop_lost, core.loop.count, core.ms_div,
-            core.halt.excluded, core.halt.hb_seen, core.halt.boot_timer, core.halt.no_first_hb, core.alarms.alarms]
+            core.halt.excluded, core.halt.hb_seen, core.halt.boot_timer, core.halt.no_first_hb, core.alarms.alarms,
+            # adversarial audit 3: the clear authorization, the non-volatile rung record, the mailbox's epoch strobe
+            core.halt.clear_authorized, core.halt.rung_nv, core.halt.rung_nv_safe, core.mbox.epoch_advanced, core.epoch.epoch]
 
 
 def core_verilog(out: str, mutant=None, kwargs=None, probes: bool = True) -> None:
@@ -194,6 +217,15 @@ HOST_PATHS = {
     "csr": (("csr_addr", "epoch_host_wr", "epoch_host_data"), ("csr_rdata",), None),
     "doorbell": (("doorbell",), ("csr_rdata", "mbox_verify_req", "mbox_dispatch", "mbox_cmd_out"), "core.mbox."),
 }
+# Adversarial audit 3 gave the doorbell one designed path out of the mailbox: a verified CLEAR frame dispatching drives
+# halt_clear_authorized, the hardware's half of a clear. The checks treat that path as follows, and nothing else changes:
+#  - the structural cone ties the sequencer instance's halt_clear_authorized input to 0 before following the host's
+#    wires, so the doorbell must still reach no register outside the mailbox by any OTHER path. The cut wire's function is
+#    proven exactly in governor_core.sv (RTL-CLEAR-NEEDS-MAILBOX-CLEAR: dispatch AND command byte CLEAR, nothing else).
+#  - the two-copy miter holds the firmware's clear (halt_clear) low in both copies: with no firmware approval the
+#    doorbell changes no register outside the mailbox and no pin but the allowed ones.
+HOST_CUT = {"doorbell": ("halt_clear_authorized",)}
+HOST_HELD_LOW = {"doorbell": ("halt_clear",)}
 
 
 def _wrappers(vtext: str, host: tuple, free_out: tuple) -> str:
@@ -245,6 +277,8 @@ def host_miter(work: str, vpath: str, path: str, solver_list: list) -> tuple[boo
         if d == "input":
             if n == "clk":
                 cg.append(".clk(clk)"); cb.append(".clk(clk)")
+            elif n in HOST_HELD_LOW.get(path, ()):
+                decl.append(f"  wire {w} i{k} = 0;"); cg.append(f".{n} (i{k})"); cb.append(f".{n} (i{k})")
             else:
                 decl.append(f"  (* anyseq *) wire {w} i{k};"); cg.append(f".{n} (i{k})"); cb.append(f".{n} (i{k})")
         else:
@@ -279,7 +313,10 @@ def host_cone(work: str, vpath: str, path: str) -> tuple[bool, str]:
     ffs = "t:$dff t:$adff t:$sdff t:$dffe t:$adffe t:$sdffe t:$aldff t:$dlatch t:$mem* " + "%u " * 8
     regs_bad = f"@cone {ffs}%i" + (f" c:$flatten\\{own[5:-1]}.* %d" if own else "")
     outs_bad = "@cone o:* %i " + " ".join(f"o:{o} %d" for o in free_out)
-    script = (f"read_verilog -sv dut.v; hierarchy -top governor_core; proc; flatten; opt_clean; "
+    # adversarial audit 3: cut the designed CLEAR path (HOST_CUT) where it enters the sequencer, before flattening: the
+    # sequencer instance's input is tied to 0, so its other inputs are still followed in full
+    cut = "".join(f"cd governor_core; connect -port {w.split('_', 1)[0]} {w} 1'b0; cd ..; " for w in HOST_CUT.get(path, ()))
+    script = (f"read_verilog -sv dut.v; hierarchy -top governor_core; proc; {cut}flatten; opt_clean; "
               f"select -set cone {src} %co*; select -count @cone; "
               f"tee -o regs.txt select -list {regs_bad}; tee -o outs.txt select -list {outs_bad}; "
               f"select -assert-none {regs_bad}; select -assert-none {outs_bad}")
@@ -363,7 +400,7 @@ FACTS = [
         "governor_core_cover.sv", 60, "from boot, a heartbeat that runs out reaches SAFE, power off, loop pad closed")),
     ("a local cause never opens the loop", lambda: _assert_fact(
         "governor_core_facts.sv", 12, "proven: cause LOCAL implies the loop pad is closed (the old fact that a HALT "
-        "to a chip in SAFE leaves the pad closed is gone: Yobie's call 1, now rule G3)")),
+        "to a chip in SAFE leaves the pad closed is gone: Yobie's call 1, now rule RTL-HALT-REACHES-PINS)")),
 ]
 
 
@@ -381,13 +418,26 @@ def _exclude_miter(work, mutant, all_solvers):
     return ok, why
 
 
+def _persist_proof(work, mutant, all_solvers):
+    """Adversarial audit 3: a halt survives a reset. rtl/formal/halt_seq_persist.sv, proven with reset free in every
+    cycle (halt_seq.sv itself resets only at power-on). Runs on the checked-in Verilog or on the mutant."""
+    from .__main__ import GEN, mutant_verilog, prove
+    v = os.path.join(work, "dut.v")
+    if mutant is None:
+        shutil.copy(os.path.join(GEN, "halt_seq.v"), v)
+    else:
+        mutant_verilog("halt.py", "HaltSeq", mutant[1], mutant[2], v, "halt_seq")
+    return prove(v, os.path.join(HERE, "halt_seq_persist.sv"), work, depth=8, solver="yices")
+
+
 # ------------------------------------------------------------------------------------------------ options
 def _sims(name):
     return {"sim": lambda: sim_b.SIMS[name](), "sim_mutant": lambda factory: sim_b.SIMS[name](cls=factory)}
 
 
 OPTIONS_B = {
-    "halt_seq": {"checks": [("EXCLUDE changes nothing outside HALTED_INITIAL with no cause (two-copy miter)", _exclude_miter)],
+    "halt_seq": {"checks": [("EXCLUDE changes nothing outside HALTED_INITIAL with no cause (two-copy miter)", _exclude_miter),
+                            ("a halt survives any reset until an authorized clear (adversarial audit 3, reset free)", _persist_proof)],
                  **_sims("halt_seq")},
     "heartbeat": {**_sims("heartbeat"), "depth": 25, "solver": "yices"},
     "meter": {**_sims("meter"), "depth": 6, "solver": "yices"},

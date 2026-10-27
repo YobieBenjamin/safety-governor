@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The SMBus/I2C target, driven by a bit-banged SMBus host in amaranth.sim (rtl/tests/smbus_host.py).
 
 Two layers:
@@ -69,36 +71,36 @@ async def battery(ctx, h):
             if ctx.get(t.sda_oe) and ctx.get(t.phase) == 0:
                 sda_driven_outside += 1
 
-    # R1 a block read returns the word with a correct PEC (and primes the PEC register for R2)
+    # RTL-SMBUS-BLOCK-READ-WITH-PEC a block read returns the word with a correct PEC (and primes the PEC register for RTL-SMBUS-GOOD-WRITE-COMMITS-ONCE)
     v, pec_ok, acks = await h.block_read(0x00)
     assert acks == [True, True, True] and v == WORD and pec_ok, "block read"
     await quiet()
-    # R2 a good doorbell write commits exactly once, with the bytes little-endian
+    # RTL-SMBUS-GOOD-WRITE-COMMITS-ONCE a good doorbell write commits exactly once, with the bytes little-endian
     acks = await h.doorbell(0x11223344)
     await quiet()
     assert all(acks) and h.doorbells == [0x11223344], f"good doorbell write: {acks} {h.doorbells}"
-    # R3 a bad PEC is NACKed and never commits
+    # RTL-SMBUS-BAD-PEC-NEVER-COMMITS a bad PEC is NACKed and never commits
     acks = await h.doorbell(0x55, pec_delta=1)
     await quiet()
     assert acks[-1] is False and len(h.doorbells) == 1, "bad PEC"
-    # R4 a write to a read-only register (STATE, word 0x02) with a correct PEC is NACKed and never commits
+    # RTL-SMBUS-READ-ONLY-WRITE-REFUSED a write to a read-only register (STATE, word 0x02) with a correct PEC is NACKed and never commits
     acks = await h.doorbell(0x55, cmd=0x02)
     await quiet()
     assert acks[2] is False and len(h.doorbells) == 1, "write to a read-only register"
-    # R5 a block write that claims 5 bytes but carries 4 (PEC correct over what was sent) never commits
+    # RTL-SMBUS-SHORT-BLOCK-NEVER-COMMITS a block write that claims 5 bytes but carries 4 (PEC correct over what was sent) never commits
     acks = await h.doorbell(0x66, count=5)
     await quiet()
     assert len(h.doorbells) == 1, "wrong byte count"
-    # R6 another address is ignored: NACK, no commit
+    # RTL-SMBUS-OTHER-ADDRESS-IGNORED another address is ignored: NACK, no commit
     acks = await h.doorbell(0x77, address=ADDR + 1)
     await quiet()
     assert acks[0] is False and len(h.doorbells) == 1, "wrong address"
-    # R7 a complete write followed by a repeated start (then a read) never commits
+    # RTL-SMBUS-WRITE-THEN-RESTART-UNCOMMITTED a complete write followed by a repeated start (then a read) never commits
     await h.doorbell(0x88, stop=False)
     v, pec_ok, _ = await h.block_read(0x00)
     await quiet()
     assert len(h.doorbells) == 1, "repeated start after the PEC"
-    # R8 a write after a repeated start is refused, even with a PEC over every byte
+    # RTL-SMBUS-WRITE-AFTER-RESTART-REFUSED a write after a repeated start is refused, even with a PEC over every byte
     a = ADDR << 1
     await h.start()
     await h.write_byte(a)
@@ -110,13 +112,13 @@ async def battery(ctx, h):
     await h.stop()
     await quiet()
     assert acks[0] is False and len(h.doorbells) == 1, "write after a repeated start"
-    # R9 four stray clock bits after the PEC, then STOP: never commits
+    # RTL-SMBUS-STRAY-BITS-NEVER-COMMIT four stray clock bits after the PEC, then STOP: never commits
     await h.doorbell(0x99, stop=False)
     await h.write_byte(0xFF, bits=4)
     await h.stop()
     await quiet()
     assert len(h.doorbells) == 1, "stray bits after the PEC"
-    # R10 the SMBus timeout: SCL held low mid-write past the limit kills the transaction
+    # RTL-SMBUS-HELD-CLOCK-KILLS-WRITE the SMBus timeout: SCL held low mid-write past the limit kills the transaction
     await h.start()
     for b in [a, DOORBELL_CMD, 4, 0xDE, 0xAD]:
         await h.write_byte(b)
@@ -128,7 +130,7 @@ async def battery(ctx, h):
     await h.stop()
     await quiet()
     assert len(h.doorbells) == 1, "a timed-out write never commits"
-    # R11 the bus still works after all of that, and the target never stretched the clock
+    # RTL-SMBUS-BUS-RECOVERS-AFTER-BATTERY the bus still works after all of that, and the target never stretched the clock
     v, pec_ok, _ = await h.block_read(0x41)
     assert v == WORD and pec_ok and ctx.get(t.csr_addr) == 0x104, "read after recovery"
     acks = await h.doorbell(0x0BADF00D)
@@ -348,7 +350,7 @@ def test_csr_addr_reaches_no_state_in_the_core():
 
 # ---- a finding the FPGA top exposed (not an SMBus bug; recorded, not fixed, because halt.py is not this branch's)
 
-# FINDING F1 (hw/fpga/REPORT.md) fixed on fix/halt: RUN needs loop_sense & ~loop_lost. This was a strict xfail;
+# FINDING RTL-CORE-HALTS-AFTER-REACHING-RUN (hw/fpga/REPORT.md) fixed on fix/halt: RUN needs loop_sense & ~loop_lost. This was a strict xfail;
 # it now passes and guards the fix.
 def test_core_reaches_run_and_stays_there_with_the_sense_strobe_running_from_power_on():
     class OneGovernorLoop(GovernorSMBus):

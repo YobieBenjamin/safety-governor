@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The governor's hard-core digital blocks in Amaranth HDL.
 
 Each block is small, synchronous, and carries one invariant from

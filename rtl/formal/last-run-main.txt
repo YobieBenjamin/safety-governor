@@ -5,11 +5,11 @@
   caught  halt_seq mutant: tamper does not open the loop [simulation: caught it too]
   caught  halt_seq mutant: HALT never escalates to SAFE [simulation: caught it too]
   caught  halt_seq mutant: the power brake releases in THROTTLE [simulation: caught it too]
-  caught  halt_seq mutant: CLEAR outranks tamper again (F-05) [simulation: missed it]
-  caught  halt_seq mutant: RUN entered on a stale loop_lost (F1) [simulation: caught it too]
+  caught  halt_seq mutant: CLEAR outranks tamper again (CONFORMANCE-CLEAR-BEATS-TAMPER) [simulation: missed it]
+  caught  halt_seq mutant: RUN entered on a stale loop_lost (RTL-CORE-HALTS-AFTER-REACHING-RUN) [simulation: caught it too]
   caught  halt_seq mutant: a halt command is ignored once throttled [simulation: caught it too]
-  caught  halt_seq mutant: a HALT to a chip in SAFE leaves the loop closed (the old behaviour, F-07) [simulation: caught it too]
-  caught  halt_seq mutant: a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old F-07) [simulation: caught it too]
+  caught  halt_seq mutant: a HALT to a chip in SAFE leaves the loop closed (the old behaviour, CONFORMANCE-HALT-IN-SAFE-MISHANDLED) [simulation: caught it too]
+  caught  halt_seq mutant: a HALT to a chip in SAFE drops it to HALT and powers the slot (govsim's old CONFORMANCE-HALT-IN-SAFE-MISHANDLED) [simulation: caught it too]
   caught  halt_seq mutant: EXCLUDE closes the loop of a chip halted by loop loss, a command or tamper [simulation: caught it too]
   caught  halt_seq mutant: an excluded chip's slot gets power (EXCLUDE moves it to the HALT rung) [simulation: caught it too]
   caught  halt_seq mutant: an excluded chip runs without a heartbeat [simulation: caught it too]
@@ -65,7 +65,7 @@
   caught  governor_core mutant: an excluded chip's PERST# pad releases [simulation: caught it too]
   caught  governor_core mutant: the host's CSR address selects the meter slot that gets charged [simulation: missed it]
   FACT  governor_core: lost heartbeat climbs to SAFE with the loop closed: from boot, a heartbeat that runs out reaches SAFE, power off, loop pad closed (trace of 28 cycles found)
-  FACT  governor_core: a local cause never opens the loop: proven: cause LOCAL implies the loop pad is closed (the old fact that a HALT to a chip in SAFE leaves the pad closed is gone: Yobie's call 1, now rule G3); bounded to 12 cycles and k-induction: every reachable state (yices)
+  FACT  governor_core: a local cause never opens the loop: proven: cause LOCAL implies the loop pad is closed (the old fact that a HALT to a chip in SAFE leaves the pad closed is gone: Yobie's call 1, now rule RTL-HALT-REACHES-PINS); bounded to 12 cycles and k-induction: every reachable state (yices)
   PROVED  smbus: bounded to 25 cycles and k-induction: every reachable state (z3, yices, boolector)
   caught  smbus mutant: the PEC byte is not checked (a corrupted write commits)
   caught  smbus mutant: the command code is not checked (a write to a read-only register is accepted)
@@ -79,13 +79,13 @@
   caught  smbus mutant: the SMBus timeout never fires
   caught  smbus mutant: the target stretches the clock while it transmits
   PROVED  lifecycle: bounded to 25 cycles and k-induction: every reachable state (z3)
-  caught  lifecycle mutant: debug granted before the fuses are read (the code before 23 October 2026, F1)
+  caught  lifecycle mutant: debug granted before the fuses are read (the code before 23 October 2026, RTL-DEBUG-WINDOW-AFTER-RESET)
   caught  lifecycle mutant: debug granted in PRODUCTION
   caught  lifecycle mutant: a fuse load can move the state down
   caught  lifecycle mutant: an advance can move the state down (back to TEST)
   caught  lifecycle mutant: a refused debug request is not flagged
   PROVED  monotonic_counter: bounded to 25 cycles and k-induction: every reachable state (z3)
-  caught  monotonic_counter mutant: the counter wraps to zero at the top (the code before 23 October 2026, F2)
+  caught  monotonic_counter mutant: the counter wraps to zero at the top (the code before 23 October 2026, RTL-COUNTER-WRAPPED-TO-ZERO)
   caught  monotonic_counter mutant: a lower high-water mark pulls the counter down
   caught  monotonic_counter mutant: a decrement path exists
   caught  monotonic_counter mutant: the fuse high-water mark is not restored at boot
@@ -148,4 +148,4 @@
   reproduced  finding mailbox_unlatched_frame: bounded check failed (z3): mailbox: props.sv:464.30-464.74 ($assert$props.sv:464$116)
   reproduced  finding monotonic_counter_reset_rollback: bounded check failed (z3): monotonic_counter: props.sv:65.47-65.69 ($assert$props.sv:65$29)
   reproduced  finding ticket_store_reset_replay: bounded check failed (z3): ticket_store: props.sv:542.46-542.61 ($assert$props.sv:542$142)
-L7: every property proven on the Verilog, every mutant caught
+WAVE-FORMAL-PROOFS-ON-VERILOG: every property proven on the Verilog, every mutant caught

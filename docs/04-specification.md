@@ -11,8 +11,8 @@ memory budgets and physical targets. The functional model in `govsim/` and the R
 > **Plain-English version:** `10-plain-english-walkthrough.md` §8, §9 and §14.
 > **Backed by:** model `govsim/governor.py` (`command` and one `_cmd_*` handler per mailbox
 > code), `govsim/policy.py` (the policy image, k-of-n), `govsim/ledger.py`, `govsim/crypto.py`,
-> `govsim/bench.py` (the timing budgets priced); tests `tests/test_h00_contract.py`,
-> `test_h03_quorum.py`, `test_h04_lane.py`, `test_h08_override.py`, `test_h09_overhead.py`;
+> `govsim/bench.py` (the timing budgets priced); tests `tests/test_contract_fresh_authorization_per_operation.py`,
+> `test_contract_policy_quorum_no_rollback.py`, `test_contract_broker_cannot_pick_rule.py`, `test_contract_override_slow_and_logged.py`, `test_contract_governor_overhead_bounded.py`;
 > hardware `rtl/governor_rtl/mailbox.py`, `ticket_store.py`, `meter.py`, `top.py` (the CSR
 > window).
 
@@ -130,7 +130,7 @@ feature. Operators should have some verbose warning / signal / notice."
    domain stops, as `02-safety-fabric.md` section 1 says a HALT does. SAFE outranks HALT, so a HALT to a chip already in SAFE leaves it in SAFE with power off, and the command becomes
    the cause on record (CAUSE bits 2:0 read 4), except that a tamper cause is kept. The priority is unchanged:
    tamper, then an authorized CLEAR, then the rest. Before this the RTL ignored a HALT in SAFE and the model dropped
-   to HALT and turned slot power back on (conformance finding F-07, now closed).
+   to HALT and turned slot power back on (conformance finding CONFORMANCE-HALT-IN-SAFE-MISHANDLED, now closed).
 2. A chip that never gets its first heartbeat keeps holding the rack (fail closed, unchanged), loudly (section 2,
    operator signals). The deliberate way out is `EXCLUDE`, signed by the authority under the same rules as `CLEAR`.
    EXCLUDE has no effect in any state but HALTED_INITIAL with no cause, and none while a valid heartbeat is live (that chip arms
@@ -201,7 +201,7 @@ to the policy edition as well (a rule cannot be keyed by the fingerprint because
 fingerprint contains the epoch of the image the rule is in). The loader derives the inputs a
 rule relies on from its constraints (`in_list`, `not_in_list`, `digest_of`), its observers and
 its budget key, unions them with the declared `inputs`, and refuses an image in which any of
-them lacks a row in `assumptions` (R-H7), or in which a budget key has no `budget_owners` row.
+them lacks a row in `assumptions` (R-CONTRACT-ASSUMPTIONS-REGISTER-COMPLETE), or in which a budget key has no `budget_owners` row.
 The heartbeat period is the authority's own configuration and is not a governor policy field;
 the governor enforces only `heartbeat_expiry_s`.
 
@@ -293,10 +293,10 @@ firmware fail to verify, which is the intended behaviour: an upgrade is an epoch
 
 | Parameter | Default | Bound |
 |---|---|---|
-| Mailbox command, `auto` rule, ticket minted | 20 µs (firmware) / 2 µs (hard gate core) | 100 µs |
+| Mailbox command, `auto` rule, ticket minted | 20 µs of firmware time to decide, plus the ticket's authentication: a 17 ms P-384 signature on the signing engine for an action ticket, or a MAC on the hash engine (about 2 µs, an assumption) for a response-release ticket, which only the node's own egress checks (adversarial audit 3: every release ticket used to be signed, which put the full serving path at 3x to 68x one engine) | 100 µs for the decision; signed action tickets limited to about 9 a second per chip beside 100-token serving (govsim/bench.py) |
 | Capability lookup | 1 cycle at the checker clock | hidden in the switch's own port logic; the governor programs ports, it does not sit on them |
 | Switch port open or close after a roster, epoch or heartbeat event | 1 ms (management-bus write) | 10 ms |
-| Device-provenance signature | 17 ms per ECDSA P-384 signature on an OTBN-class coprocessor at 100 MHz: OpenTitan's published OTBN figure is 1,697,985 cycles for a constant-time P-384 sign (704,126 for P-256, 7 ms). Per-response signing would therefore cap at about 59 responses per second per engine, so records are batched: one signature per batch window over a Merkle root of the records in the window, each record carrying its path. The window must be longer than the signature; default 50 ms. The engine is shared by every slot the governor chip serves and at a 50 ms window is busy at most 34 percent of the time whatever the load. The record trails the response; a runtime that waits for it before releasing a response adds at most window plus signature, 67 ms. A dedicated ECC engine would shorten all of this; none is assumed | window above 17 ms; engine utilization under 50 percent |
+| Device-provenance signature | 17 ms per ECDSA P-384 signature on an OTBN-class coprocessor at 100 MHz: OpenTitan's published OTBN figure is 1,697,985 cycles for a constant-time P-384 sign (704,126 for P-256, 7 ms). Per-response signing would therefore cap at about 59 responses per second per engine, so records are batched: one signature per batch window over a Merkle root of the records in the window, each record carrying its path. The window must be longer than the signature; default 50 ms. The engine is shared by every slot the governor chip serves and at a 50 ms window is busy at most 34 percent of the time whatever the load. The record trails the response; a runtime that waits for it before releasing a response adds at most window plus signature, 67 ms. A dedicated ECC engine would shorten all of this; none is assumed. Fabric traffic between roster members (loop reports, relays, reservations) is authenticated with pairwise MACs from an attested X25519 exchange at roster formation, not a signature per message: signed, the roll call alone needed 126 percent of one engine at 72 members | window above 17 ms; engine utilization under 50 percent on the full path, roll call included |
 | Heartbeat period / expiry | 1 s / 5 s | the period is the authority's own setting; the expiry is policy (`fabric.heartbeat_expiry_s`) and the governor clamps any signed window to it |
 | Staged-policy deadline | 10 s | policy (`fabric.epoch_deadline_s`): a governor that staged an image and saw no commit stops accepting heartbeats under the staged epoch and halts as a straggler |
 | Ticket validity / workload token validity | 300 s / 3600 s | policy |
@@ -311,7 +311,7 @@ firmware fail to verify, which is the intended behaviour: an upgrade is an epoch
 | Store | Size | Contents |
 |---|---|---|
 | ROM | 64 KB | Boot loader, governance key hashes, DICE engine |
-| OTP fuses | 8 Kbit | UDS, anti-rollback (256 one-time bits as a thermometer code), lifecycle, chip id, configuration |
+| OTP fuses | 8 Kbit | UDS, anti-rollback (256 one-time bits as a thermometer code, one bit per 64 edition versions; the exact version is in an NVM monotonic counter, and an edition may advance the version by at most 16, so the fuses cover more than 16,000 editions), lifecycle, chip id, configuration, the rule floor's digest, the recovery quorum's key hashes, jurisdiction roots |
 | SRAM | 512 KB | Firmware working set, capability tables, roster, in-flight requests |
 | NVM (authenticated, encrypted) | 16 MB on-die or package-bonded | Policy image (≤ 1 MB), log (circular, checkpointed off-chip), ledger state, used-ticket set (2^20 entries as a cuckoo table), reservations |
 

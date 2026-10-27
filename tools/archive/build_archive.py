@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Stage a complete, browsable archive of the program's repositories for publishing on claude.ai.
 
 One command, self-checking:
@@ -357,7 +359,7 @@ def main() -> None:
               f"{', '.join(os.path.basename(b['path']) + ' ' + human(b['bytes']) for b in info['bundles'])}, zip {human(info['zip']['bytes'])}")
     built = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     page = render(out, repos, args.console_url, built)
-    assert "—" not in page and "–" not in page, "no dashes of that kind in the page"
+    assert "\u2014" not in page and "\u2013" not in page, "no dashes of that kind in the page"
     with open(os.path.join(out, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(page)
     publish = [{"path": "index.html"}]

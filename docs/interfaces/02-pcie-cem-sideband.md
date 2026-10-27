@@ -46,19 +46,19 @@ A per-slot block between the sequencer's levers and the pads (`rtl/governor_rtl/
 
 With the shaper every rule passes: T_PVPERL measured 100.000 ms, T_PERST 101 us on the short request, T_FAIL 0 us. Five mutants of the shaper (T_PVPERL halved, no power-good timer, the power-fail path registered one cycle late, T_PERST cut to 10 us, no hold) are each caught by the rule they break (`test_mutant_caught`), and an unmodified copy of the mutant harness passes (`test_mutant_unmodified_copy_passes`), so the harness itself is not what fails.
 
-**Not done:** the shaper is not wired into `GovernorCore` and has no formal proof yet. I left `top.py` alone on purpose: the L7 work on other branches is proving `halt_seq` properties on the generated Verilog, and changing the top-level pad path under it would invalidate that work mid-flight. Next step: wire it in, regenerate, and add its three invariants to `rtl/formal`. It also needs the per-slot power-good pin, which `governor_module.csv` does not have (proposed as `+SLOT_PWRGD` in `01-dcscm-dcsci-ltpi.md`).
+**Not done:** the shaper is not wired into `GovernorCore` and has no formal proof yet. I left `top.py` alone on purpose: the WAVE-FORMAL-PROOFS-ON-VERILOG work on other branches is proving `halt_seq` properties on the generated Verilog, and changing the top-level pad path under it would invalidate that work mid-flight. Next step: wire it in, regenerate, and add its three invariants to `rtl/formal`. It also needs the per-slot power-good pin, which `governor_module.csv` does not have (proposed as `+SLOT_PWRGD` in `01-dcscm-dcsci-ltpi.md`).
 
 ## 5. T_FAIL across LTPI
 
 When the power-good reaches the governor through LTPI it is up to 19.2 us late (LTPI Table 15). The same scenario with a 20 us hop on power-good fails T_FAIL at 20 us (`test_finding_t_fail_cannot_be_met_through_an_ltpi_hop`). A commanded power cut still passes, because PERST# drops with PWR_EN on the governor side. An uncommanded brown-out does not. So:
 
-**REQ-CEM-FAIL-1.** The HPM-side endpoint ORs the slot's local power-fail into PERST#. The governor's own T_FAIL guarantee holds only where the power-good reaches it directly (the soldered-on-baseboard option, or the prototype board).
+**REQUIREMENT-LOCAL-POWER-FAIL-DRIVES-PERST.** The HPM-side endpoint ORs the slot's local power-fail into PERST#. The governor's own T_FAIL guarantee holds only where the power-good reaches it directly (the soldered-on-baseboard option, or the prototype board).
 
 ## 6. The 1 ms halt bound
 
 The sequencer asserts the brake one clock after `loop_lost` (20 ns at 50 MHz, `brake_latency_cycles`). The loop timing work assumes 10 us for "lever assertion" and gets a 317.15 us worst case; 20 ns fits inside the assumption. Over LTPI the pin sees it at 336.35 us. Both are well under 1 ms.
 
-What the 1 ms does **not** cover: the GPU's own reaction to PWRBRK#. NVML says the brake cuts core clocks "by a factor of 2 or more" (`NVML`). How fast, NVIDIA does not publish. The only public figure I found is a patent from a server maker saying 5 ms. Until NVIDIA's number is public, `docs/02-safety-fabric.md`'s line "the GPU's power brake asserts within 1 ms of the governor's halt output" should be read as the pin, not the clocks. Matrix row `CEM-06` is **members-only**.
+What the 1 ms does **not** cover: the GPU's own reaction to PWRBRK#. NVML says the brake cuts core clocks "by a factor of 2 or more" (`NVML`). How fast, NVIDIA does not publish. The only public figure I found is a patent from a server maker saying 5 ms. Until NVIDIA's number is public, `docs/02-safety-fabric.md`'s line "the GPU's power brake asserts within 1 ms of the governor's halt output" should be read as the pin, not the clocks. Matrix row `REQUIREMENT-GPU-SLOWDOWN-AFTER-BRAKE` is **members-only**.
 
 ## 7. The other sideband pins
 

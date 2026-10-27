@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Sticky alarm register. Invariant: bits are set by any source and cleared only through
 ``clear_mask`` while ``clear_authorized`` is asserted (an approver signature verified by the
 crypto core, or a rule the firmware evaluated).

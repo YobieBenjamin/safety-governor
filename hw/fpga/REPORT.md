@@ -1,37 +1,66 @@
 # FPGA build report: governor core + SMBus target on the ULX3S (ECP5 LFE5U-85F-6BG381C)
 
-Written by `hw/fpga/build.sh` on 2026-10-23 19:58 UTC, nextpnr seed 1, router2. Do not edit by hand: rerun the build.
+Written by `hw/fpga/build.sh` on 2026-10-24 01:07 UTC, nextpnr seed 1, router2. Do not edit by hand: rerun the build.
 
 ## Verdict
 
-- 50 MHz (the ASIC flow's clock): **NOT met**. The design reaches no timing result on this part.
-- 25 MHz: NOT met.
-- No timing-clean bitstream.
+- 30 MHz: met, Fmax 36.07 MHz.
+- Bench bitstream: `build/30mhz/governor_ulx3s_85f_30mhz.bit` at 30 MHz. The governor's timers run on a 1 us tick divided from whatever the clock is, so the heartbeat, throttle, halt and loop-sense timings are the same at any of these clocks.
+- Build manifest (`build/30mhz/manifest.json`): fail-closed, source_rev `5d2dc0094a29bb08`, stages top,pll,synth,pnr,pack,report, bitstream sha256 `477de080ac9bd84a`. The verdict is read from this manifest, not from the bitstream's presence.
 
 ## Utilisation
 
-After synthesis (yosys `synth_ecp5`) and after place and route (nextpnr), 50 MHz build:
+After synthesis (yosys `synth_ecp5`) and after place and route (nextpnr), 30 MHz build:
 
 | Cell | Synthesis |
 |---|---|
+| CCU2C | 399 |
+| EHXPLLL | 1 |
+| L6MUX21 | 3209 |
+| LUT4 | 17957 |
+| PFUMX | 5513 |
+| TRELLIS_FF | 12857 |
+| TRELLIS_IO | 2 |
 
-## Timing, 50 MHz build
+| Resource | Used | Available | Percent |
+|---|---|---|---|
+| DCCA | 1 | 56 | 1.8 |
+| EHXPLLL | 1 | 4 | 25.0 |
+| TRELLIS_COMB | 18869 | 83640 | 22.6 |
+| TRELLIS_FF | 12857 | 83640 | 15.4 |
+| TRELLIS_IO | 26 | 365 | 7.1 |
 
-No timing result. Last lines of nextpnr.log:
+## Timing, 30 MHz build
 
-```
-ERROR: Failed to open '--json' file 'top.json': No such file or directory.
-0 warnings, 1 error
-```
+| Clock | Achieved (MHz) | Constraint (MHz) | Met |
+|---|---|---|---|
+| `$glbnet$clk` | 36.07 | 30.00 | yes |
 
-## Timing, 25 MHz build
+Critical path:
 
-No timing result. Last lines of nextpnr.log:
+From `posedge $glbnet$clk` to `posedge $glbnet$clk`:
 
-```
-ERROR: Failed to open '--json' file 'top.json': No such file or directory.
-0 warnings, 1 error
-```
+| Step | Delay (ns) | Net or cell |
+|---|---|---|
+| clk-to-q | 0.52 | `core.gov.core.cap_storage.cap_storage_lk_peer_TRELLIS_FF_Q_2 -> core.gov.core.cap_storage.` |
+| routing | 3.27 | `core.gov.core.cap_storage.cap_storage_lk_peer[2]` |
+| logic | 0.24 | `core.gov.core.cap_storage.point0_LUT4_D_1_Z_LUT4_D_Z_LUT4_Z_D_PFUMX_Z_C0_LUT4_Z -> core.go` |
+| routing | 0.42 | `core.gov.core.cap_storage.point0_LUT4_D_1_Z_LUT4_D_Z_LUT4_Z_D_PFUMX_Z_C0[4]` |
+| logic | 0.26 | `core.gov.core.cap_storage.point0_LUT4_D_1_Z_LUT4_D_Z_LUT4_Z_D_PFUMX_Z_BLUT_LUT4_Z -> core.` |
+| routing | 0.78 | `core.gov.core.cap_storage.point0_LUT4_D_1_Z_LUT4_D_Z_LUT4_Z_D[2]` |
+| logic | 0.24 | `core.gov.core.cap_storage.point0_LUT4_D_1_Z_LUT4_D_Z_LUT4_Z -> core.gov.core.cap_storage.p` |
+| ... | | 43 more steps |
+| logic | 0.24 | `core.rb_TRELLIS_FF_Q_20_DI_L6MUX21_Z_D1_PFUMX_Z_C0_LUT4_Z_D_CCU2C_COUT_CIN_CCU2C_COUT_CIN_` |
+| routing | 5.38 | `core.rb_TRELLIS_FF_Q_20_DI_L6MUX21_Z_D1_PFUMX_Z_C0_LUT4_Z_D_CCU2C_COUT_CIN_CCU2C_COUT_CIN_` |
+| logic | 0.26 | `core.gov.core.cap_storage.budget2_TRELLIS_FF_Q_14_DI_L6MUX21_Z_D1_L6MUX21_Z_D1_PFUMX_Z_ALU` |
+| routing | 0.00 | `core.gov.core.cap_storage.budget2_TRELLIS_FF_Q_14_DI_L6MUX21_Z_D1` |
+| logic | 0.24 | `core.gov.core.cap_storage.budget2_TRELLIS_FF_Q_14_DI_L6MUX21_Z_D1_L6MUX21_Z_D0_PFUMX_Z_ALU` |
+| routing | 0.61 | `core.gov.core.cap_storage.budget2_TRELLIS_FF_Q_14_DI` |
+| setup | 0.00 | `core.gov.core.cap_storage.budget2_TRELLIS_FF_Q_14 -> core.gov.core.cap_storage.budget2_TRE` |
+
+57 steps, 27.72 ns in total.
+
+Bitstream `governor_ulx3s_85f_30mhz.bit`: 577314 bytes, sha256 `477de080ac9bd84a1f79e2440f19d9268f94b5e730181378cb2ac48b90b6aa60`.
 
 ## What is in the bitstream
 
@@ -44,7 +73,7 @@ Bitstreams are build products and are not committed. Flash: `openFPGALoader -b u
 
 ## Findings from this build
 
-**F1. The core halts itself one cycle after it first reaches RUN when the loop sense strobe runs from power-on.**
+**RTL-CORE-HALTS-AFTER-REACHING-RUN. The core halts itself one cycle after it first reaches RUN when the loop sense strobe runs from power-on.**
 `LoopIO` counts sense samples with no current. Before the governor arms, its own loop switch is open, so on a
 one-governor loop (and on any loop where this governor's switch is the open one) there is no current and the
 debounce counter saturates: `loop_lost` is high while the core sits in HALTED_INITIAL. The heartbeat arms the core,
@@ -59,7 +88,7 @@ Proposed fix, not applied (halt.py is not this branch's): in `HaltSeq`, enter RU
 so an armed core waits for one clean sense sample (at most 100 us). Until then the bench (`host_test.py levers` and
 `soak`) cannot hold RUN and will say so.
 
-**F2. 50 MHz is not met on the ECP5: the design reaches about 38 MHz, limited by the capability table's one-cycle
+**RTL-FPGA-MISSES-TARGET-CLOCK. 50 MHz is not met on the ECP5: the design reaches about 38 MHz, limited by the capability table's one-cycle
 lookup.** The critical path (below) runs from a lookup input of `cap_dpu` through the eight-entry CAM compare, the
 priority select and the 24-bit budget compare and decrement, into the budget register, in one cycle (docs/04
 section 9: "1 cycle at the checker clock"). In the router2 run at seed 1: 26.4 ns, 4.7 ns logic and 21.7 ns routing.
@@ -93,6 +122,6 @@ docs/04 says 16 meter slots; the RTL meter has 4, so CSR reads of METER_SLOT[4..
 | Package | Version |
 |---|---|
 | amaranth | 0.5.10 |
-| amaranth-yosys | 0.50.0.0.post130 |
-| yowasp-yosys | 0.70.0.0.post1259 |
-| yowasp-nextpnr-ecp5 | 0.11.1.0.post826 |
+| amaranth-yosys | 0.50.0.0.post129 |
+| yowasp-yosys | not installed |
+| yowasp-nextpnr-ecp5 | not installed |

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """The compliance matrix (docs/interfaces/COMPLIANCE-MATRIX.md): every row sourced, every evidence
 file real, the Markdown in sync with the CSV. Planted faults must each be caught."""
 import copy
@@ -44,10 +46,10 @@ def one(rows, rid, **kw):
     (dict(status="compliant"), "status"),
 ])
 def test_planted_fault_is_caught(rows, change, needle):
-    errs = M.check(rows=one(rows, "SPDM-05", **change))
+    errs = M.check(rows=one(rows, "REQUIREMENT-SPDM-SIGNED-CHALLENGE", **change))
     assert any(needle in e for e in errs), errs
 
 
 def test_nda_row_without_an_nda_source_is_caught(rows):
-    errs = M.check(rows=one(rows, "NDA-01", source="HGXOCP"))
+    errs = M.check(rows=one(rows, "REQUIREMENT-HGX-SLOT-LEVER-PIN-MAP", source="HGXOCP"))
     assert any("NDA row without an NDA source" in e for e in errs)

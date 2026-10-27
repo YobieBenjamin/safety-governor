@@ -1,4 +1,6 @@
-"""The independent second look for the L7 second set: random cycles of the Amaranth Python source in amaranth.sim,
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
+"""The independent second look for the WAVE-FORMAL-PROOFS-ON-VERILOG second set: random cycles of the Amaranth Python source in amaranth.sim,
 compared every cycle against a small reference model written from the spec (not from the RTL), outputs before the
 clock edge and state after it. Run on the real block (must agree on every cycle) and on every mutant in BLOCKS_A
 (a mutant that the random run never tells apart from the model is reported as such; the formal proof is what
@@ -8,7 +10,7 @@ The reference models are what docs/04-specification.md, docs/07-verification-pla
 block does. Where the spec and the RTL disagree (FINDINGS-a.md), the model follows the RTL's documented behaviour and
 the finding is pinned separately, so this check stays green while the finding is open.
 
-The random driver keeps the mailbox's A1 obligation (frame fields stable while verifying), as the proof assumes.
+The random driver keeps the mailbox's RTL-MAILBOX-FRAME-HELD-STILL obligation (frame fields stable while verifying), as the proof assumes.
 """
 from __future__ import annotations
 
@@ -19,8 +21,8 @@ from amaranth import ClockDomain, Elaboratable, Module, Signal
 from amaranth.sim import Simulator
 
 RTL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CYCLES = int(os.environ.get("L7_SIM_CYCLES", "20000"))          # on the real block
-MUTANT_CYCLES = int(os.environ.get("L7_SIM_MUTANT_CYCLES", "4000"))
+CYCLES = int(os.environ.get("FORMAL_SIM_CYCLES", "20000"))          # on the real block
+MUTANT_CYCLES = int(os.environ.get("FORMAL_SIM_MUTANT_CYCLES", "4000"))
 M64 = (1 << 64) - 1
 
 
@@ -204,15 +206,18 @@ class MailboxRef:
             else:
                 self.status = 3
             self.verify = 0
+        if i["epoch_advanced"]:                           # adversarial audit 3: a new epoch restarts every key slot
+            self.seq = [0] * 8
     def regs(self):
         return {"status": self.status, "cmd_out": self.cmd_out, **{f"last_seq[{k}]": v for k, v in enumerate(self.seq)}}
     @staticmethod
     def stim(r, prev):
         i = {"rst": False, "doorbell": r.random() < .4, "frame_seq": r.randrange(16), "key_slot": r.randrange(3),
              "cmd": r.randrange(4), "epoch_match": r.random() < .8, "epoch_exempt": r.random() < .3,
-             "needs_run": r.random() < .5, "running": r.random() < .7, "sig_done": r.random() < .4, "sig_ok": r.random() < .8}
+             "needs_run": r.random() < .5, "running": r.random() < .7, "sig_done": r.random() < .4, "sig_ok": r.random() < .8,
+             "epoch_advanced": r.random() < .05}
         i["signed_cmd"] = i["cmd"] if r.random() < .7 else r.randrange(4)
-        if prev.get("_verifying"):                        # A1: the frame holds still while it is being verified
+        if prev.get("_verifying"):                        # RTL-MAILBOX-FRAME-HELD-STILL: the frame holds still while it is being verified
             for f in MailboxRef.FIELDS:
                 i[f] = prev[f]
         return i

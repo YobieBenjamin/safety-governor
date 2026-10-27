@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Signoff gate for a governor_core LibreLane/OpenLane 2 run.
 
 Reads <run>/final/metrics.json (and the step reports for the bits metrics.json does not carry),

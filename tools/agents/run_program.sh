@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 # The whole software phase of the experiment program, unattended: wave after wave, in both
 # repositories, with the gates between them, GitHub kept current at every step, and a backup of
 # everything on the external drive after every step.

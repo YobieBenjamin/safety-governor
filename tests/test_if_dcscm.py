@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """OCP DC-SCM 2.x, DC-SCI and LTPI (docs/interfaces/01-dcscm-dcsci-ltpi.md).
 
 The mapping checker must pass on the committed CSV, and each planted fault must trip exactly the
@@ -53,7 +55,7 @@ def edit(rows, sig, inst="", **kw):
     (lambda b: [r for r in b if not (r["governor_signal"] == "PERST_N" and r["instance"] == "slot3")], "LEVER_MISSING"),
     (lambda b: [r for r in b if not (r["governor_signal"] == "PERST_N" and r["instance"] == "slot3")], "UNMAPPED"),
     (lambda b: edit(b, "PWR_EN", "slot2", fail_safe=""), "LEVER_NO_FAILSAFE"),
-    (lambda b: edit(b, "PWR_EN", "slot2", fail_safe="REQ-NOT-WRITTEN-DOWN"), "LEVER_NO_FAILSAFE"),
+    (lambda b: edit(b, "PWR_EN", "slot2", fail_safe="a requirement nobody wrote down"), "LEVER_NO_FAILSAFE"),
     (lambda b: edit(b, "PWRBRK_N", "slot1", ltpi_channel="LTPI2:NL_GPIO_SCM_HPM[12]"), "LTPI_LATENCY"),
     (lambda b: edit(b, "PERST_N", "slot1", ltpi_channel="LTPI2:LL_GPIO_SCM_HPM[0]"), "LTPI_REUSED"),
     (lambda b: edit(b, "PERST_N", "slot1", ltpi_channel="LTPI2:LL_GPIO_SCM_HPM[16]"), "LTPI_FRAME"),
@@ -79,7 +81,7 @@ RUNNING = {"PWRBRK_N[0]": 1, "PERST_N[0]": 1, "PWR_EN[0]": 1}
 
 def test_finding_ltpi_as_written_holds_released_levers_on_link_loss():
     """LTPI 1.2 section 2.5.2: 'LTPI shall maintain the state of the GPIOs'. A governor whose link
-    dies while its GPU runs leaves the GPU running. This is why REQ-LTPI-FS-1 exists."""
+    dies while its GPU runs leaves the GPU running. This is why REQUIREMENT-LINK-LOSS-ASSERTS-LEVERS exists."""
     link = D.LtpiLink(mode="spec")
     link.train()
     link.send(RUNNING)

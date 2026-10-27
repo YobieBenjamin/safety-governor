@@ -5,15 +5,15 @@ spdm-emu f7fa18367a967a6fde2b2537a457bc374fe81e21 built with mbedtls; libspdm an
 
 | Run | What | Expected | Result |
 |---|---|---|---|
-| A1 | libspdm requester -> governor responder, SPDM 1.1 | success | PASS: exit 0; no errors |
-| A2 | libspdm requester -> governor responder, SPDM 1.2, raw measurements, signed every time | success | PASS: exit 0; no errors |
-| A3 | A1 with one CHALLENGE_AUTH signature bit flipped by the governor | libspdm rejects | PASS: exit 1; ERROR: do_authentication_via_spdm - 80020001 |
-| A4 | A1 with one MEASUREMENTS signature bit flipped by the governor | libspdm rejects | PASS: exit 1; ERROR: do_measurement_via_spdm - 80010004 |
-| A5 | A1 with libspdm trusting its own sample root instead of the governor's | libspdm says no authority | PASS: exit 0; no errors; no authority |
+| EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION | libspdm requester -> governor responder, SPDM 1.1 | success | PASS: exit 0; no errors |
+| EXPERIMENT-SPDM-INTEROP-RAW-MEASUREMENTS | libspdm requester -> governor responder, SPDM 1.2, raw measurements, signed every time | success | PASS: exit 0; no errors |
+| EXPERIMENT-SPDM-FLIPPED-CHALLENGE-SIGNATURE | EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION with one CHALLENGE_AUTH signature bit flipped by the governor | libspdm rejects | PASS: exit 1; ERROR: do_authentication_via_spdm - 80020001 |
+| EXPERIMENT-SPDM-FLIPPED-MEASUREMENT-SIGNATURE | EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION with one MEASUREMENTS signature bit flipped by the governor | libspdm rejects | PASS: exit 1; ERROR: do_measurement_via_spdm - 80010004 |
+| EXPERIMENT-SPDM-REQUESTER-TRUSTS-SAMPLE-ROOT | EXPERIMENT-SPDM-GOVERNOR-RESPONDS-EARLIER-VERSION with libspdm trusting its own sample root instead of the governor's | libspdm says no authority | PASS: exit 0; no errors; no authority |
 | B | DMTF SPDM-Responder-Validator -> governor responder | 0 failed assertions | PASS: 781 pass, 0 fail, 48 cases not tested |
-| C1 | governor requester -> libspdm responder, SPDM 1.1 | success | PASS: verified 1.1 indices [1, 2, 3, 4, 16, 17, 253, 254] |
-| C2 | governor requester -> libspdm responder, SPDM 1.2 | success | PASS: verified 1.2 indices [1, 2, 3, 4, 16, 17, 253, 254] |
-| C3 | governor requester trusting the wrong root -> libspdm responder | governor requester rejects | PASS: rejected: chain does not start at the pinned root |
+| EXPERIMENT-SPDM-GOVERNOR-REQUESTS-EARLIER-VERSION | governor requester -> libspdm responder, SPDM 1.1 | success | PASS: verified 1.1 indices [1, 2, 3, 4, 16, 17, 253, 254] |
+| EXPERIMENT-SPDM-GOVERNOR-REQUESTS-LATER-VERSION | governor requester -> libspdm responder, SPDM 1.2 | success | PASS: verified 1.2 indices [1, 2, 3, 4, 16, 17, 253, 254] |
+| EXPERIMENT-SPDM-GOVERNOR-TRUSTS-WRONG-ROOT | governor requester trusting the wrong root -> libspdm responder | governor requester rejects | PASS: rejected: chain does not start at the pinned root |
 
 Validator cases it could not run against this responder (setup needs a feature we do not implement):
 

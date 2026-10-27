@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
+# Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
 """Differential conformance: the same mailbox frames into the RTL and into the functional model.
 
 The RTL side is ``rtl.governor_rtl.mailbox.Mailbox`` under amaranth.sim. The model side is the real
@@ -108,6 +110,13 @@ class ModelSide:
         if f.cmd == "HEARTBEAT":
             payload.update(window_start=now - 1, window_end=now + 5)
         env = self.key_for(f.cmd).sign(payload)
+        # a HALT, CLEAR or EXCLUDE needs two of three authority keys and a heartbeat two of three heartbeat signers
+        # (adversarial audit 2026-10-26). The second signature rides along; in the chip the signature engine checks the
+        # quorum before it raises sig_ok, so the mailbox sees one verdict either way.
+        if SIGNED[f.cmd][0] == "authority":
+            env["cosignatures"] = [self.rack.authority_cosigners[0].sign(payload)]
+        elif f.cmd == "HEARTBEAT":
+            env["cosignatures"] = [self.rack.heartbeat_cosigners[0].sign(payload)]
         if not f.sig_ok:
             s = env["sig"]
             env["sig"] = ("0" if s[0] != "0" else "1") + s[1:]
@@ -201,11 +210,11 @@ def classify(r: Result) -> str | None:
     f = r.frame
     seq_bad = f.seq <= r.rtl_seq_before
     if f.seq == 0 and r.rtl_seq_before == 0 and r.model_seq_before == 0:
-        return "F-02"                                # the first sequence number of a key: model accepts 0, RTL refuses
+        return "CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO"                                # the first sequence number of a key: model accepts 0, RTL refuses
     if f.cmd == "HEARTBEAT" and (not f.sig_ok or not f.type_ok):
-        return "F-03"                                # the model's heartbeat path checks the signature first
+        return "CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST"                                # the model's heartbeat path checks the signature first
     if f.needs_run and not f.running and (seq_bad or (not f.epoch_ok and not f.exempt)):
-        return "F-01"                                # the model checks run state first, the RTL after epoch
+        return "CONFORMANCE-RUN-STATE-CHECK-ORDER"                                # the model checks run state first, the RTL after epoch
     return None
 
 
@@ -233,7 +242,7 @@ RANDOM_FRAMES = 4000
 SEED = 20261023
 
 
-@conformance("R-058", "R-054", "R-055", "R-056", "R-057", "R-061", "R-063")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED", "REQUIREMENT-FRAME-EPOCH-MUST-MATCH", "REQUIREMENT-FRAME-SIGNATURE-CHECKED", "REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND", "REQUIREMENT-MAILBOX-STATUS-CODES", "REQUIREMENT-WRONG-COMMAND-STATUS")
 def test_diff_mailbox_random_frames_only_known_disagreements():
     """4,000 random frames (12 commands, seq/epoch/run/signature/type/binding combinations) into RTL and model:
     every disagreement in status or in the stored sequence must be one of the recorded findings."""
@@ -266,7 +275,7 @@ def _agree(r: Result):
     assert r.rtl_seq == r.model_seq, f"stored sequence differs: RTL {r.rtl_seq}, model {r.model_seq}"
 
 
-@conformance("R-058", "R-059")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-DISPATCH-AFTER-ALL-CHECKS")
 def test_diff_spec_good_halt():
     """A good HALT: both accept, both store its sequence."""
     r = _one([], Frame("HALT", 1))
@@ -274,7 +283,7 @@ def test_diff_spec_good_halt():
     assert r.rtl_status == S_OK and r.rtl_dispatch == 1
 
 
-@conformance("R-058", "R-054")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED")
 def test_diff_spec_replayed_halt():
     """The same HALT twice: both say bad sequence the second time."""
     r = _one([Frame("HALT", 5)], Frame("HALT", 5))
@@ -282,7 +291,7 @@ def test_diff_spec_replayed_halt():
     assert r.rtl_status == S_BAD_SEQ
 
 
-@conformance("R-058", "R-055", "R-080")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-FRAME-EPOCH-MUST-MATCH", "REQUIREMENT-EPOCH-EXEMPT-COMMANDS")
 def test_diff_spec_halt_with_stale_epoch_is_exempt():
     """HALT is epoch-exempt: a stale epoch is accepted by both."""
     r = _one([], Frame("HALT", 1, epoch_ok=False))
@@ -290,7 +299,7 @@ def test_diff_spec_halt_with_stale_epoch_is_exempt():
     assert r.rtl_status == S_OK
 
 
-@conformance("R-058", "R-057", "R-063")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND", "REQUIREMENT-WRONG-COMMAND-STATUS")
 def test_diff_spec_heartbeat_presented_as_clear():
     """The 22 October case: a frame signed as a heartbeat presented as CLEAR. Both: wrong command, nothing consumed."""
     r = _one([], Frame("CLEAR", 1, type_ok=False))
@@ -298,7 +307,7 @@ def test_diff_spec_heartbeat_presented_as_clear():
     assert r.rtl_status == S_WRONG_CMD and r.rtl_seq == 0
 
 
-@conformance("R-058", "R-055")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-FRAME-EPOCH-MUST-MATCH")
 def test_diff_spec_stale_epoch_request():
     """A REQUEST under a stale epoch: both say bad epoch."""
     r = _one([], Frame("REQUEST", 1, epoch_ok=False))
@@ -306,7 +315,7 @@ def test_diff_spec_stale_epoch_request():
     assert r.rtl_status == S_BAD_EPOCH
 
 
-@conformance("R-058", "R-056")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-FRAME-SIGNATURE-CHECKED")
 def test_diff_spec_forged_request():
     """A REQUEST with a bad signature: both say bad signature."""
     r = _one([], Frame("REQUEST", 1, sig_ok=False))
@@ -314,7 +323,7 @@ def test_diff_spec_forged_request():
     assert r.rtl_status == S_BAD_SIG
 
 
-@conformance("R-058", "R-061", "R-092")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-MAILBOX-STATUS-CODES", "REQUIREMENT-TICKET-REFUSED-STALE-OR-STOPPED")
 def test_diff_spec_request_while_not_running():
     """A good REQUEST while the governor is not in RUN: both refuse (status 6, mailbox.governor_not_running)."""
     r = _one([], Frame("REQUEST", 1, running=False))
@@ -322,7 +331,7 @@ def test_diff_spec_request_while_not_running():
     assert r.rtl_status == S_REFUSED
 
 
-@conformance("R-058")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON")
 def test_diff_spec_replayed_and_forged():
     """Replayed and forged: the sequence check comes first in both."""
     r = _one([Frame("COMMIT", 3)], Frame("COMMIT", 3, sig_ok=False))
@@ -330,7 +339,7 @@ def test_diff_spec_replayed_and_forged():
     assert r.rtl_status == S_BAD_SEQ
 
 
-@conformance("R-058")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON")
 def test_diff_spec_stale_and_forged():
     """Stale epoch and forged: the epoch check comes before the signature in both."""
     r = _one([], Frame("COMMIT", 1, epoch_ok=False, sig_ok=False))
@@ -338,7 +347,7 @@ def test_diff_spec_stale_and_forged():
     assert r.rtl_status == S_BAD_EPOCH
 
 
-@conformance("R-058", "R-061")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-MAILBOX-STATUS-CODES")
 def test_diff_spec_not_running_and_forged():
     """Not running and forged: both refuse for run state; note the RTL decides it before asking for the signature."""
     r = _one([], Frame("REQUEST", 1, running=False, sig_ok=False))
@@ -346,7 +355,7 @@ def test_diff_spec_not_running_and_forged():
     assert r.rtl_status == S_REFUSED
 
 
-@conformance("R-058", "R-081", "R-063")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-HALT-CLEAR-NAME-CHIP-EXPIRY", "REQUIREMENT-WRONG-COMMAND-STATUS")
 def test_diff_spec_clear_for_another_chip():
     """A CLEAR naming another chip: model mailbox.wrong_command, RTL status 7 (given the firmware's signed_cmd)."""
     r = _one([], Frame("CLEAR", 1, binding="other_chip"))
@@ -354,7 +363,7 @@ def test_diff_spec_clear_for_another_chip():
     assert r.rtl_status == S_WRONG_CMD
 
 
-@conformance("R-058", "R-081", "R-063")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-HALT-CLEAR-NAME-CHIP-EXPIRY", "REQUIREMENT-WRONG-COMMAND-STATUS")
 def test_diff_spec_expired_clear():
     """A CLEAR past its expiry: model mailbox.expired, RTL status 7."""
     r = _one([], Frame("CLEAR", 1, binding="expired"))
@@ -362,7 +371,7 @@ def test_diff_spec_expired_clear():
     assert r.rtl_status == S_WRONG_CMD
 
 
-@conformance("R-058", "R-054")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED")
 def test_diff_spec_per_key_sequence():
     """Two signer keys keep two counters in both: a host frame with seq 1 after an authority frame with seq 50."""
     r = _one([Frame("HALT", 50)], Frame("REQUEST", 1))
@@ -370,7 +379,7 @@ def test_diff_spec_per_key_sequence():
     assert r.rtl_status == S_OK
 
 
-@conformance("R-058", "R-056", "R-083")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-FRAME-SIGNATURE-CHECKED", "REQUIREMENT-HEARTBEAT-RELOADS-TIMER")
 def test_diff_spec_good_heartbeat():
     """A good heartbeat: both accept and store its sequence."""
     r = _one([], Frame("HEARTBEAT", 1))
@@ -378,40 +387,40 @@ def test_diff_spec_good_heartbeat():
     assert r.rtl_status == S_OK
 
 
-@conformance("R-058", "R-061", finding="F-01")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-MAILBOX-STATUS-CODES", finding="CONFORMANCE-RUN-STATE-CHECK-ORDER")
 def test_diff_finding_replayed_request_while_not_running():
-    """F-01: a replayed REQUEST while not running. RTL reports bad sequence (4); the model reports not running."""
+    """CONFORMANCE-RUN-STATE-CHECK-ORDER: a replayed REQUEST while not running. RTL reports bad sequence (4); the model reports not running."""
     _agree(_one([Frame("REQUEST", 2)], Frame("REQUEST", 2, running=False)))
 
 
-@conformance("R-058", "R-061", finding="F-01")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-MAILBOX-STATUS-CODES", finding="CONFORMANCE-RUN-STATE-CHECK-ORDER")
 def test_diff_finding_stale_request_while_not_running():
-    """F-01: a stale-epoch REQUEST while not running. RTL reports bad epoch (5); the model reports not running."""
+    """CONFORMANCE-RUN-STATE-CHECK-ORDER: a stale-epoch REQUEST while not running. RTL reports bad epoch (5); the model reports not running."""
     _agree(_one([], Frame("REQUEST", 1, epoch_ok=False, running=False)))
 
 
-@conformance("R-054", "R-058", finding="F-02")
+@conformance("REQUIREMENT-SEQUENCE-ABOVE-LAST-ACCEPTED", "REQUIREMENT-FIRST-FAILURE-IS-REASON", finding="CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO")
 def test_diff_finding_first_sequence_number_zero():
-    """F-02: the first frame of a key with seq 0. The model accepts it (0 > -1); the RTL refuses it (0 > 0 is false)."""
+    """CONFORMANCE-FIRST-SEQUENCE-NUMBER-ZERO: the first frame of a key with seq 0. The model accepts it (0 > -1); the RTL refuses it (0 > 0 is false)."""
     _agree(_one([], Frame("HALT", 0)))
 
 
-@conformance("R-058", finding="F-03")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", finding="CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST")
 def test_diff_finding_replayed_forged_heartbeat():
-    """F-03: a replayed, forged heartbeat. RTL: bad sequence (4). Model: heartbeat.bad_signature (signature first)."""
+    """CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST: a replayed, forged heartbeat. RTL: bad sequence (4). Model: heartbeat.bad_signature (signature first)."""
     _agree(_one([Frame("HEARTBEAT", 4)], Frame("HEARTBEAT", 4, sig_ok=False)))
 
 
-@conformance("R-057", "R-058", finding="F-03")
+@conformance("REQUIREMENT-SIGNED-PAYLOAD-NAMES-COMMAND", "REQUIREMENT-FIRST-FAILURE-IS-REASON", finding="CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST")
 def test_diff_finding_heartbeat_signed_as_something_else():
-    """F-03: a frame signed for CLEAR presented as HEARTBEAT. RTL: wrong command (7). Model: heartbeat.bad_signature."""
+    """CONFORMANCE-HEARTBEAT-SIGNATURE-CHECKED-FIRST: a frame signed for CLEAR presented as HEARTBEAT. RTL: wrong command (7). Model: heartbeat.bad_signature."""
     _agree(_one([], Frame("HEARTBEAT", 1, type_ok=False)))
 
 
-@conformance("R-058", "R-086")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-CLEAR-NEEDS-LOGGED-CHECKPOINT")
 def test_model_clear_handler_reports_the_mailbox_reason():
     """The spec says the first failing check is the reason reported. The model's real CLEAR handler reports
-    clear.unauthorized for every mailbox failure; that is recorded as F-04 (model only) by the next test."""
+    clear.unauthorized for every mailbox failure; that is recorded as CONFORMANCE-CLEAR-REPORTS-ONE-REASON (model only) by the next test."""
     m = ModelSide()
     g = m.g
     del g._cmd_clear                                      # the real handler, not the harness's
@@ -420,9 +429,9 @@ def test_model_clear_handler_reports_the_mailbox_reason():
     assert not r["ok"]
 
 
-@conformance("R-058", "R-086", finding="F-04")
+@conformance("REQUIREMENT-FIRST-FAILURE-IS-REASON", "REQUIREMENT-CLEAR-NEEDS-LOGGED-CHECKPOINT", finding="CONFORMANCE-CLEAR-REPORTS-ONE-REASON")
 def test_model_finding_clear_collapses_reasons():
-    """F-04 (model): a replayed CLEAR should report mailbox.bad_sequence; the model's CLEAR handler says clear.unauthorized."""
+    """CONFORMANCE-CLEAR-REPORTS-ONE-REASON (model): a replayed CLEAR should report mailbox.bad_sequence; the model's CLEAR handler says clear.unauthorized."""
     m = ModelSide()
     g = m.g
     del g._cmd_clear
@@ -433,7 +442,7 @@ def test_model_finding_clear_collapses_reasons():
 
 
 # ---------------------------------------------------------------- firmware-owned rules the model carries
-@conformance("R-080")
+@conformance("REQUIREMENT-EPOCH-EXEMPT-COMMANDS")
 def test_fw_epoch_exempt_list_matches_spec():
     """The model's epoch-exempt set (what the firmware feeds epoch_exempt from) is exactly the commands the spec lists (seven since EXCLUDE, 23 October 2026)."""
     import os
@@ -446,18 +455,18 @@ def test_fw_epoch_exempt_list_matches_spec():
     assert listed == set(EPOCH_EXEMPT), (listed, EPOCH_EXEMPT)
 
 
-@conformance("R-081")
+@conformance("REQUIREMENT-HALT-CLEAR-NAME-CHIP-EXPIRY")
 def test_fw_authority_expiry_ceiling_is_60s():
     """The model refuses a HALT or CLEAR whose expiry is more than 60 s ahead (spec: no more than 60 s)."""
     from govsim.governor import AUTHORITY_TTL_S
     assert AUTHORITY_TTL_S == 60.0
     m = ModelSide()
     now = m.rack.clock.now()
-    env = m.rack.authority_key.sign({"seq": 1, "epoch": m.g.epoch, "type": "halt", "chip_id": m.g.chip_id, "expires_at": now + 61})
+    env = m.rack.sign_authority({"seq": 1, "epoch": m.g.epoch, "type": "halt", "chip_id": m.g.chip_id, "expires_at": now + 61})
     assert m.g._check_signed(env, "authority", "HALT") == (False, reasons.MBOX_EXPIRED)
 
 
-@conformance("R-084", "R-085")
+@conformance("REQUIREMENT-HEARTBEAT-KEY-SIGNS-ONLY-HEARTBEATS", "REQUIREMENT-AUTHORITY-KEY-SIGNS-HALT")
 def test_fw_heartbeat_key_cannot_sign_a_halt():
     """The heartbeat key signs heartbeats and nothing else: a HALT under the heartbeat key is a bad signature in the model."""
     m = ModelSide()
@@ -466,20 +475,20 @@ def test_fw_heartbeat_key_cannot_sign_a_halt():
     assert m.g._check_signed(env, "authority", "HALT") == (False, reasons.MBOX_BAD_SIGNATURE)
 
 
-@conformance("R-033", "R-083")
+@conformance("REQUIREMENT-HEARTBEAT-WINDOW-CLAMPED", "REQUIREMENT-HEARTBEAT-RELOADS-TIMER")
 def test_fw_heartbeat_window_is_clamped_to_policy_expiry():
     """The model clamps a signed heartbeat window to fabric.heartbeat_expiry_s before it reloads the timer (the RTL
     takes the window as given, so this clamp is the firmware's job)."""
     m = ModelSide()
     g, now = m.g, m.rack.clock.now()
     limit = float(g.policy["fabric"].get("heartbeat_expiry_s", 5.0))
-    env = m.rack.heartbeat_key.sign({"type": "heartbeat", "seq": 99, "epoch": g.epoch, "window_start": now - 1,
+    env = m.rack.sign_heartbeat({"type": "heartbeat", "seq": 99, "epoch": g.epoch, "window_start": now - 1,
                                      "window_end": now + 10 * limit})
     assert g.command("HEARTBEAT", {}, env)["ok"]
     assert g.hb_expiry <= now + limit
 
 
-@conformance("R-090")
+@conformance("REQUIREMENT-HOST-PEER-ONLY-ON-PCIE")
 def test_fw_host_peer_only_on_pcie():
     """CAP_REQUEST for the peer 'host' is refused on NVSwitch, DPU and storage and accepted on PCIe."""
     rack = build_rack(1, "rack")
