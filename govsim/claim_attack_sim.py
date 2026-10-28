@@ -81,6 +81,12 @@ HARM_KINDS = ("money", "data_out", "commands", "rules")
 STRATEGIES = ("split", "reword", "timing", "pool", "cover", "probe", "exits", "replay")
 K_SWEEP = (1, 10, 100, 1_000, 10_000, 100_000)
 SEEDS = (1, 2, 3, 4, 5)
+# Amendment 1 to docs/29 (28 October 2026, made before any attacker run): one run of 100,000 attackers takes about
+# 2.5 hours on one Mac mini core, so the largest K runs one seed per strategy, and the controls run at K = 1 and at the
+# largest K up to 10,000. Every other K keeps five seeds.
+LARGEST_K = 100_000
+SEEDS_AT_LARGEST_K = (1,)
+CONTROL_K_CEILING = 10_000
 WINDOW_S = 3600.0
 
 # Which strategies make sense for which harm kind. A strategy that has nothing to say about a kind is not run for it.
@@ -467,6 +473,27 @@ def _job(args):
                 "harm": None, "cap": None, "over_cap": None}
 
 
+def planned_jobs(ks=K_SWEEP, seeds=SEEDS, kinds=HARM_KINDS):
+    """Every (kind, strategy, K, seed) the sweep runs, smallest K first, as docs/29 section 5 orders it.
+
+    Smallest first means that if the time limit stops the sweep, every strategy already has its results at every
+    smaller K, instead of a few strategies having results only at the largest one. The largest K runs one seed per
+    strategy (amendment 1)."""
+    jobs = []
+    for k in sorted(ks):
+        for kind in kinds:
+            for strategy in PLAN[kind]:
+                for seed in (SEEDS_AT_LARGEST_K if k == LARGEST_K else seeds):
+                    jobs.append((kind, strategy, k, seed))
+    return jobs
+
+
+def control_ks(ks=K_SWEEP):
+    """The K values the two controls run at: 1 and the largest K up to CONTROL_K_CEILING (amendment 1)."""
+    small = [k for k in ks if k <= CONTROL_K_CEILING]
+    return tuple(sorted({1, max(small) if small else 1}))
+
+
 def sweep(out_path, ks=K_SWEEP, seeds=SEEDS, kinds=HARM_KINDS, max_seconds=None, workers=None):
     """The pre-registered sweep: every harm kind, every strategy that applies, every K, every seed; the controls first.
     Runs go to ``workers`` processes (default: all cores but one). Every run is written to ``out_path`` as it finishes,
@@ -479,6 +506,7 @@ def sweep(out_path, ks=K_SWEEP, seeds=SEEDS, kinds=HARM_KINDS, max_seconds=None,
               "fleet": {"sites": SITES, "racks_per_site": RACKS_PER_SITE, "gpus_per_rack": GPUS_PER_RACK},
               "hours": HOURS, "per_agent": PER_AGENT, "ks": list(ks), "seeds": list(seeds),
               "pre_registered": (tuple(ks) == K_SWEEP and tuple(seeds) == SEEDS and HOURS == 3),
+              "amendment": 1, "control_ks": list(control_ks(ks)), "seeds_at_largest_k": list(SEEDS_AT_LARGEST_K),
               "runs": [], "controls": [], "verdicts": {}, "finished": False}
 
     def save():
@@ -489,7 +517,7 @@ def sweep(out_path, ks=K_SWEEP, seeds=SEEDS, kinds=HARM_KINDS, max_seconds=None,
 
     # the controls first: if the instrument cannot see a leak, nothing else is reported
     for control, kind, strategy in (("fleet_budget_off", "money", "split"), ("definitions_off", "commands", "reword")):
-        for k in (1, max(ks)):
+        for k in control_ks(ks):
             record["controls"].append(run(kind, strategy, k, seeds[0], control=control))
             save()
         leaked = any(r["over_cap"] for r in record["controls"] if r["control"] == control)
@@ -501,9 +529,8 @@ def sweep(out_path, ks=K_SWEEP, seeds=SEEDS, kinds=HARM_KINDS, max_seconds=None,
         save()
         return record
 
-    jobs = [(kind, strategy, k, seed) for kind in kinds for strategy in PLAN[kind] for k in ks for seed in seeds]
-    # the largest runs first, so the long ones overlap
-    jobs.sort(key=lambda j: -j[2])
+    jobs = planned_jobs(ks, seeds, kinds)
+    record["planned_runs"] = len(jobs)
     stopped = False
     with mp.get_context("fork").Pool(workers) as pool:
         for res in pool.imap_unordered(_job, jobs):

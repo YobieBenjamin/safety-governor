@@ -230,3 +230,39 @@ and demands `bricked`, which is wrong. The change adds a branch: a host-side exi
 is `governed` (with VERIFIED or PARTIAL evidence) or `unaccounted (NDA)`; and an NDA row is reported as an assumption
 the model's host allowance stands in for, the same way the bricked-by-policy exits are reported today. The test is not
 weakened: every existing branch is unchanged, and a host-side exit with no row still fails.
+
+---
+
+## Amendment 1, 28 October 2026, approved by Yobie Benjamin
+
+*Made before any attacker run of Experiment B; only its controls had run. Approved by Yobie Benjamin on 28 October 2026
+at about 22:20 UTC ("Stop it and rerun with a recorded fix").*
+
+**What happened.** The official run (overnight `claim-20261028T190518Z`) started Experiment B at 19:23 UTC. Its
+controls ran first, one after another. The control with the fleet budgets off at K = 100,000 took about 140 minutes on
+one Mac mini core and showed the leak it must show (7,995 dollars an hour against a 2,000-dollar cap). The code then
+would have run the sweep largest K first: 95 runs at K = 100,000, each about 2.5 hours, before any smaller K. At that
+rate the 14-hour limit would have stopped the sweep with about half the K = 100,000 runs done and no run at any smaller
+K, so most strategies would have had no result at all.
+
+**What changes.**
+
+1. **Smallest K first.** Section 5 of this protocol already says the K sweep runs smallest first. The code ran it
+   largest first; that was a deviation from the approved text, now corrected. `planned_jobs` in
+   `govsim/claim_attack_sim.py` orders the runs by K, smallest first.
+2. **One seed at K = 100,000.** Section 3.3 asks for at least five seeds per point. At K = 100,000 each run takes
+   about 2.5 hours on the Mac, so that point runs one seed (seed 1) per strategy: 19 runs. Every other K keeps five
+   seeds. Five seeds at K = 100,000 are to be run later on larger hardware, and the report says plainly that this
+   point rests on one seed.
+3. **Controls at K = 1 and K = 10,000.** The controls run at K = 1 and at the largest K up to 10,000, instead of at
+   K = 100,000. The K = 100,000 control from the stopped run is kept in its record and reported as extra evidence.
+
+**What does not change.** The harm kinds, the strategies, the caps, the run length (3 simulated hours), the pass and
+fail rules of section 3.4, the requirement that the controls leak, and the 14-hour limit.
+
+**The stopped run.** Its `B.json` (controls only) stays in its overnight folder, marked as stopped by this amendment.
+Experiment A's official result from that run (166 of 166) stands: nothing in this amendment touches the formal model,
+and A is run again on the new target as a check.
+
+**Expected time.** 494 runs: about 1.5 to 3.5 hours for K up to 10,000 on 13 workers, then about 5 to 6 hours for the
+19 runs at K = 100,000. About 7 to 9 hours in all.

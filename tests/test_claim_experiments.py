@@ -80,3 +80,25 @@ def test_no_strike_ticket_for_a_protected_place_however_written(short_runs, monk
     monkeypatch.setattr(B, "PER_AGENT", 6)
     out = B.run("commands", "reword", 20, 3)
     assert out["harm"] == 0 and not out["over_cap"]
+
+
+# ------------------------------------------------------------------ amendment 1 to docs/29 (28 October 2026)
+def test_the_sweep_runs_smallest_k_first():
+    ks = [k for _, _, k, _ in B.planned_jobs()]
+    assert ks == sorted(ks), "docs/29 section 5 orders the K sweep smallest first"
+
+
+def test_the_largest_k_runs_one_seed_and_every_other_k_five():
+    jobs = B.planned_jobs()
+    assert {seed for _, _, k, seed in jobs if k == B.LARGEST_K} == {1}
+    for k in B.K_SWEEP:
+        if k == B.LARGEST_K:
+            continue
+        for kind in B.HARM_KINDS:
+            for strategy in B.PLAN[kind]:
+                seeds = {s for kd, st, kk, s in jobs if (kd, st, kk) == (kind, strategy, k)}
+                assert seeds == set(B.SEEDS), (kind, strategy, k)
+
+
+def test_the_controls_run_at_one_and_ten_thousand():
+    assert B.control_ks() == (1, 10_000)
