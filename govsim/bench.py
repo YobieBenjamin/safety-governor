@@ -37,6 +37,23 @@ OTBN_CLOCK_HZ = 100e6                      # Earl Grey core clock
 SIGN_S = OTBN_P384_SIGN_CYCLES / OTBN_CLOCK_HZ    # 17 ms
 BATCH_WINDOW_S = 0.05                      # docs/04 §9: one signature per window over a Merkle root of the records
 SLOTS_PER_CHIP = 8                         # an HGX baseboard: the engine serves eight GPUs
+# Post-quantum path (C3). ML-DSA is not in Earl Grey silicon and no OTBN-specific measured cycle count is in the
+# repo (docs/04 §7, docs/08, docs/18 §9: a future OpenTitan release or a software implementation, cost measured in
+# Phase 2). The stand-in is the pqm4 project's ML-DSA-65 (Dilithium3) sign on a Cortex-M4, about 10 million
+# cycles on average.
+#
+# UNVERIFIED PLACEHOLDER: the 10,000,000 figure has NO checked source at revision 1 (no web access). It is from
+# memory of the pqm4 tables and MUST be re-checked against the current pqm4 release, with the M4->OTBN scaling,
+# before the result is relied on. Every hybrid verdict below is conditional on it.
+# Scaling assumption (UNVERIFIED, 1.0x): the M4 count is assumed equal on the OTBN-class engine. This is an
+# assumption, not a measurement, and is to be measured in Phase 2; a software SHAKE on OTBN could make it
+# optimistic. Signing is rejection sampling, so the figure is a mean; its tail is covered by HYBRID_PESSIMISM in
+# the tests (a 2x factor standing in for it -- an assumption, not a measurement), not by this constant.
+MLDSA65_SIGN_CYCLES = 10_000_000           # UNVERIFIED placeholder: Cortex-M4 pqm4 ML-DSA-65 sign, mean; no checked source
+MLDSA65_COST_SOURCED = False               # no checked source at revision 1; re-check pqm4 + M4->OTBN scaling before relying
+MLDSA65_SIGN_S = MLDSA65_SIGN_CYCLES / OTBN_CLOCK_HZ    # 100 ms
+HYBRID_SIGN_S = SIGN_S + MLDSA65_SIGN_S    # both signatures per batch, one engine: 117 ms
+HYBRID_BATCH_WINDOW_S = 0.25               # window, under 1 s, that keeps the single engine under 100 percent; must exceed HYBRID_SIGN_S
 GPU_SECONDS_PER_TOKEN = 1 / 2000.0         # a modest 2,000 tokens per second per GPU
 # ASSUMPTION (stated, not measured): an HMAC-SHA256 over a short message on the hash engine takes about 2 microseconds,
 # and a P-384 verify costs about what a sign does (17 ms on OTBN). Phase 2 measurement replaces both.
@@ -45,7 +62,8 @@ VERIFY_S = SIGN_S
 
 
 def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_request: int = 500, actions: int = 50,
-        slots_per_chip: int = SLOTS_PER_CHIP, batch_window_s: float = BATCH_WINDOW_S) -> dict:
+        slots_per_chip: int = SLOTS_PER_CHIP, batch_window_s: float = BATCH_WINDOW_S,
+        hybrid_window_s: float = HYBRID_BATCH_WINDOW_S, hybrid_sign_s: float = HYBRID_SIGN_S) -> dict:
     """Count the governor's operations for one GPU's workload and price them."""
     rack = build_rack(gpus, tier, policy_kw={"output_queries": 10 ** 9, "output_bytes": 10 ** 12})
     rack.bring_up()
@@ -71,6 +89,8 @@ def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_requ
     sig_unbatched = responses * slots_per_chip
     windows = gpu_s / batch_window_s if batch_window_s > 0 else float("inf")
     sig_batched = min(sig_unbatched, windows)
+    hybrid_windows = gpu_s / hybrid_window_s if hybrid_window_s > 0 else float("inf")
+    hybrid_batched = min(sig_unbatched, hybrid_windows)
     util = lambda n: 100.0 * n * SIGN_S / gpu_s if gpu_s else 0.0
     return {"tier": tier, "tokens": total_tokens, "ops": ops, "responses": responses,
             "gpu_seconds": gpu_s, "firmware_seconds": firmware_s,
@@ -78,6 +98,10 @@ def run(tier: str = "rack", gpus: int = 4, requests: int = 1000, tokens_per_requ
             "signatures_unbatched": sig_unbatched, "signatures_batched": sig_batched,
             "engine_utilization_unbatched_pct": util(sig_unbatched), "engine_utilization_pct": util(sig_batched),
             "record_latency_s": batch_window_s + SIGN_S,
+            "hybrid_signatures_batched": hybrid_batched,
+            "hybrid_engine_utilization_pct": 100.0 * hybrid_batched * hybrid_sign_s / gpu_s if gpu_s else 0.0,
+            "hybrid_engine_utilization_at_base_window_pct": 100.0 * sig_batched * hybrid_sign_s / gpu_s if gpu_s else 0.0,
+            "hybrid_record_latency_s": hybrid_window_s + hybrid_sign_s,
             "per_token_ops": (ops.get("mailbox", 0) + ops.get("ticket", 0) + ops.get("sign", 0)) / max(1, total_tokens)}
 
 
@@ -165,6 +189,22 @@ def measured_fabric_auth(members: int = 4) -> dict:
     return {"fabric_sign": sum(o.get("fabric_sign", 0) for o in ops), "fabric_mac": sum(o.get("fabric_mac", 0) for o in ops)}
 
 
+def hybrid_report(h: dict) -> str:
+    """The hybrid line of ``make bench``. Every verdict word is computed from the run, none is fixed text."""
+    base, win = h["hybrid_engine_utilization_at_base_window_pct"], h["hybrid_engine_utilization_pct"]
+    keeps_up = lambda u: "keeps up" if u < 100.0 else "cannot keep up"
+    holds = HYBRID_BATCH_WINDOW_S < 1.0 and win < 100.0
+    src = "sourced" if MLDSA65_COST_SOURCED else "UNVERIFIED placeholder, no checked source; re-check pqm4 and the M4->OTBN scaling"
+    return (f"hybrid (P-384 + ML-DSA-65, both per batch): {HYBRID_SIGN_S*1e3:.0f} ms per batch (ML-DSA-65 {MLDSA65_SIGN_CYCLES:,} cycles, "
+            f"Cortex-M4 pqm4 figure, {src}; OTBN 1.0x assumed); engine {base:.0f}% at the {BATCH_WINDOW_S*1e3:.0f} ms window "
+            f"({keeps_up(base)}) -> {win:.0f}% at a {HYBRID_BATCH_WINDOW_S*1e3:.0f} ms window ({keeps_up(win)}); "
+            f"record latency <= {h['hybrid_record_latency_s']*1e3:.0f} ms. "
+            f"Disproof {'did not hold' if holds else 'HOLDS: a second engine is needed'}: "
+            f"{'a window under 1 s keeps the one engine under 100 percent' if holds else 'no modelled window under 1 s keeps the engine under 100 percent'}"
+            f"{'' if MLDSA65_COST_SOURCED else ', conditional on the unverified ML-DSA figure'}. "
+            f"Only signing is counted; other uses of the engine are not modelled.")
+
+
 def main() -> None:
     print(f"signature: ECDSA P-384 on OTBN at 100 MHz = {OTBN_P384_SIGN_CYCLES:,} cycles = {SIGN_S*1e3:.1f} ms "
           f"(OpenTitan's published figure); batch window {BATCH_WINDOW_S*1e3:.0f} ms; {SLOTS_PER_CHIP} slots per governor chip")
@@ -173,6 +213,7 @@ def main() -> None:
         print(f"{tier:11s} tokens={r['tokens']:>9,}  firmware={r['firmware_seconds']*1e3:7.1f} ms of gpu={r['gpu_seconds']:6.1f} s "
               f"({r['firmware_overhead_pct']:.3f}%)  engine: {r['engine_utilization_unbatched_pct']:.0f}% unbatched -> "
               f"{r['engine_utilization_pct']:.0f}% batched  record latency <= {r['record_latency_s']*1e3:.0f} ms  ops={r['ops']}")
+    print(hybrid_report(run("rack")))
     short = run("rack", requests=1000, tokens_per_request=100)
     print(f"short responses (100 tokens): engine {short['engine_utilization_unbatched_pct']:.0f}% unbatched, which cannot keep up, "
           f"-> {short['engine_utilization_pct']:.0f}% batched (why the spec batches, docs/04 §9)")
