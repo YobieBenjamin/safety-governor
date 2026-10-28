@@ -30,7 +30,12 @@ PAY = {"amount": 100, "currency": "USD", "destination": "acct-1"}
 
 
 def test_every_hypothesis_test_trace_replays(tmp_path):
-    files = sorted(str(p) for p in TESTS.glob("test_h*.py") if p.name != "test_h19_conformance.py")
+    # The hypothesis tests H0 to H20 are the contract test files: the naming repair renamed tests/test_hNN_*.py to
+    # tests/test_contract_*.py (moves-safety-governor.tsv), so the old pattern test_h*.py now finds nothing.
+    files = sorted(str(p) for p in TESTS.glob("test_contract_*.py"))
+    # Never run the inner pytest with no files: it would collect the whole tree, this test included, and start itself
+    # again without end (the hang seen on 28 October 2026).
+    assert len(files) >= 19, f"found {len(files)} hypothesis test files; refusing to run pytest on the whole tree"
     report = tmp_path / "report.json"
     env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(TESTS), str(ROOT)]), H19_REPORT=str(report))
     proc = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "h19_plugin", "-p", "no:cacheprovider", *files],
@@ -111,6 +116,13 @@ def test_an_endpoint_that_ignores_the_edition_fails_replay_naming_the_event(monk
         ep.epoch = t["payload"]["policy_epoch"]                       # the endpoint check `policy_epoch != self.epoch` is gone
         monkeypatch.setattr(Governor, "commit_from_endpoint", lambda self, ticket: True)   # and so is the governor's
         ep.heartbeat(rack.clock.now())
+        # Since adversarial audit 3 the endpoint also checks the ticket against the edition it installed itself
+        # (`_check_against_edition`), so breaking the first check alone no longer lets the stale ticket out.
+        # That is defence in depth working; it is recorded here, then the second check is broken as well, so the
+        # endpoint under test really is broken and the replay has something to catch.
+        ok, why = ep.execute(t, "payments.transfer", PAY)
+        assert not ok and why == reasons.TICKET_STALE_EPOCH, "the endpoint's own edition check should still refuse"
+        ep._edition_epoch = t["payload"]["policy_epoch"]              # the second check is gone too
         ok, _ = ep.execute(t, "payments.transfer", PAY)
         assert ok, "the broken endpoint should have carried the stale ticket out"
     with pytest.raises(NoTransition) as exc:

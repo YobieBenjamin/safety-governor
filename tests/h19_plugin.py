@@ -1,6 +1,6 @@
 """pytest plugin for H19: run every test with the trace sink on and replay its trace at teardown.
 
-    python3 -m pytest -p h19_plugin tests/test_h00_contract.py        (with tests/ on PYTHONPATH)
+    python3 -m pytest -p h19_plugin tests/test_contract_fresh_authorization_per_operation.py        (with tests/ on PYTHONPATH)
 
 A trace the machines refuse turns the test's teardown into an error that names the event. When
 H19_REPORT is set, the per-test counts are written there as JSON.
