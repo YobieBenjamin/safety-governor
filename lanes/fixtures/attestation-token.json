@@ -1,0 +1,25 @@
+{
+  "payload": {
+    "devices": {
+      "cpu-tee": {
+        "device_id": "cpu-0",
+        "fw": "tee-runtime:2.4.0",
+        "svn": 3
+      },
+      "gpu": {
+        "device_id": "gpu-0",
+        "fw": "gpu-firmware:96.00.5E",
+        "svn": 5
+      }
+    },
+    "expires_at": 1800000300.0,
+    "issued_at": 1800000000.0,
+    "issuer": "verifier",
+    "measurement": "abababababababababababababababab",
+    "nonce": "n-1",
+    "type": "attestation-token"
+  },
+  "pub": "3d8eef3a3640c6b663e9f1ed93cf2b78314bd6c9540cb5a88b6a4255c1ac2c92",
+  "sig": "N0x1KWKmijxDqBEHEzLG+uHV0GCjSvrdm3RTaVqwP33RhggtFlDHAY8YvljYFdP8K22SCgkI6jJfSAjCFR/qCw==",
+  "signer": "fd955b09cebc9d33"
+}

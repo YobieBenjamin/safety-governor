@@ -1,0 +1,32 @@
+{
+  "gate": {
+    "pub": "69670d5260ca49776703c7a133d2a7c4db848ce8f176ae129c497264bbc543c0",
+    "seed": "a871cc7d14fe99c1bd2a3a30750726fb74cd45fe91739efede11ce274a930f70",
+    "signer": "6bc61058f6dd43a4"
+  },
+  "governance": {
+    "pub": "50e5d10998c3c056a251205d93b21bda5182ec26b1f3f0cf8a091abac0c03cfc",
+    "seed": "47e1a65f0bc13881e584aaf21c6c47a070781a8e26cb38208fc24b8b4661e3d3",
+    "signer": "0117838d8b06a514"
+  },
+  "obs-main": {
+    "pub": "63e2ec1aa9ef6284970f7a01cd7df9a43416335a2e18f1bd5236c298a921df6d",
+    "seed": "33ad0a6a881e5073d19b9aa0c7917d87f4369c3745435fd01e596663961a25d3",
+    "signer": "3dd4eb68f25c4e34"
+  },
+  "sentry": {
+    "pub": "5249eb03628ce2927319619bc06c0bad21b6144a1a6ff119e2d8ba524a4b622d",
+    "seed": "c2f4be04dbab2b2fdf372c5f3761583b2b88aa4dad586569633a5a0f3bc3ec5e",
+    "signer": "3cda73124afab04f"
+  },
+  "verifier": {
+    "pub": "3d8eef3a3640c6b663e9f1ed93cf2b78314bd6c9540cb5a88b6a4255c1ac2c92",
+    "seed": "b57bd6181b97064fa271be0f56b04b30ceea5cb6eab6d9705113a7480598b562",
+    "signer": "fd955b09cebc9d33"
+  },
+  "wm-registry": {
+    "pub": "0e94718be8817544deb68519b7d2054b12315e49e5f43a708fc1b8f7417c6632",
+    "seed": "dae248c1126cd0bb60caa3d12cf33ef794260e066a7f3d620c9a2ba1da51d0b2",
+    "signer": "15819035db6bc230"
+  }
+}
