@@ -90,6 +90,7 @@ def test_register_matches_the_models_enumeration():
     missing = [n for n in EXITS if n not in by_exit]
     assert not missing, f"model exits with no register row: {missing}"
     unshown = []
+    host_unshown = []
     for name, governed in EXITS.items():
         rows_for = by_exit[name]
         statuses = [r["status"] for r in rows_for]
@@ -100,6 +101,19 @@ def test_register_matches_the_models_enumeration():
             assert supported, f"{name} is only governed by design intent: {[r['id'] for r in gov]}"
         elif governed is False:
             assert set(statuses) == {"recorded-gap"}, f"{name} rows: {statuses}"
+        elif governed == "host":
+            # A host-side exit (adversarial audit 3): no switch of its own; the model meters it against the one shared
+            # host allowance and seals output to the egress endpoint. The register says what the hardware offers: each
+            # row is governed (backed by external evidence, not design intent) or not settled publicly (NDA), and an
+            # NDA row is reported as an assumption the model's host allowance stands in for.
+            bad = [s for s in statuses if s not in {"governed", "unaccounted (NDA)"}]
+            assert not bad, f"{name} (host-side in the model) has a forbidden status: {bad}"
+            for r in rows_for:
+                if r["status"] == "governed":
+                    ev = r["evidence"].upper()
+                    assert "VERIFIED" in ev or "PARTIAL" in ev, f"{r['id']}: a governed host-side row needs external evidence"
+            if any(s == "unaccounted (NDA)" for s in statuses):
+                host_unshown.append(name)
         else:  # None: the model bricks this exit by policy
             bad = [s for s in statuses if s not in {"bricked", "unaccounted (NDA)"}]
             assert not bad, f"{name} (bricked in the model) has a forbidden status: {bad}"
@@ -107,6 +121,8 @@ def test_register_matches_the_models_enumeration():
                 unshown.append(name)
     if unshown:
         warnings.warn(f"the model bricks these exits by policy but the register cannot show it: {unshown}")
+    if host_unshown:
+        warnings.warn(f"the model meters these host-side exits by its host allowance, but the register cannot show a hardware lever: {host_unshown}")
 
 
 def test_stated_counts_match_the_table():
