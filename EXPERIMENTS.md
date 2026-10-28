@@ -36,3 +36,16 @@ These five claims must not be run together into one headline. The design makes t
 | WAVE-DEPLOYMENT-OVERHEAD-SIMULATION | N | Whole-deployment overhead simulation | `govsim/deploy.py` (planned; not in the repository yet) | open | the per-chip model gives 34 percent engine utilisation batched and under 0.1 percent firmware share; 2026-10-24 (F23): that 34 percent is the BATCHED PROVENANCE RECORDS ONLY. The real request-to-effect path also signs one release ticket per response (`govsim/bench.py run_full_path`, `tests/test_f23_response_signature_cost.py`); those per-item tickets are not batchable, and the honest full-path engine load is 88 percent at 500-token responses and 306 percent (over one engine) at 100-token responses. Pricing is now honest; the DESIGN remedy (faster signing hardware, verifiable batch authorisation with atomic per-item consumption, or a keyed endpoint MAC for release tickets) is a spec/RTL change and stays open |
 | WAVE-FALSE-HALT-RATE-MODEL | N | False-halt rate model | `docs/07` FMEA, fault injection | open | |
 | EXPERIMENT-FPGA-BESIDE-REAL-GPU | N | FPGA beside a real GPU | pre-hardware plan, phase 4 | later | needs a lab with a rack |
+
+
+## L7 (WAVE-FORMAL-PROOFS-ON-VERILOG on main): formal proofs on the Verilog (wave 3, issue #7)
+
+Status: written, not yet run. `rtl/formal/` holds SymbiYosys properties for `ticket_store`, `epoch_reg`, `halt_seq`, `cap_table`, `monotonic_counter` and `mailbox` (mapped to P-numbers in `rtl/formal/README.md`), three expected-failure tasks that document RTL gaps, and a gate-level equivalence job.
+
+The one `make formal` run in the authoring environment failed before any solver started:
+
+    python3 rtl/formal/run_formal.py
+    FAIL  tool 'sby' not found on PATH (the program's container has it)
+    make: *** [formal] Error 1
+
+That environment has z3 only; `sby`, `yosys` and `yosys-smtbmc` are absent, and the bundled Amaranth Yosys has no Verilog frontend. So no assertion, induction step or equivalence script has been executed, and the first run in the container may need fixes to property syntax or induction strengthening. Candidate findings from reading the RTL, to be confirmed by the expected-failure tasks: the counter wraps at 2^64-1, the mailbox reads the frame live in VERIFY (no latch), and `running` is not re-checked at dispatch. The netlist check compares against a Yosys-synthesized gate netlist, not a LibreLane netlist (none is checked in).
