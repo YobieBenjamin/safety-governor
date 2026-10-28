@@ -11,7 +11,8 @@ Input: payments.transfer, params `{"amount": 250, "currency": "USD", "destinatio
 Reference: deny `constraint.destination.pattern`. govsim: allow. A missing destination is the same.
 Is the policy text settling it? The reference policy.py defines `regex`; govsim/policy.py defines no such constraint kind. Not a disagreement about the policy, a missing capability in govsim. Verdict: govsim is wrong if the shared rulebook is meant to carry the pattern.
 
-## G2 non-numeric amount crashes govsim's gate
+## G2 non-numeric amount crashes govsim's gate (CLOSED on the new main, 28 October 2026)
+Closed: since adversarial audit 2 (F03) govsim checks the amount is a finite number, so both gates now deny `constraint.amount.type` for `"999"`, `None` and `""` (`test_g2_is_closed`). The original finding, kept as it was:
 Input: `{"amount": "999", "currency": "USD", "destination": "acct-123456"}` (also `None`, `""`).
 Reference: deny `constraint.amount.type`. govsim: `TypeError` raised from `check_constraints` (`v < c["min"]`) inside `Governor._cmd_request`, no decision, no log line.
 Verdict: govsim is wrong (a gate that raises is not a gate that fails closed; the caller sees an exception rather than a denial). Catalogue entry L4.type_confusion.

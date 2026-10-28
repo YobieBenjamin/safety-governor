@@ -106,7 +106,9 @@ GOV_REASONS = {
 # above_max/below_min are one class because the two stacks pick a different candidate rule's
 # violation to report when a request fits neither rule (see GAPS, G5).
 HW_KINDS = {"max": "range", "min": "range", "not_allowed": "not_allowed", "missing": "missing", "type": "type", "pattern": "pattern", "maxlen": "maxlen"}
-GOV_KINDS = {"above_max": "range", "below_min": "range", "not_allowed": "not_allowed", "missing": "missing"}
+GOV_KINDS = {"above_max": "range", "below_min": "range", "not_allowed": "not_allowed", "missing": "missing",
+             # since adversarial audit 2 (F03) govsim checks the amount is a finite number and denies otherwise
+             "not_a_finite_number": "type"}
 
 
 def hw_class(code: str) -> str:
@@ -249,7 +251,7 @@ class GovRig:
         body = self.body(scn, token, witness)
         if witness == "stale":
             self.advance(61)            # the fresh verdict ages past its freshness window
-        return self.node.governor.command("REQUEST", {}, self.node.host_sign(body, self.node.governor.epoch))
+        return self.node.governor.command("REQUEST", {}, self.node.host_sign(body, self.node.governor.epoch, "REQUEST"))
 
     def hold(self, amount: int = 25000) -> dict:
         return self.request(pay(amount))
@@ -259,9 +261,9 @@ class GovRig:
         body = self.body(scn, token, witness)     # one body, reused for a repeat; a stale verdict ages below
         if witness == "stale":
             self.advance(61)
-        r = g.command("REQUEST", {}, self.node.host_sign(body, g.epoch))
+        r = g.command("REQUEST", {}, self.node.host_sign(body, g.epoch, "REQUEST"))
         if repeat:
-            r = g.command("REQUEST", {}, self.node.host_sign(body, g.epoch))
+            r = g.command("REQUEST", {}, self.node.host_sign(body, g.epoch, "REQUEST"))
         if not r["ok"] and r["why"] == G.GATE_HELD and approve:
             self.advance(61)
             keys = self.rack.approvers["payments.transfer.large"]
@@ -420,7 +422,9 @@ REPLAYED = {
     "TX.risk_label_ignored": pay(25000, labels=True),
 }
 # the pinned expectation for each catalogue replay: the gap that explains a disagreement, or None
-EXPECT_GAP = {"L4.destination_pattern": "G1 destination regex", "L4.type_confusion": "G2 non-numeric amount", "L4.currency_not_allowed": "G5 which rule's violation"}
+# G2 (a non-number amount crashed govsim) was closed on the new main by adversarial audit 2 (F03): govsim now denies it.
+# test_g2_is_closed pins that, so the old crash cannot come back unnoticed.
+EXPECT_GAP = {"L4.destination_pattern": "G1 destination regex", "L4.currency_not_allowed": "G5 which rule's violation"}
 
 
 def test_every_catalogue_entry_is_classified():
@@ -470,7 +474,6 @@ def test_catalogue_replayed_in_both_gates(name):
 
 GAP_CASES = {
     "G1 destination regex": (Scn(params={"amount": 250, "currency": "USD", "destination": "acct-evil"}), Outcome("deny", "constraint.destination.pattern"), Outcome("allow")),
-    "G2 non-numeric amount": (pay("999"), Outcome("deny", "constraint.amount.type"), Outcome("crash", "TypeError")),
     "G3 human rule witness": (pay(25000, witness="none"), Outcome("deny", "witness_missing"), Outcome("hold", "held")),
     "G4 resubmit after deny": (Scn(witness="none", repeat=True), Outcome("deny", "replay"), Outcome("deny", "witness_missing")),
     "G5 which rule's violation": (Scn(params={"amount": 250, "currency": "EUR", "destination": "acct-123456"}), Outcome("deny", "constraint.currency.not_allowed"), Outcome("deny", "constraint.amount.range")),
@@ -483,6 +486,14 @@ def test_pinned_disagreement(gap):
     hw, gov = both(scn)
     assert (hw, gov) == (want_hw, want_gov), f"{gap}: now reference {hw}, govsim {gov}"
     assert gap_of(scn, hw, gov) == gap
+
+
+@pytest.mark.parametrize("amount", ["999", None, ""])
+def test_g2_is_closed(amount):
+    """G2 was: a non-number amount raised TypeError inside govsim's gate (no decision, no log line). Since adversarial
+    audit 2 (F03) govsim checks the amount is a finite number, so both gates now deny it for the same reason."""
+    hw, gov = both(pay(amount))
+    assert hw == gov == Outcome("deny", "constraint.amount.type"), (amount, hw, gov)
 
 
 # ---------------------------------------------------------------------------------------
@@ -566,6 +577,7 @@ def test_excluded_gate_decisions_are_shown():
     assert g.rack.approve(gov_g.governor, h["hold_id"], "0" * 64, approvers[0])["why"] == "approve.bad_signature.request_mismatch", "govsim must refuse a wrong request hash"
     assert g.rack.approve(gov_g.governor, h["hold_id"], h["request_hash"], GovKey.generate())["why"] == G.APPROVE_BAD_SIGNATURE, "govsim must refuse a forged approver"
     g.clock.advance(3601)                              # well past the reference's 3600s hold ttl
+    g.rack.attest(gov_g)    # the workload's attestation lapses within the hour; renew it, so a refusal below is the hold's own
     o1 = g.rack.approve(gov_g.governor, h["hold_id"], h["request_hash"], approvers[0])
     o2 = g.rack.approve(gov_g.governor, h["hold_id"], h["request_hash"], approvers[1])
     assert not o1["ok"] and o2["ok"], (o1, o2)         # the hold is still releasable: govsim has no hold ceiling
@@ -586,6 +598,6 @@ def test_replayed_agreement_count():
             gaps.append((name, gap_of(REPLAYED[name], hw, gov)))
     gaps.sort()
     assert all(name in EXPECT_GAP and gap_of(REPLAYED[name], *both(REPLAYED[name])) == EXPECT_GAP[name] for name, _ in gaps), gaps
-    assert len(gaps) == len(EXPECT_GAP) == 3, gaps
+    assert len(gaps) == len(EXPECT_GAP) == 2, gaps
     assert agree + len(gaps) == len(REPLAYED)
-    assert (len(REPLAYED), agree, len(gaps)) == (20, 17, 3), (len(REPLAYED), agree, len(gaps))
+    assert (len(REPLAYED), agree, len(gaps)) == (20, 18, 2), (len(REPLAYED), agree, len(gaps))
