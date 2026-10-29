@@ -196,6 +196,7 @@ class Governor:
         self.host_key: VerifyKey | None = None
         self.model_digest: str | None = None
         self.lists: dict[str, dict] = {}
+        self._fleet_receipt_cache: dict[str, list] = {}   # digest of a fleet reservation -> the replicas' signed receipts
         # durable per-list version floors: an older still-unexpired list can never replace a newer one (F06)
         self.list_floors: dict[str, int] = self.store.get("list_floors", {})
         self.output_streams: dict[str, Any] = {}
@@ -1072,6 +1073,8 @@ class Governor:
             if not ok:
                 return self._deny("request", why, request_hash=rhash)
             reservation = {"key": b["key"], "rid": rid, "owner": self.policy["budget_owners"][b["key"]]}
+            if reservation["owner"] == "fleet":
+                reservation["receipts"] = self._fleet_receipt_cache.pop(digest(rid), None)
         self.ledger.mark(rhash, now)   # recorded before any hold or ticket exists, so this request hash cannot be used again (replay)
         if req_mode == "human":
             hold_id = random_id(8)
@@ -1266,6 +1269,9 @@ class Governor:
             receipts = fl.reserve(key, amount, limit, window_s, now, ttl, reserver=self.chip_id, nonce=nonce)
             rids = self._fleet_receipts(receipts, "fleet-reserve", {"key": key, "amount": amount, "nonce": nonce})
             if rids is not None:
+                # Keep the verified receipts so the ticket can carry them: the endpoint checks them again, so a
+                # governor whose key was extracted cannot claim a reservation the ledger never made (29 October 2026).
+                self._fleet_receipt_cache[digest(rids)] = [env for env in receipts if isinstance(env, dict) and env.get("signer") in rids]
                 return True, rids, reasons.OK
             return False, None, (reasons.GATE_BUDGET if getattr(fl, "reachable", False) else reasons.GATE_BUDGET_OWNER_UNREACHABLE)
         if owner == self.chip_id:
@@ -1393,6 +1399,10 @@ class Governor:
              "budget_key": reservation["key"] if reservation else None, "reservation": reservation["rid"] if reservation else None,
              "budget_owner": reservation["owner"] if reservation else None, "governor": self.chip_id,
              "issued_at": self.mono(), "valid_from": now + rule.get("delay_s", 0.0), "expires_at": now + rule.get("delay_s", 0.0) + TICKET_TTL_S}
+        if reservation and reservation.get("owner") == "fleet":
+            # The fleet ledger's signed receipts ride in the ticket. The endpoint verifies them against the replica keys
+            # the edition names, so the fleet cap is checked by a second party that does not trust this governor.
+            t["fleet_receipts"] = reservation.get("receipts") or []
         if action == RELEASE_ACTION and self.egress_mac_key is not None and rule.get("endpoint") == "egress":
             # Adversarial audit 3: one P-384 signature per response (17 ms on the signing engine) put the full serving
             # path at 3x to 68x one engine. A release ticket is only ever checked by this node's own egress endpoint,

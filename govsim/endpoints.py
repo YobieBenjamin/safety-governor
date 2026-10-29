@@ -190,6 +190,11 @@ class ActionEndpoint:
         # ticket_id -> the ticket's own expiry. Once a ticket has expired, admit() refuses it anyway, so its used
         # record can be dropped: the store is bounded by the tickets live at once, not by all tickets ever seen.
         self.used_expiry = self.store.get("used_expiry", {})
+        # Fleet reservations already spent at this endpoint: "replica key id:reservation id" -> [ticket_id, expiry].
+        # One ledger reservation authorizes one ticket here; a second ticket carrying the same receipts is refused, so
+        # a governor whose key was extracted cannot reuse one real reservation for many payments (29 October 2026).
+        self.used_reservations = self.store.get("used_reservations", {})
+        self.unchecked_list_constraints = 0   # list constraints this endpoint could not re-check because it holds no such list
         # Concurrency contract: a single endpoint may be driven by several threads at once (concurrent
         # dispatch). Admission plus durable consumption is an atomic compare-and-set under this lock, so
         # for any one ticket exactly one caller becomes the owner and crosses the effect boundary (F11).
@@ -242,6 +247,8 @@ class ActionEndpoint:
             self.consumed.pop(tid, None)
             self.burned.pop(tid, None)
             self.used_expiry.pop(tid, None)
+        for key in [k for k, (_, exp) in self.used_reservations.items() if exp < now]:
+            self.used_reservations.pop(key, None)
 
     def _authentic(self, ticket: dict) -> bool:
         """Signed by a governor this endpoint trusts, or, at an egress holding the MAC key it shares with its own
@@ -296,14 +303,103 @@ class ActionEndpoint:
                 or (rule.get("requirement") or {}).get("mode") == "deny":
             return False, reasons.TICKET_RULE_MISMATCH
         from .policy import check_constraints
-        typed = {**rule, "constraints": {k: c for k, c in (rule.get("constraints") or {}).items()
-                                         if "in_list" not in c and "not_in_list" not in c}}
-        ok, why = check_constraints(typed, params, {})
+        # Typed limits are re-checked here in full. A list constraint (a protected-site denylist, a recipient
+        # registry) is re-checked when this endpoint holds that signed list (``install_list``); a list it does not
+        # hold stays the governor's check alone, and is counted, so an operator can see what one governor key could
+        # still authorize at this device (29 October 2026; before, every list check stayed at the governor).
+        held = self._live_lists()
+        kept: dict[str, dict] = {}
+        for name, c in (rule.get("constraints") or {}).items():
+            lid = c.get("not_in_list") or c.get("in_list")
+            if lid is not None and lid not in held:
+                c = {k: v for k, v in c.items() if k not in ("in_list", "not_in_list")}
+                self.unchecked_list_constraints += 1
+            kept[name] = c
+        ok, why = check_constraints({**rule, "constraints": kept}, params, held)
         if not ok:
             return False, reasons.TICKET_RULE_MISMATCH + "." + why
         if rule.get("budget") and not (t.get("reservation") and t.get("budget_owner")):
             return False, reasons.TICKET_RULE_MISMATCH + ".no_reservation"
+        if rule.get("budget") and (self.edition.get("budget_owners") or {}).get(rule["budget"]["key"]) == "fleet":
+            ok, why = self._fleet_receipts_ok(t, rule, params)
+            if not ok:
+                return False, why
         return True, reasons.OK
+
+    def _fleet_receipts_ok(self, t: dict, rule: dict, params: dict) -> tuple[bool, str]:
+        """A ticket under a fleet-owned budget must carry the fleet ledger's receipts for its reservation: the
+        edition's threshold of distinct replicas, each a signed receipt over this budget key, this amount, this
+        governor, and the reservation id the ticket names for that replica. The endpoint verifies them against the
+        replica keys the edition names, so the fleet cap is enforced by the ledger and checked by the endpoint, and a
+        governor's extracted key alone buys nothing past the cap (29 October 2026)."""
+        spec = self.edition.get("fleet_ledger") or {}
+        keys = {vk.key_id: vk for vk in (VerifyKey.from_hex(h) for h in spec.get("keys", []))}
+        k = int(spec.get("threshold", 0) or 0)
+        if not keys or k < 1:
+            return False, reasons.TICKET_RULE_MISMATCH + ".fleet_ledger_unknown"
+        receipts = t.get("fleet_receipts")
+        rids = t.get("reservation")
+        if not isinstance(receipts, list) or not isinstance(rids, dict):
+            return False, reasons.TICKET_RULE_MISMATCH + ".fleet_receipts_missing"
+        amount = params.get(rule["budget"]["param"])
+        seen: set[str] = set()
+        for env in receipts:
+            if not isinstance(env, dict) or verify_any(env, keys) is None:
+                continue
+            p = env["payload"]
+            if p.get("type") != "fleet-reserve" or p.get("key") != rule["budget"]["key"] or p.get("reserver") != t.get("governor"):
+                continue
+            if not isinstance(p.get("amount"), (int, float)) or not isinstance(amount, (int, float)) or p["amount"] != amount:
+                continue
+            if rids.get(env["signer"]) != p.get("rid"):
+                continue
+            seen.add(env["signer"])
+        if len(seen) < k:
+            return False, reasons.TICKET_RULE_MISMATCH + ".fleet_receipts_short"
+        return True, reasons.OK
+
+    def install_list(self, list_id: str, signed_list: dict) -> bool:
+        """Hold a signed list this device's rules compare against, checked the way the governor checks it: signed by
+        the edition's list quorum of distinct, unrevoked governance signers, naming this list id. The list is read at
+        use time through ``_live_lists``, where expiry and issuer revocation make it stale (F06)."""
+        if self.edition is None:
+            return False
+        keys = {}
+        for h in self.edition.get("governance_keys", []):
+            vk = VerifyKey.from_hex(h)
+            if vk.key_id not in self.revoked:
+                keys[vk.key_id] = vk
+        signer = verify_any(signed_list, keys)
+        if signer is None or signed_list["payload"].get("list_id") != list_id:
+            return False
+        signers = {signer.key_id}
+        for c in signed_list.get("cosignatures", []) or []:
+            if isinstance(c, dict) and c.get("payload") == signed_list.get("payload"):
+                vk = verify_any(c, keys)
+                if vk is not None:
+                    signers.add(vk.key_id)
+        if len(signers) < int(self.edition.get("list_threshold", 1) or 1):
+            return False
+        p = signed_list["payload"]
+        held = self.lists.get(list_id)
+        if held and int(p.get("version", 0)) < int(held.get("version", 0)):
+            return False
+        self.lists[list_id] = {"entries": p["entries"], "expires_at": p["expires_at"], "version": int(p.get("version", 0)),
+                               "issuer": signer.key_id, "list_id": list_id}
+        return True
+
+    def _live_lists(self) -> dict[str, dict]:
+        """The lists this endpoint holds, as the rules see them now: stale once expired or once the edition revokes
+        the issuer. A list handed in at construction (``lists=``) with its own ``stale`` flag is passed through."""
+        now = self.clock.now()
+        view: dict[str, dict] = {}
+        for lid, meta in self.lists.items():
+            if "expires_at" in meta:
+                stale = float(meta["expires_at"]) <= now or meta.get("issuer") in self.revoked
+            else:
+                stale = bool(meta.get("stale"))
+            view[lid] = {**meta, "stale": stale}
+        return view
 
     def heartbeat(self, now: float) -> None:
         """Renew the heartbeat timer. ``execute`` refuses to act once the timer has run out."""
@@ -369,6 +465,14 @@ class ActionEndpoint:
                     # Adversarial audit 3: the design did not say what happens when the used-ticket store fills. It
                     # refuses: a ticket that cannot be recorded as used is never executed.
                     return self._refuse(reasons.ENDPOINT_TICKET_STORE_FULL)
+            if isinstance(t.get("fleet_receipts"), list) and isinstance(t.get("reservation"), dict):
+                # One fleet reservation, one ticket at this endpoint: a second ticket that carries receipts for a
+                # reservation already spent here is refused before it can act, whoever signed it.
+                pairs = [f"{signer}:{rid}" for signer, rid in t["reservation"].items()]
+                if any(self.used_reservations.get(pair, [None])[0] not in (None, t["ticket_id"]) for pair in pairs):
+                    return self._refuse(reasons.TICKET_REPLAY + ".reservation_spent")
+                for pair in pairs:
+                    self.used_reservations[pair] = [t["ticket_id"], float(t.get("expires_at", now))]
             self.used_expiry[t["ticket_id"]] = float(t.get("expires_at", now))
             self.consumed[t["ticket_id"]] = now
             self.burned[t["ticket_id"]] = now  # F33: the second record, saved with the first
@@ -402,6 +506,7 @@ class ActionEndpoint:
         self.consumed = self.store.get("consumed", {})
         self.burned = self.store.get("burned", {})
         self.used_expiry = self.store.get("used_expiry", {})
+        self.used_reservations = self.store.get("used_reservations", {})
         self.state = "ARMED"
 
 
