@@ -239,9 +239,13 @@ owns as `fleet` it needs the threshold of replicas' reserve receipts in the tick
 statement, each bound to this request, this ticket and this endpoint name; for every budgeted rule it keeps its own
 count of what it has let through against the rule's limit and window, and for every rate-bearing rule its own count
 of actions, each shared with the other devices the edition lists under its role name; it holds a device key the
-edition lists, or installs no edition; it takes the edition's expiry from the edition alone; it honours a governor's
-signed revocation; at an egress, it re-checks a release verdict's hazard class, legibility and escrow and takes only
-MACed release tickets and commit statements; it records request hashes and reservations it
+edition lists, or installs no edition, and refuses an edition whose shape enforces nothing; it takes the edition's
+expiry from the edition alone; it honours a governor's signed revocation, from the governor itself or from two of its
+peers over the governor fabric; it dates its used records from its own clock and keeps them for the longest ticket
+life plus a grace; it refuses a list constraint whose list it does not hold fresh, and checks a payee against the
+beneficiary registry it holds; it refuses receipts, approvals and statements dated more than a minute ahead of its
+clock; at an egress, it re-checks a release verdict's hazard class, legibility and escrow and takes only MACed release
+tickets and commit statements; it records request hashes and reservations it
 has acted on, so one authorization buys one effect at a device; and it refuses a ticket valid for longer than the
 TTL plus the longest rule delay in the edition.
 

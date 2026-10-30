@@ -38,6 +38,10 @@ def number_or_none(v):
     return float(v) if finite_number(v) else None
 
 
+MAX_CLOCK_SKEW_S = 60.0             # how far ahead of this device's clock a receipt, approval or commit statement may be dated
+REVOCATION_PEERS = 2                # other governors of the rack whose signed statements revoke a governor here
+REQUIRED_TICKET_FIELDS = ("type", "ticket_id", "request_id", "request_hash", "action", "params_digest", "measurement", "rule",
+                          "policy_epoch", "endpoint", "governor", "valid_from", "expires_at")
 TICKET_TTL_S = 300.0                # the governor's ticket TTL (govsim.governor.TICKET_TTL_S); repeated here so the endpoint
                                     # does not import the governor
 
@@ -225,8 +229,9 @@ class ActionEndpoint:
         # Governors revoked at this device by a signed revocation statement (a governor's last act before its tamper
         # response wipes its key), kept in the store so a restart does not forget (fresh audit 30 October 2026).
         self.revoked_by_statement = set(self.store.get("revoked_by_statement", []))
+        self.revocation_votes = self.store.get("revocation_votes", {})   # revoked key id -> [peer key ids that signed]
         self.list_floor = self.store.get("list_floor", {})  # list_id -> highest version ever installed here
-        self.unchecked_list_constraints = 0   # list constraints this endpoint could not re-check because it holds no such list
+        self.unchecked_list_constraints = 0   # list constraints this endpoint refused because it held no fresh copy of the list   # list constraints this endpoint could not re-check because it holds no such list
         # Concurrency contract: a single endpoint may be driven by several threads at once (concurrent
         # dispatch). Admission plus durable consumption is an atomic compare-and-set under this lock, so
         # for any one ticket exactly one caller becomes the owner and crosses the effect boundary (F11).
@@ -234,7 +239,7 @@ class ActionEndpoint:
         self.epoch = ""
         self.policy_expires_at = None       # F30: the edition's expiry, checked against this endpoint's clock on every admit
         self.safe_transition = safe_transition
-        self.lists = lists or {}            # list id -> {"entries": [...], "stale": bool}
+        self.lists = {**(lists or {}), **self.store.get("lists", {})}   # list id -> {"entries": [...], "stale": bool}; held signed lists come back from the store
         self.sensors = sensors or {}        # the device's own inputs at the moment of action
         self.hb_expiry = 0.0
         self.heartbeat_expiry_s = heartbeat_expiry_s
@@ -280,18 +285,32 @@ class ActionEndpoint:
         return True
 
     def revoke_governor(self, statement: dict) -> bool:
-        """A governor's signed statement that it is revoked: its last act before the tamper response wipes its key.
-        Verified against that governor's own key; after it, no ticket or commit from that key acts here, and the
-        record survives a restart. The extracted key can only forge the revocation of its own governor, which is
-        the fail-closed direction (fresh audit 30 October 2026: a tamper never reached a rack-local budget)."""
-        signer = verify_any(statement, self.keys) if isinstance(statement, dict) else None
-        p = (statement or {}).get("payload") or {}
-        if signer is None or p.get("type") != "governor-revoked" or p.get("key") != statement.get("signer"):
+        """A signed statement that a governor is revoked. Two sources count: the governor itself (its last act before
+        the tamper response wipes its key, which a host between it and this device can swallow), and the other
+        governors of the rack, who learn of the tamper over the governor fabric and each sign a statement; this device
+        revokes on the governor's own word or on REVOCATION_PEERS distinct peers' words. The extracted key can forge only its own governor's revocation, or one peer's vote, which is the
+        fail-closed direction. The record survives a restart (fresh audits of 30 October 2026)."""
+        if not isinstance(statement, dict) or not isinstance(statement.get("payload"), dict):
             return False
-        self.revoked_by_statement.add(statement["signer"])
+        signer = verify_any(statement, self.keys)
+        p = statement["payload"]
+        target = p.get("key")
+        if signer is None or p.get("type") != "governor-revoked" or not isinstance(target, str) or target not in self.keys:
+            return False
+        if statement.get("signer") == target:
+            self.revoked_by_statement.add(target)
+        else:
+            votes = set(self.revocation_votes.get(target, []))
+            votes.add(statement["signer"])
+            self.revocation_votes[target] = sorted(votes)
+            # Exactly REVOCATION_PEERS distinct peers, never fewer: in a rack with one peer, one extracted key could
+            # otherwise revoke the other governor (a denial), so there the governor's own statement is the only path
+            # and the host-swallow residual stands, stated in docs/29.
+            if len(votes) >= REVOCATION_PEERS:
+                self.revoked_by_statement.add(target)
         self.store.data["revoked_by_statement"] = sorted(self.revoked_by_statement)
         self.store.save()
-        return True
+        return target in self.revoked_by_statement
 
     def _prune_used(self, now: float) -> None:
         """Drop the used records of tickets that have expired (admit refuses an expired ticket on its own)."""
@@ -328,6 +347,9 @@ class ActionEndpoint:
         ok = ok or verify_recovery(image, self.recovery_hashes, self.recovery_threshold)   # the fused recovery quorum
         if not ok or (self.edition is not None and image["version"] < self.edition["version"]):
             return False
+        from .policy import shape_problems
+        if shape_problems(image):
+            return False   # the device will not enforce an edition whose shape enforces nothing (fresh audits 30 October 2026)
         listed = [e for e in image.get("endpoints", []) or [] if e.get("name") == self.name and e.get("pubkey")]
         if listed and (self.device_key is None or self.device_key.public.hex not in {e["pubkey"] for e in listed}):
             # The edition names the devices of this role by key. A device that is not one of them is not a device the
@@ -369,17 +391,28 @@ class ActionEndpoint:
         # registry) is re-checked when this endpoint holds that signed list (``install_list``); a list it does not
         # hold stays the governor's check alone, and is counted, so an operator can see what one governor key could
         # still authorize at this device (29 October 2026; before, every list check stayed at the governor).
-        held = {lid: meta for lid, meta in self._live_lists().items() if not meta.get("stale")}   # a stale list is not held: counted, not refused on
-        kept: dict[str, dict] = {}
+        # A list constraint is checked against the fresh signed copy this device holds. A list it does not hold, or
+        # holds but expired, is a refusal, as the register row says ("stale is a denial"); it was counted and let
+        # through before the fresh audits of 30 October 2026, which under the extracted key made messaging an open
+        # exit the day the list aged.
+        held = {lid: meta for lid, meta in self._live_lists().items() if not meta.get("stale")}
         for name, c in (rule.get("constraints") or {}).items():
             lid = c.get("not_in_list") or c.get("in_list")
             if lid is not None and lid not in held:
-                c = {k: v for k, v in c.items() if k not in ("in_list", "not_in_list")}
                 self.unchecked_list_constraints += 1
-            kept[name] = c
-        ok, why = check_constraints({**rule, "constraints": kept}, params, held)
+                return False, reasons.TICKET_RULE_MISMATCH + f".{name}.list_unavailable"
+        ok, why = check_constraints(rule, params, held)
         if not ok:
             return False, reasons.TICKET_RULE_MISMATCH + "." + why
+        ben = rule.get("beneficiary") or {}
+        if ben.get("registry"):
+            # The beneficiary registry (F04): the payee must be on the fresh signed registry this device holds.
+            reg = held.get(ben["registry"])
+            if reg is None:
+                self.unchecked_list_constraints += 1
+                return False, reasons.TICKET_RULE_MISMATCH + ".beneficiary.list_unavailable"
+            if params.get(ben.get("param", "destination")) not in reg.get("entries", []):
+                return False, reasons.TICKET_RULE_MISMATCH + ".beneficiary.not_in_registry"
         ok, why = self._mode_ok(t, rule, params, now)
         if not ok:
             return False, why
@@ -415,9 +448,11 @@ class ActionEndpoint:
         return min(MAX_TICKET_LIFE_S, TICKET_TTL_S + (max(delays) if delays else 0.0))
 
     def _record_grace(self) -> float:
-        """How long past a ticket's expiry its used records are kept: the longest ticket life less the TTL, which is
-        the longest rule delay in the edition. After that no credential naming the ticket can still be accepted."""
-        return max(0.0, self._max_ticket_life() - TICKET_TTL_S)
+        """How long past the longest ticket life a used record is kept: the longest rule delay in the edition plus
+        the clock skew allowed to credentials. Records are dated from this device's clock at the burn, never from a
+        field of the ticket, so an attacker-written expiry cannot shorten them (fresh audits 30 October 2026); after a
+        life plus this grace, no credential naming the record can still be accepted."""
+        return max(0.0, self._max_ticket_life() - TICKET_TTL_S) + MAX_CLOCK_SKEW_S
 
     def _budget_room(self, t: dict, rule: dict, params: dict, now: float) -> tuple[bool, str]:
         """This endpoint's own count under the rule's budget: the amounts it has let through inside the rule's window
@@ -458,8 +493,8 @@ class ActionEndpoint:
                 # The approval names this request's hash (which the endpoint has recomputed from the parameters it
                 # holds) and the epoch the ticket was minted under; an approval from an older rulebook is no approval.
                 at = number_or_none(p.get("at"))
-                if at is None or at < now - self._max_ticket_life() or at > now + self._max_ticket_life():
-                    continue   # an approval with no time, or older than any ticket can live, is a captured approval
+                if at is None or at < now - self._max_ticket_life() or at > now + MAX_CLOCK_SKEW_S:
+                    continue   # an approval with no time, older than any ticket can live, or from the future, is a captured approval
                 if p.get("type") == "approve" and p.get("request_hash") == t.get("request_hash") and p.get("epoch") == t.get("policy_epoch"):
                     signers.add(env["signer"])
             if len(signers) < quorum:
@@ -564,8 +599,8 @@ class ActionEndpoint:
             if b.get("request_hash") != t.get("request_hash") or b.get("endpoint") != self.name or b.get("ticket_id") != t.get("ticket_id"):
                 continue   # a receipt made for another request, another ticket or another device buys nothing here
             at = number_or_none(p.get("at"))
-            if at is None or at < now - self._max_ticket_life() or at > now + self._max_ticket_life():
-                continue   # a receipt older than any ticket can live is a captured receipt
+            if at is None or at < now - self._max_ticket_life() or at > now + MAX_CLOCK_SKEW_S:
+                continue   # a receipt older than any ticket can live, or dated ahead of this device's clock, is a captured receipt
             seen.add(env["signer"])
         if len(seen) < k:
             return False, reasons.TICKET_RULE_MISMATCH + ".fleet_receipts_short"
@@ -605,6 +640,7 @@ class ActionEndpoint:
             return False
         self.lists[list_id] = {"entries": p["entries"], "expires_at": p["expires_at"], "version": int(p.get("version", 0)),
                                "issuer": signer.key_id, "list_id": list_id}
+        self.store.data["lists"] = {lid: m for lid, m in self.lists.items() if "expires_at" in m}   # held lists survive a restart
         # The version floor lives in the store, so an older list cannot be reinstalled after a power cycle
         # (audit 30 October 2026: the floor was in memory only).
         self.list_floor[list_id] = int(p.get("version", 0))
@@ -635,9 +671,11 @@ class ActionEndpoint:
             return False
         if ticket.get("signer") in self.revoked_by_statement:
             return False
+        if ("mac" in committed) != ("mac" in ticket):
+            return False   # the statement is authenticated the way the ticket was: MAC for MAC, signature for signature
         if "mac" in committed:
             key = getattr(self, "mac_key", None)
-            if key is None or "mac" not in ticket:
+            if key is None:
                 return False
             import hmac as _hmac
             if not _hmac.compare_digest(str(committed["mac"]), hmac_sha256(key, canonical(committed["payload"]))):
@@ -649,7 +687,7 @@ class ActionEndpoint:
                 or c.get("endpoint") != self.name or c.get("budget_key") != t.get("budget_key") or c.get("reservation") != t.get("reservation"):
             return False
         at = number_or_none(c.get("at"))
-        if at is None or at > now + self._max_ticket_life() or at < now - self._max_ticket_life():
+        if at is None or at > now + MAX_CLOCK_SKEW_S or at < now - self._max_ticket_life():
             return False
         rule = self._rule_of(t)
         if self.edition is not None and rule is None:
@@ -689,6 +727,8 @@ class ActionEndpoint:
         if not self._authentic(ticket) or ticket["payload"].get("type") != "ticket":
             return False, reasons.TICKET_BAD_SIGNATURE
         t = ticket["payload"]
+        if any(f not in t for f in REQUIRED_TICKET_FIELDS):
+            return False, reasons.TICKET_BAD_SIGNATURE + ".malformed"   # a ticket missing a field is refused, not raised on
         if t["action"] != action:
             return False, reasons.TICKET_ACTION_MISMATCH
         # A ticket's life is bounded by the device, not only by its payload (audit 30 October 2026). Both window edges
@@ -769,7 +809,7 @@ class ActionEndpoint:
                 if any(self.used_reservations.get(pair) is not None for pair in pairs):
                     return self._refuse(reasons.TICKET_REPLAY + ".reservation_spent")
                 for pair in pairs:
-                    self.used_reservations[pair] = [t["ticket_id"], float(t.get("expires_at", now)) + self._record_grace()]
+                    self.used_reservations[pair] = [t["ticket_id"], now + self._max_ticket_life() + self._record_grace()]
             spent = self.used_requests.get(t.get("request_hash"))
             if spent is not None:
                 return self._refuse(reasons.TICKET_REPLAY + ".request_spent")
@@ -777,7 +817,7 @@ class ActionEndpoint:
             # credential is accepted while it is younger than the longest ticket life, and it was issued no later
             # than the ticket's expiry minus the TTL, so the ticket's expiry plus the longest rule delay covers it
             # (fresh audit 30 October 2026: records pruned at the ticket's expiry let a cycled store reopen them).
-            keep_until = float(t.get("expires_at", now)) + self._record_grace()
+            keep_until = now + self._max_ticket_life() + self._record_grace()
             self.used_requests[t.get("request_hash")] = [t["ticket_id"], keep_until]
             rule = self._rule_of(t)
             if rule is not None and rule.get("rate"):
@@ -792,7 +832,7 @@ class ActionEndpoint:
                 # the limit; a ticket whose commit then fails stays counted (fail closed, the window clears it).
                 key, param = rule["budget"]["key"], rule["budget"].get("param")
                 self.spent.setdefault(key, []).append([now, number_or_none(params.get(param)) or 0.0])
-            self.used_expiry[t["ticket_id"]] = float(t.get("expires_at", now)) + self._record_grace()
+            self.used_expiry[t["ticket_id"]] = now + self._max_ticket_life() + self._record_grace()
             self.consumed[t["ticket_id"]] = now
             self.burned[t["ticket_id"]] = now  # F33: the second record, saved with the first
             self.store.save()                  # burned before anything else happens
@@ -834,7 +874,9 @@ class ActionEndpoint:
         self.spent = self.store.get("spent", {})
         self.acted = self.store.get("acted", {})
         self.revoked_by_statement = set(self.store.get("revoked_by_statement", []))
+        self.revocation_votes = self.store.get("revocation_votes", {})
         self.list_floor = self.store.get("list_floor", {})
+        self.lists = {**self.lists, **self.store.get("lists", {})}   # the signed lists this device held before the power cycle
         self.state = "ARMED"
 
 

@@ -246,7 +246,7 @@ def test_an_endpoint_holding_the_recipient_list_refuses_an_unlisted_recipient_wh
     assert ok, why
 
 
-def test_an_endpoint_without_the_list_counts_what_it_could_not_check():
+def test_an_endpoint_without_the_list_refuses_and_counts_what_it_could_not_check():
     racks, _ = build_fleet(1)
     rack = racks[0]
     ep = rack.endpoints["messaging"]
@@ -255,8 +255,10 @@ def test_an_endpoint_without_the_list_counts_what_it_could_not_check():
     good = {"recipient": LISTED_RECIPIENTS[0], "body": "hello"}
     r = rack.request(rack.nodes[0], "message.send", good)
     assert r["ok"], r
-    ok, _ = ep.execute(r["ticket"], "message.send", good)
-    assert ok
+    ok, why = ep.execute(r["ticket"], "message.send", good)
+    # since the fresh audits of 30 October 2026 a list the device cannot check is a refusal, not a pass: the device
+    # fails closed and counts what it refused, so an operator sees the lists it is missing
+    assert not ok and why.endswith(".list_unavailable"), why
     assert ep.unchecked_list_constraints == before + 1
 
 

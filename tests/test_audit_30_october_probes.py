@@ -97,7 +97,7 @@ def test_A_a_human_mode_rule_needs_the_approvers_signatures_at_the_endpoint():
     attacker_host(rack)
     ep = rack.endpoints["payment-switch"]
     for _ in range(3):
-        params = {"amount": 1_000_000, "currency": "USD", "destination": "acct-x"}
+        params = {"amount": 1_000_000, "currency": "USD", "destination": "acct-9"}
         t = signed_with_governor_key(rack, {}, params, rule="payments.transfer.large")
         ok, why = ep.execute(t, PAY, params)
         assert not ok and why.startswith(reasons.TICKET_RULE_MISMATCH), why
@@ -133,7 +133,7 @@ def test_C_a_rack_local_budget_is_bounded_without_the_governor():
     ep = rack.endpoints["payment-switch"]
     moved = 0
     for _ in range(20):
-        params = {"amount": 999, "currency": "USD", "destination": "acct-x"}
+        params = {"amount": 999, "currency": "USD", "destination": "acct-9"}
         t = signed_with_governor_key(rack, {"budget_key": KEY, "reservation": "any", "budget_owner": "gov00"}, params)
         ok, _ = ep.execute(t, PAY, params)
         moved += 999 if ok else 0
@@ -149,7 +149,7 @@ def test_D_receipts_cannot_be_redirected_to_another_destination():
     r, params = honest(rack, 300, dest="acct-1")
     assert r["ok"]
     p = r["ticket"]["payload"]
-    bad = {"amount": 300, "currency": "USD", "destination": "acct-x"}
+    bad = {"amount": 300, "currency": "USD", "destination": "acct-9"}
     t = signed_with_governor_key(rack, {"budget_key": KEY, "reservation": p["reservation"], "budget_owner": "fleet",
                                         "fleet_receipts": p["fleet_receipts"]}, bad)
     ok, why = ep.execute(t, PAY, bad)
@@ -255,7 +255,7 @@ def test_J_ticket_validity_has_a_ceiling():
     racks, _ = build_fleet(1)
     rack = racks[0]
     ep = rack.endpoints["payment-switch"]
-    params = {"amount": 1000, "currency": "USD", "destination": "acct-x"}
+    params = {"amount": 1000, "currency": "USD", "destination": "acct-9"}
     t = signed_with_governor_key(rack, {"expires_at": rack.clock.now() + MAX_TICKET_LIFE_S + 1}, params, rule="payments.transfer.large")
     ok, why = ep.admit(t, PAY, params, rack.clock.now())
     assert not ok and why.endswith(".validity_too_long"), why
@@ -295,15 +295,16 @@ def test_L_the_list_version_floor_survives_a_restart():
     assert cold.install_list("recipient-registry", rack.signed_list("recipient-registry", LISTED_RECIPIENTS, version=6))
 
 
-# M. The beneficiary registry (F04) is not a rule constraint, so the endpoint neither checks nor counts it.
-#    Design item: the registry becomes an allowed-list constraint on the destination, so the endpoint can hold it.
-@pytest.mark.xfail(strict=True, reason="design item: the beneficiary registry is not yet an endpoint-checkable list constraint")
-def test_M_the_beneficiary_registry_is_an_endpoint_constraint():
+# M. The beneficiary registry (F04) was not checked at the endpoint. Since the fifth commit the payment switch holds the
+#    signed registry and refuses a payee not on it, whoever signed the ticket; the governor's hold-for-enrollment stays.
+def test_M_the_beneficiary_registry_is_checked_at_the_payment_switch():
     racks, _ = build_fleet(1)
     rack = racks[0]
     ep = rack.endpoints["payment-switch"]
-    rule = next(x for x in ep.edition["rules"] if x["id"] == "payments.transfer.small")
-    assert "destination" in rule["constraints"]
+    params = {"amount": 100, "currency": "USD", "destination": "never-registered"}
+    t = signed_with_governor_key(rack, {"budget_key": KEY, "reservation": {"x": "y"}, "budget_owner": "fleet"}, params)
+    ok, why = ep.execute(t, PAY, params)
+    assert not ok and why.endswith(".beneficiary.not_in_registry"), why
 
 
 # N. Tickets minted before a tamper event stayed valid at the endpoint until expiry. The governor is zeroized by the

@@ -79,7 +79,7 @@ def tick(rack, dt):
         n.egress.heartbeat(rack.clock.now())
 
 
-def small(amount, dest="acct-x"):
+def small(amount, dest="acct-9"):
     return {"amount": amount, "currency": "USD", "destination": dest}
 
 
@@ -90,6 +90,7 @@ def second_device(rack, like, name=None, commit=None):
                            governor_ids=dict(like.governor_ids), device_key=like.device_key)   # a clone: same key, so the edition installs
     g0 = rack.nodes[0].governor
     assert ep2.install_edition(g0.policy) and ep2.set_epoch(g0.signed_epoch())
+    ep2.lists = dict(like.lists)     # the clone holds the same signed lists; the host saw them installed
     ep2.heartbeat(rack.clock.now())
     ep2.commit = commit
     return ep2

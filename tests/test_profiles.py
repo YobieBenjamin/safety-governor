@@ -60,7 +60,7 @@ def test_the_extracted_key_is_bounded_by_the_profiles_own_cap_and_rate(name):
     moved = 0.0
     for _ in range(200):
         amount = min(per_ticket, cap)
-        params = {"amount": amount, "currency": "USD", "destination": "acct-x"}
+        params = {"amount": amount, "currency": "USD", "destination": "acct-9"}
         t = forged(rack, params, {"budget_key": KEY, "reservation": "forged-" + random_id(4), "budget_owner": "gov00"}, "payments.transfer.small")
         ok, _ = ep.execute(t, PAY, params)
         moved += amount if ok else 0

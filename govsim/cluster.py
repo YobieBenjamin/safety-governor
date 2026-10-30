@@ -140,7 +140,7 @@ class Rack:
         self.gov_vendor = SigningKey.generate()          # certifies each governor chip
         self.endpoint_keys = {"strike-guidance": SigningKey.generate(), "payment-switch": SigningKey.generate(),
                               "egress": SigningKey.generate(), "audit-store": SigningKey.generate(),
-                              "messaging": SigningKey.generate(), "fulfilment": SigningKey.generate()}
+                              "messaging": SigningKey.generate(), "fulfilment": SigningKey.generate(), "storage": SigningKey.generate()}
         # counters for signed messages; each signer's number must go up, or the governor refuses the message as a replay
         self.hb_seq = 0
         self.authority_seq = 0
@@ -202,7 +202,7 @@ class Rack:
                           sealed_models: list[str] | None = None, key_lease_s: float = 60.0,
                           payer_confirm_payments: bool = False,
                           message_max_bytes: int | None = None, message_rate: dict | None = None, release_max_risk: float = 0.5,
-                          strike_rate: dict | None = None, strike_max_risk: float = 0.5,
+                          strike_rate: dict | None = None, strike_max_risk: float = 0.5, pay_large_limit: float = 5_000_000.0,
                           governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0,
                           fleet_budget: bool = False, fleet_ledger: dict | None = None) -> dict:
         """Build one unsigned policy image: the reference values, the rules, the registers, the endpoints
@@ -223,14 +223,17 @@ class Rack:
                       rate=strike_rate if strike_rate is not None else {"max": 20, "window_s": 3600.0},   # strikes an hour, counted at the device too (shape check: an outward action carries a budget or a rate)
                       constraints={"target": {"type": "geo", "not_in_list": "protected-sites"}, "munition": {"in": ["gbu-39", "hellfire"]}},
                       endpoint="strike-guidance", inputs=["protected-sites", "navigation-fix", "observer-verdict"], delay_s=2.0),
-            make_rule("payments.transfer.small", "payments.transfer", constraints={"amount": {"min": 0, "max": 1000}, "currency": {"in": ["USD"]}},
+            make_rule("payments.transfer.small", "payments.transfer",
+                      constraints={"amount": {"min": 0, "max": min(1000.0, pay_small_limit)}, "currency": {"in": ["USD"]}},   # a request never exceeds its budget
                       budget={"key": "pay-usd-hourly", "param": "amount", "limit": pay_small_limit, "window_s": 3600},
                       rate={"max": 100, "window_s": 60}, endpoint="payment-switch", inputs=["beneficiary-registry"],
                       beneficiary={"registry": "beneficiary-registry", "param": "destination"},   # F04: the payee is admitted here, not just declared
                       payer_confirm=({"registry": "customer-registry", "account_param": "from_account"} if payer_confirm_payments else None),   # F05: the payer's own signed confirmation, checked on top of operator approval
                       **(human if sandbox else {})),
             make_rule("payments.transfer.large", "payments.transfer", mode="human", approvers_quorum=2,
-                      constraints={"amount": {"min": 1000, "max": 1_000_000}}, endpoint="payment-switch", inputs=["beneficiary-registry"]),
+                      constraints={"amount": {"min": 1000, "max": 1_000_000}}, endpoint="payment-switch", inputs=["beneficiary-registry"],
+                      budget={"key": "pay-usd-large-hourly", "param": "amount", "limit": pay_large_limit, "window_s": 3600},   # a cap even on approved payments (fresh audits 30 October 2026)
+                      beneficiary={"registry": "beneficiary-registry", "param": "destination"}),
             make_rule("model.output", "model.output", inputs=[],
                       output_budget={"queries": output_queries, "bytes": output_bytes, "window_s": 3600, "unpresented_bytes": unpresented_bytes}),
             make_rule("model.export.70b", "model.export", measurement=WORKLOAD_70B, **(human if sandbox else {})),   # the exact shipped workload is automatic outside the sandbox
@@ -253,8 +256,10 @@ class Rack:
                                    **({"body": {"max_bytes": message_max_bytes}} if message_max_bytes is not None else {})},
                       rate=message_rate if message_rate is not None else {"max": 60, "window_s": 60.0},   # F12: a byte bound plus a rate give the channel a finite ceiling; bounded by default since the fresh audit of 30 October 2026
                       endpoint="messaging", inputs=["recipient-registry"], **(human if sandbox else {})),
-            make_rule("message.send.any", "message.send", mode="human", approvers_quorum=2, endpoint="messaging"),
-            make_rule("shipment.order", "shipment.order", mode="human", approvers_quorum=2, endpoint="fulfilment"),
+            make_rule("message.send.any", "message.send", mode="human", approvers_quorum=2, endpoint="messaging",
+                      rate={"max": 60, "window_s": 3600.0}),   # approved messages are counted at the device too
+            make_rule("shipment.order", "shipment.order", mode="human", approvers_quorum=2, endpoint="fulfilment",
+                      rate={"max": 20, "window_s": 3600.0}),
         ]
         rows = [   # the assumptions register: each input, where it comes from, how old it may be, and what a failure does
             make_register_row("protected-sites", "deconfliction authority list, countersigned by the governance root", "per-entry expiry; stale is a denial",
@@ -266,6 +271,8 @@ class Rack:
             make_register_row("beneficiary-registry", "sanctions and beneficiary registries, signed", "registry version in the epoch", "new beneficiary is a hold",
                               "registries run by different bodies", "whether an entry is correct"),
             make_register_row("pay-usd-hourly", "the policy image (budget limit and window)", "epoch", "old epoch is a denial",
+                              "as for the policy", "whether the limit is the right limit"),
+            make_register_row("pay-usd-large-hourly", "the policy image (budget limit and window for approved payments)", "epoch", "old epoch is a denial",
                               "as for the policy", "whether the limit is the right limit"),
             make_register_row("recipient-registry", "the operator's signed recipient list", "per-list expiry; stale is a denial",
                               "unlisted recipient is a hold", "the list is signed outside the rack", "whether a listed recipient should be"),
@@ -283,7 +290,8 @@ class Rack:
                      {"name": "egress", "pubkey": self.endpoint_keys["egress"].public.hex, "safe_transition": "hold", "inputs": []},
                      {"name": "audit-store", "pubkey": self.endpoint_keys["audit-store"].public.hex, "safe_transition": "hold", "inputs": []},
                      {"name": "messaging", "pubkey": self.endpoint_keys["messaging"].public.hex, "safe_transition": "hold", "inputs": ["recipient-registry"]},
-                     {"name": "fulfilment", "pubkey": self.endpoint_keys["fulfilment"].public.hex, "safe_transition": "hold", "inputs": []}]
+                     {"name": "fulfilment", "pubkey": self.endpoint_keys["fulfilment"].public.hex, "safe_transition": "hold", "inputs": []},
+                     {"name": "storage", "pubkey": self.endpoint_keys["storage"].public.hex, "safe_transition": "hold", "inputs": []}]   # the storage path's governance point
         return make_policy(
             version=version, issued_at=now, expires_at=now + expires_in_s,
             governance_keys=[k.public for k in self.governance], threshold=self.threshold,
@@ -291,7 +299,8 @@ class Rack:
             heartbeat_key=self.heartbeat_key.public, authority_keys=[self.authority_key.public] + [k.public for k in self.authority_cosigners],
             heartbeat_cosigners=[k.public for k in self.heartbeat_cosigners], heartbeat_threshold=2, authority_threshold=2, list_threshold=2, site=self.site, fleet_ledger=fleet_ledger, publisher_keys=[self.publisher.public], observer_keys=[self.observer.public],
             reference_values=refs, endpoints=endpoints,
-            budget_owners={"pay-usd-hourly": "fleet" if fleet_budget else self._rack_budget_owner(), "hazard": "gov00"},   # "fleet": counted once for the whole fleet (govsim/fleet.py)
+            budget_owners={"pay-usd-hourly": "fleet" if fleet_budget else self._rack_budget_owner(),
+                           "pay-usd-large-hourly": "fleet" if fleet_budget else self._rack_budget_owner(), "hazard": "gov00"},   # "fleet": counted once for the whole fleet (govsim/fleet.py)
             rules=rules, assumptions=rows, override_floor_s=override_floor_s,
             buffer_classes=buffer_classes, buffer_policy=buffer_policy,      # None: the defaults in govsim/policy.py
             audit=audit, streams_required=streams_required, eval_keys=[self.evaluator.public], deployment_gate=deployment_gate,

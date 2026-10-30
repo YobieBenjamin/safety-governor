@@ -2383,6 +2383,12 @@ class Governor:
                     ep.revoke_governor(statement)
                 except Exception:
                     pass
+            # And over the governor fabric, which the host does not carry: the peers each sign a revocation of this
+            # key and hand it to their endpoints, so a host that swallows this chip's own statement is not enough
+            # (fresh audits 30 October 2026).
+            if self.fabric is not None:
+                self.fabric_send("ALARM", {"code": reasons.TAMPER, "origin": self.chip_id, "key": self.key.key_id,
+                                           "detail": {"kind": kind}})
             self.root.zeroize()
             self.close_ports()
 
@@ -2674,6 +2680,19 @@ class Governor:
         chip can see for itself (its own loop, its own counters) are raised locally and need no peer."""
         detail = body.get("detail")
         code = str(body.get("code"))
+        if code == reasons.TAMPER and body.get("origin") == sender and isinstance(body.get("key"), str):
+            # A member reporting its own tamper, authenticated by the fabric MAC: this chip signs a revocation of
+            # that member's key for every endpoint it reaches. One peer's vote alone revokes nothing where the
+            # rack has two or more peers (endpoints.REVOCATION_PEERS), so one extracted key cannot revoke the rest.
+            statement = self.key.sign({"type": "governor-revoked", "governor": sender, "key": body["key"], "by": self.chip_id,
+                                       "kind": (detail or {}).get("kind", "tamper") if isinstance(detail, dict) else "tamper",
+                                       "at": self.clock.now()})
+            for ep in list(self.endpoints.values()) + list(getattr(self, "shared_endpoints", []) or []):
+                try:
+                    ep.revoke_governor(statement)
+                except Exception:
+                    pass
+            self.log.append("governor.revoked_by_peer", {"governor": sender, "key": body["key"]})
         reporters = self.fabric_alarm_reports.setdefault(code, set())
         reporters.add(sender)
         self.log.append("alarm.reported", {"code": code, "by": sender, "reporters": len(reporters)})

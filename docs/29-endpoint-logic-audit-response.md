@@ -1,6 +1,6 @@
-# The endpoint logic audit of 30 October 2026, the review panel, and the fresh audit that followed: the response
+# The endpoint logic audits of 30 October 2026, the review panel, and the two fresh rounds that followed: the response
 
-Three rounds of independent review of the endpoint-receipts work, all answered in this branch.
+Four rounds of independent review of the endpoint-receipts work, all answered in this branch.
 
 **Round one.** A fresh agent audited the first endpoint-receipts commit (23a6b5a) against GOAL.md, with the host, one
 governor's signing key, and the fleet ledger's reachability under the attacker's control. It wrote sixteen probes, A
@@ -24,9 +24,21 @@ The fourth commit answers all fourteen, adds a shape check that refuses such edi
 auditor's probes, inverted, as `tests/test_fresh_audit_30_october.py`. The lesson, in Yobie Benjamin's words from two
 days earlier: a rulebook error is an enforcement error; the compiler now catches the class, not the instance.
 
+**Round four.** After the fourth commit, three fresh auditors, one per rulebook profile (default, tight, large, each
+also under values of its own), audited the branch as pushed (76d014c). All three said DOES NOT HOLD and, having not
+seen each other, named the same holes: the used records that enforce one authorization one effect lived until the
+ticket's own expiry, a field the attacker writes, so a shortened ticket and a prune let two real approvals pay a
+$900,000 payment 76 times in five minutes; a held list that had expired failed open at the device (dropped and
+counted) while the same list failed closed at the governor, so on day two of any edition the extracted key messaged
+anyone; the tamper revocation reached endpoints by a direct call that a host can swallow; the shape check looked at
+presence, not values (a zero window, an absurd limit, a risk ceiling of 0.999999, an endpoint with no key all signed);
+the beneficiary registry was held but unconsulted; a ledger clock running ahead let one reservation spend twice; the
+comparator raised on a ticket missing a field. The fifth commit answers all of it, and keeps the three audits' probes,
+inverted and parametrised over the three profiles, as `tests/test_audit_round2_30_october.py`. The per-action caps and
+rates of the fourth commit held under every profile and every auditor's own values.
+
 This response is evidence for people to check, not a verdict. GOAL.md says no AI is the final judge; the person merges,
-after three further fresh audits: one on the default rulebook, two on rulebooks with different values (the profiles in
-`govsim/profiles.py`), so a result that depends on the numbers the authors chose shows up.
+after a further round of fresh audits on the fifth commit.
 
 The attacker model throughout: one governor's signing key extracted without tripping the tamper mesh; every field of a
 ticket under the attacker's pen; captured receipts and captured commit statements reused; a host that forwards the
@@ -63,6 +75,15 @@ test so its closing is noticed).
    devices of its role; it honours a governor's signed revocation statement (the governor's last act before its
    tamper response wipes the key) and keeps it across a restart; an egress that shares a MAC key with its governor
    takes only MACed release tickets and MACed commit statements.
+7. Since the fifth commit: used records are dated from the device's own clock at the burn and kept for the longest
+   ticket life plus a grace, never from a ticket field; a list constraint whose list the device does not hold fresh
+   is a refusal (the register row's "stale is a denial"), and held lists survive a power cycle; the beneficiary
+   registry is checked at the payment switch; a tamper revokes the governor at every endpoint through its own last
+   statement and, over the governor fabric the host does not carry, through two peers' signed votes; receipts,
+   approvals and statements dated more than a minute ahead of the device's clock are refused; a ticket missing a
+   field is refused, not raised on; a statement is authenticated the way its ticket was; the shape check judges
+   values (windows, limits, ceilings, device keys, endpoint names, shared budget keys, the budget parameter) and the
+   device runs it too; approved payments carry a budget, and approved messages and orders a rate.
 
 ## The round one probes, A to P
 
@@ -80,7 +101,7 @@ test so its closing is noticed).
 | J | No upper bound on ticket validity | fixed (TTL plus the longest rule delay) | `test_J_...` |
 | K | An expired signed list installed | fixed | `test_K_...` |
 | L | List version floor lost on restart | fixed | `test_L_...` |
-| M | The beneficiary registry is not an endpoint constraint | open | `test_M_...` (xfail) |
+| M | The beneficiary registry is not an endpoint constraint | fixed in the fifth commit (the payment switch checks the payee against the registry it holds; the governor's hold-for-enrollment stays) | `test_M_...`, round 2 `test_5_...` |
 | N | Pre-tamper tickets act after the tamper | fixed for budgeted rules (no commit the endpoint will accept); **open** for an unbudgeted rule, bounded by the TTL and the rule's per-ticket maximum, see panel item 10 | `test_N_...`, panel `test_10_...` (xfail) |
 | O | Signer not tied to the governor field | fixed | `test_O_...` |
 | P | A refused commit burns the ticket | intended | `test_P_...` |
@@ -105,7 +126,24 @@ test so its closing is noticed).
 | 14 | Receipts age | fixed (`at` in every receipt; refused when older than a ticket can live) | `test_6_captured_receipts_age_out` |
 | 15 | A fresh audit of this branch after 1 to 14 | not yet done; the merge waits for it | |
 
-## The fresh audit's findings, and what was done with each
+## The second fresh round (three audits, three profiles), and what was done with each
+
+| # | Finding (short) | Status | Test |
+|---|---|---|---|
+| 1 | CATASTROPHIC (tight), SERIOUS (large): used records lived until the attacker-written ticket expiry; one authorization paid many times after a prune | fixed (device clock at the burn, life plus grace) | `test_1_...`, `test_1b_...` |
+| 2 | SERIOUS (all three): a held list fails open once stale | fixed (refused; lists kept across a restart) | `test_2_...`, `test_11_...` |
+| 3 | SERIOUS (tight, large): the tamper revocation reaches endpoints through the host | fixed for racks of three or more governors (two peers' votes over the fabric); in a rack of one or two the governor's own statement is the only path and the host-swallow residual stands, bounded by the edition's expiry | `test_3_...`, `test_3b_...` |
+| 4 | SERIOUS (default), MODERATE (tight, large): the shape check judged presence, not values | fixed (windows, limits, ceilings, device keys, endpoint names, shared keys, budget parameter; the device runs the check too) | `test_4_...` |
+| 5 | SERIOUS (tight), MODERATE (large): the beneficiary registry held but unconsulted (xfail M) | fixed | `test_5_...` |
+| 6 | MODERATE: a replica clock running ahead let one reservation spend twice | fixed (a minute's skew allowed, no more) | `test_6_...` |
+| 7 | NOTE: a ticket missing a field raised | fixed | `test_7_...` |
+| 8 | NOTE (large): a signed statement accepted for a MACed release ticket | fixed | `test_8_...` |
+| 9 | The fleet-commit receipt requirement in the statement had no test; approvals across an epoch change were tested through the measurement, not the epoch | tested | `test_9_...`, `test_10_...` |
+| 10 | The large-payment rule had no budget; two human-mode outward rules had no rate | fixed in the defaults; the shape check now requires a budget or a rate on every outward rule whatever its mode | `test_4_...` |
+| 11 | A clone of the listed device with its key (xfails 8b and 4b) | open, as before | xfail |
+| 12 | GOAL.md was not in this repository | a pointer file added; the text stays in hardware-and-silicon | |
+
+## The first fresh audit's findings, and what was done with each
 
 | # | Finding (short) | Status | Test |
 |---|---|---|---|
@@ -129,13 +167,14 @@ the receipt age, the reservation record, the statement fields for a rack-local b
 now have a test that fails when its check is removed.
 
 What stays unbounded at the endpoint against the extracted key, stated plainly: a clone of a listed device that holds the device's
-own key (design item: per-device attestation of the devices themselves); the open rows F, I and M; and an edition
-whose shape the check does not cover. An auto-mode rule with no budget and no rate can no longer be signed for an
+own key (design item: per-device attestation of the devices themselves); the open rows F and I; the host-swallow
+residual of the revocation in a rack of one or two governors; and an edition whose shape the check does not cover. An auto-mode rule with no budget and no rate can no longer be signed for an
 outward action (`policy.shape_problems`).
 
-Suites after the fourth commit: 644 passed, 6 xfailed (F, I, M, 4b, 10, 8b); `python -m govsim.redteam` VERDICT 1;
-`python -m govsim.bench` about five governed actions a second per governor chip. The third commit's count of 607 was
-the author's machine; the auditor measured 602 on a fresh clone, and the count here is from a fresh clone.
+Suites after the fifth commit: see the launcher's log for the count on the Mac; on a fresh clone here the whole
+repository (tests/ and rtl/tests/) passes with the xfails F, I, 4b, 10 and 8b (M is closed), `python -m govsim.redteam`
+VERDICT 1, `python -m govsim.bench` about five governed actions a second per governor chip. Counts quoted by auditors
+from `tests/` alone are 72 lower than the whole repository's, which includes `rtl/tests/`.
 
 What this does not claim: the open rows are open; the attacker is the one the two reviews described, not every
 attacker; and the hard core (RTL) carries none of the new ticket fields.

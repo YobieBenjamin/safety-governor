@@ -130,7 +130,7 @@ def test_2_two_honest_approvals_cannot_be_rebound_to_other_parameters():
     good = out["ticket"]
     approvals = good["payload"]["approvals"]
     assert len(approvals) >= 2
-    big = {"amount": 1_000_000, "currency": "USD", "destination": "acct-x"}
+    big = {"amount": 1_000_000, "currency": "USD", "destination": "acct-9"}
     moved = 0
     for _ in range(10):
         evil = a.ticket(big, {"approvals": approvals, "request_hash": good["payload"]["request_hash"],
@@ -228,6 +228,7 @@ def test_4b_a_verbatim_ticket_does_not_act_twice_at_two_devices_with_one_role_na
                          device_key=ep1.device_key)   # a clone of the listed device: same key, so the edition installs
     ep2.commit = lambda ticket: a.captured_statements[0]
     assert ep2.install_edition(g0.policy) and ep2.set_epoch(g0.signed_epoch())
+    ep2.lists = dict(ep1.lists)      # the clone holds the same signed lists
     ep2.heartbeat(rack.clock.now())
     ok, why = ep2.execute(r["ticket"], PAY, params)
     assert not ok, why
@@ -242,14 +243,14 @@ def test_5_the_default_rack_is_bounded_by_the_endpoints_own_count():
     ep = rack.endpoints["payment-switch"]
     moved = 0
     for _ in range(200):
-        params = {"amount": 999, "currency": "USD", "destination": "acct-x"}
+        params = {"amount": 999, "currency": "USD", "destination": "acct-9"}
         t = a.ticket(params, {"budget_key": KEY, "reservation": "forged-" + random_id(4), "budget_owner": "gov00"})
         ok, why = ep.execute(t, PAY, params)
         moved += 999 if ok else 0
     assert moved <= 2000, moved
     assert any(why.endswith(".endpoint_budget_exceeded") for why, _ in ep.refused)
     tick(rack, 3601)                                  # the window passes and the endpoint's count clears on its own
-    params = {"amount": 999, "currency": "USD", "destination": "acct-x"}
+    params = {"amount": 999, "currency": "USD", "destination": "acct-9"}
     t = a.ticket(params, {"budget_key": KEY, "reservation": "forged-" + random_id(4), "budget_owner": "gov00"})
     ok, why = ep.execute(t, PAY, params)
     assert ok, why                                    # inside the limit again: the bound is a window, not a lock
