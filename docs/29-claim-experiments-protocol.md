@@ -409,3 +409,39 @@ all 3), the order (smallest K first), the seeds (five per point, one at K = 100,
 **The amendment 1 record.** `B.json` of `claim-rerun-20261028T223006Z` and its partial completion stay in their
 folders, marked as superseded by this amendment; its Experiment A result (166 of 166, 13 broken models, 153 falsifiable
 checks) stands and A is run again on the new target as a check.
+
+---
+
+## Amendment 4, 30 October 2026, approved by Yobie Benjamin by running the launcher
+
+*Made when the amendment 3 sweep reached its 14-hour limit with the K = 100,000 point unfinished, before its record was
+read for a verdict.*
+
+**What happened.** Amendment 3 keeps every run governed for all three simulated hours, so each run at K = 100,000 does
+about three times the work it did under amendment 1. On the four-core machine that runs the sweep, three workers took
+about two hours per batch of three runs at that point. The sweep finished every K up to 10,000 inside the limit and
+reached 15 of the 19 runs at K = 100,000 when the 14-hour limit stopped it. Yobie Benjamin chose, before the record was
+read, to run the K = 100,000 point again alone with a longer limit rather than accept a partial top point.
+
+**What changes.**
+
+1. **The K = 100,000 point is run alone, with its own limit.** `python -m govsim.claim_attack_sim --sweep OUT.json
+   --ks 100000 --max-seconds 36000 --workers 4`: the same strategies, the same single seed, the same controls at that
+   K, ten hours, every core. Its record is marked `restricted_to_ks` and is not called pre-registered on its own.
+2. **The two records are merged, not edited.** `--merge` joins the amendment 3 record and the restricted record into
+   one, keeping every run, control and environment with its source and recomputing the verdicts by the approved rule
+   (amendment 2). Both inputs stay byte for byte as they were. Where the amendment 3 record already holds a finished
+   run at K = 100,000, the merged record keeps both and lists the duplicate; the readings use the first finished one.
+3. **The baselines are added afterwards, under their own limit.** `--baselines MERGED.json --max-seconds 86400
+   --workers 4` adds the one-requester baselines amendment 2 requires, one per finished sweep run, marked as added
+   after the sweep. If the limit stops them, the harm kinds whose baselines did not finish are INCONCLUSIVE, as clause 3
+   says.
+4. **The three readings are written beside the record** by `python -m govsim.claim_readings MERGED.json`, and only
+   the approved rule's reading is called the result.
+
+**What does not change.** The harm kinds, strategies, caps, run length, seeds, the K sweep below 100,000, the controls,
+the pass and fail rules of section 3.4 as amended, and the 14-hour limit for a full sweep. The amendment 3 record is
+kept as it ended, with its partial top point, and is the base of the merge.
+
+**The run id** of the merged record is written into amendment 2 where the placeholder stands, by a documentation
+commit after the baselines finish, with the record's SHA-256.
