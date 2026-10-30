@@ -318,7 +318,8 @@ class Rack:
         g0 = self.nodes[0].governor
         keys = {kid: g.key.public for kid, g in self.by_key.items()}
         gov = {"governance_hashes": [digest(k.public.hex) for k in self.governance], "governance_floor": self.threshold,
-               "recovery_hashes": [digest(k.public.hex) for k in self.recovery], "recovery_threshold": RECOVERY_THRESHOLD}
+               "recovery_hashes": [digest(k.public.hex) for k in self.recovery], "recovery_threshold": RECOVERY_THRESHOLD,
+               "governor_ids": {kid: g.chip_id for kid, g in self.by_key.items()}}
         protected = {"entries": [tuple(e) for e in PROTECTED_SITES], "stale": False}
         # the strike endpoint gets the sensor readings and the protected list that its checks read
         strike = ActionEndpoint("strike-guidance", self.clock, keys, safe_transition="no_release",

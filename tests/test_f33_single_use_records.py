@@ -20,7 +20,9 @@ def _strike_ticket():
     node = r.nodes[0]
     g = node.governor
     rule = next(x for x in g.policy["rules"] if x.get("endpoint") == "strike-guidance")
-    ticket = g._mint("rh", "strike", P, g.fingerprint, rule, None, r.clock.now())
+    # The strike rule is observer mode, and since 30 October 2026 the endpoint checks the observer's verdict itself,
+    # so the ticket carries one, as a ticket from the request path would.
+    ticket = g._mint("rh", "strike", P, g.fingerprint, rule, None, r.clock.now(), witnesses=[r.witness("rh", ttl_s=60.0)])
     r.clock.advance(rule.get("delay_s", 0.0) + 1.0)     # past the rule's delay, inside the ticket window
     r.heartbeat()
     return r, node, ticket

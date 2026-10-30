@@ -1,16 +1,20 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Noncommercial-1.0.0
 # Copyright (c) 2026 Yobie Benjamin. Noncommercial use only; see NOTICE and LICENSING.md.
-"""The endpoint checks the fleet ledger's receipts and the signed lists itself (29 October 2026).
+"""The endpoint checks the fleet ledger's receipts, the governor's signed commit and the signed lists itself
+(29 and 30 October 2026).
 
-The threat: a governor whose signing key was extracted without tripping the tamper mesh. Before this change the
-endpoint accepted a budgeted ticket that merely named a reservation, and its only defence was the commit message
-going back to the honest governor; an attacker who also answers commits (the host is untrusted) could spend past the
-fleet cap at that endpoint, and could mint for a recipient outside the registry because list checks stayed at the
-governor. Now the ticket carries the replicas' signed receipts, the endpoint verifies them against the replica keys the
-edition names, one reservation buys one ticket, and an endpoint that holds a signed list re-checks it.
+The threat: a governor whose signing key was extracted without tripping the tamper mesh, on a host the attacker
+controls. Before this change the endpoint accepted a budgeted ticket that merely named a reservation, took the host's
+word for the commit, and left list checks to the governor; an attacker could spend past the fleet cap at that endpoint,
+and the audit of 30 October showed that a host which simply swallows commits lets the hourly cap refill every five
+minutes, because an uncommitted reservation lapses. Now the ticket carries the replicas' signed receipts bound to this
+request and this endpoint, the endpoint verifies them against the replica keys the edition names, one reservation buys
+one ticket, the commit is a statement signed by the minting governor that carries the replicas' fleet-commit receipts,
+and an endpoint that holds a signed list re-checks it.
 
-Every test here answers the commit with True, modelling an attacker-controlled host, so nothing below passes because
-the honest governor refused a commit."""
+Every test here runs on a lying host: it forwards the commit to the governor, and answers True itself for anything the
+governor refused. So nothing below passes because the honest governor refused a commit; it passes only because the
+endpoint checked for itself."""
 from __future__ import annotations
 
 from govsim import reasons
@@ -22,6 +26,14 @@ PAY = "payments.transfer"
 
 
 def _attacker_answers_commits(rack):
+    """The host forwards the commit, and answers True on the governor's behalf whenever the governor refused."""
+    for ep in rack.endpoints.values():
+        real = ep.commit
+        ep.commit = (lambda r: (lambda ticket: r(ticket) or True))(real)
+
+
+def _host_swallows_commits(rack):
+    """The host never forwards a commit and always answers True (the audit's cap-refill attack)."""
     for ep in rack.endpoints.values():
         ep.commit = lambda ticket: True
 
@@ -87,6 +99,19 @@ def test_receipts_for_another_amount_do_not_authorize_this_one():
     assert why.endswith(".fleet_receipts_short"), why
 
 
+def test_receipts_are_bound_to_the_request_they_were_minted_for():
+    """Real receipts under a ticket for a different request hash: the binding in each receipt names the original
+    request and this endpoint, so the replicas' signatures authorize nothing else (audit 30 October 2026)."""
+    racks, _ = build_fleet(2)
+    rack = racks[0]
+    _attacker_answers_commits(rack)
+    honest, params = _honest_ticket(rack, amount=300)
+    moved = _forged(rack, {"rule": honest["payload"]["rule"], "reservation": honest["payload"]["reservation"],
+                           "fleet_receipts": honest["payload"]["fleet_receipts"]}, params)
+    ok, why = rack.endpoints["payment-switch"].execute(moved, PAY, params)
+    assert not ok and why.endswith(".fleet_receipts_short"), why
+
+
 def test_one_reservation_buys_one_ticket():
     """Real receipts, reused: the second ticket carrying the same reservation is refused before it acts."""
     racks, _ = build_fleet(2)
@@ -97,6 +122,7 @@ def test_one_reservation_buys_one_ticket():
     ok, why = ep.execute(honest, PAY, params)
     assert ok, why
     again = _forged(rack, {"rule": honest["payload"]["rule"], "reservation": honest["payload"]["reservation"],
+                           "request_hash": honest["payload"]["request_hash"],
                            "fleet_receipts": honest["payload"]["fleet_receipts"]}, params)
     ok, why = ep.execute(again, PAY, params)
     assert not ok
@@ -126,6 +152,47 @@ def test_an_extracted_key_cannot_spend_past_the_fleet_cap_with_the_host_answerin
             ok, _ = ep.execute(forged, PAY, params)
             moved += 400 if ok else 0
     assert 0 < moved <= 2000, moved
+
+
+def test_a_host_that_swallows_commits_cannot_refill_the_cap():
+    """The audit's finding: with commits swallowed, the governor's reservations lapse after 300 s and the hourly cap
+    refills, so a bare 'committed' from the host let $24,000 through an hour capped at $2,000. Now a bare True is no
+    commit: the endpoint moves nothing it cannot verify, and the ledger, not the host, decides what was spent."""
+    racks, _ = build_fleet(2)
+    rack = racks[0]
+    _host_swallows_commits(rack)
+    ep = rack.endpoints["payment-switch"]
+    moved = 0
+    for _ in range(12 * 6):                                  # an hour, a request every 50 s, across many lapse windows
+        params = {"amount": 400, "currency": "USD", "destination": "acct-1"}
+        r = rack.request(rack.nodes[0], PAY, params)
+        if r.get("ok"):
+            ok, why = ep.execute(r["ticket"], PAY, params)
+            assert not ok and why == reasons.COMMIT_REJECTED, why
+            moved += 400 if ok else 0
+        rack.tick(50)
+        rack.heartbeat()
+    assert moved == 0
+
+
+def test_a_commit_statement_for_another_ticket_or_from_another_signer_is_no_commit():
+    """The commit the endpoint acts on must be signed by the governor that minted this ticket and must name it."""
+    racks, _ = build_fleet(2)
+    rack = racks[0]
+    ep = rack.endpoints["payment-switch"]
+    first, params = _honest_ticket(rack, amount=300)
+    statement = rack.nodes[0].governor.commit_from_endpoint(first)
+    assert isinstance(statement, dict) and statement["payload"]["ticket_id"] == first["payload"]["ticket_id"]
+    second, params2 = _honest_ticket(rack, amount=300)
+    ep.commit = lambda ticket: statement                     # the host replays the first ticket's commit for the second
+    ok, why = ep.execute(second, PAY, params2)
+    assert not ok and why == reasons.COMMIT_REJECTED, why
+    third, params3 = _honest_ticket(rack, amount=300)
+    other = racks[1].nodes[0].governor                       # another governor's key signs a commit naming this ticket
+    ep.commit = lambda ticket: other.key.sign({**statement["payload"], "ticket_id": ticket["payload"]["ticket_id"], "governor": other.chip_id})
+    ok, why = ep.execute(third, PAY, params3)
+    assert not ok and why == reasons.COMMIT_REJECTED, why
+    assert len(ep.executed) == 0
 
 
 def test_an_endpoint_holding_the_recipient_list_refuses_an_unlisted_recipient_whoever_signed():
@@ -184,6 +251,7 @@ def test_used_reservations_survive_a_restart():
     assert ep.execute(honest, PAY, params)[0]
     ep.restart()
     again = _forged(rack, {"rule": honest["payload"]["rule"], "reservation": honest["payload"]["reservation"],
+                           "request_hash": honest["payload"]["request_hash"],
                            "fleet_receipts": honest["payload"]["fleet_receipts"]}, params)
     ok, why = ep.execute(again, PAY, params)
     assert not ok and why.endswith(".reservation_spent"), why

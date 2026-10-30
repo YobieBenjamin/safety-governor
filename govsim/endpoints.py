@@ -30,7 +30,7 @@ import threading
 from typing import Any, Callable
 
 from . import reasons
-from .crypto import SigningKey, VerifyKey, canonical, digest, hmac_sha256, sha256, verify_any, verify_object
+from .crypto import SigningKey, VerifyKey, canonical, digest, finite_number, hmac_sha256, sha256, verify_any, verify_object
 from .store import Store
 
 # F29: the ticket-binding check. True in every real run. The red-team self-test sets it to False, for the length
@@ -39,6 +39,8 @@ ENFORCE_TICKET_BINDING = True
 
 RACK_POINTS = ("nvswitch", "pcie", "dpu", "storage")
 USED_TICKET_CAPACITY = 1 << 20      # the endpoint's used-ticket store (docs/04: 2**20 entries)
+MAX_TICKET_LIFE_S = 3600.0          # no ticket is good for longer than an hour, whatever its payload says: a far-future ticket
+                                    # would never leave the used-ticket store (audit 30 October 2026)
 INTEGRATED_POINTS = ("copy_engine", "peer_mmu")
 BRICKED = ("display", "jtag", "debug")
 
@@ -174,7 +176,8 @@ class ActionEndpoint:
                  safe_transition: str = "no_action", lists: dict[str, Any] | None = None,
                  sensors: dict[str, Any] | None = None, heartbeat_expiry_s: float = 5.0,
                  governance_hashes: list[str] | None = None, governance_floor: int | None = None,
-                 recovery_hashes: list[str] | None = None, recovery_threshold: int = 0):
+                 recovery_hashes: list[str] | None = None, recovery_threshold: int = 0,
+                 governor_ids: dict[str, str] | None = None):
         """Create one endpoint. ``governor_keys`` maps each governor's key id to its public key, for every governor
         that may mint a ticket for this device. ``safe_transition`` is what the endpoint does when it refuses
         (the rack's endpoints use ``no_release``, ``decline`` or ``hold``). ``sensors`` are the device's own inputs at
@@ -182,6 +185,7 @@ class ActionEndpoint:
         self.name = name
         self.clock = clock
         self.keys = dict(governor_keys)      # key id -> VerifyKey of every governor that may mint for this device
+        self.governor_ids = dict(governor_ids or {})   # key id -> chip id, when known: a ticket's governor field must match its signer
         self.store = store or Store()
         self.consumed = self.store.get("consumed", {})     # ticket_id -> t
         # F33: a second, separate record of burned tickets, written in the same save as ``consumed``. The single-use
@@ -194,6 +198,7 @@ class ActionEndpoint:
         # One ledger reservation authorizes one ticket here; a second ticket carrying the same receipts is refused, so
         # a governor whose key was extracted cannot reuse one real reservation for many payments (29 October 2026).
         self.used_reservations = self.store.get("used_reservations", {})
+        self.list_floor = self.store.get("list_floor", {})  # list_id -> highest version ever installed here
         self.unchecked_list_constraints = 0   # list constraints this endpoint could not re-check because it holds no such list
         # Concurrency contract: a single endpoint may be driven by several threads at once (concurrent
         # dispatch). Admission plus durable consumption is an atomic compare-and-set under this lock, so
@@ -307,7 +312,7 @@ class ActionEndpoint:
         # registry) is re-checked when this endpoint holds that signed list (``install_list``); a list it does not
         # hold stays the governor's check alone, and is counted, so an operator can see what one governor key could
         # still authorize at this device (29 October 2026; before, every list check stayed at the governor).
-        held = self._live_lists()
+        held = {lid: meta for lid, meta in self._live_lists().items() if not meta.get("stale")}   # a stale list is not held: counted, not refused on
         kept: dict[str, dict] = {}
         for name, c in (rule.get("constraints") or {}).items():
             lid = c.get("not_in_list") or c.get("in_list")
@@ -318,12 +323,51 @@ class ActionEndpoint:
         ok, why = check_constraints({**rule, "constraints": kept}, params, held)
         if not ok:
             return False, reasons.TICKET_RULE_MISMATCH + "." + why
+        ok, why = self._mode_ok(t, rule, params)
+        if not ok:
+            return False, why
         if rule.get("budget") and not (t.get("reservation") and t.get("budget_owner")):
             return False, reasons.TICKET_RULE_MISMATCH + ".no_reservation"
         if rule.get("budget") and (self.edition.get("budget_owners") or {}).get(rule["budget"]["key"]) == "fleet":
             ok, why = self._fleet_receipts_ok(t, rule, params)
             if not ok:
                 return False, why
+        return True, reasons.OK
+
+    def _mode_ok(self, t: dict, rule: dict, params: dict) -> tuple[bool, str]:
+        """The rule's mode is enforced here, not only at the governor (audit 30 October 2026: a captured governor key
+        could mint a ticket for a human-mode rule with no approver). A human-mode rule needs the edition's quorum of
+        distinct approvers for that rule, each a signed approval naming this ticket's request hash. An observer-mode
+        rule needs at least one observer's signed verdict naming the request hash."""
+        mode = (rule.get("requirement") or {}).get("mode", "auto")
+        if mode == "human":
+            hexes = (self.edition.get("approver_keys") or {}).get(rule.get("id"), [])
+            keys = {vk.key_id: vk for vk in (VerifyKey.from_hex(h) for h in hexes)}
+            quorum = max(1, int((rule.get("requirement") or {}).get("approvers_quorum", 1) or 1))
+            if not keys:
+                return False, reasons.TICKET_RULE_MISMATCH + ".no_approver_keys"
+            signers: set[str] = set()
+            for env in t.get("approvals") or []:
+                if not isinstance(env, dict) or verify_any(env, keys) is None:
+                    continue
+                p = env.get("payload") or {}
+                if p.get("type") == "approve" and p.get("request_hash") == t.get("request_hash"):
+                    signers.add(env["signer"])
+            if len(signers) < quorum:
+                return False, reasons.TICKET_RULE_MISMATCH + ".approvals_short"
+        elif mode == "observer":
+            keys = {vk.key_id: vk for vk in (VerifyKey.from_hex(h) for h in self.edition.get("observer_keys") or [])}
+            # A verdict is bound to this ticket either by the request hash (a witnessed action) or by the response
+            # hash the ticket names (a release ticket, where the observer judged the model's response, not the request).
+            bound_to = {t.get("request_hash"), (params or {}).get("response_hash")} - {None}
+            good = 0
+            for env in t.get("witnesses") or []:
+                if isinstance(env, dict) and verify_any(env, keys) is not None:
+                    p = env.get("payload") or {}
+                    if p.get("type") == "observer-verdict" and (p.get("request_hash") in bound_to or p.get("response_hash") in bound_to):
+                        good += 1
+            if good < 1:
+                return False, reasons.TICKET_RULE_MISMATCH + ".no_observer_verdict"
         return True, reasons.OK
 
     def _fleet_receipts_ok(self, t: dict, rule: dict, params: dict) -> tuple[bool, str]:
@@ -349,10 +393,13 @@ class ActionEndpoint:
             p = env["payload"]
             if p.get("type") != "fleet-reserve" or p.get("key") != rule["budget"]["key"] or p.get("reserver") != t.get("governor"):
                 continue
-            if not isinstance(p.get("amount"), (int, float)) or not isinstance(amount, (int, float)) or p["amount"] != amount:
+            if not finite_number(p.get("amount")) or not finite_number(amount) or p["amount"] != amount:
                 continue
             if rids.get(env["signer"]) != p.get("rid"):
                 continue
+            b = p.get("binding") or {}
+            if b.get("request_hash") != t.get("request_hash") or b.get("endpoint") != self.name:
+                continue   # a receipt made for another request or another device buys nothing here
             seen.add(env["signer"])
         if len(seen) < k:
             return False, reasons.TICKET_RULE_MISMATCH + ".fleet_receipts_short"
@@ -381,11 +428,18 @@ class ActionEndpoint:
         if len(signers) < int(self.edition.get("list_threshold", 1) or 1):
             return False
         p = signed_list["payload"]
+        if float(p.get("expires_at", 0)) <= self.clock.now():
+            return False   # an expired list is never installed, so a replayed old list cannot be used to refuse honest traffic
         held = self.lists.get(list_id)
-        if held and int(p.get("version", 0)) < int(held.get("version", 0)):
+        floor = int(self.list_floor.get(list_id, 0))
+        if int(p.get("version", 0)) < max(floor, int(held.get("version", 0)) if held else floor):
             return False
         self.lists[list_id] = {"entries": p["entries"], "expires_at": p["expires_at"], "version": int(p.get("version", 0)),
                                "issuer": signer.key_id, "list_id": list_id}
+        # The version floor lives in the store, so an older list cannot be reinstalled after a power cycle
+        # (audit 30 October 2026: the floor was in memory only).
+        self.list_floor[list_id] = int(p.get("version", 0))
+        self.store.save()
         return True
 
     def _live_lists(self) -> dict[str, dict]:
@@ -400,6 +454,32 @@ class ActionEndpoint:
                 stale = bool(meta.get("stale"))
             view[lid] = {**meta, "stale": stale}
         return view
+
+    def _commit_verified(self, ticket: dict, committed) -> bool:
+        """A commit is good only as a statement signed by the governor that minted the ticket, naming this ticket, and,
+        for a fleet-owned budget, carrying the edition's threshold of distinct replicas' fleet-commit receipts, each
+        closing the reservation this ticket names. Anything else, a bare True included, is no commit."""
+        if not isinstance(committed, dict) or verify_any(committed, self.keys) is None or committed.get("signer") != ticket.get("signer"):
+            return False
+        t, c = ticket["payload"], committed.get("payload") or {}
+        if c.get("type") != "commit" or c.get("ticket_id") != t.get("ticket_id"):
+            return False
+        if self.edition is not None and t.get("budget_key") and (self.edition.get("budget_owners") or {}).get(t["budget_key"]) == "fleet":
+            spec = self.edition.get("fleet_ledger") or {}
+            keys = {vk.key_id: vk for vk in (VerifyKey.from_hex(h) for h in spec.get("keys", []))}
+            k = int(spec.get("threshold", 0) or 0)
+            rids = t.get("reservation") if isinstance(t.get("reservation"), dict) else {}
+            closed: set[str] = set()
+            for env in c.get("fleet_receipts") or []:
+                if not isinstance(env, dict) or verify_any(env, keys) is None:
+                    continue
+                p = env.get("payload") or {}
+                if p.get("type") == "fleet-commit" and p.get("key") == t["budget_key"] and p.get("reserver") == t.get("governor") \
+                        and rids.get(env["signer"]) == p.get("rid"):
+                    closed.add(env["signer"])
+            if not keys or k < 1 or len(closed) < k:
+                return False
+        return True
 
     def heartbeat(self, now: float) -> None:
         """Renew the heartbeat timer. ``execute`` refuses to act once the timer has run out."""
@@ -418,6 +498,14 @@ class ActionEndpoint:
         t = ticket["payload"]
         if t["action"] != action:
             return False, reasons.TICKET_ACTION_MISMATCH
+        # A ticket's life is bounded by the device, not only by its payload (audit 30 October 2026).
+        try:
+            if float(t.get("expires_at", 0)) - float(t.get("valid_from", 0)) > MAX_TICKET_LIFE_S or float(t.get("expires_at", 0)) > now + MAX_TICKET_LIFE_S:
+                return False, reasons.TICKET_RULE_MISMATCH + ".validity_too_long"
+        except (TypeError, ValueError):
+            return False, reasons.TICKET_RULE_MISMATCH + ".validity_malformed"
+        if self.governor_ids and self.governor_ids.get(ticket.get("signer")) not in (None, t.get("governor")):
+            return False, reasons.TICKET_RULE_MISMATCH + ".governor_mismatch"
         if t["params_digest"] != digest(params):
             return False, reasons.TICKET_PARAMS_MISMATCH
         # F29: every ticket names exactly one endpoint. An unbound ticket is refused, and so is a ticket
@@ -481,6 +569,10 @@ class ActionEndpoint:
             committed = self.commit(ticket) if self.commit else False
         except ConnectionError:
             return self._refuse(reasons.COMMIT_UNREACHABLE)
+        if committed and not self._commit_verified(ticket, committed):
+            # The host answered for the governor, or the fleet ledger did not close the reservation: no effect
+            # (audit 30 October 2026: a bare 'yes' from the host used to be enough).
+            committed = False
         if not committed:
             return self._refuse(reasons.COMMIT_REJECTED)
         # The device's own checks run after the commit, so a ticket that fails one of them is already burned and
@@ -507,6 +599,7 @@ class ActionEndpoint:
         self.burned = self.store.get("burned", {})
         self.used_expiry = self.store.get("used_expiry", {})
         self.used_reservations = self.store.get("used_reservations", {})
+        self.list_floor = self.store.get("list_floor", {})
         self.state = "ARMED"
 
 
@@ -519,13 +612,14 @@ class EgressEndpoint(ActionEndpoint):
 
     def __init__(self, name: str, clock, governor_keys: dict[str, VerifyKey], store: Store | None = None, safe_transition: str = "hold",
                  governance_hashes: list[str] | None = None, governance_floor: int | None = None,
-                 recovery_hashes: list[str] | None = None, recovery_threshold: int = 0):
+                 recovery_hashes: list[str] | None = None, recovery_threshold: int = 0,
+                 governor_ids: dict[str, str] | None = None):
         """The egress for one node. It holds responses until a release ticket covers them. Its safe transition is ``hold``.
         It holds the governance anchors too, so it learns each new edition from the governance signatures themselves
         and not only from its own governor (adversarial audit 3: a straggling governor kept its egress on old rules)."""
         super().__init__(name, clock, governor_keys, store, safe_transition=safe_transition,
                          governance_hashes=governance_hashes, governance_floor=governance_floor,
-                         recovery_hashes=recovery_hashes, recovery_threshold=recovery_threshold)
+                         recovery_hashes=recovery_hashes, recovery_threshold=recovery_threshold, governor_ids=governor_ids)
         self.held: dict[tuple[str, str], dict] = {}        # (session, response_id) -> {"bytes", "response_hash", "stream_hashes"}
         self.delivered: dict[str, list[bytes]] = {}        # session -> responses that left
         self.bytes_held = 0

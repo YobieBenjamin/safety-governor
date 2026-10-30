@@ -1069,7 +1069,8 @@ class Governor:
             amount = params.get(b["param"])
             if not finite_number(amount) or amount < 0:   # reject bool, NaN and infinity before reserving (F03)
                 return self._deny("request", reasons.GATE_BUDGET + ".amount_invalid", request_hash=rhash)
-            ok, rid, why = self._reserve(b["key"], amount, b["limit"], b["window_s"], now, TICKET_TTL_S + rule.get("delay_s", 0.0))
+            ok, rid, why = self._reserve(b["key"], amount, b["limit"], b["window_s"], now, TICKET_TTL_S + rule.get("delay_s", 0.0),
+                                         binding={"request_hash": rhash, "endpoint": rule.get("endpoint")})
             if not ok:
                 return self._deny("request", why, request_hash=rhash)
             reservation = {"key": b["key"], "rid": rid, "owner": self.policy["budget_owners"][b["key"]]}
@@ -1084,7 +1085,7 @@ class Governor:
             self.store.save()
             self.log.append("gate.hold", {"hold_id": hold_id, "request_hash": rhash, "rule": rule["id"], "cause": hold_cause})
             return {"ok": False, "why": reasons.GATE_HELD, "hold_id": hold_id, "request_hash": rhash, "cause": hold_cause}
-        ticket = self._mint(rhash, action, params, fp, rule, reservation, now)
+        ticket = self._mint(rhash, action, params, fp, rule, reservation, now, witnesses=req.get("witnesses", []))
         return {"ok": True, "why": reasons.OK, "ticket": ticket, "request_hash": rhash}
 
     # ------------------------------------------------------------------ response release
@@ -1247,8 +1248,11 @@ class Governor:
             return (owners, k) if owners and 1 <= k <= len(owners) else None
         return [str(spec)], 1
 
-    def _reserve(self, key: str, amount: float, limit: float, window_s: float, now: float, ttl: float) -> tuple[bool, str | None, str]:
-        """Reserve at the key's owner: locally if that is us, over the fabric otherwise. There is no default owner."""
+    def _reserve(self, key: str, amount: float, limit: float, window_s: float, now: float, ttl: float,
+                 binding: dict | None = None) -> tuple[bool, str | None, str]:
+        """Reserve at the key's owner: locally if that is us, over the fabric otherwise. There is no default owner.
+        ``binding`` (the request hash and the endpoint) is signed into a fleet receipt, so the receipt is good for one
+        request at one device."""
         spec = self._budget_owners(key)
         if spec is None:
             return False, None, reasons.POLICY_BUDGET_OWNER_MISSING
@@ -1266,8 +1270,14 @@ class Governor:
             if fl is None:
                 return False, None, reasons.GATE_BUDGET_OWNER_UNREACHABLE
             nonce = random_id(16)
-            receipts = fl.reserve(key, amount, limit, window_s, now, ttl, reserver=self.chip_id, nonce=nonce)
+            receipts = fl.reserve(key, amount, limit, window_s, now, ttl, reserver=self.chip_id, nonce=nonce, binding=binding)
             rids = self._fleet_receipts(receipts, "fleet-reserve", {"key": key, "amount": amount, "nonce": nonce})
+            if rids is None:
+                # Fewer than the threshold answered. The replicas that did reserve are told to give it back, so a
+                # refused request does not hold fleet budget for the rest of the window (audit 30 October 2026).
+                partial = {env["signer"]: env["payload"].get("rid") for env in receipts if isinstance(env, dict) and env.get("signer")}
+                if partial:
+                    fl.release(key, partial, reserver=self.chip_id)
             if rids is not None:
                 # Keep the verified receipts so the ticket can carry them: the endpoint checks them again, so a
                 # governor whose key was extracted cannot claim a reservation the ledger never made (29 October 2026).
@@ -1307,13 +1317,20 @@ class Governor:
 
     def _fleet_commit(self, key: str, rids) -> bool:
         """Commit a fleet reservation: the threshold of replicas named in it must each return a signed commit."""
+        return self._fleet_commit_receipts(key, rids) is not None
+
+    def _fleet_commit_receipts(self, key: str, rids) -> list[dict] | None:
+        """Commit a fleet reservation and return the replicas' signed commit receipts (the threshold of them, each
+        naming the reservation it closed), or None when the commit did not reach the threshold."""
         fl = self.fleet_ledger
         if fl is None or not isinstance(rids, dict):
-            return False
+            return None
         nonce = random_id(16)
         receipts = fl.commit(key, rids, self.clock.now(), reserver=self.chip_id, nonce=nonce)
         got = self._fleet_receipts(receipts, "fleet-commit", {"key": key, "nonce": nonce})
-        return got is not None and all(rids.get(signer) == rid for signer, rid in got.items())
+        if got is None or not all(rids.get(signer) == rid for signer, rid in got.items()):
+            return None
+        return [env for env in receipts if isinstance(env, dict) and env.get("signer") in got]
 
     def _reserve_quorum(self, key, amount, limit, window_s, now, ttl, owners, k) -> tuple[bool, dict | None, str]:
         """Reserve at every owner; succeed only if at least ``k`` of them reserved. The reservation is the map
@@ -1392,13 +1409,22 @@ class Governor:
             return reasons.GATE_ALARM
         return None
 
-    def _mint(self, rhash: str, action: str, params: dict, fp: str, rule: dict, reservation: dict | None, now: float) -> dict:
-        """``issued_at`` is the governor's monotonic counter; ``valid_from``/``expires_at`` are endpoint clock seconds."""
+    def _mint(self, rhash: str, action: str, params: dict, fp: str, rule: dict, reservation: dict | None, now: float,
+              approvals: list[dict] | None = None, witnesses: list[dict] | None = None) -> dict:
+        """``issued_at`` is the governor's monotonic counter; ``valid_from``/``expires_at`` are endpoint clock seconds.
+        A ticket for a human-mode rule carries the approvers' signed approvals, and one for an observer-mode rule the
+        observers' signed verdicts, so the endpoint can check the rule's mode itself and not only this governor's
+        signature (audit 30 October 2026: a captured governor key could mint a human-mode ticket with no approver)."""
         t = {"type": "ticket", "ticket_id": random_id(16), "request_hash": rhash, "action": action, "params_digest": digest(params),
              "measurement": fp, "rule": rule["id"], "policy_epoch": self.epoch, "endpoint": rule.get("endpoint"),
              "budget_key": reservation["key"] if reservation else None, "reservation": reservation["rid"] if reservation else None,
              "budget_owner": reservation["owner"] if reservation else None, "governor": self.chip_id,
              "issued_at": self.mono(), "valid_from": now + rule.get("delay_s", 0.0), "expires_at": now + rule.get("delay_s", 0.0) + TICKET_TTL_S}
+        mode = (rule.get("requirement") or {}).get("mode", "auto")
+        if mode == "human":
+            t["approvals"] = list(approvals or [])
+        elif mode == "observer":
+            t["witnesses"] = [w for w in (witnesses or []) if isinstance(w, dict) and (w.get("payload") or {}).get("type") == "observer-verdict"]
         if reservation and reservation.get("owner") == "fleet":
             # The fleet ledger's signed receipts ride in the ticket. The endpoint verifies them against the replica keys
             # the edition names, so the fleet cap is checked by a second party that does not trust this governor.
@@ -1461,7 +1487,7 @@ class Governor:
         if not str(p.get("reason", "")).strip():
             return self._deny("approve", reasons.APPROVE_NO_REASON)
         now = self.clock.now()
-        self.approvals.setdefault(hold_id, {})[env["signer"]] = {"t": now, "reason": p["reason"]}
+        self.approvals.setdefault(hold_id, {})[env["signer"]] = {"t": now, "reason": p["reason"], "env": env}
         self.log.append("approve.signature", {"hold_id": hold_id, "approver": env["signer"], "reason": p["reason"]})
         rule = next(r for r in self.policy["rules"] if r["id"] == hold["rule"])
         quorum = max(1, rule["requirement"].get("approvers_quorum", 1))
@@ -1484,7 +1510,8 @@ class Governor:
             ok, why = self._revalidate_payer(hold["payer_confirm"], hold["params"], now)
             if not ok:
                 return self._deny("approve", why, hold_id=hold_id)
-        ticket = self._mint(hold["request_hash"], hold["action"], hold["params"], hold["fingerprint"], rule, hold["reservation"], now)
+        ticket = self._mint(hold["request_hash"], hold["action"], hold["params"], hold["fingerprint"], rule, hold["reservation"], now,
+                            approvals=[a["env"] for a in self.approvals[hold_id].values() if a.get("env")])
         self.holds.pop(hold_id)
         self.store.save()
         self.log.append("approve.released", {"hold_id": hold_id, "approvers": sorted(self.approvals[hold_id]), "latency_s": now - hold["created_at"]})
@@ -1505,8 +1532,12 @@ class Governor:
         committed = self.commit_from_endpoint(env["payload"].get("ticket") or {})
         return {"ok": committed, "why": reasons.OK if committed else reasons.COMMIT_REJECTED}
 
-    def commit_from_endpoint(self, ticket: dict) -> bool:
-        """The endpoint's COMMIT. Unreachable governor means the endpoint refuses."""
+    def commit_from_endpoint(self, ticket: dict):
+        """The endpoint's COMMIT. Unreachable governor means the endpoint refuses. Returns False, or a signed commit
+        statement the endpoint verifies before it acts: for a fleet-owned budget the replicas' fleet-commit receipts
+        ride inside it, so a host that answers 'committed' on the governor's behalf buys nothing (audit 30 October 2026:
+        the endpoint took commit as a bare yes from the host, and an uncommitted reservation lapses after 300 seconds,
+        so swallowed commits let the hourly cap refill every five minutes)."""
         with self.lock:
             if not self.reachable:
                 raise ConnectionError(reasons.COMMIT_UNREACHABLE)
@@ -1539,11 +1570,13 @@ class Governor:
                 self.log.append("gate.commit_rejected", {"ticket_id": tid, "why": reasons.TICKET_NOT_MINTED})
                 return False
             ok = True
+            fleet_receipts = None
             if t.get("reservation"):
                 owner = t.get("budget_owner") or self.chip_id
                 spec = self._budget_owners(t["budget_key"]) if t.get("budget_key") else None
                 if owner == "fleet":
-                    ok = self._fleet_commit(t["budget_key"], t["reservation"])
+                    fleet_receipts = self._fleet_commit_receipts(t["budget_key"], t["reservation"])
+                    ok = fleet_receipts is not None
                 elif isinstance(t["reservation"], dict):
                     ok = spec is not None and len(spec[0]) > 1 and self._commit_quorum(t["budget_key"], t["reservation"], *spec)
                 elif owner == self.chip_id:
@@ -1557,7 +1590,10 @@ class Governor:
                 self.committed_tickets[tid] = self.clock.now()
                 self.minted_tickets.pop(tid, None)
             self.log.append("gate.commit" if ok else "gate.commit_rejected", {"ticket_id": tid})
-            return ok
+            if not ok:
+                return False
+            return self.key.sign({"type": "commit", "ticket_id": tid, "governor": self.chip_id, "budget_key": t.get("budget_key"),
+                                  "reservation": t.get("reservation"), "fleet_receipts": fleet_receipts or [], "at": self.clock.now()})
 
     # ------------------------------------------------------------------ alarms
     def raise_alarm(self, code: str, source: str, detail: dict | None = None) -> None:
