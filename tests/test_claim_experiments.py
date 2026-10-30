@@ -102,3 +102,35 @@ def test_the_largest_k_runs_one_seed_and_every_other_k_five():
 
 def test_the_controls_run_at_one_and_ten_thousand():
     assert B.control_ks() == (1, 10_000)
+
+
+def test_amendment_3_the_run_stays_governed_for_all_three_hours():
+    """Amendment 3 (30 October 2026): the harness re-attests and re-begins the model before the one-hour workload token
+    expires, so an honest payment succeeds in every simulated hour, not only the first. Before the amendment hours two
+    and three refused everything as gate.not_attested, and every honest-success figure was an artefact of that."""
+    import collections
+    from govsim import claim_attack_sim as C
+    clock, racks, nodes = C.build(fleet_budget=True, seed=1)
+    n = len(nodes)
+    by_hour = collections.defaultdict(collections.Counter)
+    last = clock.now()
+    for rnd in range(int(C.HOURS * 3600 / C.STEP_S)):
+        if clock.now() - last >= C.REATTEST_S:
+            for rr, nn in nodes:
+                rr.attest(nn)
+                rr.load_model(nn)
+            last = clock.now()
+        r, node = nodes[rnd % n]
+        res = r.pay(node, 5.0, "alice-123")
+        ok = bool(res.get("ok")) and C._execute_payment(r, res, 5.0, "recipient-a")
+        by_hour[int(rnd * C.STEP_S // 3600)]["ok" if ok else str(res.get("why"))] += 1
+        C.advance(clock, racks, C.STEP_S)
+    assert C.REATTEST_S < 3600
+    for hour in range(C.HOURS):
+        assert by_hour[hour] == {"ok": 60}, (hour, dict(by_hour[hour]))
+
+
+def test_amendment_3_the_record_carries_its_provenance():
+    from govsim import claim_attack_sim as C
+    env = C._environment()
+    assert env["amendment"] == 3 and env["python"] and "reattest_s" in env

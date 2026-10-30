@@ -266,3 +266,58 @@ and A is run again on the new target as a check.
 
 **Expected time.** 494 runs: about 1.5 to 3.5 hours for K up to 10,000 on 13 workers, then about 5 to 6 hours for the
 19 runs at K = 100,000. About 7 to 9 hours in all.
+
+---
+
+## Amendment 2, drafted 29 October 2026, NOT YET APPROVED
+
+*A clarification of section 3.4, drafted after the amendment 1 run finished and after its data had been seen, which is
+why it is recorded here as a draft for the independent review (R8) and for Yobie Benjamin, and is not applied by the
+code.*
+
+Section 3.4 fails a harm kind when `L` grows with `K`. The code's `grows_with_k` fails a kind only when the growth also
+ends above the cap. In the amendment 1 run money rose from 1,499 to 1,995 dollars and data out from 2 MiB to 8 MiB,
+both under their caps and both flat from K = 1,000 (money) and K = 10 (data) on; under the text both fail, under the
+code both pass. The draft rule: a harm kind fails if any run is over its cap, or if harm is still rising between the
+two largest K (within a tolerance the review fixes before looking again), or if harm at any K exceeds what the rulebook
+would let one requester with the same total number of requests do. Under a 1 percent tolerance the data-out probing
+strategy still fails (a 2.8 percent rise between K = 10,000 and 100,000, towards the ceiling four other strategies
+reach exactly). The tolerance is not to be tuned to the data. Until this is approved, every record reports both the
+code's reading and the text's reading, and no reading is called the result.
+
+---
+
+## Amendment 3, 30 October 2026, approved by Yobie Benjamin by running the rerun
+
+*Made after an adversarial audit of the amendment 1 record, before any result was called a result.*
+
+**What happened.** The attacker harness attested every GPU once, at bring-up, and never again. The governor's workload
+token and attestation live one hour (`TOKEN_TTL_S`), and the design's only renewal path is for the host to re-attest
+and begin the model again. The harness did neither, so from the second simulated hour on every request, honest or
+attacking, was refused as `gate.not_attested`. Reproduced on 30 October: with no attacker at all, 60 of 60 honest
+payments succeed in hour one and 0 of 120 in hours two and three. Consequences for the amendment 1 record
+(`claim-rerun-20261028T223006Z`): each three-hour run was in effect a one-hour run with about one request per attacker;
+the honest success rates it recorded (32.8 percent at K = 1 falling to 9.6 percent at K = 100,000) are artefacts, the
+estimate within the governed hour being about 98 percent falling to about 29 percent; the timing strategy lost three of
+its five window edges; and the caps it reports as held were held within one hour, not three. No run went over its cap,
+and the controls leaked as required, so the instrument itself was not broken; the run was shorter than it said.
+
+**What changes.**
+
+1. **The honest host keeps the workload attested.** Every 50 simulated minutes the harness re-attests every GPU and
+   begins the same model again on it, as a real host must before the one-hour token expires (`REATTEST_S` in
+   `govsim/claim_attack_sim.py`). Verified: with no attacker, 180 of 180 honest payments succeed over three hours.
+2. **The record carries its provenance.** Each sweep record now carries the harness commit, the interpreter, the z3
+   version and the machine (section 1, rules R1 and R6), which the amendment 1 record lacked.
+3. **The harness states section 3.4 as written.** Its docstring misquoted the rule ("beyond the cap"); it now quotes
+   the text and names the code's narrower reading as a reading, with amendment 2 pending.
+4. **A renewal command is an open design item.** A workload token that can only be renewed by beginning the model
+   again is a gap in the design, recorded here for the design log; it is not fixed by this amendment.
+
+**What does not change.** The harm kinds, the strategies, the caps, the run length (3 simulated hours, now governed for
+all 3), the order (smallest K first), the seeds (five per point, one at K = 100,000), the controls at K = 1 and
+10,000, the pass and fail rules of section 3.4 (with amendment 2 pending), and the 14-hour limit.
+
+**The amendment 1 record.** `B.json` of `claim-rerun-20261028T223006Z` and its partial completion stay in their
+folders, marked as superseded by this amendment; its Experiment A result (166 of 166, 13 broken models, 153 falsifiable
+checks) stands and A is run again on the new target as a check.

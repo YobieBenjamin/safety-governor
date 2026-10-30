@@ -45,9 +45,12 @@ money must leak beyond the fleet cap as K reaches more racks; ``definitions_off`
 pre-audit-3 design), so a reworded protected site must get a strike ticket. If a control does not leak, the instrument
 is broken and the sweep reports no result.
 
-Pass and fail (docs/29 section 3.4, approved 28 October 2026): a harm kind PASSES when, for every K and every seed, L
-stays at or below its cap and L does not grow with K beyond the cap; any run over the cap FAILS the kind. Leakage
-within the cap is reported, never hidden.
+Pass and fail (docs/29 section 3.4, approved 28 October 2026, quoted): a harm kind PASSES when, for every K and run
+length, L stays at or below the cap and L does not grow with K; it FAILS on any run where L exceeds the cap, or where L
+grows with K. The code's ``grows_with_k`` test fails a kind only when the growth also ends above the cap; that is a
+narrower reading than the text, both readings are reported in the record, and which one stands is for the independent
+review and the author, not for this program (amendment 2, drafted 29 October 2026, not yet approved). Leakage within
+the cap is reported, never hidden.
 
 The scale is what this machine finished. Anything beyond it is an extrapolation, reported separately and never as a
 measurement.
@@ -77,6 +80,11 @@ HOURS = 3                      # simulated run length
 STEP_S = 60.0                  # one round of the simulation
 PER_AGENT = 3                  # requests each attacker sends over the run
 HONEST_PER_GPU_PER_HOUR = 6    # the honest population's small payments
+REATTEST_S = 3000.0            # the honest host re-attests every GPU this often (50 minutes), before the one-hour
+                               # attestation token expires. Amendment 3 (30 October 2026): the harness never did this, so
+                               # from the second simulated hour on every request was refused as unattested and only the
+                               # first hour of each run was governed; the honest-success figures of the first runs were
+                               # artefacts of that.
 HARM_KINDS = ("money", "data_out", "commands", "rules")
 STRATEGIES = ("split", "reword", "timing", "pool", "cover", "probe", "exits", "replay")
 K_SWEEP = (1, 10, 100, 1_000, 10_000, 100_000)
@@ -235,8 +243,18 @@ def run(kind, strategy, k, seed, *, control=None):
     ctx = definitions_off() if control == "definitions_off" else None
     if ctx:
         ctx.__enter__()
+    last_attest = clock.now()
     try:
         for rnd in range(rounds):
+            # the honest host keeps every GPU's attestation and its workload token current, as a real host must: it
+            # re-attests and begins the same model again before the one-hour token expires, which is the design's
+            # only renewal path today (a renewal command is an open design item). Without this the run is governed
+            # for one hour and refused for the rest (amendment 3, 30 October 2026).
+            if clock.now() - last_attest >= REATTEST_S:
+                for rr, nn in nodes:
+                    rr.attest(nn)
+                    rr.load_model(nn)
+                last_attest = clock.now()
             # the honest population (money runs only): small listed payments spread over the GPUs; the cover strategy
             # hides in five times as much honest traffic
             if kind == "money":
@@ -456,6 +474,23 @@ def _attack_once(kind, strategy, r, node, rng, clock, racks, nodes, probe_amount
 
 
 # ---------------------------------------------------------------------------------------------- the sweep
+def _environment():
+    """The commit this harness ran from and the interpreter, so a record can be tied to code (docs/29 R1 and R6)."""
+    import platform, subprocess
+    env = {"python": platform.python_version(), "machine": platform.platform(), "reattest_s": REATTEST_S, "amendment": 3}
+    try:
+        env["commit"] = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5,
+                                       cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).stdout.strip() or None
+    except Exception:
+        env["commit"] = None
+    try:
+        import z3
+        env["z3"] = z3.get_version_string()
+    except Exception:
+        env["z3"] = None
+    return env
+
+
 def grows_with_k(points):
     """True when harm at the largest K is clearly above harm at K = 1 (more than 10 percent and more than 1 unit)."""
     if len(points) < 2:
@@ -506,7 +541,7 @@ def sweep(out_path, ks=K_SWEEP, seeds=SEEDS, kinds=HARM_KINDS, max_seconds=None,
               "fleet": {"sites": SITES, "racks_per_site": RACKS_PER_SITE, "gpus_per_rack": GPUS_PER_RACK},
               "hours": HOURS, "per_agent": PER_AGENT, "ks": list(ks), "seeds": list(seeds),
               "pre_registered": (tuple(ks) == K_SWEEP and tuple(seeds) == SEEDS and HOURS == 3),
-              "amendment": 1, "control_ks": list(control_ks(ks)), "seeds_at_largest_k": list(SEEDS_AT_LARGEST_K),
+              "amendment": 3, "control_ks": list(control_ks(ks)), "seeds_at_largest_k": list(SEEDS_AT_LARGEST_K),
               "runs": [], "controls": [], "verdicts": {}, "finished": False}
 
     def save():
@@ -531,6 +566,7 @@ def sweep(out_path, ks=K_SWEEP, seeds=SEEDS, kinds=HARM_KINDS, max_seconds=None,
 
     jobs = planned_jobs(ks, seeds, kinds)
     record["planned_runs"] = len(jobs)
+    record["environment"] = _environment()
     stopped = False
     with mp.get_context("fork").Pool(workers) as pool:
         for res in pool.imap_unordered(_job, jobs):
