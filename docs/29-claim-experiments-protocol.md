@@ -88,6 +88,15 @@ straggler window. The theorem is proved for symbols, then evaluated with those n
   through the fix pipeline (failing test first, fix, full suites, proof again).
 - **INCONCLUSIVE:** a solver timeout. Recorded as such, never as a pass.
 
+*Note added 30 October 2026 (review panel condition B4; the rule above is not edited).* The trace replay this PASS
+rule requires (method step 3) does not exist yet: `govsim/trace.py` and `tests/test_trace_conformance.py` are planned
+and not in the repository, and `proofs/claim_model.py` defers the link to the code. Until it is built and run,
+Experiment A is reported as "proved for the model, assuming the trusted base and the open register rows; the trace
+replay required by section 2.4 is outstanding, so A is not a 2.4 PASS". The model's assumption A3 (the endpoint's
+ticket check behaves as specified) is the assumption the open findings against `fix/endpoint-receipts` falsify, so the
+gap is not academic. The record also lists that the human and observer lanes are not modelled and that the model has
+no host between endpoint and ledger.
+
 ## 3. Experiment B: cooperating attackers against the rulebook (condition 2)
 
 ### 3.1 The setting
@@ -131,6 +140,24 @@ for honest users. Each run has a fixed seed; each point is repeated with at leas
 result therefore has two parts: what was measured (up to the largest `K` and run length that finished), and an
 extrapolation to the GOAL.md scale (millions of users, trillions of tokens) stated as a model with its assumptions,
 never presented as a measurement.
+
+*Note added 30 October 2026 (review panel conditions B5 and B6; the text above is not edited).* Every record's report
+states what the harness measured, so that each cell is read as what it is and not as the strategy name section 3.2
+gives it:
+
+- money harm is measured as all attacker value moved through the payment endpoint against the fleet cap, which is
+  stricter than section 3.1's off-list definition; value to an unlisted payee is also measured, against a cap of zero;
+- for the commands kind, the probe and replay strategies draw a random spelling of a protected place, the same as
+  reword; they are not an adaptive search or a replay of tickets;
+- the three rules strategies (replay, probe, pool) ignore the strategy name, so those cells are one experiment run
+  three times (the amendment 1 record shows identical refusal counts);
+- data out exercises four of the twelve exits of `govsim/gpu.py` (pcie, nvlink_c2c, host_nic, bmc_nic), not every exit;
+- timing is round packing only: requests placed against the window edges of the schedule, not clock skew, edition
+  changes or concurrent races;
+- pool uses one payer account with many payees, not many accounts;
+- under the rulebook in force the data allowance is per GPU, so bytes out scale with the number of governed GPUs an
+  attacker reaches; the data-out report says so in its first line and gives one GPU's measured allowance beside the
+  fleet cap (amendment 2).
 
 ### 3.4 Pass and fail
 
@@ -269,21 +296,82 @@ and A is run again on the new target as a check.
 
 ---
 
-## Amendment 2, drafted 29 October 2026, NOT YET APPROVED
+## Amendment 2, a change to the pass rule of section 3.4
 
-*A clarification of section 3.4, drafted after the amendment 1 run finished and after its data had been seen, which is
-why it is recorded here as a draft for the independent review (R8) and for Yobie Benjamin, and is not applied by the
-code.*
+*The text below is the text the four members of the review panel signed on 30 October 2026, appended here as they
+asked, with the approval filled in and nothing above it edited. It replaces the draft of 29 October 2026 that stood
+here marked NOT YET APPROVED. It is numbered 2 because it was drafted before amendment 3, which was approved first;
+its approval came after amendment 3's and before the amendment 3 record was opened.*
 
-Section 3.4 fails a harm kind when `L` grows with `K`. The code's `grows_with_k` fails a kind only when the growth also
-ends above the cap. In the amendment 1 run money rose from 1,499 to 1,995 dollars and data out from 2 MiB to 8 MiB,
-both under their caps and both flat from K = 1,000 (money) and K = 10 (data) on; under the text both fail, under the
-code both pass. The draft rule: a harm kind fails if any run is over its cap, or if harm is still rising between the
-two largest K (within a tolerance the review fixes before looking again), or if harm at any K exceeds what the rulebook
-would let one requester with the same total number of requests do. Under a 1 percent tolerance the data-out probing
-strategy still fails (a 2.8 percent rise between K = 10,000 and 100,000, towards the ceiling four other strategies
-reach exactly). The tolerance is not to be tuned to the data. Until this is approved, every record reports both the
-code's reading and the text's reading, and no reading is called the result.
+Amendment 2, a change to the pass rule of section 3.4. Approved 2026-10-30T04:00 UTC by Yobie Benjamin, who did not
+draft it, on the unanimous recommendation of a four-member review panel (design/30-review-panel-decision.md in the
+project), before anyone had read the amendment 3 record ([run id to be written here when it finishes]).
+
+Section 3.4 fails a harm kind "where L grows with K (cooperating attackers get no more than one attacker)". The
+code's growth clause (grows_with_k) was unreachable: it could only fire when the over-cap clause had already failed the
+run, so growth with K was never tested by the harness. In this
+harness each attacker sends PER_AGENT = 3 requests, so K is attack volume as much as cooperation, and one attacker
+with three requests cannot reach a non-zero cap; the clause as written fails every budget-bounded design, including
+a perfect one. In the amendment 1 pilot it failed all twelve money and data-out strategy lines. The clause meant that
+cooperating attackers must not get more than one requester with the same volume. From this amendment the rule is:
+
+1. A harm kind FAILS if any run at any K and any seed has L above its cap.
+
+2. A harm kind FAILS for cooperation if, at any K and seed, L exceeds the one-requester baseline for that strategy,
+   K and seed. The baseline is a run of the harness with the same strategy, run length, fleet and seed, with one
+   requester (one identity: one account, one workload token, one GPU, under the rulebook's rate limits) sending the
+   same total number of requests (K times PER_AGENT). The harness pins the baseline to one GPU; the sweep's rotation
+   of requests across GPUs does not apply to it. Baselines run at every K in the sweep, five seeds, one seed at
+   K = 100,000, and are recorded under "baseline" in the same record. The one-GPU pin is a harness option committed
+   and tested (a test shows the pinned run touches one GPU) before any baseline runs. No tolerance is applied. A FAIL under this
+   clause is reported as "K cooperating attackers got X more than one requester with the same volume" and is
+   classed under section 3.5 (a model error, or a design flaw with its remedy class) the day it is found, the same
+   way a counterexample is classed under section 2.4.
+
+3. Otherwise the harm kind PASSES, provided zero rewordings bypassed the definitions engine. A harm kind whose
+   baselines did not finish is INCONCLUSIVE, not PASS; a harm kind with a crashed run is INCOMPLETE as before.
+
+Reported, never a verdict: for every strategy line, the maxima by K, the baseline by K, the spread across seeds at
+each K, and the change in L between the two largest K on seed 1 in units of the cap, which is written as a sentence in
+the verdict line of every PASS ("still rising by X percent of the cap at the top of the sweep, one seed" or "flat"). Leakage within the cap is
+reported as section 3.4 already requires. The data-out report states in its first line that under the rulebook in
+force the data allowance is per GPU, so bytes out scale with the number of governed GPUs an attacker reaches; whether
+that allowance is the design or a flaw under clause 2 is a decision for Yobie, recorded in the design log, not a
+reading of this rule. Expected before the baselines run, and stated here so it is not a surprise: under the present
+per-GPU allowance the data-out kind FAILS clause 2 at every K at or above the number of GPUs, by construction; the
+section 3.5 remedy class is "a budget that is per-server where it should be fleet-wide".
+
+The amendment 3 record, if its sweep began before this approval, is reported under three readings: the original text,
+the pre-amendment code, and this rule, with the baseline runs added afterwards and marked as added. This amendment was
+written after the amendment 1 record was seen; that fact, and the pilot's readings under the original text (money
+FAIL, data out FAIL at small K) and under this rule (to be computed once baselines exist), are recorded with it.
+
+What does not change: harm kinds, strategies, caps, run length, seeds, the K sweep, the two controls, smallest K
+first, and the 14-hour limit. The baselines add to the run count; if the limit stops them, clause 3 applies.
+
+**Where it is computed.** The harness (`govsim/claim_attack_sim.py`, `verdict_for_kind`) computes clauses 1 to 3 and
+runs the baselines (`--pin-gpu`, `planned_baselines`, and `--baselines RECORD.json` to add them to a record whose
+sweep began before this approval, marked `added_after_sweep`). The three readings of section 3.4 (the original text,
+the pre-amendment code's over-cap-only reading, and this rule) are computed from a saved record, without altering it,
+by `govsim/claim_readings.py`, committed with this amendment; its output is written beside the record. The harness's
+exit status says whether the record was written and finished, not how any reading came out. A test
+(`tests/test_claim_experiments.py`, the amendment 2 tests) feeds hand-built points and baselines through the verdict
+function for FAIL on cap, FAIL on the baseline, PASS, INCONCLUSIVE and INCOMPLETE, checks the seed-for-seed rise
+sentence, and shows the pinned baseline run touches one GPU.
+
+**The pilot's readings, recorded with this amendment.** The amendment 1 record (`claim-rerun-20261028T223006Z`,
+superseded by amendment 3) was seen before this amendment was drafted. In it money rose from 1,499 to 1,995 dollars
+and data out from 2 MiB to 8 MiB, both under their caps; money/split sat at 1,995 from K = 1,000 on; data_out/probe
+rose at every step of K (4.3, 4.5, 6.1, 8.1 and 8.3 MB at K = 10, 100, 1,000, 10,000 and 100,000). The draft that stood
+here said both were "flat from K = 1,000 (money) and K = 10 (data) on"; the data half of that sentence was wrong and
+is withdrawn. Under the original text both money and data out FAIL (L grows with K from K = 1); under the
+pre-amendment code both PASS (no run over its cap); under this rule, to be computed once the pilot's baselines exist:
+[to be written].
+
+**What Experiment B's attacker is not.** The attacker of Experiment B holds no governor key and every endpoint is
+honest (it checks tickets as specified). A B PASS is therefore not evidence against the extracted-key attacker of the
+endpoint work on `fix/endpoint-receipts` (one governor key extracted, a host that forwards, swallows, forges or
+rewraps commits), and must not be quoted against it.
 
 ---
 
