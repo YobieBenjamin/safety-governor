@@ -23,6 +23,7 @@ from govsim.crypto import digest, random_id
 from govsim.fleet import build_fleet
 
 PAY = "payments.transfer"
+KEY = "pay-usd-hourly"
 
 
 def _attacker_answers_commits(rack):
@@ -89,17 +90,32 @@ def test_a_forged_reservation_without_receipts_is_refused_at_the_endpoint():
 
 
 def test_receipts_for_another_amount_do_not_authorize_this_one():
-    """The attacker reserves $300 honestly, then signs a ticket for $900 that carries the $300 receipts."""
-    racks, _ = build_fleet(2)
+    """The attacker reserves $300 honestly, then signs a ticket for $900 that carries the $300 receipts. The request
+    hash refuses it first; the amount check is exercised on its own with receipts the replicas sign for this very
+    request at the smaller amount (a governor that reserved less than it minted for)."""
+    racks, fleet = build_fleet(2)
     rack = racks[0]
     _attacker_answers_commits(rack)
     honest, _ = _honest_ticket(rack, amount=300)
     params = {"amount": 900, "currency": "USD", "destination": "acct-1"}
     ticket = _forged(rack, {"rule": honest["payload"]["rule"], "reservation": honest["payload"]["reservation"],
                             "fleet_receipts": honest["payload"]["fleet_receipts"]}, params)
-    ok, why = rack.endpoints["payment-switch"].execute(ticket, PAY, params)
+    ep = rack.endpoints["payment-switch"]
+    ok, why = ep.execute(ticket, PAY, params)
     assert not ok
     assert why.endswith(".fleet_receipts_short"), why
+    # receipts genuinely signed by the replicas, bound to this request and ticket, but for $300 against a $900 ticket
+    t = ticket["payload"]
+    rule = next(r for r in ep.edition["rules"] if r["id"] == t["rule"])
+    receipts, rids = [], {}
+    for rep in fleet.replicas:
+        rid = "rid-" + random_id(4)
+        rids[rep.key.public.key_id] = rid
+        receipts.append(rep.key.sign({"type": "fleet-reserve", "key": KEY, "amount": 300, "reserver": t["governor"], "nonce": "n", "rid": rid,
+                                      "binding": {"request_hash": t["request_hash"], "endpoint": "payment-switch", "ticket_id": t["ticket_id"]},
+                                      "at": rack.clock.now()}))
+    ok, why = ep._fleet_receipts_ok({**t, "reservation": rids, "fleet_receipts": receipts}, rule, params, rack.clock.now())
+    assert not ok and why.endswith(".fleet_receipts_short"), why
 
 
 def test_receipts_are_bound_to_the_request_they_were_minted_for():
@@ -131,6 +147,11 @@ def test_one_reservation_buys_one_ticket():
     assert not ok
     assert why.endswith(".request_spent") or why.endswith(".reservation_spent"), why
     assert len(ep.executed) == 1
+    # the reservation record refuses on its own: with every other record cleared in process, the honest ticket
+    # presented again is stopped by the spent reservation alone
+    ep.used_requests.clear(); ep.consumed.clear(); ep.burned.clear()
+    ok, why = ep.execute(honest, PAY, params)
+    assert not ok and why.endswith(".reservation_spent"), why
 
 
 def test_an_extracted_key_cannot_spend_past_the_fleet_cap_with_the_host_answering_commits():
@@ -190,6 +211,8 @@ def test_a_commit_statement_for_another_ticket_or_from_another_signer_is_no_comm
     ep.commit = lambda ticket: statement                     # the host replays the first ticket's commit for the second
     ok, why = ep.execute(second, PAY, params2)
     assert not ok and why == reasons.COMMIT_REJECTED, why
+    # the statement's own fields are what refuse for a rack-local budget: the same check, without fleet receipts
+    assert not ep._commit_verified(second, {**statement, "payload": {**statement["payload"], "ticket_id": second["payload"]["ticket_id"]}}, rack.clock.now())
     third, params3 = _honest_ticket(rack, amount=300)
     other = racks[1].nodes[0].governor                       # another governor's key signs a commit naming this ticket
     ep.commit = lambda ticket: other.key.sign({**statement["payload"], "ticket_id": ticket["payload"]["ticket_id"], "governor": other.chip_id})
@@ -227,6 +250,7 @@ def test_an_endpoint_without_the_list_counts_what_it_could_not_check():
     racks, _ = build_fleet(1)
     rack = racks[0]
     ep = rack.endpoints["messaging"]
+    ep.lists.pop("recipient-registry", None)            # a device that was never given the list (the default now holds it)
     before = ep.unchecked_list_constraints
     good = {"recipient": LISTED_RECIPIENTS[0], "body": "hello"}
     r = rack.request(rack.nodes[0], "message.send", good)
@@ -240,10 +264,10 @@ def test_a_list_signed_below_the_quorum_is_not_installed_at_the_endpoint():
     racks, _ = build_fleet(1)
     rack = racks[0]
     ep = rack.endpoints["messaging"]
-    env = rack.signed_list("recipient-registry", LISTED_RECIPIENTS)
+    env = rack.signed_list("recipient-registry", LISTED_RECIPIENTS + ["attacker"], version=9)
     env.pop("cosignatures", None)
     assert not ep.install_list("recipient-registry", env)
-    assert "recipient-registry" not in ep.lists
+    assert "attacker" not in ep.lists["recipient-registry"]["entries"]   # the list the device holds is the one it was given at bring-up
 
 
 def test_used_reservations_survive_a_restart():

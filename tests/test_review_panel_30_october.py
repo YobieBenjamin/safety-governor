@@ -193,7 +193,8 @@ def test_4_captured_commit_receipts_do_not_spend_again_here_or_at_a_second_switc
     ep2 = ActionEndpoint("payment-switch", rack.clock, dict(ep1.keys), safe_transition="decline",
                          governance_hashes=ep1.governance_hashes, governance_floor=ep1.governance_floor,
                          recovery_hashes=ep1.recovery_hashes, recovery_threshold=ep1.recovery_threshold,
-                         governor_ids={n.governor.key.key_id: n.governor.chip_id for n in rack.nodes})
+                         governor_ids={n.governor.key.key_id: n.governor.chip_id for n in rack.nodes},
+                         device_key=ep1.device_key)   # a clone of the listed device: same key, so the edition installs
     ep2.commit = lambda ticket: a.captured_statements[0]
     assert ep2.install_edition(g0.policy) and ep2.set_epoch(g0.signed_epoch())
     ep2.heartbeat(rack.clock.now())
@@ -223,7 +224,8 @@ def test_4b_a_verbatim_ticket_does_not_act_twice_at_two_devices_with_one_role_na
     ep2 = ActionEndpoint("payment-switch", rack.clock, dict(ep1.keys), safe_transition="decline",
                          governance_hashes=ep1.governance_hashes, governance_floor=ep1.governance_floor,
                          recovery_hashes=ep1.recovery_hashes, recovery_threshold=ep1.recovery_threshold,
-                         governor_ids={n.governor.key.key_id: n.governor.chip_id for n in rack.nodes})
+                         governor_ids={n.governor.key.key_id: n.governor.chip_id for n in rack.nodes},
+                         device_key=ep1.device_key)   # a clone of the listed device: same key, so the edition installs
     ep2.commit = lambda ticket: a.captured_statements[0]
     assert ep2.install_edition(g0.policy) and ep2.set_epoch(g0.signed_epoch())
     ep2.heartbeat(rack.clock.now())
@@ -266,8 +268,10 @@ def test_6_captured_receipts_age_out():
     assert ep.execute(r["ticket"], PAY, params)[0]
     tick(rack, 3700)
     ep._prune_used(rack.clock.now())
-    assert not ep.used_reservations
-    late = a.resign(r["ticket"], {"valid_from": rack.clock.now(), "expires_at": rack.clock.now() + 300})
+    assert not ep.used_reservations and not ep.used_requests
+    # the same ticket id and request, a new window: nothing in the records refuses it any more; only the receipts' age does
+    t = dict(r["ticket"]["payload"]); t.update({"valid_from": rack.clock.now(), "expires_at": rack.clock.now() + 300})
+    late = a.g.key.sign(t)
     ok, why = ep.execute(late, PAY, params)
     assert not ok and why.endswith(".fleet_receipts_short"), why
 

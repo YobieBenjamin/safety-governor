@@ -172,6 +172,60 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
     }
 
 
+# Actions the governor performs itself, with no device acting on a ticket: the only rules allowed to name no endpoint.
+GOVERNOR_ACTIONS = {"model.output", "model.export", "compute.extend", "weights.write"}
+# Actions whose effect leaves the governed system (money, messages, goods, strikes, bytes to a user) and so must be
+# bounded by a budget or a rate at the device that acts, whatever the governor does.
+OUTWARD_ACTIONS = {"payments.transfer", "message.send", "shipment.order", "strike", "response.release"}
+
+
+def shape_problems(image: dict) -> list[str]:
+    """The rulebook shapes that no governor or endpoint can make safe, named so the edition is refused at signing
+    time rather than found by an auditor (fresh audit 30 October 2026, where five of fourteen findings were editions
+    that enforced nothing). Returns a list of problems, empty when the edition's shape is sound. Each line names the
+    rule and the shape:
+      - a rule for an action a device performs that names no endpoint (every device would accept it, or none)
+      - a rule whose action leaves the system with neither a budget nor a rate, unless a human must approve each one
+      - an observer-mode rule whose risk ceiling is 1.0 (every verdict passes) or that names no observer key
+      - a human-mode rule with a quorum below one or no approver keys in the edition
+      - a money budget (a budget whose rule moves payments) not owned by the fleet when a fleet ledger is named
+      - an audit store named by the edition that is not among its endpoints"""
+    problems: list[str] = []
+    rules = image.get("rules", []) or []
+    owners = image.get("budget_owners", {}) or {}
+    approver_keys = image.get("approver_keys", {}) or {}
+    has_fleet_ledger = bool((image.get("fleet_ledger") or {}).get("keys"))
+    endpoint_names = {e.get("name") for e in image.get("endpoints", []) or []}
+    for r in rules:
+        rid, action = r.get("id", "?"), r.get("action")
+        req = r.get("requirement") or {}
+        mode = req.get("mode", "auto")
+        if mode == "deny":
+            continue
+        if not r.get("endpoint") and action not in GOVERNOR_ACTIONS:
+            problems.append(f"{rid}: names no endpoint for an action a device performs")
+        if action in OUTWARD_ACTIONS and not r.get("budget") and not r.get("rate") and mode != "human" and action != "response.release":
+            problems.append(f"{rid}: an outward action with neither a budget nor a rate")
+        if action == "response.release" and not r.get("output_budget") and not any(x.get("action") == "model.output" and x.get("output_budget") for x in rules):
+            problems.append(f"{rid}: a release rule with no output budget anywhere in the edition")
+        if mode == "observer":
+            if float(req.get("max_risk", 1.0)) >= 1.0:
+                problems.append(f"{rid}: an observer-mode rule whose risk ceiling is 1.0 (every verdict passes)")
+            if not image.get("observer_keys"):
+                problems.append(f"{rid}: an observer-mode rule in an edition with no observer keys")
+        if mode == "human":
+            if int(req.get("approvers_quorum", 0) or 0) < 1:
+                problems.append(f"{rid}: a human-mode rule with a quorum below one")
+            if not approver_keys.get(rid):
+                problems.append(f"{rid}: a human-mode rule with no approver keys in the edition")
+        if r.get("budget") and action == "payments.transfer" and has_fleet_ledger and owners.get(r["budget"].get("key")) != "fleet":
+            problems.append(f"{rid}: a money budget not owned by the fleet though a fleet ledger is named")
+    store = (image.get("audit") or {}).get("store")
+    if store and endpoint_names and store not in endpoint_names:
+        problems.append(f"audit store {store} is not among the edition's endpoints")
+    return problems
+
+
 def policy_epoch(image: dict) -> str:
     """The epoch of an image: a digest of its body, with the signatures left out. Two images that differ in any field
     get different epochs, so a command made under one edition cannot be replayed under another."""

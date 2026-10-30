@@ -216,9 +216,10 @@ Request {request_id, measurement_token, action, params{...}, witnesses: [Asserti
 Ticket {ticket_id (random 128-bit), request_id, request_hash, action, params_digest, measurement, rule,
         policy_epoch, endpoint, budget_key, budget_owner, reservation, issued_at (monotonic counter),
         valid_from, expires_at (endpoint clock),
-        approvals: [Approval]        // human-mode rules: the approvers' signed approvals over request_hash and epoch
+        approvals: [Approval]        // human-mode rules: the approvers' signed approvals over request_hash, epoch and the time given (at)
         witnesses: [Assertion]       // observer-mode rules: the observers' signed verdicts over request_hash
         fleet_receipts: [Receipt]    // fleet-owned budgets: the ledger replicas' signed reserve receipts
+        escrow: [Receipt]            // release tickets: the audit store's escrow receipts, re-checked at the egress
         sig_governor}                // a release ticket to the node's own egress is MACed under the shared egress key instead
 
 Receipt (fleet-reserve, signed by one ledger replica)
@@ -236,12 +237,17 @@ approval, verdict and receipt that names the hash is tied to those parameters; i
 edition's approver quorum, or an unexpired observer verdict under the rule's risk ceiling); for a budget the edition
 owns as `fleet` it needs the threshold of replicas' reserve receipts in the ticket and commit receipts in the
 statement, each bound to this request, this ticket and this endpoint name; for every budgeted rule it keeps its own
-count of what it has let through against the rule's limit and window; it records request hashes and reservations it
+count of what it has let through against the rule's limit and window, and for every rate-bearing rule its own count
+of actions, each shared with the other devices the edition lists under its role name; it holds a device key the
+edition lists, or installs no edition; it takes the edition's expiry from the edition alone; it honours a governor's
+signed revocation; at an egress, it re-checks a release verdict's hazard class, legibility and escrow and takes only
+MACed release tickets and commit statements; it records request hashes and reservations it
 has acted on, so one authorization buys one effect at a device; and it refuses a ticket valid for longer than the
 TTL plus the longest rule delay in the edition.
 
-Sizes, as measured in the model: a fleet-budgeted payment ticket with three reserve receipts is about 2.3 KB and its
-commit statement about 1.4 KB; a human-lane ticket with two approvals about 1.6 KB. Verifications per fleet-budgeted
+Sizes, as measured by the fresh audit of 30 October 2026 on the third commit: a fleet-budgeted payment ticket with
+three reserve receipts 2,499 bytes, its commit statement 2,049 bytes (the commit receipts carry the binding), a
+human-lane ticket with two approvals 1,661 bytes. Verifications per fleet-budgeted
 payment at the endpoint: one ticket, three reserve receipts, one commit statement, three commit receipts (eight P-384
 verifications). Per governed action the governor signs twice (ticket and commit), which the bench prices at about
 five governed actions per second per governor chip beside 100-token serving on one signing engine; release tickets

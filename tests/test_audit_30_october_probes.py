@@ -175,7 +175,8 @@ def test_E_the_same_receipts_do_not_spend_at_a_second_payment_switch():
     ep2 = ActionEndpoint("payment-switch", rack.clock, dict(ep1.keys), safe_transition="decline",
                          governance_hashes=ep1.governance_hashes, governance_floor=ep1.governance_floor,
                          recovery_hashes=ep1.recovery_hashes, recovery_threshold=ep1.recovery_threshold,
-                         governor_ids={k: g.chip_id for k, g in ((n.governor.key.key_id, n.governor) for n in rack.nodes)})
+                         governor_ids={k: g.chip_id for k, g in ((n.governor.key.key_id, n.governor) for n in rack.nodes)},
+                         device_key=ep1.device_key)   # a clone of the listed device: same key, so the edition installs
     ep2.commit = ep1.commit
     assert ep2.install_edition(g0.policy) and ep2.set_epoch(g0.signed_epoch())
     ep2.heartbeat(rack.clock.now())
@@ -288,7 +289,7 @@ def test_L_the_list_version_floor_survives_a_restart():
     g0 = rack.nodes[0].governor
     cold = ActionEndpoint("messaging", rack.clock, dict(ep.keys), store=ep.store, safe_transition="hold",
                           governance_hashes=ep.governance_hashes, governance_floor=ep.governance_floor,
-                          recovery_hashes=ep.recovery_hashes, recovery_threshold=ep.recovery_threshold)
+                          recovery_hashes=ep.recovery_hashes, recovery_threshold=ep.recovery_threshold, device_key=ep.device_key)
     assert cold.install_edition(g0.policy)
     assert not cold.install_list("recipient-registry", rack.signed_list("recipient-registry", LISTED_RECIPIENTS, version=1))
     assert cold.install_list("recipient-registry", rack.signed_list("recipient-registry", LISTED_RECIPIENTS, version=6))
@@ -317,7 +318,8 @@ def test_N_pre_tamper_tickets_do_not_act_after_the_tamper():
     assert r["ok"]
     rack.nodes[0].governor.tamper_event()
     ok, why = ep.execute(r["ticket"], PAY, params)
-    assert not ok and why == reasons.COMMIT_REJECTED, why
+    # the tampered governor's last act revoked its key at every endpoint, so the ticket is refused before any commit
+    assert not ok and why in (reasons.TICKET_REVOKED_GOVERNOR, reasons.COMMIT_REJECTED), why
 
 
 # O. The signer and the governor field were not tied: receipts for gov00 rode in a ticket signed by gov01.

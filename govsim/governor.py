@@ -46,7 +46,7 @@ from .endpoints import BRICKED, DescriptorChecker, INTEGRATED_POINTS, RACK_POINT
 from .fuses import Fuses, PRODUCTION
 from .ledger import Ledger
 from .log import Log
-from .policy import (RELEASE_ACTION, buffer_allowed, check_budget_owners, check_constraints, check_register, find_rule,
+from .policy import (RELEASE_ACTION, shape_problems, buffer_allowed, check_budget_owners, check_constraints, check_register, find_rule,
                      floor_violations, loosenings, policy_epoch, select_rule, verify_policy, verify_recovery)
 from .fuses import POLICY_FUSE_BITS, POLICY_FUSE_STRIDE
 from .root import SiliconRoot
@@ -382,6 +382,12 @@ class Governor:
         # dropped the protected-site constraint and made strikes automatic, and was accepted on every chip).
         if floor_violations(image, self.fuses.rule_floor):
             return False, reasons.POLICY_BELOW_FLOOR
+        # The shape check: an edition that would make a governor or an endpoint enforce nothing is refused here, at
+        # signing time, with the problems logged (fresh audit 30 October 2026).
+        problems = shape_problems(image)
+        if problems:
+            self.log.append("policy.unsafe_shape", {"version": image.get("version"), "problems": problems})
+            return False, reasons.POLICY_UNSAFE_SHAPE
         if self.policy and not at_boot:
             # A version may advance only a little per edition, so one edition cannot burn the anti-rollback range
             # and lock out every later legitimate edition (audit 3: a stolen quorum signed version 10**9).
@@ -1433,6 +1439,9 @@ class Governor:
             t["approvals"] = list(approvals or [])
         elif mode == "observer":
             t["witnesses"] = [w for w in (witnesses or []) if isinstance(w, dict) and (w.get("payload") or {}).get("type") == "observer-verdict"]
+        if action == RELEASE_ACTION:
+            # The audit store's escrow receipts ride with a release ticket, so the egress can re-check escrow itself.
+            t["escrow"] = [w for w in (witnesses or []) if isinstance(w, dict) and (w.get("payload") or {}).get("type") == "escrow"]
         if reservation and reservation.get("owner") == "fleet":
             # The fleet ledger's signed receipts ride in the ticket. The endpoint verifies them against the replica keys
             # the edition names. The replicas count independently of this governor, but they take the limit, window
@@ -2364,6 +2373,16 @@ class Governor:
             self.cause, self.cause_opens_loop = reasons.TAMPER, True
             self.cause_entry = self.log.size - 1
             self._apply_rung(SAFE, opens_loop=True)
+            # The last act before the key is wiped: a signed statement that this governor is revoked, delivered to
+            # every endpoint that holds its key, so a ticket or commit signed with a copy of the key acts nowhere
+            # after the tamper (fresh audit 30 October 2026: the tamper never reached a rack-local budget).
+            statement = self.key.sign({"type": "governor-revoked", "governor": self.chip_id, "key": self.key.key_id,
+                                       "kind": kind, "at": self.clock.now()})
+            for ep in list(self.endpoints.values()) + list(getattr(self, "shared_endpoints", []) or []):
+                try:
+                    ep.revoke_governor(statement)
+                except Exception:
+                    pass
             self.root.zeroize()
             self.close_ports()
 

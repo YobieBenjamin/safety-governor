@@ -127,7 +127,8 @@ class Rack:
         self.approvers = {"strike": [SigningKey.generate() for _ in range(3)], "payments.transfer.large": [SigningKey.generate() for _ in range(3)],
                           "alarms": [SigningKey.generate() for _ in range(2)], "sandbox": [SigningKey.generate() for _ in range(2)],
                           "response.release": [SigningKey.generate() for _ in range(2)], "weights.write.any": [SigningKey.generate() for _ in range(2)],
-                          "message.send.any": [SigningKey.generate() for _ in range(2)], "shipment.order": [SigningKey.generate() for _ in range(2)]}
+                          "message.send.any": [SigningKey.generate() for _ in range(2)], "shipment.order": [SigningKey.generate() for _ in range(2)],
+                          "model.export.any": [SigningKey.generate() for _ in range(2)]}   # every human-mode rule has approvers (shape check)
         self.publisher = SigningKey.generate()
         self.observer = SigningKey.generate()
         # EXPERIMENT-CUSTOMER-CONFIRMATION (tests/test_customer_confirmation.py): a couple of customers, each with their own key, as a signed customer registry would hold them
@@ -200,7 +201,8 @@ class Rack:
                           sandbox: bool = False, extra_refs: list[dict] | None = None,
                           sealed_models: list[str] | None = None, key_lease_s: float = 60.0,
                           payer_confirm_payments: bool = False,
-                          message_max_bytes: int | None = None, message_rate: dict | None = None,
+                          message_max_bytes: int | None = None, message_rate: dict | None = None, release_max_risk: float = 0.5,
+                          strike_rate: dict | None = None, strike_max_risk: float = 0.5,
                           governance_classes: dict[str, str] | None = None, governance_class_quorum: int = 0,
                           fleet_budget: bool = False, fleet_ledger: dict | None = None) -> dict:
         """Build one unsigned policy image: the reference values, the rules, the registers, the endpoints
@@ -217,7 +219,8 @@ class Rack:
         human = {"mode": "human", "approvers_quorum": 2}   # the keyword set that makes a rule need two approvers
         rules = [
             # strike guidance: the target must not be on the protected list, and the munition must be on the fixed list
-            make_rule("strike", "strike", mode=strike_mode, observers=[self.observer.key_id], max_risk=0.5, approvers_quorum=2,
+            make_rule("strike", "strike", mode=strike_mode, observers=[self.observer.key_id], max_risk=strike_max_risk, approvers_quorum=2,
+                      rate=strike_rate if strike_rate is not None else {"max": 20, "window_s": 3600.0},   # strikes an hour, counted at the device too (shape check: an outward action carries a budget or a rate)
                       constraints={"target": {"type": "geo", "not_in_list": "protected-sites"}, "munition": {"in": ["gbu-39", "hellfire"]}},
                       endpoint="strike-guidance", inputs=["protected-sites", "navigation-fix", "observer-verdict"], delay_s=2.0),
             make_rule("payments.transfer.small", "payments.transfer", constraints={"amount": {"min": 0, "max": 1000}, "currency": {"in": ["USD"]}},
@@ -234,7 +237,7 @@ class Rack:
             make_rule("model.export.any", "model.export", mode="human", approvers_quorum=2),                           # any other workload goes to humans
             # a response leaving the rack is an action; in the sandbox its only destination is the audit store
             make_rule("response.release", "response.release", mode="auto" if sandbox else release_mode, observers=[self.observer.key_id],
-                      max_risk=1.0, approvers_quorum=2, endpoint="audit-store" if sandbox else "egress", inputs=["observer-verdict"],
+                      max_risk=release_max_risk, approvers_quorum=2, endpoint="audit-store" if sandbox else "egress", inputs=["observer-verdict"],
                       on_hazard=on_hazard, on_illegible=on_illegible, min_legibility=min_legibility, hazard_budget=hazard_budget,
                       streams_required=streams_required),
             # training governance: a model writes its weights to its own storage flow and nowhere else without humans
@@ -248,7 +251,7 @@ class Rack:
             make_rule("message.send.listed", "message.send",
                       constraints={"recipient": {"in_list": "recipient-registry"},
                                    **({"body": {"max_bytes": message_max_bytes}} if message_max_bytes is not None else {})},
-                      rate=message_rate,       # F12: a per-byte bound plus a message rate give the channel a finite byte ceiling (tests/test_f12_containment_channels.py)
+                      rate=message_rate if message_rate is not None else {"max": 60, "window_s": 60.0},   # F12: a byte bound plus a rate give the channel a finite ceiling; bounded by default since the fresh audit of 30 October 2026
                       endpoint="messaging", inputs=["recipient-registry"], **(human if sandbox else {})),
             make_rule("message.send.any", "message.send", mode="human", approvers_quorum=2, endpoint="messaging"),
             make_rule("shipment.order", "shipment.order", mode="human", approvers_quorum=2, endpoint="fulfilment"),
@@ -322,21 +325,32 @@ class Rack:
                "governor_ids": {kid: g.chip_id for kid, g in self.by_key.items()}}
         protected = {"entries": [tuple(e) for e in PROTECTED_SITES], "stale": False}
         # the strike endpoint gets the sensor readings and the protected list that its checks read
-        strike = ActionEndpoint("strike-guidance", self.clock, keys, safe_transition="no_release",
+        ek = self.endpoint_keys   # each device's own key; the edition lists the public half under the device's role name
+        strike = ActionEndpoint("strike-guidance", self.clock, keys, safe_transition="no_release", device_key=ek["strike-guidance"],
                                 sensors={"nav_gnss": (37.0, -122.0), "nav_inertial": (37.0, -122.0), "lists": {"protected-sites": protected}}, **gov)
         strike.checks = strike_checks()
-        pay = ActionEndpoint("payment-switch", self.clock, keys, safe_transition="decline", **gov)
-        messaging = ActionEndpoint("messaging", self.clock, keys, safe_transition="hold", **gov)
-        fulfilment = ActionEndpoint("fulfilment", self.clock, keys, safe_transition="hold", **gov)
-        self.audit_store = AuditStore("audit-store", self.clock, keys, self.endpoint_keys["audit-store"])
+        pay = ActionEndpoint("payment-switch", self.clock, keys, safe_transition="decline", device_key=ek["payment-switch"], **gov)
+        messaging = ActionEndpoint("messaging", self.clock, keys, safe_transition="hold", device_key=ek["messaging"], **gov)
+        fulfilment = ActionEndpoint("fulfilment", self.clock, keys, safe_transition="hold", device_key=ek.get("fulfilment"), **gov)
+        # The audit store is an egress like any other and holds the same governance anchors, so it checks the edition
+        # (fresh audit 30 October 2026: it was built with none and released on any governor-signed ticket).
+        self.audit_store = AuditStore("audit-store", self.clock, keys, self.endpoint_keys["audit-store"], **gov)
         for ep in (strike, pay, messaging, fulfilment, self.audit_store):
             ep.commit = self._commit_route
             ep.install_edition(g0.policy)
             ep.set_epoch(g0.signed_epoch())
             self.endpoints[ep.name] = ep
             g0.endpoints[ep.name] = ep
+        # The shared endpoints hold the signed lists their rules name, so they re-check them (fresh audit 30 October
+        # 2026: the default messaging endpoint held no list and its in_list constraint was only counted).
+        messaging.install_list("recipient-registry", self.signed_list("recipient-registry", LISTED_RECIPIENTS))
+        pay.install_list("beneficiary-registry", self.signed_list("beneficiary-registry", LISTED_BENEFICIARIES))
+        strike.install_list("protected-sites", self.signed_list("protected-sites", PROTECTED_SITES))
+        for node in self.nodes:
+            # every governor can tell the shared endpoints when its tamper response revokes it
+            node.governor.shared_endpoints = [strike, pay, messaging, fulfilment, self.audit_store]
         for node in self.nodes:                      # the DPU's egress to the user: one per node
-            node.egress = EgressEndpoint("egress", self.clock, keys, **gov)
+            node.egress = EgressEndpoint("egress", self.clock, keys, device_key=ek["egress"], **gov)
             node.egress.install_edition(node.governor.policy)
             node.gpu.output_seal_key = os.urandom(32)   # the GPU-to-egress session key: the host sees only ciphertext
             node.egress.output_seal_key = node.gpu.output_seal_key
@@ -586,7 +600,8 @@ class Rack:
         so it cannot be moved to another request."""
         n = self.approver_seq.get(approver.key_id, 0) + 1
         self.approver_seq[approver.key_id] = n
-        env = approver.sign({"seq": n, "epoch": governor.epoch, "hold_id": hold_id, "request_hash": request_hash, "reason": reason, "type": "approve"})
+        env = approver.sign({"seq": n, "epoch": governor.epoch, "hold_id": hold_id, "request_hash": request_hash, "reason": reason,
+                             "type": "approve", "at": self.clock.now()})   # the time the approval was given: the endpoint refuses an old one
         return governor.command("APPROVE", {}, env)
 
     def sign_output(self, node: Node, stream: str, data: bytes, response_id: str | None = None, session: str | None = None) -> dict:
