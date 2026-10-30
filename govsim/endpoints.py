@@ -33,6 +33,14 @@ from . import reasons
 from .crypto import SigningKey, VerifyKey, canonical, digest, finite_number, hmac_sha256, sha256, verify_any, verify_object
 from .store import Store
 
+def number_or_none(v):
+    """The value as a float when it is a real, finite number (bool excluded), else None."""
+    return float(v) if finite_number(v) else None
+
+
+TICKET_TTL_S = 300.0                # the governor's ticket TTL (govsim.governor.TICKET_TTL_S); repeated here so the endpoint
+                                    # does not import the governor
+
 # F29: the ticket-binding check. True in every real run. The red-team self-test sets it to False, for the length
 # of one run, to show that the battery reports a leak when the binding is missing. Nothing else changes it.
 ENFORCE_TICKET_BINDING = True
@@ -198,6 +206,15 @@ class ActionEndpoint:
         # One ledger reservation authorizes one ticket here; a second ticket carrying the same receipts is refused, so
         # a governor whose key was extracted cannot reuse one real reservation for many payments (29 October 2026).
         self.used_reservations = self.store.get("used_reservations", {})
+        # Request hashes already acted on here: request_hash -> [ticket_id, expiry]. One authorization (approvals,
+        # verdicts, receipts all name the request hash) buys one effect at this endpoint; a second ticket for the same
+        # request is refused, whoever signed it (review panel 30 October 2026).
+        self.used_requests = self.store.get("used_requests", {})
+        # What this endpoint itself has let through under each budget key: budget_key -> [[time, amount], ...]. The
+        # endpoint is a second counter for every budgeted rule, so a governor whose key was extracted, on a host that
+        # forges commits, is still bounded by the edition's limit at this device even where no fleet ledger counts
+        # (review panel 30 October 2026: the default rack's money budget had no bound outside the governor).
+        self.spent = self.store.get("spent", {})
         self.list_floor = self.store.get("list_floor", {})  # list_id -> highest version ever installed here
         self.unchecked_list_constraints = 0   # list constraints this endpoint could not re-check because it holds no such list
         # Concurrency contract: a single endpoint may be driven by several threads at once (concurrent
@@ -254,6 +271,8 @@ class ActionEndpoint:
             self.used_expiry.pop(tid, None)
         for key in [k for k, (_, exp) in self.used_reservations.items() if exp < now]:
             self.used_reservations.pop(key, None)
+        for key in [k for k, (_, exp) in self.used_requests.items() if exp < now]:
+            self.used_requests.pop(key, None)
 
     def _authentic(self, ticket: dict) -> bool:
         """Signed by a governor this endpoint trusts, or, at an egress holding the MAC key it shares with its own
@@ -290,7 +309,7 @@ class ActionEndpoint:
             self.epoch = self._edition_epoch
         return True
 
-    def _check_against_edition(self, ticket: dict, t: dict, action: str, params: dict) -> tuple[bool, str]:
+    def _check_against_edition(self, ticket: dict, t: dict, action: str, params: dict, now: float) -> tuple[bool, str]:
         """The ticket's governor is not revoked, and the rule it names exists in the edition in force and allows this
         action, at this endpoint, for this workload, with these fields (typed limits; list checks stay at the
         governor, which holds the signed lists)."""
@@ -323,18 +342,57 @@ class ActionEndpoint:
         ok, why = check_constraints({**rule, "constraints": kept}, params, held)
         if not ok:
             return False, reasons.TICKET_RULE_MISMATCH + "." + why
-        ok, why = self._mode_ok(t, rule, params)
+        ok, why = self._mode_ok(t, rule, params, now)
         if not ok:
             return False, why
-        if rule.get("budget") and not (t.get("reservation") and t.get("budget_owner")):
-            return False, reasons.TICKET_RULE_MISMATCH + ".no_reservation"
-        if rule.get("budget") and (self.edition.get("budget_owners") or {}).get(rule["budget"]["key"]) == "fleet":
-            ok, why = self._fleet_receipts_ok(t, rule, params)
-            if not ok:
-                return False, why
+        # The budget the ticket names must be the rule's budget, as the edition has it. Every budget check below keys
+        # off the rule, never off a field the ticket's signer chose (review panel 30 October 2026: a ticket re-signed
+        # with budget_key set to None skipped the fleet-commit check and refilled the cap).
+        budget = rule.get("budget")
+        if budget:
+            if t.get("budget_key") != budget.get("key") or not (t.get("reservation") and t.get("budget_owner")):
+                return False, reasons.TICKET_RULE_MISMATCH + ".no_reservation"
+            owner = (self.edition.get("budget_owners") or {}).get(budget["key"])
+            if owner == "fleet":
+                if t.get("budget_owner") != "fleet":
+                    return False, reasons.TICKET_RULE_MISMATCH + ".budget_owner_mismatch"
+                ok, why = self._fleet_receipts_ok(t, rule, params, now)
+                if not ok:
+                    return False, why
+        elif t.get("budget_key") or t.get("reservation"):
+            return False, reasons.TICKET_RULE_MISMATCH + ".unexpected_reservation"
         return True, reasons.OK
 
-    def _mode_ok(self, t: dict, rule: dict, params: dict) -> tuple[bool, str]:
+    def _rule_of(self, t: dict) -> dict | None:
+        if self.edition is None:
+            return None
+        return next((r for r in self.edition.get("rules", []) if r.get("id") == t.get("rule")), None)
+
+    def _max_ticket_life(self) -> float:
+        """A ticket lives at most its TTL plus the longest delay any rule in the edition in force can add; with no
+        edition the fixed ceiling applies (review panel 30 October 2026)."""
+        if self.edition is None:
+            return MAX_TICKET_LIFE_S
+        delays = [float(r.get("delay_s", 0.0) or 0.0) for r in self.edition.get("rules", []) if finite_number(r.get("delay_s", 0.0) or 0.0)]
+        return min(MAX_TICKET_LIFE_S, TICKET_TTL_S + (max(delays) if delays else 0.0))
+
+    def _budget_room(self, t: dict, rule: dict, params: dict, now: float) -> tuple[bool, str]:
+        """This endpoint's own count under the rule's budget: the amounts it has let through inside the rule's window
+        plus this one must fit the rule's limit. It is a bound this device enforces from what it has done, so it does
+        not depend on any governor's ledger. For a fleet-owned budget it is only a per-device bound, which is never
+        looser than the fleet cap."""
+        budget = rule.get("budget") or {}
+        amount = number_or_none(params.get(budget.get("param")))
+        limit, window = number_or_none(budget.get("limit")), number_or_none(budget.get("window_s", 3600.0))
+        if amount is None or limit is None or window is None or amount < 0:
+            return False, reasons.TICKET_RULE_MISMATCH + ".amount_malformed"
+        rows = [[at, a] for at, a in self.spent.get(budget["key"], []) if at > now - window]
+        if sum(a for _, a in rows) + amount > limit:
+            return False, reasons.TICKET_RULE_MISMATCH + ".endpoint_budget_exceeded"
+        self.spent[budget["key"]] = rows
+        return True, reasons.OK
+
+    def _mode_ok(self, t: dict, rule: dict, params: dict, now: float) -> tuple[bool, str]:
         """The rule's mode is enforced here, not only at the governor (audit 30 October 2026: a captured governor key
         could mint a ticket for a human-mode rule with no approver). A human-mode rule needs the edition's quorum of
         distinct approvers for that rule, each a signed approval naming this ticket's request hash. An observer-mode
@@ -351,7 +409,9 @@ class ActionEndpoint:
                 if not isinstance(env, dict) or verify_any(env, keys) is None:
                     continue
                 p = env.get("payload") or {}
-                if p.get("type") == "approve" and p.get("request_hash") == t.get("request_hash"):
+                # The approval names this request's hash (which the endpoint has recomputed from the parameters it
+                # holds) and the epoch the ticket was minted under; an approval from an older rulebook is no approval.
+                if p.get("type") == "approve" and p.get("request_hash") == t.get("request_hash") and p.get("epoch") == t.get("policy_epoch"):
                     signers.add(env["signer"])
             if len(signers) < quorum:
                 return False, reasons.TICKET_RULE_MISMATCH + ".approvals_short"
@@ -360,17 +420,24 @@ class ActionEndpoint:
             # A verdict is bound to this ticket either by the request hash (a witnessed action) or by the response
             # hash the ticket names (a release ticket, where the observer judged the model's response, not the request).
             bound_to = {t.get("request_hash"), (params or {}).get("response_hash")} - {None}
+            max_risk = number_or_none((rule.get("requirement") or {}).get("max_risk", 1.0))
             good = 0
             for env in t.get("witnesses") or []:
                 if isinstance(env, dict) and verify_any(env, keys) is not None:
                     p = env.get("payload") or {}
-                    if p.get("type") == "observer-verdict" and (p.get("request_hash") in bound_to or p.get("response_hash") in bound_to):
-                        good += 1
+                    if p.get("type") != "observer-verdict" or not (p.get("request_hash") in bound_to or p.get("response_hash") in bound_to):
+                        continue
+                    # Checked as the governor checks it (review panel 30 October 2026: an expired verdict with risk
+                    # 0.99 fired a strike because the endpoint matched the hash and nothing else).
+                    exp, risk = number_or_none(p.get("expires_at")), number_or_none(p.get("risk", 1.0))
+                    if exp is None or exp <= now or risk is None or (max_risk is not None and risk > max_risk):
+                        continue
+                    good += 1
             if good < 1:
                 return False, reasons.TICKET_RULE_MISMATCH + ".no_observer_verdict"
         return True, reasons.OK
 
-    def _fleet_receipts_ok(self, t: dict, rule: dict, params: dict) -> tuple[bool, str]:
+    def _fleet_receipts_ok(self, t: dict, rule: dict, params: dict, now: float) -> tuple[bool, str]:
         """A ticket under a fleet-owned budget must carry the fleet ledger's receipts for its reservation: the
         edition's threshold of distinct replicas, each a signed receipt over this budget key, this amount, this
         governor, and the reservation id the ticket names for that replica. The endpoint verifies them against the
@@ -398,8 +465,11 @@ class ActionEndpoint:
             if rids.get(env["signer"]) != p.get("rid"):
                 continue
             b = p.get("binding") or {}
-            if b.get("request_hash") != t.get("request_hash") or b.get("endpoint") != self.name:
-                continue   # a receipt made for another request or another device buys nothing here
+            if b.get("request_hash") != t.get("request_hash") or b.get("endpoint") != self.name or b.get("ticket_id") != t.get("ticket_id"):
+                continue   # a receipt made for another request, another ticket or another device buys nothing here
+            at = number_or_none(p.get("at"))
+            if at is None or at < now - self._max_ticket_life() or at > now + self._max_ticket_life():
+                continue   # a receipt older than any ticket can live is a captured receipt
             seen.add(env["signer"])
         if len(seen) < k:
             return False, reasons.TICKET_RULE_MISMATCH + ".fleet_receipts_short"
@@ -455,16 +525,36 @@ class ActionEndpoint:
             view[lid] = {**meta, "stale": stale}
         return view
 
-    def _commit_verified(self, ticket: dict, committed) -> bool:
-        """A commit is good only as a statement signed by the governor that minted the ticket, naming this ticket, and,
-        for a fleet-owned budget, carrying the edition's threshold of distinct replicas' fleet-commit receipts, each
-        closing the reservation this ticket names. Anything else, a bare True included, is no commit."""
-        if not isinstance(committed, dict) or verify_any(committed, self.keys) is None or committed.get("signer") != ticket.get("signer"):
+    def _commit_verified(self, ticket: dict, committed, now: float) -> bool:
+        """A commit is good only as a statement from the governor that minted the ticket (signed, or MACed for a MACed
+        release ticket), naming this ticket, this request, this endpoint, the ticket's budget key and reservation, and,
+        when the edition owns the rule's budget as fleet, carrying the edition's threshold of distinct replicas'
+        fleet-commit receipts, each closing the reservation this ticket names for that replica and bound to this
+        request and this device. Anything else, a bare True included, is no commit. Every check keys off the edition's
+        rule, not off a field of the ticket (review panel 30 October 2026)."""
+        if not isinstance(committed, dict) or not isinstance(committed.get("payload"), dict) or committed.get("signer") != ticket.get("signer"):
             return False
-        t, c = ticket["payload"], committed.get("payload") or {}
-        if c.get("type") != "commit" or c.get("ticket_id") != t.get("ticket_id"):
+        if "mac" in committed:
+            key = getattr(self, "mac_key", None)
+            if key is None or "mac" not in ticket:
+                return False
+            import hmac as _hmac
+            if not _hmac.compare_digest(str(committed["mac"]), hmac_sha256(key, canonical(committed["payload"]))):
+                return False
+        elif verify_any(committed, self.keys) is None:
             return False
-        if self.edition is not None and t.get("budget_key") and (self.edition.get("budget_owners") or {}).get(t["budget_key"]) == "fleet":
+        t, c = ticket["payload"], committed["payload"]
+        if c.get("type") != "commit" or c.get("ticket_id") != t.get("ticket_id") or c.get("request_hash") != t.get("request_hash") \
+                or c.get("endpoint") != self.name or c.get("budget_key") != t.get("budget_key") or c.get("reservation") != t.get("reservation"):
+            return False
+        at = number_or_none(c.get("at"))
+        if at is None or at > now + self._max_ticket_life() or at < now - self._max_ticket_life():
+            return False
+        rule = self._rule_of(t)
+        if self.edition is not None and rule is None:
+            return False
+        budget = (rule or {}).get("budget")
+        if budget and (self.edition.get("budget_owners") or {}).get(budget["key"]) == "fleet":
             spec = self.edition.get("fleet_ledger") or {}
             keys = {vk.key_id: vk for vk in (VerifyKey.from_hex(h) for h in spec.get("keys", []))}
             k = int(spec.get("threshold", 0) or 0)
@@ -474,8 +564,10 @@ class ActionEndpoint:
                 if not isinstance(env, dict) or verify_any(env, keys) is None:
                     continue
                 p = env.get("payload") or {}
-                if p.get("type") == "fleet-commit" and p.get("key") == t["budget_key"] and p.get("reserver") == t.get("governor") \
-                        and rids.get(env["signer"]) == p.get("rid"):
+                b = p.get("binding") or {}
+                if p.get("type") == "fleet-commit" and p.get("key") == budget["key"] and p.get("reserver") == t.get("governor") \
+                        and rids.get(env["signer"]) == p.get("rid") and b.get("request_hash") == t.get("request_hash") \
+                        and b.get("endpoint") == self.name and b.get("ticket_id") == t.get("ticket_id"):
                     closed.add(env["signer"])
             if not keys or k < 1 or len(closed) < k:
                 return False
@@ -498,16 +590,26 @@ class ActionEndpoint:
         t = ticket["payload"]
         if t["action"] != action:
             return False, reasons.TICKET_ACTION_MISMATCH
-        # A ticket's life is bounded by the device, not only by its payload (audit 30 October 2026).
-        try:
-            if float(t.get("expires_at", 0)) - float(t.get("valid_from", 0)) > MAX_TICKET_LIFE_S or float(t.get("expires_at", 0)) > now + MAX_TICKET_LIFE_S:
-                return False, reasons.TICKET_RULE_MISMATCH + ".validity_too_long"
-        except (TypeError, ValueError):
+        # A ticket's life is bounded by the device, not only by its payload (audit 30 October 2026). Both window edges
+        # must be finite numbers; a string or an infinity in either is refused, not raised (review panel 30 October 2026).
+        valid_from, expires_at = number_or_none(t.get("valid_from", 0.0)), number_or_none(t.get("expires_at"))
+        if valid_from is None or expires_at is None:
             return False, reasons.TICKET_RULE_MISMATCH + ".validity_malformed"
+        life = self._max_ticket_life()
+        if expires_at - valid_from > life or expires_at > now + life:
+            return False, reasons.TICKET_RULE_MISMATCH + ".validity_too_long"
         if self.governor_ids and self.governor_ids.get(ticket.get("signer")) not in (None, t.get("governor")):
             return False, reasons.TICKET_RULE_MISMATCH + ".governor_mismatch"
         if t["params_digest"] != digest(params):
             return False, reasons.TICKET_PARAMS_MISMATCH
+        # The request hash is recomputed here from the request id and measurement the ticket carries and the action
+        # and parameters presented, the way the governor built it. Every approval, verdict and receipt names that hash,
+        # so this is what ties them to these parameters (review panel 30 October 2026).
+        if t.get("request_hash") != digest([t.get("request_id"), t.get("measurement"), action, params]):
+            return False, reasons.TICKET_RULE_MISMATCH + ".request_hash_mismatch"
+        spent = self.used_requests.get(t.get("request_hash"))
+        if spent and spent[0] != t["ticket_id"]:
+            return False, reasons.TICKET_REPLAY + ".request_spent"
         # F29: every ticket names exactly one endpoint. An unbound ticket is refused, and so is a ticket
         # that names another endpoint. The check does not depend on the ticket carrying a truthy field.
         if ENFORCE_TICKET_BINDING:
@@ -520,12 +622,12 @@ class ActionEndpoint:
         if t["policy_epoch"] != self.epoch:
             return False, reasons.TICKET_STALE_EPOCH
         if self.governance_hashes is not None:
-            ok, why = self._check_against_edition(ticket, t, action, params)
+            ok, why = self._check_against_edition(ticket, t, action, params, now)
             if not ok:
                 return False, why
-        if now < t.get("valid_from", 0.0):
+        if now < valid_from:
             return False, reasons.TICKET_NOT_YET_VALID
-        if now >= t["expires_at"]:
+        if now >= expires_at:
             return False, reasons.TICKET_EXPIRED
         if t["ticket_id"] in self.consumed:
             return False, reasons.TICKET_REPLAY
@@ -561,6 +663,19 @@ class ActionEndpoint:
                     return self._refuse(reasons.TICKET_REPLAY + ".reservation_spent")
                 for pair in pairs:
                     self.used_reservations[pair] = [t["ticket_id"], float(t.get("expires_at", now))]
+            spent = self.used_requests.get(t.get("request_hash"))
+            if spent and spent[0] != t["ticket_id"]:
+                return self._refuse(reasons.TICKET_REPLAY + ".request_spent")
+            self.used_requests[t.get("request_hash")] = [t["ticket_id"], float(t.get("expires_at", now))]
+            rule = self._rule_of(t)
+            if rule is not None and rule.get("budget"):
+                ok, why = self._budget_room(t, rule, params, now)
+                if not ok:
+                    return self._refuse(why)
+                # Counted at the burn, inside the lock, so two tickets admitted together cannot both fit the last of
+                # the limit; a ticket whose commit then fails stays counted (fail closed, the window clears it).
+                key, param = rule["budget"]["key"], rule["budget"].get("param")
+                self.spent.setdefault(key, []).append([now, number_or_none(params.get(param)) or 0.0])
             self.used_expiry[t["ticket_id"]] = float(t.get("expires_at", now))
             self.consumed[t["ticket_id"]] = now
             self.burned[t["ticket_id"]] = now  # F33: the second record, saved with the first
@@ -569,7 +684,7 @@ class ActionEndpoint:
             committed = self.commit(ticket) if self.commit else False
         except ConnectionError:
             return self._refuse(reasons.COMMIT_UNREACHABLE)
-        if committed and not self._commit_verified(ticket, committed):
+        if committed and not self._commit_verified(ticket, committed, now):
             # The host answered for the governor, or the fleet ledger did not close the reservation: no effect
             # (audit 30 October 2026: a bare 'yes' from the host used to be enough).
             committed = False
@@ -599,6 +714,8 @@ class ActionEndpoint:
         self.burned = self.store.get("burned", {})
         self.used_expiry = self.store.get("used_expiry", {})
         self.used_reservations = self.store.get("used_reservations", {})
+        self.used_requests = self.store.get("used_requests", {})
+        self.spent = self.store.get("spent", {})
         self.list_floor = self.store.get("list_floor", {})
         self.state = "ARMED"
 

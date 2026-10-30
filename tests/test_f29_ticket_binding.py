@@ -8,6 +8,7 @@ covered vectors are VEC-0005, VEC-0006, VEC-0007, VEC-0008 and VEC-0069. These t
 the fix and pass after it."""
 from govsim import reasons
 from govsim.cluster import build_rack
+from govsim.crypto import digest
 
 
 def _rack_with_export_ticket():
@@ -34,7 +35,7 @@ def test_a_ticket_bound_to_another_endpoint_is_refused():
     r, _ = _rack_with_export_ticket()
     g = r.nodes[0].governor
     rule = next(x for x in g.policy["rules"] if x.get("endpoint") == "payment-switch")
-    ticket = g._mint("rh", "payments.transfer", {"amount": 1}, g.fingerprint, rule, None, r.clock.now())
+    ticket = g._mint(digest(["rid", g.fingerprint, "payments.transfer", {"amount": 1}]), "payments.transfer", {"amount": 1}, g.fingerprint, rule, None, r.clock.now(), request_id="rid")
     assert ticket["payload"]["endpoint"] == "payment-switch"
     ok, why = r.endpoints["messaging"].execute(ticket, "payments.transfer", {"amount": 1})
     assert not ok and why == reasons.TICKET_WRONG_ENDPOINT
@@ -69,7 +70,7 @@ def test_the_storage_grant_refuses_a_weights_ticket_with_no_endpoint():
     n = 4096
     params = {"destination": node.model_digest, "model_digest": node.model_digest, "bytes": n}
     rule = _unbound_copy(next(x for x in g.policy["rules"] if x["id"] == "weights.write.own"))
-    ticket = g._mint("rh", "weights.write", params, g.fingerprint, rule, None, r.clock.now())
+    ticket = g._mint(digest(["rid", g.fingerprint, "weights.write", params]), "weights.write", params, g.fingerprint, rule, None, r.clock.now(), request_id="rid")
     assert ticket["payload"]["endpoint"] is None
     ok, why = g.grant_storage_export(ticket, n)
     assert not ok and why == reasons.TICKET_UNBOUND, why
@@ -82,7 +83,7 @@ def test_the_storage_grant_refuses_a_weights_ticket_bound_to_another_endpoint():
     n = 4096
     params = {"destination": node.model_digest, "model_digest": node.model_digest, "bytes": n}
     rule = dict(next(x for x in g.policy["rules"] if x["id"] == "weights.write.own"), endpoint="payment-switch")
-    ticket = g._mint("rh", "weights.write", params, g.fingerprint, rule, None, r.clock.now())
+    ticket = g._mint(digest(["rid", g.fingerprint, "weights.write", params]), "weights.write", params, g.fingerprint, rule, None, r.clock.now(), request_id="rid")
     ok, why = g.grant_storage_export(ticket, n)
     assert not ok and why == reasons.TICKET_WRONG_ENDPOINT, why
 
@@ -102,7 +103,7 @@ def test_data_only_rules_never_authorise_an_effect():
                             ("compute.extend", "compute.extend")):
         rule = next(x for x in g.policy["rules"] if x["id"] == rule_id)
         assert rule.get("endpoint") is None, rule_id
-        ticket = g._mint("rh", action, params, g.fingerprint, rule, None, r.clock.now())
+        ticket = g._mint(digest(["rid", g.fingerprint, action, params]), action, params, g.fingerprint, rule, None, r.clock.now(), request_id="rid")
         for name, ep in r.endpoints.items():
             ok, why = ep.execute(ticket, action, params)
             assert not ok and why == reasons.TICKET_UNBOUND, (rule_id, name)

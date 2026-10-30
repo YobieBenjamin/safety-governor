@@ -49,8 +49,11 @@ def _forged(rack, payload_changes: dict, params: dict):
     """A ticket signed with the governor's own key (extracted), with whatever payload the attacker likes."""
     g = rack.nodes[0].governor
     now = rack.clock.now()
-    t = {"type": "ticket", "ticket_id": random_id(16), "request_hash": digest(random_id(8)), "action": PAY,
-         "params_digest": digest(params), "measurement": g.fingerprint, "rule": "payments.transfer.listed",
+    rid = random_id(8)
+    # The attacker builds the ticket the way the governor does, request id and hash included, so the endpoint's
+    # recomputation of the hash passes and the checks under test are the ones that refuse.
+    t = {"type": "ticket", "ticket_id": random_id(16), "request_id": rid, "request_hash": digest([rid, g.fingerprint, PAY, params]),
+         "action": PAY, "params_digest": digest(params), "measurement": g.fingerprint, "rule": "payments.transfer.listed",
          "policy_epoch": g.epoch, "endpoint": "payment-switch", "budget_key": "pay-usd-hourly",
          "reservation": {"forged-replica": "rid-forged"}, "budget_owner": "fleet", "governor": g.chip_id,
          "issued_at": g.mono(), "valid_from": now, "expires_at": now + 300}
@@ -122,11 +125,11 @@ def test_one_reservation_buys_one_ticket():
     ok, why = ep.execute(honest, PAY, params)
     assert ok, why
     again = _forged(rack, {"rule": honest["payload"]["rule"], "reservation": honest["payload"]["reservation"],
-                           "request_hash": honest["payload"]["request_hash"],
+                           "request_hash": honest["payload"]["request_hash"], "request_id": honest["payload"]["request_id"],
                            "fleet_receipts": honest["payload"]["fleet_receipts"]}, params)
     ok, why = ep.execute(again, PAY, params)
     assert not ok
-    assert why.endswith(".reservation_spent"), why
+    assert why.endswith(".request_spent") or why.endswith(".reservation_spent"), why
     assert len(ep.executed) == 1
 
 
@@ -204,7 +207,8 @@ def test_an_endpoint_holding_the_recipient_list_refuses_an_unlisted_recipient_wh
     assert ep.install_list("recipient-registry", rack.signed_list("recipient-registry", LISTED_RECIPIENTS))
     params = {"recipient": "anyone@outside.example", "body": "weights part 1"}
     now = rack.clock.now()
-    t = {"type": "ticket", "ticket_id": random_id(16), "request_hash": digest("forged"), "action": "message.send",
+    t = {"type": "ticket", "ticket_id": random_id(16), "request_id": "forged", "request_hash": digest(["forged", g.fingerprint, "message.send", params]),
+         "action": "message.send",
          "params_digest": digest(params), "measurement": g.fingerprint, "rule": "message.send.listed", "policy_epoch": g.epoch,
          "endpoint": "messaging", "budget_key": None, "reservation": None, "budget_owner": None, "governor": g.chip_id,
          "issued_at": g.mono(), "valid_from": now, "expires_at": now + 300}
@@ -251,7 +255,7 @@ def test_used_reservations_survive_a_restart():
     assert ep.execute(honest, PAY, params)[0]
     ep.restart()
     again = _forged(rack, {"rule": honest["payload"]["rule"], "reservation": honest["payload"]["reservation"],
-                           "request_hash": honest["payload"]["request_hash"],
+                           "request_hash": honest["payload"]["request_hash"], "request_id": honest["payload"]["request_id"],
                            "fleet_receipts": honest["payload"]["fleet_receipts"]}, params)
     ok, why = ep.execute(again, PAY, params)
-    assert not ok and why.endswith(".reservation_spent"), why
+    assert not ok and (why.endswith(".request_spent") or why.endswith(".reservation_spent")), why

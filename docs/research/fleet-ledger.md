@@ -38,6 +38,23 @@ Per GOAL.md the chip's boundary is the data center. A ledger's scope is set by t
 governors share it; a budget spanning data centers is a policy choice, and a site cut off from its ledger quorum refuses
 the budgeted actions (fail closed) without affecting any other site.
 
+## The replica's trust boundary (review panel, 30 October 2026)
+
+What the replica checks for itself: that the reservation it is asked to commit or release was made by the governor
+named as reserver, and its own count. What it takes from the caller: the budget limit, the window, the time (`now`) and
+the TTL (`fleet.py`, `reserve`). In the model the only caller is a governor object in the same process, so this is
+sound there; in silicon the governor reaches the replica over an untrusted path, and a caller that can set the limit or
+the clock can lift or erase the count. So the receipts prove that a replica counted, not that it counted against the
+edition's limit on the edition's clock. The claim that the fleet cap is "checked by a second party that does not trust
+this governor" is withdrawn until the replica authenticates its caller and holds the limit, window and clock itself,
+from the edition it is given. That change is a named follow-up with the architect's probes P4a to P4d
+(`design/30-review-panel-decision.md`) as its tests.
+
+Costs the design accepts, stated: a reservation that reaches the threshold at reserve but not at commit leaves the
+committed amount counted at the replicas that did commit until the window passes; and a host that forwards the commit
+and then drops the statement spends an hour of cap for no effect. Both are starvation, not theft; both are bounded by
+the window; neither is fixed here.
+
 ## What is still open
 
 - The replicas in the model count independently in one process. Requiring all of them costs availability: one

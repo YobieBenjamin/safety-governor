@@ -30,7 +30,7 @@ def setup():
     ep = r.endpoints["messaging"]
     now = r.clock.now()
     payload = {"type": "ticket", "ticket_id": TID, "request_hash": digest(["rid", g.fingerprint, "message.send", PARAMS]),
-               "action": "message.send", "params_digest": digest(PARAMS), "measurement": g.fingerprint,
+               "request_id": "rid", "action": "message.send", "params_digest": digest(PARAMS), "measurement": g.fingerprint,
                "rule": "message.send.listed", "policy_epoch": g.epoch, "endpoint": "messaging",
                "budget_key": None, "reservation": None, "budget_owner": None, "governor": g.chip_id,
                "issued_at": g.mono(), "valid_from": now, "expires_at": now + 300}

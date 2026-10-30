@@ -4,10 +4,10 @@
 
 The audit ran against the first endpoint-receipts change (commit 23a6b5a) and every probe below reproduced. Each test
 here asserts the secure outcome, so a test that fails means the weakness is back. Six of the sixteen are design items
-rather than defects in this change (rack-local budgets have no ledger outside the governor, reservation starvation,
-k = n liveness, n/k overspend under a lowered threshold, the beneficiary registry not being an endpoint constraint,
-and the fail-closed burn of a ticket whose commit was refused); those are marked xfail(strict=True) or documented as
-intended, and the record of each is in docs/29 and the case-against paper, so they are tracked and not hidden.
+rather than defects in this change (reservation starvation, k = n liveness, n/k overspend under a lowered threshold,
+the beneficiary registry not being an endpoint constraint, and the fail-closed burn of a ticket whose commit was
+refused); those are marked xfail(strict=True) or documented as intended. The rack-local budget (C) was closed on the
+review panel's finding of 30 October 2026 by the endpoint's own count, and the record of each is in docs/29 and the case-against paper, so they are tracked and not hidden.
 
 The attacker model is the audit's: one governor's signing key extracted without tripping the tamper mesh, on a host the
 attacker controls. The host forwards every commit to the governor and, when the governor refuses, answers with a commit
@@ -27,18 +27,34 @@ PAY = "payments.transfer"
 KEY = "pay-usd-hourly"
 
 
+CAPTURED: list[dict] = []   # every fleet receipt the host has seen, reused in every forged commit statement
+
+
 def attacker_host(rack, gov=None):
-    """Forward the commit; when the governor refuses, sign a commit statement with the extracted key instead."""
+    """Forward the commit; record every receipt that comes back; when the governor refuses, sign a commit statement
+    with the extracted key that names every field the endpoint checks and carries every captured receipt
+    (review panel 30 October 2026: the earlier helper left the statement half empty, which is why some probes
+    passed for incidental reasons)."""
     g = gov or rack.nodes[0].governor
 
     def forged_commit(ticket):
         t = ticket["payload"]
-        return g.key.sign({"type": "commit", "ticket_id": t["ticket_id"], "governor": t.get("governor"), "budget_key": t.get("budget_key"),
-                           "reservation": t.get("reservation"), "fleet_receipts": [], "at": rack.clock.now()})
+        return g.key.sign({"type": "commit", "ticket_id": t["ticket_id"], "request_hash": t.get("request_hash"),
+                           "endpoint": t.get("endpoint"), "governor": t.get("governor"), "budget_key": t.get("budget_key"),
+                           "reservation": t.get("reservation"), "fleet_receipts": list(CAPTURED), "at": rack.clock.now()})
+
+    def wrap(real):
+        def commit(ticket):
+            CAPTURED.extend(ticket["payload"].get("fleet_receipts") or [])
+            out = real(ticket)
+            if isinstance(out, dict):
+                CAPTURED.extend((out.get("payload") or {}).get("fleet_receipts") or [])
+                return out
+            return forged_commit(ticket)
+        return commit
 
     for ep in rack.endpoints.values():
-        real = ep.commit
-        ep.commit = (lambda r: (lambda ticket: r(ticket) or forged_commit(ticket)))(real)
+        ep.commit = wrap(ep.commit)
 
 
 def host_swallows_commits(rack):
@@ -56,8 +72,9 @@ def signed_with_governor_key(rack, changes: dict, params: dict, rule="payments.t
     """A ticket signed with the governor's key but not produced by its rule engine (the extracted-key threat)."""
     g = gov or rack.nodes[0].governor
     now = rack.clock.now()
-    t = {"type": "ticket", "ticket_id": random_id(16), "request_hash": digest(random_id(8)), "action": PAY,
-         "params_digest": digest(params), "measurement": g.fingerprint, "rule": rule,
+    rid = changes.get("request_id") or random_id(8)
+    t = {"type": "ticket", "ticket_id": random_id(16), "request_id": rid, "request_hash": digest([rid, g.fingerprint, PAY, params]),
+         "action": PAY, "params_digest": digest(params), "measurement": g.fingerprint, "rule": rule,
          "policy_epoch": g.epoch, "endpoint": "payment-switch", "budget_key": None,
          "reservation": None, "budget_owner": None, "governor": g.chip_id,
          "issued_at": g.mono(), "valid_from": now, "expires_at": now + 300}
@@ -100,16 +117,15 @@ def test_B_swallowed_commits_no_longer_refill_the_cap():
             r, params = honest(rack, 400)
             if r.get("ok"):
                 ok, why = ep.execute(r["ticket"], PAY, params)
-                assert not ok and why == reasons.COMMIT_REJECTED, why
+                assert not ok and why in (reasons.COMMIT_REJECTED, reasons.TICKET_RULE_MISMATCH + ".endpoint_budget_exceeded"), why
                 moved += 400 if ok else 0
         tick(rack, TICKET_TTL_S + 1)
     assert moved == 0
 
 
-# C. A rack-local budget has no ledger outside the governor, so an extracted key that also signs its own commit
-#    statements is bounded only by the rule's per-ticket maximum, not by the hourly cap. Design item: budgets that
-#    bound money must be fleet-owned, where the replicas' receipts and commit receipts are required (docs/29).
-@pytest.mark.xfail(strict=True, reason="design item: a rack-local budget has no ledger outside the governor; money budgets are fleet-owned")
+# C. A rack-local budget had no ledger outside the governor, so an extracted key that also signed its own commit
+#    statements was bounded only by the rule's per-ticket maximum. Now the endpoint counts what it lets through under
+#    each budget key against the rule's limit and window (review panel 30 October 2026).
 def test_C_a_rack_local_budget_is_bounded_without_the_governor():
     rack = build_rack(1)
     rack.bring_up()
@@ -138,6 +154,11 @@ def test_D_receipts_cannot_be_redirected_to_another_destination():
                                         "fleet_receipts": p["fleet_receipts"]}, bad)
     ok, why = ep.execute(t, PAY, bad)
     assert not ok and why.endswith(".fleet_receipts_short"), why
+    t = signed_with_governor_key(rack, {"budget_key": KEY, "reservation": p["reservation"], "budget_owner": "fleet",
+                                        "request_hash": p["request_hash"], "request_id": p["request_id"],
+                                        "fleet_receipts": p["fleet_receipts"]}, bad)
+    ok, why = ep.execute(t, PAY, bad)                        # the hash copied too: it no longer matches the parameters
+    assert not ok and why.endswith(".request_hash_mismatch"), why
     ok2, why2 = ep.execute(r["ticket"], PAY, params)       # and the honest ticket still goes through
     assert ok2, why2
 
@@ -163,7 +184,8 @@ def test_E_the_same_receipts_do_not_spend_at_a_second_payment_switch():
     assert ep1.execute(r["ticket"], PAY, params)[0]
     p = r["ticket"]["payload"]
     again = signed_with_governor_key(rack, {"budget_key": KEY, "reservation": p["reservation"], "budget_owner": "fleet",
-                                            "request_hash": p["request_hash"], "fleet_receipts": p["fleet_receipts"]}, params)
+                                            "request_hash": p["request_hash"], "request_id": p["request_id"],
+                                            "fleet_receipts": p["fleet_receipts"]}, params)
     ok, why = ep2.execute(again, PAY, params)
     assert not ok, why
 
@@ -309,8 +331,8 @@ def test_O_the_signer_must_be_the_governor_the_ticket_names():
     p = r["ticket"]["payload"]
     g1 = rack.nodes[1].governor
     t = signed_with_governor_key(rack, {"budget_key": KEY, "reservation": p["reservation"], "budget_owner": "fleet",
-                                        "request_hash": p["request_hash"], "fleet_receipts": p["fleet_receipts"],
-                                        "governor": "gov00"}, params, gov=g1)
+                                        "request_hash": p["request_hash"], "request_id": p["request_id"],
+                                        "fleet_receipts": p["fleet_receipts"], "governor": "gov00"}, params, gov=g1)
     assert t["signer"] == g1.key.key_id and t["payload"]["governor"] == "gov00"
     ok, why = ep.execute(t, PAY, params)
     assert not ok and why.endswith(".governor_mismatch"), why

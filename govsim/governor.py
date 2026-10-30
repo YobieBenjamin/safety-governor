@@ -1064,13 +1064,14 @@ class Governor:
         if rule.get("rate") and not self.ledger.rate_ok(f"rate|{fp}|{action}", rule["rate"]["max"], rule["rate"]["window_s"], now):
             return self._deny("request", reasons.GATE_RATE, request_hash=rhash)
         reservation = None
+        ticket_id = random_id(16)    # chosen before the reservation, so the ledger's receipts can name the ticket they are for
         if rule.get("budget"):
             b = rule["budget"]
             amount = params.get(b["param"])
             if not finite_number(amount) or amount < 0:   # reject bool, NaN and infinity before reserving (F03)
                 return self._deny("request", reasons.GATE_BUDGET + ".amount_invalid", request_hash=rhash)
             ok, rid, why = self._reserve(b["key"], amount, b["limit"], b["window_s"], now, TICKET_TTL_S + rule.get("delay_s", 0.0),
-                                         binding={"request_hash": rhash, "endpoint": rule.get("endpoint")})
+                                         binding={"request_hash": rhash, "endpoint": rule.get("endpoint"), "ticket_id": ticket_id})
             if not ok:
                 return self._deny("request", why, request_hash=rhash)
             reservation = {"key": b["key"], "rid": rid, "owner": self.policy["budget_owners"][b["key"]]}
@@ -1079,13 +1080,15 @@ class Governor:
         self.ledger.mark(rhash, now)   # recorded before any hold or ticket exists, so this request hash cannot be used again (replay)
         if req_mode == "human":
             hold_id = random_id(8)
-            self.holds[hold_id] = {"request_hash": rhash, "action": action, "params": params, "fingerprint": fp, "rule": rule["id"],
+            self.holds[hold_id] = {"request_hash": rhash, "request_id": req.get("request_id"), "ticket_id": ticket_id, "action": action, "params": params,
+                                   "fingerprint": fp, "rule": rule["id"],
                                    "reservation": reservation, "created_at": now, "epoch": self.epoch, "cause": hold_cause,
                                    "payer_confirm": payer_commit}
             self.store.save()
             self.log.append("gate.hold", {"hold_id": hold_id, "request_hash": rhash, "rule": rule["id"], "cause": hold_cause})
             return {"ok": False, "why": reasons.GATE_HELD, "hold_id": hold_id, "request_hash": rhash, "cause": hold_cause}
-        ticket = self._mint(rhash, action, params, fp, rule, reservation, now, witnesses=req.get("witnesses", []))
+        ticket = self._mint(rhash, action, params, fp, rule, reservation, now, witnesses=req.get("witnesses", []),
+                            request_id=req.get("request_id"), ticket_id=ticket_id)
         return {"ok": True, "why": reasons.OK, "ticket": ticket, "request_hash": rhash}
 
     # ------------------------------------------------------------------ response release
@@ -1410,13 +1413,18 @@ class Governor:
         return None
 
     def _mint(self, rhash: str, action: str, params: dict, fp: str, rule: dict, reservation: dict | None, now: float,
-              approvals: list[dict] | None = None, witnesses: list[dict] | None = None) -> dict:
+              approvals: list[dict] | None = None, witnesses: list[dict] | None = None, request_id: str | None = None,
+              ticket_id: str | None = None) -> dict:
         """``issued_at`` is the governor's monotonic counter; ``valid_from``/``expires_at`` are endpoint clock seconds.
         A ticket for a human-mode rule carries the approvers' signed approvals, and one for an observer-mode rule the
         observers' signed verdicts, so the endpoint can check the rule's mode itself and not only this governor's
         signature (audit 30 October 2026: a captured governor key could mint a human-mode ticket with no approver)."""
-        t = {"type": "ticket", "ticket_id": random_id(16), "request_hash": rhash, "action": action, "params_digest": digest(params),
-             "measurement": fp, "rule": rule["id"], "policy_epoch": self.epoch, "endpoint": rule.get("endpoint"),
+        # The ticket carries the request id, so an endpoint can recompute the request hash from the id, the measurement,
+        # the action and the parameters it is handed, and so tie every approval, verdict and receipt that names the hash
+        # to these exact parameters (review panel 30 October 2026: a hash the endpoint could not recompute let two
+        # honest approvals of a small payment be rebound to large ones).
+        t = {"type": "ticket", "ticket_id": ticket_id or random_id(16), "request_hash": rhash, "request_id": request_id, "action": action,
+             "params_digest": digest(params), "measurement": fp, "rule": rule["id"], "policy_epoch": self.epoch, "endpoint": rule.get("endpoint"),
              "budget_key": reservation["key"] if reservation else None, "reservation": reservation["rid"] if reservation else None,
              "budget_owner": reservation["owner"] if reservation else None, "governor": self.chip_id,
              "issued_at": self.mono(), "valid_from": now + rule.get("delay_s", 0.0), "expires_at": now + rule.get("delay_s", 0.0) + TICKET_TTL_S}
@@ -1427,7 +1435,9 @@ class Governor:
             t["witnesses"] = [w for w in (witnesses or []) if isinstance(w, dict) and (w.get("payload") or {}).get("type") == "observer-verdict"]
         if reservation and reservation.get("owner") == "fleet":
             # The fleet ledger's signed receipts ride in the ticket. The endpoint verifies them against the replica keys
-            # the edition names, so the fleet cap is checked by a second party that does not trust this governor.
+            # the edition names. The replicas count independently of this governor, but they take the limit, window
+            # and clock from their caller (docs/research/fleet-ledger.md, trust boundary), so this is a second count,
+            # not yet a second party.
             t["fleet_receipts"] = reservation.get("receipts") or []
         if action == RELEASE_ACTION and self.egress_mac_key is not None and rule.get("endpoint") == "egress":
             # Adversarial audit 3: one P-384 signature per response (17 ms on the signing engine) put the full serving
@@ -1511,7 +1521,8 @@ class Governor:
             if not ok:
                 return self._deny("approve", why, hold_id=hold_id)
         ticket = self._mint(hold["request_hash"], hold["action"], hold["params"], hold["fingerprint"], rule, hold["reservation"], now,
-                            approvals=[a["env"] for a in self.approvals[hold_id].values() if a.get("env")])
+                            approvals=[a["env"] for a in self.approvals[hold_id].values() if a.get("env")], request_id=hold.get("request_id"),
+                            ticket_id=hold.get("ticket_id"))
         self.holds.pop(hold_id)
         self.store.save()
         self.log.append("approve.released", {"hold_id": hold_id, "approvers": sorted(self.approvals[hold_id]), "latency_s": now - hold["created_at"]})
@@ -1592,8 +1603,16 @@ class Governor:
             self.log.append("gate.commit" if ok else "gate.commit_rejected", {"ticket_id": tid})
             if not ok:
                 return False
-            return self.key.sign({"type": "commit", "ticket_id": tid, "governor": self.chip_id, "budget_key": t.get("budget_key"),
-                                  "reservation": t.get("reservation"), "fleet_receipts": fleet_receipts or [], "at": self.clock.now()})
+            stmt = {"type": "commit", "ticket_id": tid, "request_hash": t.get("request_hash"), "endpoint": t.get("endpoint"),
+                    "governor": self.chip_id, "budget_key": t.get("budget_key"), "reservation": t.get("reservation"),
+                    "fleet_receipts": fleet_receipts or [], "at": self.clock.now()}
+            if "mac" in ticket and self.egress_mac_key is not None:
+                # A release ticket was MACed, not signed (adversarial audit 3 item 20); its commit statement is too, so
+                # the serving path still costs no signature per response (review panel 30 October 2026).
+                self.ops["commit_mac"] = self.ops.get("commit_mac", 0) + 1
+                return {"payload": stmt, "signer": self.key.key_id, "mac": hmac_sha256(self.egress_mac_key, canonical(stmt))}
+            self.ops["commit"] = self.ops.get("commit", 0) + 1
+            return self.key.sign(stmt)
 
     # ------------------------------------------------------------------ alarms
     def raise_alarm(self, code: str, source: str, detail: dict | None = None) -> None:
