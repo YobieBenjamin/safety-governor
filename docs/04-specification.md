@@ -213,10 +213,53 @@ the governor enforces only `heartbeat_expiry_s`.
 Request {request_id, measurement_token, action, params{...}, witnesses: [Assertion]}
    request_hash = SHA-256(canonical(request_id, fingerprint, action, params))
 
-Ticket {ticket_id (random 128-bit), request_hash, action, params_digest, measurement, rule,
+Ticket {ticket_id (random 128-bit), request_id, request_hash, action, params_digest, measurement, rule,
         policy_epoch, endpoint, budget_key, budget_owner, reservation, issued_at (monotonic counter),
-        valid_from, expires_at (endpoint clock), sig_governor}
+        valid_from, expires_at (endpoint clock),
+        approvals: [Approval]        // human-mode rules: the approvers' signed approvals over request_hash, epoch and the time given (at)
+        witnesses: [Assertion]       // observer-mode rules: the observers' signed verdicts over request_hash
+        fleet_receipts: [Receipt]    // fleet-owned budgets: the ledger replicas' signed reserve receipts
+        escrow: [Receipt]            // release tickets: the audit store's escrow receipts, re-checked at the egress
+        sig_governor}                // a release ticket to the node's own egress is MACed under the shared egress key instead
 
+Receipt (fleet-reserve, signed by one ledger replica)
+       {key, amount, reserver (governor id), nonce, rid, at (replica clock),
+        binding {request_hash, endpoint, ticket_id}}
+
+Commit {ticket_id, request_hash, endpoint, governor, budget_key, reservation, at,
+        fleet_receipts: [Receipt (fleet-commit: key, rid, reserver, nonce, at, binding)],
+        sig_governor}                // MACed under the egress key for a MACed release ticket
+```
+
+The endpoint acts on nothing but a ticket and a commit statement it has verified itself (30 October 2026). It
+recomputes `request_hash` from `request_id`, `measurement`, the action and the parameters it is handed, so every
+approval, verdict and receipt that names the hash is tied to those parameters; it checks the rule's mode (the
+edition's approver quorum, or an unexpired observer verdict under the rule's risk ceiling); for a budget the edition
+owns as `fleet` it needs the threshold of replicas' reserve receipts in the ticket and commit receipts in the
+statement, each bound to this request, this ticket and this endpoint name; for every budgeted rule it keeps its own
+count of what it has let through against the rule's limit and window, and for every rate-bearing rule its own count
+of actions, each shared with the other devices the edition lists under its role name; it holds a device key the
+edition lists, or installs no edition, and refuses an edition whose shape enforces nothing; it takes the edition's
+expiry from the edition alone; it honours a governor's signed revocation, from the governor itself or from two of its
+peers over the governor fabric; it dates its used records from its own clock and keeps them for the longest ticket
+life plus a grace; it refuses a list constraint whose list it does not hold fresh, and checks a payee against the
+beneficiary registry it holds; it refuses receipts, approvals and statements dated more than a minute ahead of its
+clock; at an egress, it re-checks a release verdict's hazard class, legibility and escrow and takes only MACed release
+tickets and commit statements; it records request hashes and reservations it
+has acted on, so one authorization buys one effect at a device; and it refuses a ticket valid for longer than the
+TTL plus the longest rule delay in the edition.
+
+Sizes, as measured by the fresh audit of 30 October 2026 on the third commit: a fleet-budgeted payment ticket with
+three reserve receipts 2,499 bytes, its commit statement 2,049 bytes (the commit receipts carry the binding), a
+human-lane ticket with two approvals 1,661 bytes. Verifications per fleet-budgeted
+payment at the endpoint: one ticket, three reserve receipts, one commit statement, three commit receipts (eight P-384
+verifications). Per governed action the governor signs twice (ticket and commit), which the bench prices at about
+five governed actions per second per governor chip beside 100-token serving on one signing engine; release tickets
+and their commit statements are MACed and cost no signature. Whether the endpoint's verifications run in hardware or
+in a firmware stage, and how the RTL ticket format carries these fields, is open (the RTL ticket carries none of
+them today; see `results/rtl-conformance.md`).
+
+```
 Capability (32 bytes packed) {
    point: u8      // rack tier: 0 NVSwitch port, 1 PCIe switch port, 2 DPU flow, 3 storage path;
                   // integrated tier adds 4 copy engine, 5 peer MMU

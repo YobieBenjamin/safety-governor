@@ -172,6 +172,98 @@ def make_policy(*, version: int, issued_at: float, expires_at: float, governance
     }
 
 
+# Actions the governor performs itself, with no device acting on a ticket: the only rules allowed to name no endpoint.
+GOVERNOR_ACTIONS = {"model.output", "model.export", "compute.extend", "weights.write"}
+MAX_WINDOW_S = 7 * 86400.0      # the longest budget or rate window an edition may name
+MAX_LIMIT = 1e12                # the largest budget limit or rate maximum an edition may name (a larger one is no bound)
+MAX_RISK_CEILING = 0.9          # an observer-mode rule's risk ceiling above this admits every verdict in practice
+# Actions whose effect leaves the governed system (money, messages, goods, strikes, bytes to a user) and so must be
+# bounded by a budget or a rate at the device that acts, whatever the governor does.
+OUTWARD_ACTIONS = {"payments.transfer", "message.send", "shipment.order", "strike", "response.release"}
+
+
+def shape_problems(image: dict) -> list[str]:
+    """The rulebook shapes that no governor or endpoint can make safe, named so the edition is refused at signing
+    time rather than found by an auditor (fresh audit 30 October 2026, where five of fourteen findings were editions
+    that enforced nothing). Returns a list of problems, empty when the edition's shape is sound. Each line names the
+    rule and the shape:
+      - a rule for an action a device performs that names no endpoint (every device would accept it, or none)
+      - a rule whose action leaves the system with neither a budget nor a rate, unless a human must approve each one
+      - an observer-mode rule whose risk ceiling is 1.0 (every verdict passes) or that names no observer key
+      - a human-mode rule with a quorum below one or no approver keys in the edition
+      - a money budget (a budget whose rule moves payments) not owned by the fleet when a fleet ledger is named
+      - an audit store named by the edition that is not among its endpoints"""
+    problems: list[str] = []
+    rules = image.get("rules", []) or []
+    owners = image.get("budget_owners", {}) or {}
+    approver_keys = image.get("approver_keys", {}) or {}
+    has_fleet_ledger = bool((image.get("fleet_ledger") or {}).get("keys"))
+    endpoints = image.get("endpoints", []) or []
+    endpoint_names = {e.get("name") for e in endpoints if e.get("pubkey")}
+    for e in endpoints:
+        if not e.get("pubkey"):
+            problems.append(f"endpoint {e.get('name')}: listed with no device key")
+    budget_windows: dict[str, float] = {}
+
+    def positive(v, cap):
+        return finite_number(v) and 0 < v <= cap
+
+    for r in rules:
+        rid, action = r.get("id", "?"), r.get("action")
+        req = r.get("requirement") or {}
+        mode = req.get("mode", "auto")
+        if mode == "deny":
+            continue
+        if not r.get("endpoint") and action not in GOVERNOR_ACTIONS:
+            problems.append(f"{rid}: names no endpoint for an action a device performs")
+        if r.get("endpoint") and endpoint_names and r["endpoint"] not in endpoint_names:
+            problems.append(f"{rid}: names an endpoint ({r['endpoint']}) no listed device holds")
+        # Values, not only presence (fresh audits 30 October 2026: a zero window, an absurd limit or a ceiling of
+        # 0.999999 passed a check that looked only for the field).
+        b = r.get("budget") or {}
+        if b:
+            if not positive(b.get("window_s"), MAX_WINDOW_S):
+                problems.append(f"{rid}: a budget window that is not a positive number of seconds up to {int(MAX_WINDOW_S)}")
+            if not positive(b.get("limit"), MAX_LIMIT):
+                problems.append(f"{rid}: a budget limit that is not a positive finite number up to {MAX_LIMIT:g}")
+            param = b.get("param")
+            cons = (r.get("constraints") or {}).get(param) or {}
+            if not param or not finite_number(cons.get("max")):
+                problems.append(f"{rid}: a budget whose parameter ({param}) has no numeric maximum in the rule's constraints")
+            elif finite_number(b.get("limit")) and cons["max"] > b["limit"]:
+                problems.append(f"{rid}: a per-request maximum above the budget limit")
+            key, win = b.get("key"), b.get("window_s")
+            if key in budget_windows and budget_windows[key] != win:
+                problems.append(f"{rid}: budget key {key} is shared by rules with different windows")
+            budget_windows[key] = win
+        rate = r.get("rate") or {}
+        if rate:
+            if not positive(rate.get("window_s"), MAX_WINDOW_S):
+                problems.append(f"{rid}: a rate window that is not a positive number of seconds up to {int(MAX_WINDOW_S)}")
+            if not positive(rate.get("max"), MAX_LIMIT) or rate.get("max") < 1:
+                problems.append(f"{rid}: a rate maximum that is not a number of actions from 1 up to {MAX_LIMIT:g}")
+        if action in OUTWARD_ACTIONS and not b and not rate and action != "response.release":
+            problems.append(f"{rid}: an outward action with neither a budget nor a rate")
+        if action == "response.release" and not r.get("output_budget") and not any(x.get("action") == "model.output" and x.get("output_budget") for x in rules):
+            problems.append(f"{rid}: a release rule with no output budget anywhere in the edition")
+        if mode == "observer":
+            if not finite_number(req.get("max_risk", 1.0)) or float(req.get("max_risk", 1.0)) > MAX_RISK_CEILING:
+                problems.append(f"{rid}: an observer-mode rule whose risk ceiling is above {MAX_RISK_CEILING} (every verdict passes)")
+            if not image.get("observer_keys"):
+                problems.append(f"{rid}: an observer-mode rule in an edition with no observer keys")
+        if mode == "human":
+            if int(req.get("approvers_quorum", 0) or 0) < 1:
+                problems.append(f"{rid}: a human-mode rule with a quorum below one")
+            if not approver_keys.get(rid):
+                problems.append(f"{rid}: a human-mode rule with no approver keys in the edition")
+        if r.get("budget") and action == "payments.transfer" and has_fleet_ledger and owners.get(r["budget"].get("key")) != "fleet":
+            problems.append(f"{rid}: a money budget not owned by the fleet though a fleet ledger is named")
+    store = (image.get("audit") or {}).get("store")
+    if store and endpoint_names and store not in endpoint_names:
+        problems.append(f"audit store {store} is not among the edition's endpoints")
+    return problems
+
+
 def policy_epoch(image: dict) -> str:
     """The epoch of an image: a digest of its body, with the signatures left out. Two images that differ in any field
     get different epochs, so a command made under one edition cannot be replayed under another."""

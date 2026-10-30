@@ -10,6 +10,7 @@ governor's record are all cleared in-process, the same ticket runs again. That r
 that the host cannot write these records. It is not a software fix."""
 from govsim import reasons
 from govsim.cluster import build_rack
+from govsim.crypto import digest
 
 P = {"target": [10.0, 10.0], "munition": "gbu-39"}   # fields a strike rule allows: the endpoint now checks them against the edition
 
@@ -20,7 +21,9 @@ def _strike_ticket():
     node = r.nodes[0]
     g = node.governor
     rule = next(x for x in g.policy["rules"] if x.get("endpoint") == "strike-guidance")
-    ticket = g._mint("rh", "strike", P, g.fingerprint, rule, None, r.clock.now())
+    # The strike rule is observer mode, and since 30 October 2026 the endpoint checks the observer's verdict itself,
+    # so the ticket carries one, as a ticket from the request path would.
+    ticket = g._mint(digest(["rid", g.fingerprint, "strike", P]), "strike", P, g.fingerprint, rule, None, r.clock.now(), request_id="rid", witnesses=[r.witness(digest(["rid", g.fingerprint, "strike", P]), ttl_s=60.0)])
     r.clock.advance(rule.get("delay_s", 0.0) + 1.0)     # past the rule's delay, inside the ticket window
     r.heartbeat()
     return r, node, ticket

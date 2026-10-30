@@ -17,7 +17,7 @@ from govsim.crypto import digest
 
 BIG = {"output_queries": 10 ** 6, "output_bytes": 10 ** 12}
 TID = "unbudgeted-msg-1"
-PARAMS = {"recipient": "ally@example.com", "body": "status update"}
+PARAMS = {"recipient": "recipient-a", "body": "status update"}   # a listed recipient: the messaging endpoint holds the registry
 
 
 def setup():
@@ -30,7 +30,7 @@ def setup():
     ep = r.endpoints["messaging"]
     now = r.clock.now()
     payload = {"type": "ticket", "ticket_id": TID, "request_hash": digest(["rid", g.fingerprint, "message.send", PARAMS]),
-               "action": "message.send", "params_digest": digest(PARAMS), "measurement": g.fingerprint,
+               "request_id": "rid", "action": "message.send", "params_digest": digest(PARAMS), "measurement": g.fingerprint,
                "rule": "message.send.listed", "policy_epoch": g.epoch, "endpoint": "messaging",
                "budget_key": None, "reservation": None, "budget_owner": None, "governor": g.chip_id,
                "issued_at": g.mono(), "valid_from": now, "expires_at": now + 300}
@@ -88,6 +88,7 @@ def test_central_single_use_blocks_a_second_commit_after_a_lost_burn():
     # no longer be the only guard; the governor's central single-use record refuses the second commit.
     ep.consumed.clear()
     ep.burned.clear()        # F33: the endpoint's second record is lost as well, so only the central record is left
+    ep.used_requests.clear() # and the request record, written in the same save (30 October 2026), is lost with them
     ok2, why2 = ep.execute(ticket, "message.send", PARAMS)
     assert not ok2 and why2 == reasons.COMMIT_REJECTED
     assert len([e for e in ep.executed if e["ticket"] == TID]) == 1   # still exactly one effect

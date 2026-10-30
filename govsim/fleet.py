@@ -41,24 +41,48 @@ class LedgerReplica:
 
     def __init__(self, clock):
         self.ledger = Ledger(Store(), clock)
+        self.clock = clock
         self.key = SigningKey.generate()
         self.holder: dict[str, str] = {}
+        self.binding: dict[str, dict] = {}   # rid -> the request and endpoint the reservation was made for
         self.reachable = True
 
-    def reserve(self, key, amount, limit, window_s, now, ttl, reserver, nonce) -> dict | None:
+    def reserve(self, key, amount, limit, window_s, now, ttl, reserver, nonce, binding=None) -> dict | None:
+        """``binding`` names the request hash and the endpoint the reservation is for; it is signed into the receipt,
+        so the endpoint can refuse a receipt that was made for another request or another device (30 October 2026)."""
         if not self.reachable:
             return None
         rid = self.ledger.reserve(key, amount, limit, window_s, now, ttl)
         if not rid:
             return None
         self.holder[rid] = reserver
+        self.binding[rid] = dict(binding or {})
+        # ``at`` is the replica's own clock, so an endpoint can refuse a receipt older than any ticket may live
+        # (review panel 30 October 2026: receipts never aged, so captured receipts could be replayed after the
+        # endpoint's used-reservation record had been pruned).
         return self.key.sign({"type": "fleet-reserve", "key": key, "amount": amount, "reserver": reserver,
-                              "nonce": nonce, "rid": rid})
+                              "nonce": nonce, "rid": rid, "binding": self.binding[rid], "at": self._now()})
+
+    def _now(self) -> float:
+        return float(self.clock.now()) if self.clock is not None else 0.0
+
+    def release(self, key, rid, reserver) -> bool:
+        """Give back a reservation that will not be spent (a reservation the governor could not complete at the
+        threshold of replicas). Only the governor that made it may release it."""
+        if not self.reachable or self.holder.get(rid) != reserver:
+            return False
+        self.ledger.release(key, rid)
+        self.holder.pop(rid, None)
+        self.binding.pop(rid, None)
+        return True
 
     def commit(self, key, rid, now, reserver, nonce) -> dict | None:
         if not self.reachable or self.holder.get(rid) != reserver or not self.ledger.commit(key, rid, now):
             return None
-        return self.key.sign({"type": "fleet-commit", "key": key, "rid": rid, "reserver": reserver, "nonce": nonce})
+        # The commit receipt repeats the binding the reservation was made with, so a captured commit statement
+        # cannot be rewrapped around a ticket for another request or another device (review panel 30 October 2026).
+        return self.key.sign({"type": "fleet-commit", "key": key, "rid": rid, "reserver": reserver, "nonce": nonce,
+                              "binding": self.binding.get(rid, {}), "at": self._now()})
 
 
 class FleetLedger:
@@ -82,8 +106,17 @@ class FleetLedger:
         """What an edition names for this ledger: the replica keys and the threshold."""
         return {"keys": [r.key.public.hex for r in self.replicas], "threshold": self.threshold}
 
-    def reserve(self, key, amount, limit, window_s, now, ttl, reserver, nonce) -> list[dict]:
-        return [x for r in self.replicas if (x := r.reserve(key, amount, limit, window_s, now, ttl, reserver, nonce))]
+    def reserve(self, key, amount, limit, window_s, now, ttl, reserver, nonce, binding=None) -> list[dict]:
+        return [x for r in self.replicas if (x := r.reserve(key, amount, limit, window_s, now, ttl, reserver, nonce, binding))]
+
+    def release(self, key, rids: dict, reserver) -> int:
+        """Release the reservations in ``rids`` (replica key id -> reservation id). Returns how many were released."""
+        n = 0
+        for r in self.replicas:
+            rid = rids.get(r.key.public.key_id)
+            if rid and r.release(key, rid, reserver):
+                n += 1
+        return n
 
     def commit(self, key, rids: dict, now, reserver, nonce) -> list[dict]:
         out = []

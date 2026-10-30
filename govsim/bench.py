@@ -30,6 +30,8 @@ COST_S = {
     "shared_reserve": 10e-6,
     "output_bytes": 0.0,       # the hash runs at line rate; no governor time per byte
     "ticket_mac": 20e-6,       # a release ticket: same firmware path as a ticket; its MAC runs on the hash engine
+    "commit": 20e-6,           # a signed commit statement for an action ticket (one P-384 signature, counted below)
+    "commit_mac": 20e-6,       # a MACed commit statement for a release ticket: hash engine, no signature
     "fabric_mac": 2e-6,        # one pairwise MAC per recipient (hash engine; firmware only queues it)
 }
 OTBN_P384_SIGN_CYCLES = 1_697_985          # opentitan.org, OTBN performance table, ECDSA-P384 sign, constant time
@@ -115,11 +117,15 @@ def run_full_path(tier: str = "rack", gpus: int = 2, responses: int = 100, token
     # response, on the hash engine); only action tickets are P-384 signatures on the signing engine.
     release_tickets = ops.get("ticket_mac", 0)
     action_tickets = ops.get("ticket", 0)
+    # Review panel 30 October 2026: the endpoint now acts only on a commit statement the governor signs. For a release
+    # ticket that statement is MACed (hash engine); for an action ticket it is a second P-384 signature, priced here.
+    commit_sigs = ops.get("commit", 0)
+    commit_macs = ops.get("commit_mac", 0)
 
     # the engine serves every slot on the chip, each producing the same stream
     record_sigs_chip = record_sigs * slots_per_chip
-    action_sigs_chip = action_tickets * slots_per_chip
-    release_macs_chip = release_tickets * slots_per_chip
+    action_sigs_chip = (action_tickets + commit_sigs) * slots_per_chip
+    release_macs_chip = (release_tickets + commit_macs) * slots_per_chip
     windows = gpu_s / batch_window_s if batch_window_s > 0 else float("inf")
     records_batched = min(record_sigs_chip, windows)             # records collapse to one signature per window
     util = lambda n: 100.0 * n * SIGN_S / gpu_s if gpu_s else 0.0
@@ -127,7 +133,8 @@ def run_full_path(tier: str = "rack", gpus: int = 2, responses: int = 100, token
     return {"tier": tier, "responses": responses, "actions": actions, "tokens": total_tokens, "gpu_seconds": gpu_s,
             "ops": ops, "firmware_seconds": firmware_s,
             "signatures": record_sigs, "tickets": release_tickets + action_tickets, "release_tickets": release_tickets,
-            "action_tickets": action_tickets, "verifications": verifications, "releases": delivered,
+            "action_tickets": action_tickets, "commit_statements": commit_sigs, "commit_macs": commit_macs,
+            "verifications": verifications, "releases": delivered,
             "slots_per_chip": slots_per_chip,
             "records_batched": records_batched, "release_ticket_signatures": 0, "release_ticket_macs": release_macs_chip,
             "engine_utilization_records_only_pct": util(records_batched),
@@ -185,8 +192,10 @@ def main() -> None:
               f"tickets (was {f['engine_utilization_signed_release_pct']:.0f}% with a signature per release ticket)  "
               f"(signs={f['signatures']}, release MACs={f['release_tickets']}, releases={f['releases']})")
     head = 50.0 - run_full_path("rack", responses=100, tokens_per_response=100, actions=0)["engine_utilization_full_path_pct"]
-    cap = head / 100.0 / SIGN_S
-    print(f"  signed action tickets that fit under half an engine beside 100-token serving: about {cap:.0f} per second per "
+    # Two P-384 signatures per governed action since the review panel of 30 October 2026: the ticket and the commit
+    # statement the endpoint acts on. The headroom is shared between them.
+    cap = head / 100.0 / SIGN_S / 2
+    print(f"  governed actions (one signed ticket plus one signed commit statement each) that fit under half an engine beside 100-token serving: about {cap:.0f} per second per "
           f"governor chip ({cap / SLOTS_PER_CHIP:.1f} per GPU at {SLOTS_PER_CHIP} GPUs per chip)")
     print("loop roll call per member chip (one beacon a second; P-384 verify priced as a sign):")
     for n in (9, 72):

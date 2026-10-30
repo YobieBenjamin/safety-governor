@@ -17,6 +17,7 @@ POLICY_ROLLBACK = "policy.rollback"
 JURISDICTION_UNKNOWN = "jurisdiction.unknown"           # no fused root for that jurisdiction, or the edition names another
 JURISDICTION_DENIED = "jurisdiction.denied"             # a jurisdiction governing the action has no rule allowing it
 JURISDICTION_EXPIRED = "jurisdiction.expired"           # a jurisdiction's edition expired: what it governs is denied
+POLICY_UNSAFE_SHAPE = "policy.unsafe_shape"              # the edition has a shape no governor or endpoint may enforce (see policy.shape_problems)
 POLICY_BELOW_FLOOR = "policy.below_fused_rule_floor"     # the edition removes or weakens a rule the fuses protect
 POLICY_VERSION_JUMP = "policy.version_jump"             # the version advances more than MAX_EDITION_STEP, or past the fuses
 POLICY_LOOSENING_DELAY = "policy.loosening_before_delay"  # a loosening edition before its public delay has run

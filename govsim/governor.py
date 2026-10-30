@@ -46,7 +46,7 @@ from .endpoints import BRICKED, DescriptorChecker, INTEGRATED_POINTS, RACK_POINT
 from .fuses import Fuses, PRODUCTION
 from .ledger import Ledger
 from .log import Log
-from .policy import (RELEASE_ACTION, buffer_allowed, check_budget_owners, check_constraints, check_register, find_rule,
+from .policy import (RELEASE_ACTION, shape_problems, buffer_allowed, check_budget_owners, check_constraints, check_register, find_rule,
                      floor_violations, loosenings, policy_epoch, select_rule, verify_policy, verify_recovery)
 from .fuses import POLICY_FUSE_BITS, POLICY_FUSE_STRIDE
 from .root import SiliconRoot
@@ -196,6 +196,7 @@ class Governor:
         self.host_key: VerifyKey | None = None
         self.model_digest: str | None = None
         self.lists: dict[str, dict] = {}
+        self._fleet_receipt_cache: dict[str, list] = {}   # digest of a fleet reservation -> the replicas' signed receipts
         # durable per-list version floors: an older still-unexpired list can never replace a newer one (F06)
         self.list_floors: dict[str, int] = self.store.get("list_floors", {})
         self.output_streams: dict[str, Any] = {}
@@ -381,6 +382,12 @@ class Governor:
         # dropped the protected-site constraint and made strikes automatic, and was accepted on every chip).
         if floor_violations(image, self.fuses.rule_floor):
             return False, reasons.POLICY_BELOW_FLOOR
+        # The shape check: an edition that would make a governor or an endpoint enforce nothing is refused here, at
+        # signing time, with the problems logged (fresh audit 30 October 2026).
+        problems = shape_problems(image)
+        if problems:
+            self.log.append("policy.unsafe_shape", {"version": image.get("version"), "problems": problems})
+            return False, reasons.POLICY_UNSAFE_SHAPE
         if self.policy and not at_boot:
             # A version may advance only a little per edition, so one edition cannot burn the anti-rollback range
             # and lock out every later legitimate edition (audit 3: a stolen quorum signed version 10**9).
@@ -1063,25 +1070,31 @@ class Governor:
         if rule.get("rate") and not self.ledger.rate_ok(f"rate|{fp}|{action}", rule["rate"]["max"], rule["rate"]["window_s"], now):
             return self._deny("request", reasons.GATE_RATE, request_hash=rhash)
         reservation = None
+        ticket_id = random_id(16)    # chosen before the reservation, so the ledger's receipts can name the ticket they are for
         if rule.get("budget"):
             b = rule["budget"]
             amount = params.get(b["param"])
             if not finite_number(amount) or amount < 0:   # reject bool, NaN and infinity before reserving (F03)
                 return self._deny("request", reasons.GATE_BUDGET + ".amount_invalid", request_hash=rhash)
-            ok, rid, why = self._reserve(b["key"], amount, b["limit"], b["window_s"], now, TICKET_TTL_S + rule.get("delay_s", 0.0))
+            ok, rid, why = self._reserve(b["key"], amount, b["limit"], b["window_s"], now, TICKET_TTL_S + rule.get("delay_s", 0.0),
+                                         binding={"request_hash": rhash, "endpoint": rule.get("endpoint"), "ticket_id": ticket_id})
             if not ok:
                 return self._deny("request", why, request_hash=rhash)
             reservation = {"key": b["key"], "rid": rid, "owner": self.policy["budget_owners"][b["key"]]}
+            if reservation["owner"] == "fleet":
+                reservation["receipts"] = self._fleet_receipt_cache.pop(digest(rid), None)
         self.ledger.mark(rhash, now)   # recorded before any hold or ticket exists, so this request hash cannot be used again (replay)
         if req_mode == "human":
             hold_id = random_id(8)
-            self.holds[hold_id] = {"request_hash": rhash, "action": action, "params": params, "fingerprint": fp, "rule": rule["id"],
+            self.holds[hold_id] = {"request_hash": rhash, "request_id": req.get("request_id"), "ticket_id": ticket_id, "action": action, "params": params,
+                                   "fingerprint": fp, "rule": rule["id"],
                                    "reservation": reservation, "created_at": now, "epoch": self.epoch, "cause": hold_cause,
                                    "payer_confirm": payer_commit}
             self.store.save()
             self.log.append("gate.hold", {"hold_id": hold_id, "request_hash": rhash, "rule": rule["id"], "cause": hold_cause})
             return {"ok": False, "why": reasons.GATE_HELD, "hold_id": hold_id, "request_hash": rhash, "cause": hold_cause}
-        ticket = self._mint(rhash, action, params, fp, rule, reservation, now)
+        ticket = self._mint(rhash, action, params, fp, rule, reservation, now, witnesses=req.get("witnesses", []),
+                            request_id=req.get("request_id"), ticket_id=ticket_id)
         return {"ok": True, "why": reasons.OK, "ticket": ticket, "request_hash": rhash}
 
     # ------------------------------------------------------------------ response release
@@ -1244,8 +1257,11 @@ class Governor:
             return (owners, k) if owners and 1 <= k <= len(owners) else None
         return [str(spec)], 1
 
-    def _reserve(self, key: str, amount: float, limit: float, window_s: float, now: float, ttl: float) -> tuple[bool, str | None, str]:
-        """Reserve at the key's owner: locally if that is us, over the fabric otherwise. There is no default owner."""
+    def _reserve(self, key: str, amount: float, limit: float, window_s: float, now: float, ttl: float,
+                 binding: dict | None = None) -> tuple[bool, str | None, str]:
+        """Reserve at the key's owner: locally if that is us, over the fabric otherwise. There is no default owner.
+        ``binding`` (the request hash and the endpoint) is signed into a fleet receipt, so the receipt is good for one
+        request at one device."""
         spec = self._budget_owners(key)
         if spec is None:
             return False, None, reasons.POLICY_BUDGET_OWNER_MISSING
@@ -1263,9 +1279,18 @@ class Governor:
             if fl is None:
                 return False, None, reasons.GATE_BUDGET_OWNER_UNREACHABLE
             nonce = random_id(16)
-            receipts = fl.reserve(key, amount, limit, window_s, now, ttl, reserver=self.chip_id, nonce=nonce)
+            receipts = fl.reserve(key, amount, limit, window_s, now, ttl, reserver=self.chip_id, nonce=nonce, binding=binding)
             rids = self._fleet_receipts(receipts, "fleet-reserve", {"key": key, "amount": amount, "nonce": nonce})
+            if rids is None:
+                # Fewer than the threshold answered. The replicas that did reserve are told to give it back, so a
+                # refused request does not hold fleet budget for the rest of the window (audit 30 October 2026).
+                partial = {env["signer"]: env["payload"].get("rid") for env in receipts if isinstance(env, dict) and env.get("signer")}
+                if partial:
+                    fl.release(key, partial, reserver=self.chip_id)
             if rids is not None:
+                # Keep the verified receipts so the ticket can carry them: the endpoint checks them again, so a
+                # governor whose key was extracted cannot claim a reservation the ledger never made (29 October 2026).
+                self._fleet_receipt_cache[digest(rids)] = [env for env in receipts if isinstance(env, dict) and env.get("signer") in rids]
                 return True, rids, reasons.OK
             return False, None, (reasons.GATE_BUDGET if getattr(fl, "reachable", False) else reasons.GATE_BUDGET_OWNER_UNREACHABLE)
         if owner == self.chip_id:
@@ -1301,13 +1326,20 @@ class Governor:
 
     def _fleet_commit(self, key: str, rids) -> bool:
         """Commit a fleet reservation: the threshold of replicas named in it must each return a signed commit."""
+        return self._fleet_commit_receipts(key, rids) is not None
+
+    def _fleet_commit_receipts(self, key: str, rids) -> list[dict] | None:
+        """Commit a fleet reservation and return the replicas' signed commit receipts (the threshold of them, each
+        naming the reservation it closed), or None when the commit did not reach the threshold."""
         fl = self.fleet_ledger
         if fl is None or not isinstance(rids, dict):
-            return False
+            return None
         nonce = random_id(16)
         receipts = fl.commit(key, rids, self.clock.now(), reserver=self.chip_id, nonce=nonce)
         got = self._fleet_receipts(receipts, "fleet-commit", {"key": key, "nonce": nonce})
-        return got is not None and all(rids.get(signer) == rid for signer, rid in got.items())
+        if got is None or not all(rids.get(signer) == rid for signer, rid in got.items()):
+            return None
+        return [env for env in receipts if isinstance(env, dict) and env.get("signer") in got]
 
     def _reserve_quorum(self, key, amount, limit, window_s, now, ttl, owners, k) -> tuple[bool, dict | None, str]:
         """Reserve at every owner; succeed only if at least ``k`` of them reserved. The reservation is the map
@@ -1386,13 +1418,36 @@ class Governor:
             return reasons.GATE_ALARM
         return None
 
-    def _mint(self, rhash: str, action: str, params: dict, fp: str, rule: dict, reservation: dict | None, now: float) -> dict:
-        """``issued_at`` is the governor's monotonic counter; ``valid_from``/``expires_at`` are endpoint clock seconds."""
-        t = {"type": "ticket", "ticket_id": random_id(16), "request_hash": rhash, "action": action, "params_digest": digest(params),
-             "measurement": fp, "rule": rule["id"], "policy_epoch": self.epoch, "endpoint": rule.get("endpoint"),
+    def _mint(self, rhash: str, action: str, params: dict, fp: str, rule: dict, reservation: dict | None, now: float,
+              approvals: list[dict] | None = None, witnesses: list[dict] | None = None, request_id: str | None = None,
+              ticket_id: str | None = None) -> dict:
+        """``issued_at`` is the governor's monotonic counter; ``valid_from``/``expires_at`` are endpoint clock seconds.
+        A ticket for a human-mode rule carries the approvers' signed approvals, and one for an observer-mode rule the
+        observers' signed verdicts, so the endpoint can check the rule's mode itself and not only this governor's
+        signature (audit 30 October 2026: a captured governor key could mint a human-mode ticket with no approver)."""
+        # The ticket carries the request id, so an endpoint can recompute the request hash from the id, the measurement,
+        # the action and the parameters it is handed, and so tie every approval, verdict and receipt that names the hash
+        # to these exact parameters (review panel 30 October 2026: a hash the endpoint could not recompute let two
+        # honest approvals of a small payment be rebound to large ones).
+        t = {"type": "ticket", "ticket_id": ticket_id or random_id(16), "request_hash": rhash, "request_id": request_id, "action": action,
+             "params_digest": digest(params), "measurement": fp, "rule": rule["id"], "policy_epoch": self.epoch, "endpoint": rule.get("endpoint"),
              "budget_key": reservation["key"] if reservation else None, "reservation": reservation["rid"] if reservation else None,
              "budget_owner": reservation["owner"] if reservation else None, "governor": self.chip_id,
              "issued_at": self.mono(), "valid_from": now + rule.get("delay_s", 0.0), "expires_at": now + rule.get("delay_s", 0.0) + TICKET_TTL_S}
+        mode = (rule.get("requirement") or {}).get("mode", "auto")
+        if mode == "human":
+            t["approvals"] = list(approvals or [])
+        elif mode == "observer":
+            t["witnesses"] = [w for w in (witnesses or []) if isinstance(w, dict) and (w.get("payload") or {}).get("type") == "observer-verdict"]
+        if action == RELEASE_ACTION:
+            # The audit store's escrow receipts ride with a release ticket, so the egress can re-check escrow itself.
+            t["escrow"] = [w for w in (witnesses or []) if isinstance(w, dict) and (w.get("payload") or {}).get("type") == "escrow"]
+        if reservation and reservation.get("owner") == "fleet":
+            # The fleet ledger's signed receipts ride in the ticket. The endpoint verifies them against the replica keys
+            # the edition names. The replicas count independently of this governor, but they take the limit, window
+            # and clock from their caller (docs/research/fleet-ledger.md, trust boundary), so this is a second count,
+            # not yet a second party.
+            t["fleet_receipts"] = reservation.get("receipts") or []
         if action == RELEASE_ACTION and self.egress_mac_key is not None and rule.get("endpoint") == "egress":
             # Adversarial audit 3: one P-384 signature per response (17 ms on the signing engine) put the full serving
             # path at 3x to 68x one engine. A release ticket is only ever checked by this node's own egress endpoint,
@@ -1451,7 +1506,7 @@ class Governor:
         if not str(p.get("reason", "")).strip():
             return self._deny("approve", reasons.APPROVE_NO_REASON)
         now = self.clock.now()
-        self.approvals.setdefault(hold_id, {})[env["signer"]] = {"t": now, "reason": p["reason"]}
+        self.approvals.setdefault(hold_id, {})[env["signer"]] = {"t": now, "reason": p["reason"], "env": env}
         self.log.append("approve.signature", {"hold_id": hold_id, "approver": env["signer"], "reason": p["reason"]})
         rule = next(r for r in self.policy["rules"] if r["id"] == hold["rule"])
         quorum = max(1, rule["requirement"].get("approvers_quorum", 1))
@@ -1474,7 +1529,9 @@ class Governor:
             ok, why = self._revalidate_payer(hold["payer_confirm"], hold["params"], now)
             if not ok:
                 return self._deny("approve", why, hold_id=hold_id)
-        ticket = self._mint(hold["request_hash"], hold["action"], hold["params"], hold["fingerprint"], rule, hold["reservation"], now)
+        ticket = self._mint(hold["request_hash"], hold["action"], hold["params"], hold["fingerprint"], rule, hold["reservation"], now,
+                            approvals=[a["env"] for a in self.approvals[hold_id].values() if a.get("env")], request_id=hold.get("request_id"),
+                            ticket_id=hold.get("ticket_id"))
         self.holds.pop(hold_id)
         self.store.save()
         self.log.append("approve.released", {"hold_id": hold_id, "approvers": sorted(self.approvals[hold_id]), "latency_s": now - hold["created_at"]})
@@ -1495,8 +1552,12 @@ class Governor:
         committed = self.commit_from_endpoint(env["payload"].get("ticket") or {})
         return {"ok": committed, "why": reasons.OK if committed else reasons.COMMIT_REJECTED}
 
-    def commit_from_endpoint(self, ticket: dict) -> bool:
-        """The endpoint's COMMIT. Unreachable governor means the endpoint refuses."""
+    def commit_from_endpoint(self, ticket: dict):
+        """The endpoint's COMMIT. Unreachable governor means the endpoint refuses. Returns False, or a signed commit
+        statement the endpoint verifies before it acts: for a fleet-owned budget the replicas' fleet-commit receipts
+        ride inside it, so a host that answers 'committed' on the governor's behalf buys nothing (audit 30 October 2026:
+        the endpoint took commit as a bare yes from the host, and an uncommitted reservation lapses after 300 seconds,
+        so swallowed commits let the hourly cap refill every five minutes)."""
         with self.lock:
             if not self.reachable:
                 raise ConnectionError(reasons.COMMIT_UNREACHABLE)
@@ -1529,11 +1590,13 @@ class Governor:
                 self.log.append("gate.commit_rejected", {"ticket_id": tid, "why": reasons.TICKET_NOT_MINTED})
                 return False
             ok = True
+            fleet_receipts = None
             if t.get("reservation"):
                 owner = t.get("budget_owner") or self.chip_id
                 spec = self._budget_owners(t["budget_key"]) if t.get("budget_key") else None
                 if owner == "fleet":
-                    ok = self._fleet_commit(t["budget_key"], t["reservation"])
+                    fleet_receipts = self._fleet_commit_receipts(t["budget_key"], t["reservation"])
+                    ok = fleet_receipts is not None
                 elif isinstance(t["reservation"], dict):
                     ok = spec is not None and len(spec[0]) > 1 and self._commit_quorum(t["budget_key"], t["reservation"], *spec)
                 elif owner == self.chip_id:
@@ -1547,7 +1610,18 @@ class Governor:
                 self.committed_tickets[tid] = self.clock.now()
                 self.minted_tickets.pop(tid, None)
             self.log.append("gate.commit" if ok else "gate.commit_rejected", {"ticket_id": tid})
-            return ok
+            if not ok:
+                return False
+            stmt = {"type": "commit", "ticket_id": tid, "request_hash": t.get("request_hash"), "endpoint": t.get("endpoint"),
+                    "governor": self.chip_id, "budget_key": t.get("budget_key"), "reservation": t.get("reservation"),
+                    "fleet_receipts": fleet_receipts or [], "at": self.clock.now()}
+            if "mac" in ticket and self.egress_mac_key is not None:
+                # A release ticket was MACed, not signed (adversarial audit 3 item 20); its commit statement is too, so
+                # the serving path still costs no signature per response (review panel 30 October 2026).
+                self.ops["commit_mac"] = self.ops.get("commit_mac", 0) + 1
+                return {"payload": stmt, "signer": self.key.key_id, "mac": hmac_sha256(self.egress_mac_key, canonical(stmt))}
+            self.ops["commit"] = self.ops.get("commit", 0) + 1
+            return self.key.sign(stmt)
 
     # ------------------------------------------------------------------ alarms
     def raise_alarm(self, code: str, source: str, detail: dict | None = None) -> None:
@@ -2299,6 +2373,22 @@ class Governor:
             self.cause, self.cause_opens_loop = reasons.TAMPER, True
             self.cause_entry = self.log.size - 1
             self._apply_rung(SAFE, opens_loop=True)
+            # The last act before the key is wiped: a signed statement that this governor is revoked, delivered to
+            # every endpoint that holds its key, so a ticket or commit signed with a copy of the key acts nowhere
+            # after the tamper (fresh audit 30 October 2026: the tamper never reached a rack-local budget).
+            statement = self.key.sign({"type": "governor-revoked", "governor": self.chip_id, "key": self.key.key_id,
+                                       "kind": kind, "at": self.clock.now()})
+            for ep in list(self.endpoints.values()) + list(getattr(self, "shared_endpoints", []) or []):
+                try:
+                    ep.revoke_governor(statement)
+                except Exception:
+                    pass
+            # And over the governor fabric, which the host does not carry: the peers each sign a revocation of this
+            # key and hand it to their endpoints, so a host that swallows this chip's own statement is not enough
+            # (fresh audits 30 October 2026).
+            if self.fabric is not None:
+                self.fabric_send("ALARM", {"code": reasons.TAMPER, "origin": self.chip_id, "key": self.key.key_id,
+                                           "detail": {"kind": kind}})
             self.root.zeroize()
             self.close_ports()
 
@@ -2590,6 +2680,19 @@ class Governor:
         chip can see for itself (its own loop, its own counters) are raised locally and need no peer."""
         detail = body.get("detail")
         code = str(body.get("code"))
+        if code == reasons.TAMPER and body.get("origin") == sender and isinstance(body.get("key"), str):
+            # A member reporting its own tamper, authenticated by the fabric MAC: this chip signs a revocation of
+            # that member's key for every endpoint it reaches. One peer's vote alone revokes nothing where the
+            # rack has two or more peers (endpoints.REVOCATION_PEERS), so one extracted key cannot revoke the rest.
+            statement = self.key.sign({"type": "governor-revoked", "governor": sender, "key": body["key"], "by": self.chip_id,
+                                       "kind": (detail or {}).get("kind", "tamper") if isinstance(detail, dict) else "tamper",
+                                       "at": self.clock.now()})
+            for ep in list(self.endpoints.values()) + list(getattr(self, "shared_endpoints", []) or []):
+                try:
+                    ep.revoke_governor(statement)
+                except Exception:
+                    pass
+            self.log.append("governor.revoked_by_peer", {"governor": sender, "key": body["key"]})
         reporters = self.fabric_alarm_reports.setdefault(code, set())
         reporters.add(sender)
         self.log.append("alarm.reported", {"code": code, "by": sender, "reporters": len(reporters)})

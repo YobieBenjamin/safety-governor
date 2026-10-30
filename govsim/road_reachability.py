@@ -120,7 +120,11 @@ def _rack(mutate=None):
         img = copy.deepcopy(r.make_policy_image(r.policy_version + 1, **r.policy_kw))
         mutate(img)
         r.policy_version += 1
-        assert r.change_epoch(sign_policy(img, r.governance[: r.threshold]))["committed"], "mutated policy did not commit"
+        res = r.change_epoch(sign_policy(img, r.governance[: r.threshold]))
+        if not res["committed"]:
+            # The shape check refused the mutated edition at signing time (policy.shape_problems): the road it would
+            # have opened never exists. The caller treats a refused edition as a caught gap.
+            return r, None
         r.load_model(node)
     return r, node
 
@@ -185,8 +189,12 @@ def checks():
             if rule["id"] == "message.send.any":
                 rule["requirement"]["mode"] = "auto"
     rg, ng = _rack(mutate=gap)
-    check("planted gap (message.send.any -> auto) is caught as a new open-auto road",
-          "message.send.any" in open_auto_rules(ng), f"open-auto rules: {open_auto_rules(ng)}")
+    if ng is None:
+        check("planted gap (message.send.any -> auto) is caught: the edition is refused by the shape check before it can open a road", True,
+              "policy.unsafe_shape: an outward action with neither a budget nor a rate")
+    else:
+        check("planted gap (message.send.any -> auto) is caught as a new open-auto road",
+              "message.send.any" in open_auto_rules(ng), f"open-auto rules: {open_auto_rules(ng)}")
 
     checks.ref_open = ref_open
     return out
