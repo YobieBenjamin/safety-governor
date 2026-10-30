@@ -361,3 +361,10 @@ def test_amendment_2_the_record_carries_the_protocol_hash_and_provenance_first(t
     rec = json.loads(out.read_text())
     assert rec["protocol_sha256"] == digest and rec["environment"]["amendment"] == 3 and rec["environment"]["python"]
     assert rec["pass_rule"] == B.PASS_RULE and rec["controls"] == [] and rec["runs"] == [] and rec["finished"] is False
+
+
+def test_a_restricted_sweep_keeps_the_protocols_control_points():
+    """Amendment 4: the K = 100,000 point run alone still runs its controls at K = 1 and K = 10,000, where a control can
+    leak; a control at K = 1 alone cannot, and the record would end NO RESULT."""
+    from govsim.claim_attack_sim import CONTROL_K_CEILING, control_ks
+    assert control_ks([100000]) == control_ks() == (1, CONTROL_K_CEILING)

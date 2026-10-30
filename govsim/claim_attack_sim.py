@@ -604,8 +604,12 @@ def planned_baselines(ks=K_SWEEP, seeds=SEEDS, kinds=HARM_KINDS):
 
 
 def control_ks(ks=K_SWEEP):
-    """The K values the two controls run at: 1 and the largest K up to CONTROL_K_CEILING (amendment 1)."""
-    small = [k for k in ks if k <= CONTROL_K_CEILING]
+    """The K values the two controls run at: 1 and the largest pre-registered K up to CONTROL_K_CEILING (amendment 1).
+    They are the protocol's control points whatever K values this sweep is restricted to: a sweep of the K = 100,000
+    point alone (amendment 4) still runs its controls at K = 1 and K = 10,000, because at K = 1 three requests cannot
+    leak past a $2,000 cap and a control that cannot leak proves nothing (the first amendment 4 run, 30 October 2026,
+    ended NO RESULT for exactly that reason)."""
+    small = [k for k in K_SWEEP if k <= CONTROL_K_CEILING]
     return tuple(sorted({1, max(small) if small else 1}))
 
 
